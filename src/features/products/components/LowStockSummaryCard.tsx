@@ -10,7 +10,7 @@ const PREVIEW_COUNT = 4
 export function LowStockSummaryCard() {
   const { user } = useAuth()
   const { alerts, count, loading, hasLoadedOnce } = useLowStockAlerts()
-  const canViewProducts = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_PRODUCTS)
+  const canViewProducts = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.VIEW_PRODUCTS)
   const preview = alerts.slice(0, PREVIEW_COUNT)
 
   return (

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 export const loginSchema = z.object({
-  clientIdentifier: z.string().trim().min(1, 'Client ID is required'),
+  clientIdentifier: z.string().trim().min(1, 'Company ID is required'),
   username: z.string().trim().min(1, 'Username is required'),
   password: z.string().min(1, 'Password is required'),
 })

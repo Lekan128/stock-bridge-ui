@@ -108,8 +108,8 @@ export function SignupPage() {
           })}
         />
         <TextField
-          label="Client identifier"
-          hint="Used to log in. Lowercase letters, numbers, and hyphens only."
+          label="Company ID"
+          hint="The short identifier your team will type when logging in. Lowercase letters, numbers, and hyphens only."
           error={errors.clientIdentifier?.message}
           {...register('clientIdentifier', {
             onChange: () => {

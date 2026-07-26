@@ -10,15 +10,14 @@ import { AppLayout } from '@/layouts/AppLayout'
 import { AdminAggregateAnalyticsPage } from '@/pages/AdminAggregateAnalyticsPage'
 import { AdminTenantDetailPage } from '@/pages/AdminTenantDetailPage'
 import { AdminTenantsPage } from '@/pages/AdminTenantsPage'
-import { AnalyticsPage } from '@/pages/AnalyticsPage'
 import { DashboardPage } from '@/pages/DashboardPage'
-import { InventoryPage } from '@/pages/InventoryPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { LowStockProductsPage } from '@/pages/LowStockProductsPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { ProductDetailPage } from '@/pages/ProductDetailPage'
 import { ProductFormPage } from '@/pages/ProductFormPage'
 import { ProductsPage } from '@/pages/ProductsPage'
+import { ProfilePage } from '@/pages/ProfilePage'
 import { SignupPage } from '@/pages/SignupPage'
 import { SuperAdminLoginPage } from '@/pages/SuperAdminLoginPage'
 import { UsersPage } from '@/pages/UsersPage'
@@ -52,10 +51,11 @@ export function AppRoutes() {
         }
       >
         <Route index element={<DashboardPage />} />
+        {/* Reading the catalog needs VIEW_PRODUCTS (every role has it); writing needs MANAGE_PRODUCTS. */}
         <Route
           path="products"
           element={
-            <RequirePermission permission={PERMISSIONS.MANAGE_PRODUCTS}>
+            <RequirePermission permission={PERMISSIONS.VIEW_PRODUCTS}>
               <ProductsPage />
             </RequirePermission>
           }
@@ -71,7 +71,7 @@ export function AppRoutes() {
         <Route
           path="products/low-stock"
           element={
-            <RequirePermission permission={PERMISSIONS.MANAGE_PRODUCTS}>
+            <RequirePermission permission={PERMISSIONS.VIEW_PRODUCTS}>
               <LowStockProductsPage />
             </RequirePermission>
           }
@@ -79,7 +79,7 @@ export function AppRoutes() {
         <Route
           path="products/:id"
           element={
-            <RequirePermission permission={PERMISSIONS.MANAGE_PRODUCTS}>
+            <RequirePermission permission={PERMISSIONS.VIEW_PRODUCTS}>
               <ProductDetailPage />
             </RequirePermission>
           }
@@ -92,22 +92,10 @@ export function AppRoutes() {
             </RequirePermission>
           }
         />
-        <Route
-          path="inventory"
-          element={
-            <RequirePermission permission={PERMISSIONS.MANAGE_INVENTORY}>
-              <InventoryPage />
-            </RequirePermission>
-          }
-        />
-        <Route
-          path="analytics"
-          element={
-            <RequirePermission permission={PERMISSIONS.VIEW_ANALYTICS}>
-              <AnalyticsPage />
-            </RequirePermission>
-          }
-        />
+        {/* Analytics now lives on the dashboard — keep old links working. */}
+        <Route path="analytics" element={<Navigate to="/" replace />} />
+        {/* Self-service — every authenticated tenant user, no permission required. */}
+        <Route path="profile" element={<ProfilePage />} />
         <Route
           path="users"
           element={

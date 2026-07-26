@@ -16,7 +16,7 @@ export function NotificationBell() {
 
   const { user } = useAuth()
   const { alerts, count, loading, hasLoadedOnce, error } = useLowStockAlerts()
-  const canViewProducts = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_PRODUCTS)
+  const canViewProducts = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.VIEW_PRODUCTS)
 
   const visibleAlerts = alerts.slice(0, MAX_VISIBLE)
   const badgeCount = count > 9 ? '9+' : count

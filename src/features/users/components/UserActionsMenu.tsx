@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { KeyRound, MoreVertical, Pencil, UserX } from 'lucide-react'
+import { KeyRound, MoreVertical, Pencil, UserX, type LucideIcon } from 'lucide-react'
 import { useClickOutside } from '@/hooks/useClickOutside'
+import { formatDisplayName } from '@/features/users/formatters'
 import type { TenantUserSummary } from '@/features/users/types'
 
 export interface UserActionsMenuProps {
@@ -11,9 +12,22 @@ export interface UserActionsMenuProps {
   onDeactivate: () => void
 }
 
+interface MenuItem {
+  label: string
+  icon: LucideIcon
+  onClick: () => void
+  danger?: boolean
+  disabled?: boolean
+  title?: string
+}
+
 const MENU_WIDTH = 176 // w-44
 const MENU_GAP = 8 // mt-2 / mb-2
 const VIEWPORT_MARGIN = 8
+
+const SELF_HINT = "You can't change your own role or status"
+const OWNER_PASSWORD_HINT = "Only the account owner can change the account owner's password"
+const OWNER_DEACTIVATE_HINT = "The account owner can't be deactivated"
 
 export function UserActionsMenu({ user, isSelf, onEdit, onResetPassword, onDeactivate }: UserActionsMenuProps) {
   const [open, setOpen] = useState(false)
@@ -22,9 +36,20 @@ export function UserActionsMenu({ user, isSelf, onEdit, onResetPassword, onDeact
   const buttonRef = useRef<HTMLButtonElement>(null)
   useClickOutside(ref, () => setOpen(false))
 
-  const items = [
+  // The backend rejects these outright for the account owner (409/403) — the UI blocks them
+  // up front so nobody clicks through to an error they can't do anything about.
+  const resetBlocked = user.root && !isSelf
+  const deactivateBlocked = user.root
+
+  const items: MenuItem[] = [
     { label: 'Edit', icon: Pencil, onClick: onEdit },
-    { label: 'Reset password', icon: KeyRound, onClick: onResetPassword },
+    {
+      label: 'Reset password',
+      icon: KeyRound,
+      onClick: onResetPassword,
+      disabled: resetBlocked,
+      title: resetBlocked ? OWNER_PASSWORD_HINT : undefined,
+    },
     ...(user.active
       ? [
           {
@@ -32,9 +57,9 @@ export function UserActionsMenu({ user, isSelf, onEdit, onResetPassword, onDeact
             icon: UserX,
             onClick: onDeactivate,
             danger: true,
-            disabled: isSelf,
-            title: isSelf ? "You can't change your own role or status" : undefined,
-          },
+            disabled: isSelf || deactivateBlocked,
+            title: deactivateBlocked ? OWNER_DEACTIVATE_HINT : isSelf ? SELF_HINT : undefined,
+          } satisfies MenuItem,
         ]
       : []),
   ]
@@ -78,7 +103,7 @@ export function UserActionsMenu({ user, isSelf, onEdit, onResetPassword, onDeact
         onClick={toggleOpen}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={`Actions for ${user.username}`}
+        aria-label={`Actions for ${formatDisplayName(user)}`}
         className="inline-flex items-center justify-center rounded-md p-2 text-neutral-500 hover:bg-neutral-100"
       >
         <MoreVertical className="h-4 w-4" />

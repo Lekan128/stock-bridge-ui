@@ -1,4 +1,4 @@
-import { BarChart3, LayoutDashboard, Package, Users, Warehouse, type LucideIcon } from 'lucide-react'
+import { LayoutDashboard, Users, Warehouse, type LucideIcon } from 'lucide-react'
 import { PERMISSIONS, type Permission } from '@/auth/permissions'
 
 export interface NavItem {
@@ -10,8 +10,7 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/products', label: 'Products', icon: Package, requiredPermission: PERMISSIONS.MANAGE_PRODUCTS },
-  { path: '/inventory', label: 'Inventory', icon: Warehouse, requiredPermission: PERMISSIONS.MANAGE_INVENTORY },
-  { path: '/analytics', label: 'Analytics', icon: BarChart3, requiredPermission: PERMISSIONS.VIEW_ANALYTICS },
+  // VIEW_PRODUCTS, not MANAGE_PRODUCTS — read-only roles can browse the catalog.
+  { path: '/products', label: 'Inventory', icon: Warehouse, requiredPermission: PERMISSIONS.VIEW_PRODUCTS },
   { path: '/users', label: 'Users', icon: Users, requiredPermission: PERMISSIONS.MANAGE_USERS },
 ]
