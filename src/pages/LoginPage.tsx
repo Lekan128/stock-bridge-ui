@@ -42,7 +42,7 @@ export function LoginPage() {
       navigate(redirectTo, { replace: true })
     } catch (err) {
       if (isAppError(err) && err.status === 401) {
-        setFormError('Invalid client ID, username, or password.')
+        setFormError('Invalid Company ID, username, or password.')
       } else if (isAppError(err)) {
         setFormError(err.message)
       } else {
@@ -65,7 +65,8 @@ export function LoginPage() {
     >
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
         <TextField
-          label="Client ID"
+          label="Company ID"
+          hint="The short identifier your company was given at signup."
           autoComplete="organization"
           error={errors.clientIdentifier?.message}
           {...register('clientIdentifier')}

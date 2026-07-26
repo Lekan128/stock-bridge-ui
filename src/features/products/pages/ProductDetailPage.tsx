@@ -40,6 +40,7 @@ export function ProductDetailPage() {
   const [deactivating, setDeactivating] = useState(false)
 
   const canManageInventory = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_INVENTORY)
+  const canManageProducts = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_PRODUCTS)
 
   function handleMutationSuccess(result: StockMutationResponse) {
     setProduct(result.product)
@@ -82,7 +83,7 @@ export function ProductDetailPage() {
           <button
             type="button"
             onClick={() => navigate('/products')}
-            aria-label="Back to products"
+            aria-label="Back to inventory"
             className="mt-0.5 rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100"
           >
             <ArrowLeft className="h-5 w-5" />
@@ -96,17 +97,19 @@ export function ProductDetailPage() {
             <p className="mt-0.5 text-sm text-neutral-500">SKU: {product.sku}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Link to={`/products/${product.id}/edit`} className={buttonClassName('secondary')}>
-            <Pencil className="h-4 w-4" />
-            Edit
-          </Link>
-          {product.active && (
-            <Button variant="danger" onClick={() => setConfirmDeactivate(true)}>
-              Deactivate
-            </Button>
-          )}
-        </div>
+        {canManageProducts && (
+          <div className="flex items-center gap-2">
+            <Link to={`/products/${product.id}/edit`} className={buttonClassName('secondary')}>
+              <Pencil className="h-4 w-4" />
+              Edit
+            </Link>
+            {product.active && (
+              <Button variant="danger" onClick={() => setConfirmDeactivate(true)}>
+                Deactivate
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-6 rounded-lg border border-neutral-200 bg-white p-5 md:grid-cols-3">

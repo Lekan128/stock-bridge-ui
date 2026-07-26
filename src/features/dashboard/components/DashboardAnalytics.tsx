@@ -22,7 +22,11 @@ import { useTopProducts } from '@/features/analytics/hooks/useTopProducts'
 
 const TOP_PRODUCTS_LIMIT = 8
 
-export function AnalyticsPage() {
+/**
+ * Analytics half of the dashboard. Mounted only for users with VIEW_ANALYTICS so
+ * that the analytics hooks below never fire (and never 403) for anyone else.
+ */
+export function DashboardAnalytics() {
   const { user } = useAuth()
   const [range, setRange] = useState<DateRange>(defaultDateRange)
   const [metric, setMetric] = useState<TopProductsMetric>('value')
@@ -31,7 +35,7 @@ export function AnalyticsPage() {
   const params = { from: toApiDateTime(range.from), to: toApiDateTime(range.to) }
   const granularity = granularityForRange(range.from, range.to)
   const rangeLabel = formatDateRange(range.from, range.to)
-  const canViewProducts = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_PRODUCTS)
+  const canViewProducts = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.VIEW_PRODUCTS)
 
   const { data: summary, loading: summaryLoading, error: summaryError } = useAnalyticsSummary(params)
   const {
@@ -49,7 +53,7 @@ export function AnalyticsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">Analytics</h1>
+          <h1 className="text-2xl font-semibold text-neutral-900">Dashboard</h1>
           <p className="text-sm text-neutral-500">Stock movement trends and top products.</p>
         </div>
         <DateRangeControl value={range} onChange={setRange} />

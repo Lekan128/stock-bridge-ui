@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { PERMISSIONS } from '@/auth/permissions'
+import { useAuth } from '@/auth/useAuth'
 import { Pagination } from '@/components/Pagination'
 import { useToast } from '@/components/useToast'
 import { BulkUploadModal } from '@/features/products/components/BulkUploadModal'
@@ -16,7 +18,9 @@ import { downloadBlob } from '@/utils/downloadBlob'
 const PAGE_SIZE = 20
 
 export function ProductListPage() {
+  const { user } = useAuth()
   const { showToast } = useToast()
+  const canManageProducts = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_PRODUCTS)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<ProductStatusFilter>('all')
   const [page, setPage] = useState(0)
@@ -79,13 +83,14 @@ export function ProductListPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold text-neutral-900">Products</h1>
+      <h1 className="text-2xl font-semibold text-neutral-900">Inventory</h1>
 
       <ProductsToolbar
         search={search}
         onSearchChange={handleSearchChange}
         statusFilter={statusFilter}
         onStatusFilterChange={handleStatusFilterChange}
+        canManageProducts={canManageProducts}
         onBulkUpload={() => setBulkUploadOpen(true)}
         onDownloadTemplate={() => void handleDownloadTemplate()}
         onExport={() => void handleExport()}
@@ -97,7 +102,9 @@ export function ProductListPage() {
         <div className="rounded-md border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700">{error}</div>
       )}
 
-      {!loading && !error && isTrulyEmpty && <EmptyProductsState onBulkUpload={() => setBulkUploadOpen(true)} />}
+      {!loading && !error && isTrulyEmpty && (
+        <EmptyProductsState canManageProducts={canManageProducts} onBulkUpload={() => setBulkUploadOpen(true)} />
+      )}
 
       {!loading && !error && !isTrulyEmpty && data && (
         <>
@@ -122,7 +129,7 @@ export function ProductListPage() {
       )}
 
       <BulkUploadModal
-        open={bulkUploadOpen}
+        open={bulkUploadOpen && canManageProducts}
         onClose={() => setBulkUploadOpen(false)}
         onSuccess={handleBulkUploadSuccess}
       />

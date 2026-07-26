@@ -37,7 +37,7 @@ export function LowStockProductsPage() {
         <button
           type="button"
           onClick={() => navigate('/products')}
-          aria-label="Back to products"
+          aria-label="Back to inventory"
           className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100"
         >
           <ArrowLeft className="h-5 w-5" />
@@ -62,7 +62,7 @@ export function LowStockProductsPage() {
           <h2 className="mt-4 text-base font-semibold text-neutral-900">You're all stocked up</h2>
           <p className="mt-1 max-w-sm text-sm text-neutral-500">No products are below their low-stock threshold right now.</p>
           <Link to="/products" className="mt-5 text-sm font-medium text-primary-600 hover:underline">
-            Back to all products
+            Back to inventory
           </Link>
         </div>
       )}
