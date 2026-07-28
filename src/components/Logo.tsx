@@ -1,12 +1,26 @@
+/**
+ * `stockBridge` is the inventory workspace; `procurePal` is the public marketplace storefront.
+ * Same platform, same mark — only the wordmark changes, because the bridge/arrow icon means the
+ * same thing in both places (goods moving into stock) and two separate marks would read as two
+ * unrelated products.
+ */
+export type LogoBrand = 'stockBridge' | 'procurePal'
+
 export interface LogoProps {
   /** Icon height in px. The wordmark, when shown, scales proportionally. Default 32. */
   size?: number
   /** 'full' renders icon + wordmark (e.g. login screen); 'icon' renders the mark alone (e.g. header/sidebar). */
   variant?: 'full' | 'icon'
+  brand?: LogoBrand
   className?: string
 }
 
-export function Logo({ size = 32, variant = 'full', className = '' }: LogoProps) {
+const brandNames: Record<LogoBrand, string> = {
+  stockBridge: 'Stock Bridge',
+  procurePal: 'ProcurePal',
+}
+
+export function Logo({ size = 32, variant = 'full', brand = 'stockBridge', className = '' }: LogoProps) {
   return (
     <span className={`inline-flex items-center gap-2 ${className}`}>
       <svg
@@ -15,7 +29,7 @@ export function Logo({ size = 32, variant = 'full', className = '' }: LogoProps)
         viewBox="0 0 32 32"
         xmlns="http://www.w3.org/2000/svg"
         role={variant === 'icon' ? 'img' : undefined}
-        aria-label={variant === 'icon' ? 'Stock Bridge' : undefined}
+        aria-label={variant === 'icon' ? brandNames[brand] : undefined}
         aria-hidden={variant === 'full' ? true : undefined}
       >
         {/* pylons */}
@@ -28,7 +42,16 @@ export function Logo({ size = 32, variant = 'full', className = '' }: LogoProps)
       </svg>
       {variant === 'full' && (
         <span className="font-sans font-semibold leading-none" style={{ fontSize: size * 0.5 }}>
-          <span className="text-neutral-900">Stock</span> <span className="text-primary-600">Bridge</span>
+          {brand === 'procurePal' ? (
+            <>
+              <span className="text-neutral-900">Procure</span>
+              <span className="text-primary-600">Pal</span>
+            </>
+          ) : (
+            <>
+              <span className="text-neutral-900">Stock</span> <span className="text-primary-600">Bridge</span>
+            </>
+          )}
         </span>
       )}
     </span>

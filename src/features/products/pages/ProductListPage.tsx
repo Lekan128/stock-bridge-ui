@@ -1,13 +1,17 @@
 import { useState } from 'react'
+import { PERMISSIONS } from '@/auth/permissions'
+import { useAuth } from '@/auth/useAuth'
 import { Pagination } from '@/components/Pagination'
 import { useToast } from '@/components/useToast'
 import { BulkUploadModal } from '@/features/products/components/BulkUploadModal'
 import { EmptyProductsState } from '@/features/products/components/EmptyProductsState'
+import { IncomingStockNotice } from '@/features/products/components/IncomingStockNotice'
 import { ProductCard } from '@/features/products/components/ProductCard'
 import { ProductListSkeleton } from '@/features/products/components/ProductListSkeleton'
 import { ProductTable, type ProductSort, type ProductSortField } from '@/features/products/components/ProductTable'
 import { ProductsToolbar } from '@/features/products/components/ProductsToolbar'
 import { productsApi } from '@/features/products/api/productsApi'
+import { useProductIncoming } from '@/features/products/hooks/useProductIncoming'
 import { useProducts } from '@/features/products/hooks/useProducts'
 import type { ProductStatusFilter } from '@/features/products/types'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
@@ -16,7 +20,9 @@ import { downloadBlob } from '@/utils/downloadBlob'
 const PAGE_SIZE = 20
 
 export function ProductListPage() {
+  const { user } = useAuth()
   const { showToast } = useToast()
+  const canManageProducts = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_PRODUCTS)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<ProductStatusFilter>('all')
   const [page, setPage] = useState(0)
@@ -32,6 +38,10 @@ export function ProductListPage() {
     size: PAGE_SIZE,
     sort: `${sort.field},${sort.direction}`,
   })
+
+  // Stock bought from ProcurePal and not yet received. Surfaced beside — never inside — the
+  // quantity on hand, so "12 usable, 20 incoming" can never be misread as 32 usable.
+  const { incomingFor, totals: incomingTotals } = useProductIncoming(data?.content)
 
   function handleSortChange(field: ProductSortField) {
     setSort((prev) =>
@@ -79,13 +89,21 @@ export function ProductListPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold text-neutral-900">Products</h1>
+      <h1 className="text-2xl font-semibold text-neutral-900">Inventory</h1>
+
+      <IncomingStockNotice
+        units={incomingTotals.units}
+        productCount={incomingTotals.productCount}
+        awaitingReceiptUnits={incomingTotals.awaitingReceiptUnits}
+        approximate={incomingTotals.approximate}
+      />
 
       <ProductsToolbar
         search={search}
         onSearchChange={handleSearchChange}
         statusFilter={statusFilter}
         onStatusFilterChange={handleStatusFilterChange}
+        canManageProducts={canManageProducts}
         onBulkUpload={() => setBulkUploadOpen(true)}
         onDownloadTemplate={() => void handleDownloadTemplate()}
         onExport={() => void handleExport()}
@@ -97,7 +115,9 @@ export function ProductListPage() {
         <div className="rounded-md border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700">{error}</div>
       )}
 
-      {!loading && !error && isTrulyEmpty && <EmptyProductsState onBulkUpload={() => setBulkUploadOpen(true)} />}
+      {!loading && !error && isTrulyEmpty && (
+        <EmptyProductsState canManageProducts={canManageProducts} onBulkUpload={() => setBulkUploadOpen(true)} />
+      )}
 
       {!loading && !error && !isTrulyEmpty && data && (
         <>
@@ -109,11 +129,16 @@ export function ProductListPage() {
             <>
               <div className="flex flex-col gap-2 md:hidden">
                 {data.content.map((product) => (
-                  <ProductCard key={product.id} product={product} />
+                  <ProductCard key={product.id} product={product} incoming={incomingFor(product).quantity} />
                 ))}
               </div>
               <div className="hidden overflow-hidden rounded-lg border border-neutral-200 bg-white md:block">
-                <ProductTable products={data.content} sort={sort} onSortChange={handleSortChange} />
+                <ProductTable
+                  products={data.content}
+                  sort={sort}
+                  onSortChange={handleSortChange}
+                  incomingFor={incomingFor}
+                />
               </div>
             </>
           )}
@@ -122,7 +147,7 @@ export function ProductListPage() {
       )}
 
       <BulkUploadModal
-        open={bulkUploadOpen}
+        open={bulkUploadOpen && canManageProducts}
         onClose={() => setBulkUploadOpen(false)}
         onSuccess={handleBulkUploadSuccess}
       />

@@ -1,0 +1,42 @@
+import { useEffect, useState } from 'react'
+import { superAdminApiClient } from '@/features/admin/api/superAdminApi'
+import type { AdminUserListParams, SuperAdminUserSummary } from '@/features/admin/types'
+import type { PageResponse } from '@/features/products/types'
+import { isAppError } from '@/types/api'
+
+/** Read-only listing of any one tenant's users (GET /api/superadmin/clients/{id}/users). */
+export function useClientUsers(clientId: string | undefined, params: AdminUserListParams) {
+  const [data, setData] = useState<PageResponse<SuperAdminUserSummary> | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [reloadToken, setReloadToken] = useState(0)
+  const paramsKey = JSON.stringify(params)
+
+  useEffect(() => {
+    if (!clientId) return
+
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+
+    superAdminApiClient
+      .listClientUsers(clientId, params)
+      .then((response) => {
+        if (!cancelled) setData(response)
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(isAppError(err) ? err.message : 'Something went wrong. Please try again.')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+    // paramsKey is a stable stand-in for params (a fresh object each render).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId, paramsKey, reloadToken])
+
+  return { data, loading, error, refetch: () => setReloadToken((t) => t + 1) }
+}

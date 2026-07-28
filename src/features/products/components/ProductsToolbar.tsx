@@ -9,6 +9,8 @@ export interface ProductsToolbarProps {
   onSearchChange: (value: string) => void
   statusFilter: ProductStatusFilter
   onStatusFilterChange: (value: ProductStatusFilter) => void
+  /** Everything that writes to the catalog needs MANAGE_PRODUCTS; export only needs VIEW_PRODUCTS. */
+  canManageProducts: boolean
   onBulkUpload: () => void
   onDownloadTemplate: () => void
   onExport: () => void
@@ -25,6 +27,7 @@ export function ProductsToolbar({
   onSearchChange,
   statusFilter,
   onStatusFilterChange,
+  canManageProducts,
   onBulkUpload,
   onDownloadTemplate,
   onExport,
@@ -66,35 +69,48 @@ export function ProductsToolbar({
       </div>
 
       <div className="flex items-center justify-between gap-2">
-        <Link to="/products/new" className={buttonClassName('primary')}>
-          <Plus className="h-4 w-4" />
-          Add Product
-        </Link>
+        {canManageProducts ? (
+          <Link to="/app/products/new" className={buttonClassName('primary')}>
+            <Plus className="h-4 w-4" />
+            Add Product
+          </Link>
+        ) : (
+          <span />
+        )}
 
         <div className="flex items-center gap-2">
           <div className="hidden items-center gap-2 md:flex">
-            <button
-              type="button"
-              onClick={onBulkUpload}
-              className={buttonClassName('secondary')}
-            >
-              <Upload className="h-4 w-4" />
-              Bulk Upload
-            </button>
-            <button
-              type="button"
-              onClick={onDownloadTemplate}
-              className={buttonClassName('secondary')}
-            >
-              <FileSpreadsheet className="h-4 w-4" />
-              Download Template
-            </button>
+            {canManageProducts && (
+              <>
+                <button
+                  type="button"
+                  onClick={onBulkUpload}
+                  className={buttonClassName('secondary')}
+                >
+                  <Upload className="h-4 w-4" />
+                  Bulk Upload
+                </button>
+                <button
+                  type="button"
+                  onClick={onDownloadTemplate}
+                  className={buttonClassName('secondary')}
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                  Download Template
+                </button>
+              </>
+            )}
             <button type="button" onClick={onExport} className={buttonClassName('secondary')}>
               <Download className="h-4 w-4" />
               Export
             </button>
           </div>
-          <BulkActionsMenu onBulkUpload={onBulkUpload} onDownloadTemplate={onDownloadTemplate} onExport={onExport} />
+          <BulkActionsMenu
+            canManageProducts={canManageProducts}
+            onBulkUpload={onBulkUpload}
+            onDownloadTemplate={onDownloadTemplate}
+            onExport={onExport}
+          />
         </div>
       </div>
     </div>

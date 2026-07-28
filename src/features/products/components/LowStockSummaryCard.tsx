@@ -1,16 +1,20 @@
-import { AlertTriangle, PackageCheck } from 'lucide-react'
+import { AlertTriangle, PackageCheck, Truck } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
 import { Spinner } from '@/components/Spinner'
 import { useLowStockAlerts } from '@/features/products/hooks/useLowStockAlerts'
+import { useProductIncoming } from '@/features/products/hooks/useProductIncoming'
 
 const PREVIEW_COUNT = 4
 
 export function LowStockSummaryCard() {
   const { user } = useAuth()
   const { alerts, count, loading, hasLoadedOnce } = useLowStockAlerts()
-  const canViewProducts = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_PRODUCTS)
+  // Low stock with a delivery already booked is not the same problem as low stock with nothing
+  // coming, and the dashboard is exactly where somebody decides to re-order.
+  const { incomingFor } = useProductIncoming(alerts)
+  const canViewProducts = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.VIEW_PRODUCTS)
   const preview = alerts.slice(0, PREVIEW_COUNT)
 
   return (
@@ -45,20 +49,31 @@ export function LowStockSummaryCard() {
 
         {hasLoadedOnce && count > 0 && (
           <ul className="flex flex-col gap-2">
-            {preview.map((product) => (
-              <li key={product.id} className="flex items-center justify-between gap-2 text-sm">
-                <span className="truncate text-neutral-700">{product.name}</span>
-                <span className="shrink-0 text-neutral-500">
-                  {product.quantityOnHand} / {product.lowStockThreshold ?? '—'}
-                </span>
-              </li>
-            ))}
+            {preview.map((product) => {
+              const incoming = incomingFor(product).quantity
+              return (
+                <li key={product.id} className="flex items-start justify-between gap-2 text-sm">
+                  <div className="min-w-0">
+                    <span className="block truncate text-neutral-700">{product.name}</span>
+                    {incoming > 0 && (
+                      <span className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-warning-700">
+                        <Truck className="h-3 w-3" aria-hidden="true" />
+                        {incoming} on the way — no need to re-order
+                      </span>
+                    )}
+                  </div>
+                  <span className="shrink-0 text-neutral-500">
+                    {product.quantityOnHand} / {product.lowStockThreshold ?? '—'}
+                  </span>
+                </li>
+              )
+            })}
           </ul>
         )}
       </div>
 
       {canViewProducts && hasLoadedOnce && count > 0 && (
-        <Link to="/products/low-stock" className="mt-4 inline-block text-sm font-medium text-primary-600 hover:underline">
+        <Link to="/app/products/low-stock" className="mt-4 inline-block text-sm font-medium text-primary-600 hover:underline">
           View all {count} low-stock products
         </Link>
       )}

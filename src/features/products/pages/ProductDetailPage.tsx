@@ -7,16 +7,19 @@ import { Button, buttonClassName } from '@/components/Button'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useToast } from '@/components/useToast'
 import { productsApi } from '@/features/products/api/productsApi'
+import { IncomingStockBadge } from '@/features/products/components/IncomingStockBadge'
 import { LowStockBadge } from '@/features/products/components/LowStockBadge'
 import { ProductDetailSkeleton } from '@/features/products/components/ProductDetailSkeleton'
 import { ProductImage } from '@/features/products/components/ProductImage'
 import { StatusBadge } from '@/features/products/components/StatusBadge'
 import { StockAdjustmentModal } from '@/features/products/components/StockAdjustmentModal'
+import { StockBreakdownPanel } from '@/features/products/components/StockBreakdownPanel'
 import { StockHistoryTable } from '@/features/products/components/StockHistoryTable'
 import { StockQuantityModal } from '@/features/products/components/StockQuantityModal'
 import { formatCurrency } from '@/features/products/formatters'
 import { useLowStockAlerts } from '@/features/products/hooks/useLowStockAlerts'
 import { useProduct } from '@/features/products/hooks/useProduct'
+import { useProductIncoming } from '@/features/products/hooks/useProductIncoming'
 import { useStockHistory } from '@/features/products/hooks/useStockHistory'
 import type { StockMutationResponse } from '@/features/products/types'
 import { isAppError } from '@/types/api'
@@ -30,6 +33,9 @@ export function ProductDetailPage() {
   const { showToast } = useToast()
   const { product, setProduct, loading, error } = useProduct(id)
   const { refetch: refetchLowStockAlerts } = useLowStockAlerts()
+  // A single-element array so the hook's "does the API send incomingQuantity?" check works the
+  // same way here as it does on the list.
+  const { incomingFor } = useProductIncoming(product ? [product] : undefined)
   const [historyPage, setHistoryPage] = useState(0)
   const { data: history, loading: historyLoading, error: historyError, refetch: refetchHistory } = useStockHistory(
     id,
@@ -40,6 +46,7 @@ export function ProductDetailPage() {
   const [deactivating, setDeactivating] = useState(false)
 
   const canManageInventory = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_INVENTORY)
+  const canManageProducts = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_PRODUCTS)
 
   function handleMutationSuccess(result: StockMutationResponse) {
     setProduct(result.product)
@@ -75,14 +82,16 @@ export function ProductDetailPage() {
     )
   }
 
+  const incoming = incomingFor(product)
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-3">
           <button
             type="button"
-            onClick={() => navigate('/products')}
-            aria-label="Back to products"
+            onClick={() => navigate('/app/products')}
+            aria-label="Back to inventory"
             className="mt-0.5 rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100"
           >
             <ArrowLeft className="h-5 w-5" />
@@ -92,21 +101,24 @@ export function ProductDetailPage() {
               <h1 className="text-2xl font-semibold text-neutral-900">{product.name}</h1>
               <StatusBadge active={product.active} />
               {product.isLowStock && <LowStockBadge />}
+              <IncomingStockBadge quantity={incoming.quantity} />
             </div>
             <p className="mt-0.5 text-sm text-neutral-500">SKU: {product.sku}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Link to={`/products/${product.id}/edit`} className={buttonClassName('secondary')}>
-            <Pencil className="h-4 w-4" />
-            Edit
-          </Link>
-          {product.active && (
-            <Button variant="danger" onClick={() => setConfirmDeactivate(true)}>
-              Deactivate
-            </Button>
-          )}
-        </div>
+        {canManageProducts && (
+          <div className="flex items-center gap-2">
+            <Link to={`/app/products/${product.id}/edit`} className={buttonClassName('secondary')}>
+              <Pencil className="h-4 w-4" />
+              Edit
+            </Link>
+            {product.active && (
+              <Button variant="danger" onClick={() => setConfirmDeactivate(true)}>
+                Deactivate
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-6 rounded-lg border border-neutral-200 bg-white p-5 md:grid-cols-3">
@@ -129,17 +141,12 @@ export function ProductDetailPage() {
         </div>
       </div>
 
-      <div className="rounded-lg border border-neutral-200 bg-white p-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm text-neutral-500">Quantity on hand</p>
-            <div className="mt-1 flex items-center gap-2">
-              <span className="text-3xl font-semibold text-neutral-900">{product.quantityOnHand}</span>
-              {product.isLowStock && <LowStockBadge />}
-            </div>
-          </div>
-          {canManageInventory && (
-            <div className="flex flex-wrap gap-2">
+      <StockBreakdownPanel
+        product={product}
+        incoming={incoming}
+        actions={
+          canManageInventory ? (
+            <>
               <Button variant="secondary" onClick={() => setActiveAction('in')}>
                 Stock In
               </Button>
@@ -149,10 +156,10 @@ export function ProductDetailPage() {
               <Button variant="secondary" onClick={() => setActiveAction('adjustment')}>
                 Adjust
               </Button>
-            </div>
-          )}
-        </div>
-      </div>
+            </>
+          ) : undefined
+        }
+      />
 
       <div>
         <h2 className="mb-3 text-base font-semibold text-neutral-900">Movement history</h2>

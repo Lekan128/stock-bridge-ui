@@ -16,6 +16,12 @@ export interface AddUserModalProps {
   onSuccess: (user: TenantUserSummary) => void
 }
 
+/** Optional profile fields are only sent when filled in — the backend stores blanks as null anyway. */
+function optional(value: string): string | undefined {
+  const trimmed = value.trim()
+  return trimmed === '' ? undefined : trimmed
+}
+
 export function AddUserModal({ onClose, onSuccess }: AddUserModalProps) {
   const [formError, setFormError] = useState<string | null>(null)
 
@@ -33,7 +39,16 @@ export function AddUserModal({ onClose, onSuccess }: AddUserModalProps) {
   async function onSubmit(values: CreateUserFormValues) {
     setFormError(null)
     try {
-      const user = await usersApi.create({ username: values.username, password: values.password, role: values.role })
+      const user = await usersApi.create({
+        username: values.username,
+        password: values.password,
+        role: values.role,
+        firstName: optional(values.firstName),
+        lastName: optional(values.lastName),
+        email: optional(values.email),
+        phone: optional(values.phone),
+        jobTitle: optional(values.jobTitle),
+      })
       onSuccess(user)
     } catch (err) {
       if (isAppError(err) && err.status === 409) {
@@ -49,6 +64,7 @@ export function AddUserModal({ onClose, onSuccess }: AddUserModalProps) {
       open
       onClose={onClose}
       title="Add user"
+      size="lg"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
@@ -63,7 +79,7 @@ export function AddUserModal({ onClose, onSuccess }: AddUserModalProps) {
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
         <TextField
           label="Username"
-          hint="Can be an email or any username — this is what they'll use to log in along with your client ID"
+          hint="Can be an email or any username — this is what they'll use to log in along with your Company ID"
           error={errors.username?.message}
           {...register('username')}
         />
@@ -77,8 +93,27 @@ export function AddUserModal({ onClose, onSuccess }: AddUserModalProps) {
         <Controller
           control={control}
           name="role"
-          render={({ field }) => <RoleSelectField value={field.value} onChange={field.onChange} />}
+          render={({ field }) => (
+            <RoleSelectField value={field.value} onChange={field.onChange} error={errors.role?.message} />
+          )}
         />
+
+        <div className="border-t border-neutral-200 pt-4">
+          <p className="text-sm font-medium text-neutral-700">Profile details</p>
+          <p className="mt-0.5 text-xs text-neutral-500">
+            All optional — they can fill these in themselves from their profile page later.
+          </p>
+          <div className="mt-3 flex flex-col gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <TextField label="First name" error={errors.firstName?.message} {...register('firstName')} />
+              <TextField label="Last name" error={errors.lastName?.message} {...register('lastName')} />
+            </div>
+            <TextField label="Email" type="email" error={errors.email?.message} {...register('email')} />
+            <TextField label="Phone" type="tel" error={errors.phone?.message} {...register('phone')} />
+            <TextField label="Job title" error={errors.jobTitle?.message} {...register('jobTitle')} />
+          </div>
+        </div>
+
         <FormError message={formError} />
       </form>
     </Modal>

@@ -8,7 +8,8 @@ export function RequirePermission({ permission, children }: { permission: Permis
   const permissions = user?.type === 'tenant' ? user.permissions : []
 
   if (!permissions.includes(permission)) {
-    return <Navigate to="/" replace />
+    // Back to the workspace dashboard, not `/` — `/` is now the public storefront.
+    return <Navigate to="/app" replace />
   }
 
   return <>{children}</>

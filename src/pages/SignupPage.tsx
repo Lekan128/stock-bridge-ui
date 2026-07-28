@@ -10,6 +10,7 @@ import { FormError } from '@/components/FormError'
 import { TextField } from '@/components/TextField'
 import { useToast } from '@/components/useToast'
 import { isAppError } from '@/types/api'
+import { DEFAULT_AUTHENTICATED_PATH } from '@/utils/redirectTarget'
 import { slugify } from '@/utils/slugify'
 
 const KNOWN_FIELDS = new Set<keyof SignupFormValues>([
@@ -55,7 +56,7 @@ export function SignupPage() {
         confirmPassword: values.confirmPassword,
       })
       showToast(`Welcome to Stock Bridge, ${tenantUser.clientName}!`, 'success')
-      navigate('/', { replace: true })
+      navigate(DEFAULT_AUTHENTICATED_PATH, { replace: true })
     } catch (err) {
       if (!isAppError(err)) {
         setFormError('Something went wrong. Please try again.')
@@ -108,8 +109,8 @@ export function SignupPage() {
           })}
         />
         <TextField
-          label="Client identifier"
-          hint="Used to log in. Lowercase letters, numbers, and hyphens only."
+          label="Company ID"
+          hint="The short identifier your team will type when logging in. Lowercase letters, numbers, and hyphens only."
           error={errors.clientIdentifier?.message}
           {...register('clientIdentifier', {
             onChange: () => {
