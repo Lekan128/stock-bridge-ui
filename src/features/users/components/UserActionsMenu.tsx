@@ -7,6 +7,14 @@ import type { TenantUserSummary } from '@/features/users/types'
 export interface UserActionsMenuProps {
   user: TenantUserSummary
   isSelf?: boolean
+  /**
+   * Lets the root user's password be reset by somebody who is not them. False everywhere on the
+   * tenant surface, where the backend refuses it; true on the super-admin platform-owner screen,
+   * where the same call is allowed and is the deliberate lockout-recovery path. Nothing else
+   * about the root user's protections changes — the role and status guards are unconditional
+   * because the backend answers 409 to those from every caller.
+   */
+  allowRootPasswordReset?: boolean
   onEdit: () => void
   onResetPassword: () => void
   onDeactivate: () => void
@@ -29,7 +37,14 @@ const SELF_HINT = "You can't change your own role or status"
 const OWNER_PASSWORD_HINT = "Only the account owner can change the account owner's password"
 const OWNER_DEACTIVATE_HINT = "The account owner can't be deactivated"
 
-export function UserActionsMenu({ user, isSelf, onEdit, onResetPassword, onDeactivate }: UserActionsMenuProps) {
+export function UserActionsMenu({
+  user,
+  isSelf,
+  allowRootPasswordReset = false,
+  onEdit,
+  onResetPassword,
+  onDeactivate,
+}: UserActionsMenuProps) {
   const [open, setOpen] = useState(false)
   const [position, setPosition] = useState<{ top: number; left: number; openUp: boolean } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
@@ -38,7 +53,7 @@ export function UserActionsMenu({ user, isSelf, onEdit, onResetPassword, onDeact
 
   // The backend rejects these outright for the account owner (409/403) — the UI blocks them
   // up front so nobody clicks through to an error they can't do anything about.
-  const resetBlocked = user.root && !isSelf
+  const resetBlocked = user.root && !isSelf && !allowRootPasswordReset
   const deactivateBlocked = user.root
 
   const items: MenuItem[] = [
