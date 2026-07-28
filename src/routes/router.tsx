@@ -84,6 +84,11 @@ const ProfilePage = lazy(() =>
   import('@/pages/ProfilePage').then((m) => ({ default: m.ProfilePage })),
 )
 const UsersPage = lazy(() => import('@/pages/UsersPage').then((m) => ({ default: m.UsersPage })))
+const CompanySettingsPage = lazy(() =>
+  import('@/pages/CompanySettingsPage').then((m) => ({
+    default: m.CompanySettingsPage,
+  })),
+)
 
 const MarketplaceProductsPage = lazy(() =>
   import('@/pages/MarketplaceProductsPage').then((m) => ({
@@ -124,6 +129,11 @@ const AdminTenantDetailPage = lazy(() =>
 const AdminAggregateAnalyticsPage = lazy(() =>
   import('@/pages/AdminAggregateAnalyticsPage').then((m) => ({
     default: m.AdminAggregateAnalyticsPage,
+  })),
+)
+const AdminPlatformOwnerUsersPage = lazy(() =>
+  import('@/pages/AdminPlatformOwnerUsersPage').then((m) => ({
+    default: m.AdminPlatformOwnerUsersPage,
   })),
 )
 
@@ -361,6 +371,11 @@ export function AppRoutes() {
 
           {/* Self-service — every authenticated tenant user, no permission required. */}
           <Route path="profile" element={<ProfilePage />} />
+          {/* Deliberately ungated, mirroring the backend: GET /api/company carries no
+            @PreAuthorize, so a storekeeper can read their company's details (including the
+            Company ID they need to onboard a colleague) even though only an OWNER can change
+            them. The page gates the edit form on MANAGE_COMPANY_PROFILE instead. */}
+          <Route path="company" element={<CompanySettingsPage />} />
           <Route
             path="users"
             element={
@@ -397,6 +412,10 @@ export function AppRoutes() {
           <Route index element={<Navigate to="tenants" replace />} />
           <Route path="tenants" element={<AdminTenantsPage />} />
           <Route path="tenants/:id" element={<AdminTenantDetailPage />} />
+          {/* ProcurePal's own staff accounts — the one tenant a super admin may write. Every
+            other tenant's users are read-only, on the Users section of the tenant detail page,
+            because no API exists to write them. */}
+          <Route path="procurepal-users" element={<AdminPlatformOwnerUsersPage />} />
           <Route path="analytics" element={<AdminAggregateAnalyticsPage />} />
         </Route>
       </Routes>

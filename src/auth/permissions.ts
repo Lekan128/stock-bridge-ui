@@ -11,6 +11,13 @@ export const PERMISSIONS = {
   MANAGE_INVENTORY: 'MANAGE_INVENTORY',
   VIEW_ANALYTICS: 'VIEW_ANALYTICS',
 
+  /**
+   * Edit the caller's own company record — PUT /api/company. Granted to OWNER alone (V7).
+   * Reading the company (GET /api/company) is deliberately ungated on the backend, so this
+   * code gates the *edit affordance* on the company settings page, never the page itself.
+   */
+  MANAGE_COMPANY_PROFILE: 'MANAGE_COMPANY_PROFILE',
+
   // Marketplace — buyer side (contract §4.11).
   BROWSE_MARKETPLACE: 'BROWSE_MARKETPLACE',
   PLACE_ORDERS: 'PLACE_ORDERS',

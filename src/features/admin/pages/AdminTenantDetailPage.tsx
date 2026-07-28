@@ -7,9 +7,11 @@ import {
   PackageCheck,
   PackageMinus,
   PackagePlus,
+  Pencil,
+  Store,
   Users as UsersIcon,
 } from 'lucide-react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ChartCard } from '@/components/analytics/ChartCard'
 import { DateRangeControl } from '@/components/analytics/DateRangeControl'
 import { defaultDateRange, granularityForRange, toApiDateTime, type DateRange } from '@/components/analytics/dateRange'
@@ -19,16 +21,20 @@ import { StatCard } from '@/components/analytics/StatCard'
 import { SummaryCardsSkeleton } from '@/components/analytics/SummaryCardsSkeleton'
 import { TopProductsChart } from '@/components/analytics/TopProductsChart'
 import type { TopProductsDirection, TopProductsMetric } from '@/components/analytics/types'
+import { Badge } from '@/components/Badge'
 import { Button } from '@/components/Button'
 import { useToast } from '@/components/useToast'
 import { superAdminApiClient } from '@/features/admin/api/superAdminApi'
 import { ClientStatusBadge } from '@/features/admin/components/ClientStatusBadge'
+import { EditClientModal } from '@/features/admin/components/EditClientModal'
 import { SuspendClientDialog } from '@/features/admin/components/SuspendClientDialog'
-import { formatDate } from '@/features/admin/formatters'
+import { TenantUsersPanel } from '@/features/admin/components/TenantUsersPanel'
+import { formatDate, formatPaymentTerms } from '@/features/admin/formatters'
 import { useClientAnalyticsSummary } from '@/features/admin/hooks/useClientAnalyticsSummary'
 import { useClientDetail } from '@/features/admin/hooks/useClientDetail'
 import { useClientMovementsOverTime } from '@/features/admin/hooks/useClientMovementsOverTime'
 import { useClientTopProducts } from '@/features/admin/hooks/useClientTopProducts'
+import type { SuperAdminClientDetail } from '@/features/admin/types'
 import { isAppError } from '@/types/api'
 
 const TOP_PRODUCTS_LIMIT = 8
@@ -43,6 +49,7 @@ export function AdminTenantDetailPage() {
   const [direction, setDirection] = useState<TopProductsDirection>('in')
   const [confirmSuspend, setConfirmSuspend] = useState(false)
   const [statusUpdating, setStatusUpdating] = useState(false)
+  const [editing, setEditing] = useState(false)
 
   const params = { from: toApiDateTime(range.from), to: toApiDateTime(range.to) }
   const granularity = granularityForRange(range.from, range.to)
@@ -72,6 +79,18 @@ export function AdminTenantDetailPage() {
     } finally {
       setStatusUpdating(false)
     }
+  }
+
+  function handleEditSuccess(updated: SuperAdminClientDetail) {
+    const renamed = client !== null && updated.slug !== client.slug
+    setClient(updated)
+    setEditing(false)
+    showToast(
+      renamed
+        ? `${updated.name} updated. Its login identifier is now "${updated.slug}" — tell its users.`
+        : `${updated.name} updated.`,
+      'success',
+    )
   }
 
   async function handleConfirmSuspend() {
@@ -121,13 +140,36 @@ export function AdminTenantDetailPage() {
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-semibold text-neutral-900">{client.name}</h1>
               <ClientStatusBadge active={client.active} />
+              {client.platformOwner && (
+                <Badge variant="info">
+                  <Store className="h-3 w-3" aria-hidden="true" />
+                  Platform owner
+                </Badge>
+              )}
             </div>
             <p className="mt-0.5 text-sm text-neutral-500">
-              {client.slug} · {client.adminEmail} · Created {formatDate(client.createdAt)}
+              {client.slug} · {client.adminEmail}
+              {client.phone ? ` · ${client.phone}` : ''} · Created {formatDate(client.createdAt)}
+            </p>
+            <p className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-neutral-500">
+              <Badge variant={client.paymentTerms === 'PAY_ON_DELIVERY_ALLOWED' ? 'success' : 'neutral'}>
+                {formatPaymentTerms(client.paymentTerms)}
+              </Badge>
+              {/* ProcurePal is the one tenant whose users a super admin may write, and this is
+                  the only screen that knows which row that is. */}
+              {client.platformOwner && (
+                <Link to="/admin/procurepal-users" className="text-sm font-medium text-primary-700 hover:underline">
+                  Manage ProcurePal users →
+                </Link>
+              )}
             </p>
           </div>
         </div>
-        <div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="secondary" onClick={() => setEditing(true)}>
+            <Pencil className="h-4 w-4" />
+            Edit
+          </Button>
           {client.active ? (
             <Button variant="danger" onClick={() => setConfirmSuspend(true)}>
               Suspend
@@ -151,6 +193,8 @@ export function AdminTenantDetailPage() {
           variant={client.lowStockProductCount > 0 ? 'warning' : 'default'}
         />
       </div>
+
+      <TenantUsersPanel clientId={client.id} clientName={client.name} />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-base font-semibold text-neutral-900">Analytics</h2>
@@ -209,6 +253,10 @@ export function AdminTenantDetailPage() {
           onDirectionChange={setDirection}
         />
       </ChartCard>
+
+      {editing && (
+        <EditClientModal client={client} onClose={() => setEditing(false)} onSuccess={handleEditSuccess} />
+      )}
 
       <SuspendClientDialog
         open={confirmSuspend}

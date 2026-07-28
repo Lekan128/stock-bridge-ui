@@ -46,7 +46,7 @@ export function AdminLayout() {
         </div>
       </header>
 
-      {/* Below md: a horizontal tab row replaces the sidebar — only 2 sections, so a
+      {/* Below md: a horizontal tab row replaces the sidebar — only a handful of sections, so a
           drawer/hamburger would be overkill; this keeps the section usable at tablet width. */}
       <nav className="flex gap-1 overflow-x-auto border-b border-neutral-200 bg-white px-4 py-2 md:hidden">
         {ADMIN_NAV_ITEMS.map((item) => (
