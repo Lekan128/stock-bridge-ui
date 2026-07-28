@@ -70,7 +70,7 @@ export function ProductsToolbar({
 
       <div className="flex items-center justify-between gap-2">
         {canManageProducts ? (
-          <Link to="/products/new" className={buttonClassName('primary')}>
+          <Link to="/app/products/new" className={buttonClassName('primary')}>
             <Plus className="h-4 w-4" />
             Add Product
           </Link>

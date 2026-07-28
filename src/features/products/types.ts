@@ -4,8 +4,29 @@ export interface Product {
   sku: string
   description: string | null
   unitPrice: number
-  costPrice: number | null
+  /** Usable stock: what can be picked, sold or consumed today. */
   quantityOnHand: number
+  costPrice: number | null
+  /**
+   * Stock bought from ProcurePal, paid for, and NOT yet physically received — visible so nobody
+   * re-orders something already on its way, and explicitly not usable until receipt is confirmed.
+   *
+   * ⚠️ **`GET /api/products` does not currently send this.** The column exists (migration V6 added
+   * `products.incoming_quantity`) and the JPA entity maps it, but `ProductResponse` — the DTO
+   * behind `/api/products`, `/api/products/{id}` and `/api/products/low-stock` — predates the
+   * marketplace and has no such component. Only `AdminCatalogProductResponse` exposes it today.
+   *
+   * Optional, and deliberately NOT normalised to `0` at the API layer: `undefined` ("the server
+   * never told us") and `0` ("the server told us there is none") are different facts, and
+   * `resolveIncoming()` needs to tell them apart to decide whether to fall back to the
+   * order-derived figure. See `features/orders/incomingStock.ts`.
+   */
+  incomingQuantity?: number
+  /**
+   * Links a buyer's own product row back to the ProcurePal catalog product it was created from.
+   * Same caveat as above: the column exists, `ProductResponse` does not expose it yet.
+   */
+  sourceProductId?: string
   lowStockThreshold: number | null
   imageUrl: string | null
   active: boolean

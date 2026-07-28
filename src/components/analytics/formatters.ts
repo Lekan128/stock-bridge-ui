@@ -1,22 +1,19 @@
-const currencyFormatter = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' })
-const compactCurrencyFormatter = new Intl.NumberFormat(undefined, {
-  style: 'currency',
-  currency: 'USD',
-  notation: 'compact',
-  maximumFractionDigits: 1,
-})
+import { formatNaira, formatNairaCompact } from '@/utils/money'
+
 const compactNumberFormatter = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 })
 const numberFormatter = new Intl.NumberFormat(undefined)
 const dayFormatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' })
 const monthFormatter = new Intl.DateTimeFormat(undefined, { month: 'short', year: 'numeric' })
 const rangeFormatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 
+// Both delegate to the one shared NGN formatter — chart axes and inventory pages must never
+// disagree with the storefront about what a price looks like.
 export function formatCurrency(value: number): string {
-  return currencyFormatter.format(value)
+  return formatNaira(value)
 }
 
 export function formatCompactCurrency(value: number): string {
-  return compactCurrencyFormatter.format(value)
+  return formatNairaCompact(value)
 }
 
 export function formatCompactNumber(value: number): string {

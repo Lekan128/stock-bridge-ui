@@ -17,12 +17,19 @@ export interface AuthClient {
   id?: string
   identifier: string
   name?: string
+  /** True when this tenant is ProcurePal itself — `clients.is_platform_owner`. */
+  platformOwner: boolean
 }
 
 export interface AuthContextValue {
   user: AuthTenantUser | null
   client: AuthClient | null
   isAuthenticated: boolean
+  /**
+   * Convenience mirror of `client.platformOwner`, so guards and nav filters don't each have to
+   * null-check the client. Never a substitute for the backend's own platform-owner check.
+   */
+  isPlatformOwner: boolean
   isBootstrapping: boolean
   loginTenant: (payload: TenantLoginRequest) => Promise<void>
   signup: (payload: ClientSignupRequest) => Promise<TenantUser>
@@ -69,7 +76,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           permissions: claims?.permissions ?? [],
         })
         const lastIdentifier = authStorage.getLastClientIdentifier()
-        setClient({ id: claims?.clientId, identifier: lastIdentifier ?? '' })
+        setClient({
+          id: claims?.clientId,
+          identifier: lastIdentifier ?? '',
+          platformOwner: claims?.platformOwner === true,
+        })
       } catch {
         setAccessToken(null)
         authStorage.clearSession()
@@ -108,7 +119,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role: tenantUser.role,
       permissions: tenantUser.permissions,
     })
-    setClient({ identifier: tenantUser.clientIdentifier, name: tenantUser.clientName })
+    setClient({
+      identifier: tenantUser.clientIdentifier,
+      name: tenantUser.clientName,
+      platformOwner: tenantUser.platformOwner === true,
+    })
   }
 
   async function logout() {
@@ -132,6 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       client,
       isAuthenticated: user !== null,
+      isPlatformOwner: client?.platformOwner === true,
       isBootstrapping,
       loginTenant,
       signup,

@@ -1,6 +1,6 @@
 import { Menu } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
-import { NAV_ITEMS } from '@/layouts/navConfig'
+import { findNavItemForPath } from '@/layouts/navConfig'
 import { NotificationBell } from '@/layouts/NotificationBell'
 import { UserMenu } from '@/layouts/UserMenu'
 
@@ -10,10 +10,9 @@ export interface TopbarProps {
 
 export function Topbar({ onOpenMobileSidebar }: TopbarProps) {
   const location = useLocation()
-  const pageTitle =
-    NAV_ITEMS.find(
-      (item) => item.path === location.pathname || (item.path !== '/' && location.pathname.startsWith(`${item.path}/`)),
-    )?.label ?? 'Stock Bridge'
+  // Routes without a nav entry (profile, order detail, the marketplace admin sub-pages) fall back
+  // to the product name rather than showing a stale title from a prefix match.
+  const pageTitle = findNavItemForPath(location.pathname)?.label ?? 'Stock Bridge'
 
   return (
     <header className="flex h-16 shrink-0 items-center justify-between border-b border-neutral-200 bg-white px-4 sm:px-6">

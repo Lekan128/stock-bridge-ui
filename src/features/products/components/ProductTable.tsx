@@ -1,5 +1,6 @@
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { IncomingStockBadge } from '@/features/products/components/IncomingStockBadge'
 import { LowStockBadge } from '@/features/products/components/LowStockBadge'
 import { ProductImage } from '@/features/products/components/ProductImage'
 import { StatusBadge } from '@/features/products/components/StatusBadge'
@@ -18,17 +19,21 @@ export interface ProductTableProps {
   products: Product[]
   sort: ProductSort
   onSortChange: (field: ProductSortField) => void
+  /** Incoming stock per product. Omit where there is none to show (e.g. a ProcurePal-side list). */
+  incomingFor?: (product: Product) => { quantity: number }
 }
 
+// "On hand (usable)" rather than "Quantity on hand": once a second quantity exists on the row,
+// the header has to say which one it is sorting and which one you can actually use.
 const columns: { field: ProductSortField; label: string; align?: 'right' }[] = [
   { field: 'name', label: 'Name' },
   { field: 'sku', label: 'SKU' },
   { field: 'unitPrice', label: 'Unit price', align: 'right' },
-  { field: 'quantityOnHand', label: 'Quantity on hand', align: 'right' },
+  { field: 'quantityOnHand', label: 'On hand (usable)', align: 'right' },
   { field: 'active', label: 'Status' },
 ]
 
-export function ProductTable({ products, sort, onSortChange }: ProductTableProps) {
+export function ProductTable({ products, sort, onSortChange, incomingFor }: ProductTableProps) {
   const navigate = useNavigate()
 
   return (
@@ -64,36 +69,50 @@ export function ProductTable({ products, sort, onSortChange }: ProductTableProps
         </tr>
       </thead>
       <tbody>
-        {products.map((product) => (
-          <tr
-            key={product.id}
-            onClick={() => navigate(`/products/${product.id}`)}
-            style={
-              product.isLowStock ? { boxShadow: 'inset 4px 0 0 0 var(--color-warning-500)' } : undefined
-            }
-            className="cursor-pointer hover:bg-neutral-50"
-          >
-            <td className="border-b border-neutral-100 px-4 py-2.5">
-              <div className="flex items-center gap-2.5">
-                <ProductImage src={product.imageUrl} alt={product.name} className="h-8 w-8 shrink-0 rounded-md" />
-                <span className="font-medium text-neutral-900">{product.name}</span>
-              </div>
-            </td>
-            <td className="border-b border-neutral-100 px-4 py-2.5 text-neutral-600">{product.sku}</td>
-            <td className="border-b border-neutral-100 px-4 py-2.5 text-right text-neutral-700">
-              {formatCurrency(product.unitPrice)}
-            </td>
-            <td className="border-b border-neutral-100 px-4 py-2.5 text-right">
-              <div className="flex items-center justify-end gap-2">
-                {product.isLowStock && <LowStockBadge />}
-                <span className="font-medium text-neutral-900">{product.quantityOnHand}</span>
-              </div>
-            </td>
-            <td className="border-b border-neutral-100 px-4 py-2.5">
-              <StatusBadge active={product.active} />
-            </td>
-          </tr>
-        ))}
+        {products.map((product) => {
+          const incoming = incomingFor?.(product).quantity ?? 0
+
+          return (
+            <tr
+              key={product.id}
+              onClick={() => navigate(`/app/products/${product.id}`)}
+              style={
+                product.isLowStock ? { boxShadow: 'inset 4px 0 0 0 var(--color-warning-500)' } : undefined
+              }
+              className="cursor-pointer hover:bg-neutral-50"
+            >
+              <td className="border-b border-neutral-100 px-4 py-2.5">
+                <div className="flex items-center gap-2.5">
+                  <ProductImage src={product.imageUrl} alt={product.name} className="h-8 w-8 shrink-0 rounded-md" />
+                  <span className="font-medium text-neutral-900">{product.name}</span>
+                </div>
+              </td>
+              <td className="border-b border-neutral-100 px-4 py-2.5 text-neutral-600">{product.sku}</td>
+              <td className="border-b border-neutral-100 px-4 py-2.5 text-right text-neutral-700">
+                {formatCurrency(product.unitPrice)}
+              </td>
+              <td className="border-b border-neutral-100 px-4 py-2.5 text-right">
+                <div className="flex items-center justify-end gap-2">
+                  {product.isLowStock && <LowStockBadge />}
+                  {/* Zero usable stock is greyed rather than bolded even when a delivery is en
+                      route — the number you can act on today is still nought. */}
+                  <span className={product.quantityOnHand > 0 ? 'font-medium text-neutral-900' : 'font-medium text-neutral-400'}>
+                    {product.quantityOnHand}
+                  </span>
+                </div>
+                {/* On its own line, never summed into the figure above. */}
+                {incoming > 0 && (
+                  <div className="mt-1 flex justify-end">
+                    <IncomingStockBadge quantity={incoming} />
+                  </div>
+                )}
+              </td>
+              <td className="border-b border-neutral-100 px-4 py-2.5">
+                <StatusBadge active={product.active} />
+              </td>
+            </tr>
+          )
+        })}
       </tbody>
     </table>
   )

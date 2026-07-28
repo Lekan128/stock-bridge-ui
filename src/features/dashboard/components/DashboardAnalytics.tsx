@@ -105,7 +105,7 @@ export function DashboardAnalytics() {
             subtitle={summary.lowStockProductCount > 0 ? 'Needs attention' : 'All stocked up'}
             icon={AlertTriangle}
             variant="warning"
-            href={canViewProducts ? '/products/low-stock' : undefined}
+            href={canViewProducts ? '/app/products/low-stock' : undefined}
           />
         </div>
       )}

@@ -27,6 +27,12 @@ export interface TenantAccessTokenClaims {
   username: string
   role: string
   permissions: string[]
+  /**
+   * `clients.is_platform_owner` for the caller's tenant. Carried in the token so a session
+   * restored from a refresh token (which returns tokens only, no user object) can still decide
+   * whether to show the marketplace-admin nav. Optional — treat an absent claim as false.
+   */
+  platformOwner?: boolean
   iat: number
   exp: number
 }
