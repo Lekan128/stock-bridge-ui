@@ -10,6 +10,7 @@ import { FormError } from '@/components/FormError'
 import { TextField } from '@/components/TextField'
 import { useToast } from '@/components/useToast'
 import { isAppError } from '@/types/api'
+import { DEFAULT_AUTHENTICATED_PATH } from '@/utils/redirectTarget'
 import { slugify } from '@/utils/slugify'
 
 const KNOWN_FIELDS = new Set<keyof SignupFormValues>([
@@ -55,7 +56,7 @@ export function SignupPage() {
         confirmPassword: values.confirmPassword,
       })
       showToast(`Welcome to Stock Bridge, ${tenantUser.clientName}!`, 'success')
-      navigate('/', { replace: true })
+      navigate(DEFAULT_AUTHENTICATED_PATH, { replace: true })
     } catch (err) {
       if (!isAppError(err)) {
         setFormError('Something went wrong. Please try again.')

@@ -9,6 +9,7 @@ import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
 import { TextField } from '@/components/TextField'
 import { isAppError } from '@/types/api'
+import { DEFAULT_AUTHENTICATED_PATH, readRedirectParam, sanitizeRedirect } from '@/utils/redirectTarget'
 import { authStorage } from '@/utils/storage'
 
 interface LocationState {
@@ -38,7 +39,13 @@ export function LoginPage() {
     setFormError(null)
     try {
       await loginTenant(values)
-      const redirectTo = (location.state as LocationState | null)?.from?.pathname ?? '/'
+      // Precedence: an explicit `?redirect=` (how the storefront sends people here — e.g.
+      // `/login?redirect=/checkout`), then legacy router state, then the workspace dashboard.
+      // Both candidates go through sanitizeRedirect so a crafted link can't bounce the user off-site.
+      const redirectTo =
+        readRedirectParam(location.search) ??
+        sanitizeRedirect((location.state as LocationState | null)?.from?.pathname) ??
+        DEFAULT_AUTHENTICATED_PATH
       navigate(redirectTo, { replace: true })
     } catch (err) {
       if (isAppError(err) && err.status === 401) {
@@ -55,12 +62,18 @@ export function LoginPage() {
     <AuthCard
       title="Log in"
       footer={
-        <span className="text-neutral-500">
-          New company?{' '}
-          <Link to="/signup" className="font-medium text-primary-600 hover:underline">
-            Create an account
+        <div className="flex flex-col gap-2">
+          <span className="text-neutral-500">
+            New company?{' '}
+            <Link to="/signup" className="font-medium text-primary-600 hover:underline">
+              Create an account
+            </Link>
+          </span>
+          {/* Login sits outside the storefront chrome, so it needs its own way back. */}
+          <Link to="/" className="text-xs text-neutral-500 hover:text-neutral-700 hover:underline">
+            Browse the ProcurePal marketplace
           </Link>
-        </span>
+        </div>
       }
     >
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">

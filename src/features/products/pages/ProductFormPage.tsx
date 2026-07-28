@@ -80,7 +80,7 @@ export function ProductFormPage() {
       } else {
         showToast(isEdit ? 'Product updated.' : 'Product created.', 'success')
       }
-      navigate(`/products/${saved.id}`)
+      navigate(`/app/products/${saved.id}`)
     } catch (err) {
       if (!isAppError(err)) {
         setFormError('Something went wrong. Please try again.')

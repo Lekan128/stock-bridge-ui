@@ -5,11 +5,13 @@ import { Pagination } from '@/components/Pagination'
 import { useToast } from '@/components/useToast'
 import { BulkUploadModal } from '@/features/products/components/BulkUploadModal'
 import { EmptyProductsState } from '@/features/products/components/EmptyProductsState'
+import { IncomingStockNotice } from '@/features/products/components/IncomingStockNotice'
 import { ProductCard } from '@/features/products/components/ProductCard'
 import { ProductListSkeleton } from '@/features/products/components/ProductListSkeleton'
 import { ProductTable, type ProductSort, type ProductSortField } from '@/features/products/components/ProductTable'
 import { ProductsToolbar } from '@/features/products/components/ProductsToolbar'
 import { productsApi } from '@/features/products/api/productsApi'
+import { useProductIncoming } from '@/features/products/hooks/useProductIncoming'
 import { useProducts } from '@/features/products/hooks/useProducts'
 import type { ProductStatusFilter } from '@/features/products/types'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
@@ -36,6 +38,10 @@ export function ProductListPage() {
     size: PAGE_SIZE,
     sort: `${sort.field},${sort.direction}`,
   })
+
+  // Stock bought from ProcurePal and not yet received. Surfaced beside — never inside — the
+  // quantity on hand, so "12 usable, 20 incoming" can never be misread as 32 usable.
+  const { incomingFor, totals: incomingTotals } = useProductIncoming(data?.content)
 
   function handleSortChange(field: ProductSortField) {
     setSort((prev) =>
@@ -85,6 +91,13 @@ export function ProductListPage() {
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl font-semibold text-neutral-900">Inventory</h1>
 
+      <IncomingStockNotice
+        units={incomingTotals.units}
+        productCount={incomingTotals.productCount}
+        awaitingReceiptUnits={incomingTotals.awaitingReceiptUnits}
+        approximate={incomingTotals.approximate}
+      />
+
       <ProductsToolbar
         search={search}
         onSearchChange={handleSearchChange}
@@ -116,11 +129,16 @@ export function ProductListPage() {
             <>
               <div className="flex flex-col gap-2 md:hidden">
                 {data.content.map((product) => (
-                  <ProductCard key={product.id} product={product} />
+                  <ProductCard key={product.id} product={product} incoming={incomingFor(product).quantity} />
                 ))}
               </div>
               <div className="hidden overflow-hidden rounded-lg border border-neutral-200 bg-white md:block">
-                <ProductTable products={data.content} sort={sort} onSortChange={handleSortChange} />
+                <ProductTable
+                  products={data.content}
+                  sort={sort}
+                  onSortChange={handleSortChange}
+                  incomingFor={incomingFor}
+                />
               </div>
             </>
           )}

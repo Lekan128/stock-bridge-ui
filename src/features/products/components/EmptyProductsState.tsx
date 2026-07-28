@@ -21,7 +21,7 @@ export function EmptyProductsState({ canManageProducts, onBulkUpload }: EmptyPro
       </p>
       {canManageProducts && (
         <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-          <Link to="/products/new" className={buttonClassName('primary')}>
+          <Link to="/app/products/new" className={buttonClassName('primary')}>
             Add your first product
           </Link>
           <Button variant="secondary" onClick={onBulkUpload}>
