@@ -119,7 +119,7 @@ export function StorefrontFooter() {
         <div className="mt-10 flex flex-col gap-2 border-t border-neutral-200 pt-6 text-xs text-neutral-500 sm:flex-row sm:items-center sm:justify-between">
           <p>© {CURRENT_YEAR} ProcurePal. All prices in Nigerian naira (₦). Delivery within Nigeria only.</p>
           <p>
-            Powered by <span className="font-medium text-neutral-600">Stock Bridge</span>
+            Powered by <span className="font-medium text-neutral-600">Procure Paddy</span>
           </p>
         </div>
       </div>

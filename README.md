@@ -1,6 +1,6 @@
-# Stock Bridge UI
+# Procure Paddy UI
 
-Mobile-first, corporate-facing inventory management SPA — the frontend for Stock Bridge. Talks
+Mobile-first, corporate-facing inventory management SPA — the frontend for Procure Paddy. Talks
 to [`stock-bridge-api`](../stock-bridge-api) over a JWT-secured REST API.
 
 See the root [`APP_TOUR.md`](../APP_TOUR.md) for a feature-by-feature walkthrough and demo login

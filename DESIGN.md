@@ -1,4 +1,4 @@
-# Stock Bridge — Design Tokens
+# Procure Paddy — Design Tokens
 
 Design tokens live in `src/index.css` under the Tailwind v4 `@theme` block (CSS-first config —
 there is no `tailwind.config.js`). Every token below is available as a Tailwind utility, e.g.
