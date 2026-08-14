@@ -29,11 +29,11 @@
 # service's own FRONTEND_ORIGIN must list this site's URL or every request
 # from it fails CORS.
 [context.staging.environment]
-  VITE_API_BASE_URL = "https://REPLACE-WITH-STAGING-API.onrender.com"
+  VITE_API_BASE_URL = "staging-api.procurepaddy.com"
 
 # Pull request previews point at staging too. A preview is unreviewed code, so
 # the failure mode of getting this wrong (writing to the production database
 # from a branch that may never merge) is much worse than the inconvenience of
 # previewing against staging data.
 [context.deploy-preview.environment]
-  VITE_API_BASE_URL = "https://REPLACE-WITH-STAGING-API.onrender.com"
+  VITE_API_BASE_URL = "staging-api.procurepaddy.com"
