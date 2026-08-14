@@ -83,7 +83,7 @@ export function ProfileDetailsForm({ profile, onUpdated }: ProfileDetailsFormPro
       <div>
         <h2 className="text-base font-semibold text-neutral-900">Your details</h2>
         <p className="mt-0.5 text-sm text-neutral-500">
-          How your name shows up across Stock Bridge. Leave a field empty to clear it.
+          How your name shows up across Procure Paddy. Leave a field empty to clear it.
         </p>
       </div>
 

@@ -55,7 +55,7 @@ export function SignupPage() {
         password: values.password,
         confirmPassword: values.confirmPassword,
       })
-      showToast(`Welcome to Stock Bridge, ${tenantUser.clientName}!`, 'success')
+      showToast(`Welcome to Procure Paddy, ${tenantUser.clientName}!`, 'success')
       navigate(DEFAULT_AUTHENTICATED_PATH, { replace: true })
     } catch (err) {
       if (!isAppError(err)) {
