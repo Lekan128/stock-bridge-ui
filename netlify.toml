@@ -1,0 +1,39 @@
+# Netlify build configuration.
+#
+# Values here override the equivalents set in the Netlify UI, which is the
+# point: build settings and per-environment API URLs live in the repo and
+# change through review, not through a dashboard field nobody can diff.
+#
+# SPA routing is deliberately NOT configured here - `public/_redirects`
+# already ships the `/* /index.html 200` rule into `dist/`, and duplicating
+# it as a `[[redirects]]` block would mean two places to keep in sync.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  # Pin the toolchain so a Netlify default bump can't change build output
+  # underneath us. Matches the Node LTS line used locally.
+  NODE_VERSION = "22"
+
+# `VITE_API_BASE_URL` is baked into the bundle at build time, not read at
+# runtime - so each context has to be built against its own backend. There is
+# no `[context.production.environment]` block on purpose: production's value
+# stays where it already is (Netlify UI > Site configuration > Environment
+# variables), so adding staging can't accidentally repoint the live site.
+
+# The `staging` branch, deployed at https://staging--<site-name>.netlify.app.
+# Requires branch deploys to be enabled for `staging` in the Netlify UI - see
+# DEPLOYMENT.md. The URL below must be the *staging* Render service, and that
+# service's own FRONTEND_ORIGIN must list this site's URL or every request
+# from it fails CORS.
+[context.staging.environment]
+  VITE_API_BASE_URL = "https://REPLACE-WITH-STAGING-API.onrender.com"
+
+# Pull request previews point at staging too. A preview is unreviewed code, so
+# the failure mode of getting this wrong (writing to the production database
+# from a branch that may never merge) is much worse than the inconvenience of
+# previewing against staging data.
+[context.deploy-preview.environment]
+  VITE_API_BASE_URL = "https://REPLACE-WITH-STAGING-API.onrender.com"
