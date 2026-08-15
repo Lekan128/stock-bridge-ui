@@ -5,7 +5,8 @@ to [`stock-bridge-api`](../stock-bridge-api) over a JWT-secured REST API.
 
 See the root [`APP_TOUR.md`](../APP_TOUR.md) for a feature-by-feature walkthrough and demo login
 credentials, and [`ENVIRONMENT.md`](../ENVIRONMENT.md) for every environment variable across the
-whole system. See [`DESIGN.md`](./DESIGN.md) for the color/typography/spacing tokens.
+whole system. See [`DESIGN.md`](./DESIGN.md) for the color/typography/spacing tokens, and
+[`DEPLOYMENT.md`](./DEPLOYMENT.md) for how this gets built and hosted on Netlify.
 
 ## Tech stack
 
@@ -55,6 +56,10 @@ deployed backend's URL before building — it's baked into the build output, not
 
 `npm run preview` serves that `dist/` build locally, useful for a final sanity check before
 deploying.
+
+Hosted builds run this same command on Netlify — `main` for production, `staging` for the
+staging branch deploy, each built against its own `VITE_API_BASE_URL`. See
+[`DEPLOYMENT.md`](./DEPLOYMENT.md).
 
 ## Folder structure
 
