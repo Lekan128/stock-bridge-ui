@@ -28,12 +28,17 @@
 # DEPLOYMENT.md. The URL below must be the *staging* Render service, and that
 # service's own FRONTEND_ORIGIN must list this site's URL or every request
 # from it fails CORS.
+#
+# Keep the `https://` scheme. axios reads a schemeless baseURL as a relative
+# path, so it resolves against the Netlify origin - every call quietly goes to
+# staging--<site>.netlify.app/staging-api.procurepaddy.com/... instead of the
+# backend, with no error to explain why.
 [context.staging.environment]
-  VITE_API_BASE_URL = "staging-api.procurepaddy.com"
+  VITE_API_BASE_URL = "https://staging-api.procurepaddy.com"
 
 # Pull request previews point at staging too. A preview is unreviewed code, so
 # the failure mode of getting this wrong (writing to the production database
 # from a branch that may never merge) is much worse than the inconvenience of
 # previewing against staging data.
 [context.deploy-preview.environment]
-  VITE_API_BASE_URL = "staging-api.procurepaddy.com"
+  VITE_API_BASE_URL = "https://staging-api.procurepaddy.com"
