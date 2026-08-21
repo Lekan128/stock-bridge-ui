@@ -20,6 +20,10 @@ import { NotFoundPage } from '@/pages/NotFoundPage'
 import { SignupPage } from '@/pages/SignupPage'
 import { StorefrontHomePage } from '@/pages/StorefrontHomePage'
 import { StorefrontProductDetailPage } from '@/pages/StorefrontProductDetailPage'
+// Eager for the same reason as the storefront: `/verify-email` is an entry point clicked from an
+// email, by someone with no warm cache and often no session, and making them wait on a second
+// round trip for a chunk before anything appears is the wrong trade for a page this small.
+import { VerifyEmailPage } from '@/pages/VerifyEmailPage'
 
 /**
  * Everything past the storefront is code-split.
@@ -204,6 +208,12 @@ export function AppRoutes() {
               </RequireAuth>
             }
           />
+
+          {/* The target of the link in every confirmation email. Deliberately public and
+            deliberately inside the storefront chrome: the person clicking may have no session on
+            this device (phone vs. the laptop they signed up on), and whatever the outcome they
+            should land somewhere with navigation rather than on an orphaned card. */}
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
 
           {/* Unmatched paths keep the storefront chrome, so a bad link is never a dead end. */}
           <Route path="*" element={<NotFoundPage />} />

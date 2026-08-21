@@ -15,6 +15,14 @@ export interface AppError {
   message: string
   errors?: AppFieldError[]
   rowErrors?: AppRowError[]
+  /**
+   * The `Retry-After` response header, in seconds, when the server sent one — 429s from the
+   * verification-resend endpoint do. Absent when the header was missing *or* when the browser
+   * hid it: `Retry-After` is not a CORS-safelisted response header, so a cross-origin caller
+   * only sees it if the API lists it in `Access-Control-Expose-Headers`. Callers must therefore
+   * treat this as a hint, never as a guarantee.
+   */
+  retryAfterSeconds?: number
 }
 
 export function isAppError(error: unknown): error is AppError {
