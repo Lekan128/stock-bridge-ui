@@ -1,5 +1,11 @@
 /**
- * Wire shapes for `/api/marketplace/admin/analytics/*`.
+ * Wire shapes for `/api/marketplace/admin/analytics/*` — ProcurePal's OWN sales.
+ *
+ * Every figure below counts only orders whose seller is ProcurePal. That narrowed in M6:
+ * before it, these endpoints spanned every seller, which put third-party vendors' revenue
+ * on the operator's own page. Cross-seller totals are a super admin surface now
+ * (`/api/superadmin/analytics/revenue/**`, typed in `features/admin/types`), and no tenant
+ * token reaches them.
  *
  * Definitions live on the server (see `MarketplacePeriodMetrics` and its siblings) and are
  * summarised here only where a reader of this file would otherwise get the number wrong —
@@ -20,7 +26,7 @@ export interface AnalyticsRangeParams {
   to: string
 }
 
-/** One window's headline figures. The summary endpoint returns two of these. */
+/** One window's headline figures for ProcurePal's own sales. The summary returns two of these. */
 export interface MarketplacePeriodMetrics {
   /** Goods + delivery, on orders that are neither CANCELLED nor PENDING_PAYMENT. */
   grossRevenue: number

@@ -75,6 +75,39 @@ export interface CheckoutQuote {
   payOnDeliveryMaxOrderValue?: number
   deliveryAddress?: DeliveryAddress
   unavailableItems: UnavailableLine[]
+  /**
+   * One entry per seller in the basket, in the order the resulting orders will be created.
+   *
+   * A single-seller basket has exactly one, so the UI renders the grouped layout unconditionally
+   * rather than branching on a count. The top-level `subtotal`/`deliveryFee`/`total` remain the
+   * basket-wide sums — what the buyer actually pays, in one transaction.
+   *
+   * These figures are authoritative and must be rendered as given. Delivery is charged PER SELLER
+   * server-side, so a UI that summed the goods itself and applied one fee would quote a total the
+   * order then refuses.
+   */
+  sellerGroups: CheckoutSellerGroup[]
+}
+
+/**
+ * What one seller's share of the basket costs — and therefore what one of the resulting orders
+ * will look like.
+ *
+ * Carries the seller's name and logo but no commission rate: what the platform charges a vendor is
+ * between the platform and the vendor, and it is not on the wire.
+ */
+export interface CheckoutSellerGroup {
+  sellerId: string
+  sellerName: string
+  sellerSlug: string | null
+  sellerLogoUrl: string | null
+  platformOwner: boolean
+  itemCount: number
+  distinctItemCount: number
+  subtotal: number
+  deliveryFee: number
+  total: number
+  freeDeliveryApplied: boolean
 }
 
 /**
@@ -129,6 +162,30 @@ export interface OrderStatusEvent {
   createdAt: string
 }
 
+/** Who fulfilled an order, as its buyer may see them — name and logo only. */
+export interface OrderSeller {
+  id: string
+  name: string
+  slug: string | null
+  logoUrl: string | null
+  platformOwner: boolean
+}
+
+/**
+ * Another order from the same checkout — enough to say "and this one, from that seller, for this
+ * much" and link to it.
+ *
+ * Deliberately shallow: `Order` carries its own siblings, so nesting full orders would recurse.
+ */
+export interface SiblingOrder {
+  id: string
+  orderNumber: string
+  status: OrderStatus
+  paymentStatus: PaymentStatus
+  total: number
+  seller: OrderSeller | null
+}
+
 export interface Order {
   id: string
   orderNumber: string
@@ -139,6 +196,15 @@ export interface Order {
   subtotal: number
   deliveryFee: number
   total: number
+  /** Who is fulfilling this order. Null only if the seller row was hard-deleted. */
+  seller: OrderSeller | null
+  /**
+   * The basket this order came out of. Orders sharing this value were placed by one press of one
+   * button and paid for with one transaction.
+   */
+  checkoutGroupId: string
+  /** The OTHER orders that checkout produced — empty for an ordinary single-seller basket. */
+  siblingOrders: SiblingOrder[]
   delivery: OrderDelivery
   customerNote?: string
   cancellationReason?: string

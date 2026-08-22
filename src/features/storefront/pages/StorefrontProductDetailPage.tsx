@@ -6,6 +6,7 @@ import { Breadcrumbs } from '@/components/Breadcrumbs'
 import { Button, buttonClassName } from '@/components/Button'
 import { EmptyState } from '@/components/EmptyState'
 import { ErrorState } from '@/components/ErrorState'
+import { SellerBadge } from '@/features/storefront/components/SellerBadge'
 import { ProductPriceTag } from '@/components/ProductPriceTag'
 import { QuantityStepper } from '@/components/QuantityStepper'
 import { useCart } from '@/features/cart/hooks/useCart'
@@ -31,7 +32,7 @@ import { formatQuantity } from '@/utils/units'
 export function StorefrontProductDetailPage() {
   const { idOrSlug } = useParams<{ idOrSlug: string }>()
   const navigate = useNavigate()
-  const { addItem } = useCart()
+  const { addItem, canShop } = useCart()
   const { settings } = useMarketplaceSettings()
   const { product, related, loading, error, notFound, refetch } = useProductDetail(idOrSlug)
 
@@ -135,6 +136,10 @@ export function StorefrontProductDetailPage() {
           )}
           <h1 className="mt-1 text-xl font-bold leading-tight text-neutral-900 sm:text-2xl">{product.name}</h1>
 
+          {/* Linked here, unlike on the grid tile: this is the page where a buyer decides whether
+              to trust a third-party seller, so "who is this" has to lead somewhere. */}
+          <SellerBadge seller={product.seller} size="md" className="mt-2" />
+
           <div className="mt-2 flex flex-wrap items-center gap-2">
             {product.inStock ? (
               <Badge variant="success">
@@ -180,7 +185,24 @@ export function StorefrontProductDetailPage() {
             </div>
           </dl>
 
-          {canBuy ? (
+          {/* A signed-in seller sees the listing but gets no basket. The storefront is public
+              and a vendor has every reason to look at it — checking how their own products
+              render, most obviously — but they cannot buy, and a quantity stepper leading to a
+              checkout that refuses them is a worse answer than a plain statement.
+              See CartContext.canShop. */}
+          {!canShop ? (
+            <div className="mt-5 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+              <p className="text-sm font-medium text-neutral-900">You are signed in as a seller</p>
+              <p className="mt-1 text-sm text-neutral-600">
+                Vendor accounts sell on the marketplace rather than buy from it, so there is no cart
+                here. Your own listings and orders are in{' '}
+                <Link to="/app" className="font-medium text-primary-600 underline underline-offset-2">
+                  your workspace
+                </Link>
+                .
+              </p>
+            </div>
+          ) : canBuy ? (
             <div className="mt-5">
               <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>

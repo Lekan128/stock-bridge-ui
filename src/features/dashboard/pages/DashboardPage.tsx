@@ -3,12 +3,38 @@ import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
 import { DashboardAnalytics } from '@/features/dashboard/components/DashboardAnalytics'
 import { LowStockSummaryCard } from '@/features/products/components/LowStockSummaryCard'
+import { VendorDashboardPage } from '@/features/vendor/pages/VendorDashboardPage'
 
+/**
+ * `/app` — the workspace home, which is a different screen depending on what kind of account
+ * is looking at it.
+ *
+ * A VENDOR gets the seller's dashboard: who is waiting on them, what they are owed, what has
+ * run out, which listings are stuck in review. Everything below this branch is a BUYER's
+ * dashboard — stock movements into their own store, what they spent — and none of those
+ * questions have an answer for an account that cannot place an order. Showing a seller a
+ * screen about buying is the clearest possible signal that the app has not noticed what they
+ * are.
+ *
+ * `isVendor` and not `isSeller` on purpose. ProcurePal sells too, but it also buys and runs
+ * its own inventory through this app, so the ordinary dashboard is genuinely its dashboard —
+ * its selling figures live on `/app/selling/analytics`, which it also reaches. This is the one
+ * place in the whole feature where the vendor/seller distinction goes the other way, which is
+ * why it is stated here rather than left to the reader.
+ *
+ * Not a route swap in the router: `/app` is one route with one meaning ("home"), and giving it
+ * two paths would mean every link, redirect and bookmark in the app having to know which one
+ * the current account gets.
+ */
 export function DashboardPage() {
-  const { user } = useAuth()
+  const { user, isVendor } = useAuth()
   const permissions = user?.type === 'tenant' ? user.permissions : []
   const canViewAnalytics = permissions.includes(PERMISSIONS.VIEW_ANALYTICS)
   const canViewProducts = permissions.includes(PERMISSIONS.VIEW_PRODUCTS)
+
+  if (isVendor) {
+    return <VendorDashboardPage />
+  }
 
   if (canViewAnalytics) {
     return <DashboardAnalytics />

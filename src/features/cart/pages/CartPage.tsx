@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ArrowRight, CircleAlert, Lock, ShoppingCart, Trash2, Warehouse } from 'lucide-react'
+import { ArrowRight, BadgeCheck, CircleAlert, Lock, ShoppingCart, Store, Trash2, Warehouse } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { Button, buttonClassName } from '@/components/Button'
@@ -10,6 +10,7 @@ import { CartLineRow } from '@/features/cart/components/CartLineRow'
 import { CartSkeleton } from '@/features/cart/components/CartSkeleton'
 import { FreeDeliveryNudge } from '@/features/cart/components/FreeDeliveryNudge'
 import { useCart } from '@/features/cart/hooks/useCart'
+import { groupCartBySeller } from '@/features/cart/types'
 import { useMarketplaceSettings } from '@/features/storefront/hooks/useMarketplaceSettings'
 import { formatNaira, formatNairaWhole } from '@/utils/money'
 
@@ -30,6 +31,9 @@ export function CartPage() {
   const [clearing, setClearing] = useState(false)
 
   const unavailable = useMemo(() => items.filter((item) => !item.available), [items])
+  // The same grouping and ordering the checkout summary uses, so the two screens list the sellers
+  // the same way round — see groupCartBySeller.
+  const sellerGroups = useMemo(() => groupCartBySeller(items), [items])
   const overStock = useMemo(
     () => items.filter((item) => item.available && item.quantityOnHand > 0 && item.quantity > item.quantityOnHand),
     [items],
@@ -141,16 +145,69 @@ export function CartPage() {
             </div>
           )}
 
-          <ul className="divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white px-4">
-            {items.map((item) => (
-              <CartLineRow
-                key={item.productId}
-                item={item}
-                onQuantityChange={(productId, quantity) => void updateQuantity(productId, quantity)}
-                onRemove={(productId) => void removeItem(productId)}
-              />
+          {/* Grouped by seller, always — even for a single-seller cart, where it renders as one
+              heading. Branching on `length > 1` would mean the common case and the split case had
+              different layouts, and the moment a buyer adds a second seller's item the whole page
+              would appear to restructure itself.
+
+              The heading is what makes the delivery fee on the next screen make sense: each group
+              becomes its own order with its own fee, and a buyer who never saw the grouping would
+              read that as being charged twice for one delivery. */}
+          <div className="space-y-4">
+            {sellerGroups.map((group) => (
+              <section
+                key={group.sellerId ?? 'unattributed'}
+                className="overflow-hidden rounded-lg border border-neutral-200 bg-white"
+                aria-label={`Items from ${group.sellerName}`}
+              >
+                <header className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-100 bg-neutral-50 px-4 py-2.5">
+                  <div className="flex min-w-0 items-center gap-2">
+                    {group.sellerLogoUrl ? (
+                      <img
+                        src={group.sellerLogoUrl}
+                        alt=""
+                        aria-hidden="true"
+                        className="h-5 w-5 shrink-0 rounded-full object-cover"
+                      />
+                    ) : group.platformOwner ? (
+                      <BadgeCheck className="h-5 w-5 shrink-0 text-primary-600" aria-hidden="true" />
+                    ) : (
+                      <Store className="h-5 w-5 shrink-0 text-neutral-400" aria-hidden="true" />
+                    )}
+                    <p className="truncate text-sm font-semibold text-neutral-900">
+                      <span className="font-normal text-neutral-500">Sold by </span>
+                      {group.sellerName}
+                    </p>
+                  </div>
+                  {/* Goods only. The delivery fee for this group is the server's call — it depends
+                      on the free-delivery threshold — and appears on the checkout summary. */}
+                  <p className="text-sm text-neutral-600">
+                    <span className="text-neutral-400">Items </span>
+                    <span className="font-medium text-neutral-900">{formatNaira(group.subtotal)}</span>
+                  </p>
+                </header>
+
+                <ul className="divide-y divide-neutral-100 px-4">
+                  {group.items.map((item) => (
+                    <CartLineRow
+                      key={item.productId}
+                      item={item}
+                      onQuantityChange={(productId, quantity) => void updateQuantity(productId, quantity)}
+                      onRemove={(productId) => void removeItem(productId)}
+                    />
+                  ))}
+                </ul>
+              </section>
             ))}
-          </ul>
+          </div>
+
+          {sellerGroups.length > 1 && (
+            <p className="mt-3 text-xs text-neutral-500">
+              Your basket has items from {sellerGroups.length} sellers, so it will be placed as{' '}
+              {sellerGroups.length} separate orders — one per seller, each delivered and tracked on its own.
+              You still pay once.
+            </p>
+          )}
 
           <Link
             to="/"
