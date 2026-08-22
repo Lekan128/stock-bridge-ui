@@ -2,9 +2,10 @@ import { useState } from 'react'
 import { Check, ShoppingCart } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Badge } from '@/components/Badge'
-import { Button } from '@/components/Button'
+import { Button, buttonClassName } from '@/components/Button'
 import { useCart } from '@/features/cart/hooks/useCart'
 import { ProductImage } from '@/features/products/components/ProductImage'
+import { SellerBadge } from '@/features/storefront/components/SellerBadge'
 import type { MarketplaceProduct } from '@/features/storefront/types'
 import { formatNaira } from '@/utils/money'
 import { formatPerUnit, formatQuantity } from '@/utils/units'
@@ -25,14 +26,18 @@ export interface ProductGridCardProps {
  * One product in the catalog grid.
  *
  * Out-of-stock products stay on the grid rather than being filtered away (contract §10): a
- * wholesale buyer needs to know ProcurePal carries the line at all, and hiding it just makes the
- * catalog look thin. They are badged and the add button is replaced, not merely greyed.
+ * wholesale buyer needs to know the marketplace carries the line at all, and hiding it just makes
+ * the catalog look thin. They are badged and the add button is replaced, not merely greyed.
+ *
+ * Every tile names its seller. A B2B buyer placing a real purchase order is entitled to know
+ * whether the goods are ProcurePal's or a third party's before they commit, and — because
+ * delivery is charged per seller — which tiles will end up on the same order as each other.
  *
  * Add-to-cart adds the MOQ, not 1 — adding a quantity the server would immediately clamp is a
  * lie about what just happened to the cart.
  */
 export function ProductGridCard({ product }: ProductGridCardProps) {
-  const { addItem } = useCart()
+  const { addItem, canShop } = useCart()
   const [adding, setAdding] = useState(false)
   const [justAdded, setJustAdded] = useState(false)
 
@@ -87,6 +92,11 @@ export function ProductGridCard({ product }: ProductGridCardProps) {
           </Link>
         </h3>
 
+        {/* Directly under the name: with several sellers on one grid, "who am I buying from" is
+            part of identifying the product, not a footnote about it. Not linked — this card is
+            already wrapped in product links, and an anchor inside an anchor is invalid HTML. */}
+        <SellerBadge seller={product.seller} className="mt-1" linked={false} />
+
         <div className="mt-2">
           <p className="text-base font-semibold text-neutral-900">{formatNaira(product.unitPrice)}</p>
           <p className="text-xs text-neutral-500">{formatPerUnit(product.unitOfMeasure)}</p>
@@ -100,7 +110,16 @@ export function ProductGridCard({ product }: ProductGridCardProps) {
 
         <div className="mt-3 flex-1" />
 
-        {canBuy ? (
+        {/* A signed-in vendor gets a "view" link where the add button would be, not a disabled
+            one. The storefront is public and a seller has every reason to browse it — to check
+            how their own listings look, if nothing else — but they cannot buy, so offering a
+            basket and then refusing at checkout would be a worse answer than never offering it.
+            See CartContext.canShop. */}
+        {!canShop ? (
+          <Link to={productPath(product)} className={`w-full ${buttonClassName('secondary')}`}>
+            View product
+          </Link>
+        ) : canBuy ? (
           <Button
             variant="primary"
             onClick={handleAdd}
