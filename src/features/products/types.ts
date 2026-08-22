@@ -1,3 +1,5 @@
+import type { VendorKind } from '@/features/vendors/types'
+
 export interface Product {
   id: string
   name: string
@@ -28,7 +30,36 @@ export interface Product {
    */
   sourceProductId?: string
   lowStockThreshold: number | null
+  /**
+   * The two marketplace identity facets. READ-ONLY on this type, and read-only on
+   * `/api/products` — that endpoint has never written either of them.
+   *
+   * A seller sets them through the marketplace-details route instead: their own at
+   * `/api/vendor/catalogue/products/:id/marketplace-details`
+   * (`vendorCatalogueApi.updateMarketplaceDetails`), ProcurePal's under
+   * `/api/marketplace/admin/**`. They are reported here so the product FORM can show a vendor
+   * what they already have without a second fetch of the catalogue page.
+   *
+   * <p>`unitOfMeasure` is the commercially load-bearing one: a B2B price means nothing until
+   * it means "per 50kg bag" rather than "per carton". Absent on most rows and permanently so
+   * for a buying company's private stock, which has no marketplace facets at all.
+   */
+  brand?: string
+  unitOfMeasure?: string
   imageUrl: string | null
+  /**
+   * Which supplier this item comes from, as an entry in THIS company's own vendor directory
+   * (`/app/vendors`). Set automatically to the ProcurePaddy seller when goods arrive from a
+   * marketplace order, and settable by hand to a supplier the company added itself.
+   *
+   * Absent on most rows and permanently so: a product with no supplier attached is an ordinary
+   * product, not an incomplete one. The name and kind are denormalised alongside the id so a
+   * product list can show "from Ada Millers" without a request per row — they are read-only, and
+   * the only way to change what they say is through the vendor directory itself.
+   */
+  companyVendorId?: string
+  companyVendorName?: string
+  companyVendorKind?: VendorKind
   active: boolean
   isLowStock: boolean
   createdAt: string
@@ -64,11 +95,19 @@ export interface ProductFormPayload {
   unitPrice: number
   costPrice?: number
   lowStockThreshold?: number
+  /** An entry in this company's own vendor directory. Resolved against the caller's tenant server-side. */
+  companyVendorId?: string
 }
 
 export interface ProductUpdatePayload extends Partial<ProductFormPayload> {
   active?: boolean
   removeImage?: boolean
+  /**
+   * Unlinks the product from its supplier. Not redundant with sending `companyVendorId: undefined`:
+   * this is a patch-style payload where an absent field means "leave it alone", so without an
+   * explicit flag there would be no way to express "remove the link" at all. Mirrors `removeImage`.
+   */
+  clearCompanyVendor?: boolean
 }
 
 export type MovementType = 'IN' | 'OUT' | 'ADJUSTMENT'

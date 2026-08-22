@@ -18,6 +18,7 @@ import { StockHistoryTable } from '@/features/products/components/StockHistoryTa
 import { StockQuantityModal } from '@/features/products/components/StockQuantityModal'
 import { formatCurrency } from '@/features/products/formatters'
 import { useLowStockAlerts } from '@/features/products/hooks/useLowStockAlerts'
+import { VendorKindBadge } from '@/features/vendors/components/VendorKindBadge'
 import { useProduct } from '@/features/products/hooks/useProduct'
 import { useProductIncoming } from '@/features/products/hooks/useProductIncoming'
 import { useStockHistory } from '@/features/products/hooks/useStockHistory'
@@ -132,6 +133,27 @@ export function ProductDetailPage() {
             <div>
               <dt className="text-neutral-500">Cost price</dt>
               <dd className="mt-0.5 font-medium text-neutral-900">{formatCurrency(product.costPrice)}</dd>
+            </div>
+            {/* Where this stock comes from. Rendered even when unset, as an em dash, rather than
+                hidden: an absent row reads as "this product has no supplier concept", where a dash
+                reads as "nobody has said yet" — and the second is the true one. */}
+            <div className="col-span-2">
+              <dt className="text-neutral-500">Supplier</dt>
+              <dd className="mt-0.5 flex flex-wrap items-center gap-2">
+                {product.companyVendorId ? (
+                  <>
+                    <Link
+                      to={`/app/vendors/${product.companyVendorId}`}
+                      className="font-medium text-neutral-900 hover:text-primary-700 hover:underline"
+                    >
+                      {product.companyVendorName}
+                    </Link>
+                    {product.companyVendorKind && <VendorKindBadge kind={product.companyVendorKind} />}
+                  </>
+                ) : (
+                  <span className="text-neutral-400">—</span>
+                )}
+              </dd>
             </div>
           </dl>
           <div className="mt-4">

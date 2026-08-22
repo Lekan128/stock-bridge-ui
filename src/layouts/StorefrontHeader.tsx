@@ -3,6 +3,7 @@ import { ArrowUpRight, Mail, Menu, Phone, ShieldCheck } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { Logo } from '@/components/Logo'
+import { useCart } from '@/features/cart/hooks/useCart'
 import { useMarketplaceSettings } from '@/features/storefront/hooks/useMarketplaceSettings'
 import { StorefrontCartButton } from '@/layouts/StorefrontCartButton'
 import { StorefrontCategoryMenu } from '@/layouts/StorefrontCategoryMenu'
@@ -22,6 +23,7 @@ import { formatNairaWhole } from '@/utils/money'
 export function StorefrontHeader() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const { isAuthenticated, client, user } = useAuth()
+  const { canShop } = useCart()
   const { settings } = useMarketplaceSettings()
 
   const companyLabel = client?.name ?? client?.identifier ?? user?.username ?? ''
@@ -76,7 +78,9 @@ export function StorefrontHeader() {
             </div>
 
             <div className="ml-auto flex items-center gap-1 md:ml-0">
-              <StorefrontCartButton />
+              {/* Hidden for a signed-in vendor: they sell here and cannot buy, so a cart badge
+                  would count a basket that has no checkout behind it. See CartContext.canShop. */}
+              {canShop && <StorefrontCartButton />}
 
               {isAuthenticated ? (
                 <div className="flex items-center gap-1">

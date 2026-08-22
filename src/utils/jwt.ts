@@ -1,3 +1,5 @@
+import type { ClientType } from '@/types/auth'
+
 /**
  * Client-side JWT payload decode only — no signature verification. Safe for reading
  * display claims (username, role) after a token refresh; the server is still the sole
@@ -33,6 +35,13 @@ export interface TenantAccessTokenClaims {
    * whether to show the marketplace-admin nav. Optional — treat an absent claim as false.
    */
   platformOwner?: boolean
+  /**
+   * `clients.client_type` for the caller's tenant, COMPANY or VENDOR. Carried in the token
+   * for the same reason `platformOwner` is: a session restored from a refresh token gets
+   * tokens only, no user object, and the sidebar has to know which workspace to draw before
+   * the first API call. Optional — treat an absent claim as COMPANY.
+   */
+  clientType?: ClientType
   iat: number
   exp: number
 }

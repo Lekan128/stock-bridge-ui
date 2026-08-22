@@ -30,3 +30,17 @@ export const PAYMENT_TERMS_OPTIONS: { value: PaymentTerms; label: string; descri
       'Extends credit to this customer. Pay on delivery may then be offered at checkout, subject to the marketplace settings.',
   },
 ]
+
+
+/**
+ * The escrow hold, in words: "7 days", "1 day", or a sentence for zero.
+ *
+ * Zero is a legal value meaning "payable as soon as the buyer confirms", and rendering it as
+ * "0 days" reads like a missing field on the one screen where a reader most needs to be certain
+ * of what they are agreeing to. It lives here rather than beside the dialog so the page, the
+ * dialog and the history list cannot describe the same number three different ways.
+ */
+export function describeHold(days: number): string {
+  if (days === 0) return 'no hold — payable as soon as the buyer confirms'
+  return `${days} day${days === 1 ? '' : 's'}`
+}

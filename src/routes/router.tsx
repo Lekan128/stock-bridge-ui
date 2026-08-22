@@ -6,6 +6,7 @@ import { RedirectIfSuperAdminAuthenticated } from '@/auth/RedirectIfSuperAdminAu
 import { RequireAuth } from '@/auth/RequireAuth'
 import { RequirePermission } from '@/auth/RequirePermission'
 import { RequirePlatformOwner } from '@/auth/RequirePlatformOwner'
+import { RequireSeller } from '@/auth/RequireSeller'
 import { RequireSuperAdmin } from '@/auth/RequireSuperAdmin'
 import { BootstrappingScreen } from '@/components/BootstrappingScreen'
 import { AdminLayout } from '@/layouts/AdminLayout'
@@ -84,6 +85,21 @@ const AddressListPage = lazy(() =>
     default: m.AddressListPage,
   })),
 )
+const VendorListPage = lazy(() =>
+  import('@/pages/VendorListPage').then((m) => ({
+    default: m.VendorListPage,
+  })),
+)
+const VendorDetailPage = lazy(() =>
+  import('@/pages/VendorDetailPage').then((m) => ({
+    default: m.VendorDetailPage,
+  })),
+)
+const VendorPurchaseHistoryPage = lazy(() =>
+  import('@/pages/VendorPurchaseHistoryPage').then((m) => ({
+    default: m.VendorPurchaseHistoryPage,
+  })),
+)
 const ProfilePage = lazy(() =>
   import('@/pages/ProfilePage').then((m) => ({ default: m.ProfilePage })),
 )
@@ -130,14 +146,82 @@ const AdminTenantDetailPage = lazy(() =>
     default: m.AdminTenantDetailPage,
   })),
 )
+const AdminMarketplaceRevenuePage = lazy(() =>
+  import('@/pages/AdminMarketplaceRevenuePage').then((m) => ({
+    default: m.AdminMarketplaceRevenuePage,
+  })),
+)
 const AdminAggregateAnalyticsPage = lazy(() =>
   import('@/pages/AdminAggregateAnalyticsPage').then((m) => ({
     default: m.AdminAggregateAnalyticsPage,
   })),
 )
+const AdminListingModerationPage = lazy(() =>
+  import('@/pages/AdminListingModerationPage').then((m) => ({
+    default: m.AdminListingModerationPage,
+  })),
+)
+// A vendor's public storefront. Lazy rather than eager like the rest of the storefront: it is
+// reached by clicking a seller name, never as a cold first paint, so it does not need to be in
+// the entry chunk the way `/` and `/product/:idOrSlug` do.
+const SellerStorefrontPage = lazy(() =>
+  import('@/pages/SellerStorefrontPage').then((m) => ({
+    default: m.SellerStorefrontPage,
+  })),
+)
 const AdminPlatformOwnerUsersPage = lazy(() =>
   import('@/pages/AdminPlatformOwnerUsersPage').then((m) => ({
     default: m.AdminPlatformOwnerUsersPage,
+  })),
+)
+// The public vendor application. Lazy rather than eager like `/signup` and `/login`: it is
+// reached by clicking a link on the signup card, never as a cold first paint, so it does not
+// need to be in the entry chunk.
+const VendorApplicationPage = lazy(() =>
+  import('@/pages/VendorApplicationPage').then((m) => ({
+    default: m.VendorApplicationPage,
+  })),
+)
+const AdminVendorWaitlistPage = lazy(() =>
+  import('@/pages/AdminVendorWaitlistPage').then((m) => ({
+    default: m.AdminVendorWaitlistPage,
+  })),
+)
+const AdminVendorsPage = lazy(() =>
+  import('@/pages/AdminVendorsPage').then((m) => ({
+    default: m.AdminVendorsPage,
+  })),
+)
+// Settlement policy (M9): the escrow hold. Lazy like every other admin screen — it is reached
+// deliberately, a handful of times a year, and never as a first paint.
+const AdminSettlementSettingsPage = lazy(() =>
+  import('@/pages/AdminSettlementSettingsPage').then((m) => ({
+    default: m.AdminSettlementSettingsPage,
+  })),
+)
+
+// The seller's own workspace. All four are behind a login and none is a first paint, so they
+// are lazy like the rest of `/app`. The vendor DASHBOARD is deliberately absent from this
+// list: it is not a route of its own — `/app` renders it in place of the buyer dashboard for
+// a vendor account (see DashboardPage), so it rides in DashboardPage's chunk.
+const VendorCataloguePage = lazy(() =>
+  import('@/pages/VendorCataloguePage').then((m) => ({
+    default: m.VendorCataloguePage,
+  })),
+)
+const VendorSalesAnalyticsPage = lazy(() =>
+  import('@/pages/VendorSalesAnalyticsPage').then((m) => ({
+    default: m.VendorSalesAnalyticsPage,
+  })),
+)
+const VendorPickupAddressesPage = lazy(() =>
+  import('@/pages/VendorPickupAddressesPage').then((m) => ({
+    default: m.VendorPickupAddressesPage,
+  })),
+)
+const VendorStatementPage = lazy(() =>
+  import('@/pages/VendorStatementPage').then((m) => ({
+    default: m.VendorStatementPage,
   })),
 )
 
@@ -172,6 +256,9 @@ export function AppRoutes() {
         <Route element={<StorefrontLayout />}>
           <Route path="/" element={<StorefrontHomePage />} />
           <Route path="/product/:idOrSlug" element={<StorefrontProductDetailPage />} />
+          {/* One seller's storefront. Public, like the rest of the catalog — a buyer deciding
+              whether to order from a third party should not have to sign in to see who they are. */}
+          <Route path="/seller/:idOrSlug" element={<SellerStorefrontPage />} />
           {/* Anonymous carts are allowed — the cart lives in localStorage until login (contract §8). */}
           <Route path="/cart" element={<CartPage />} />
           <Route
@@ -238,6 +325,11 @@ export function AppRoutes() {
             </RedirectIfAuthenticated>
           }
         />
+        {/* Applying to sell. Deliberately NOT wrapped in RedirectIfAuthenticated, unlike the two
+          above: those create or resume a session, so bouncing a signed-in user away from them is
+          right. This creates no account at all — it adds a business to a waitlist a super admin
+          reviews by hand — so a signed-in buyer who wants to also sell must be able to reach it. */}
+        <Route path="/vendor-application" element={<VendorApplicationPage />} />
 
         {/* ------------------------------------------------------- Legacy workspace paths → /app */}
         {/* The workspace moved from `/` to `/app` when `/` became the storefront. These keep every
@@ -334,9 +426,138 @@ export function AppRoutes() {
             }
           />
 
-          {/* ProcurePal-only. RequirePlatformOwner wraps RequirePermission, not the other way round:
-            every tenant's OWNER holds MANAGE_MARKETPLACE, so the platform-owner check is the one
-            that actually keeps other companies out (contract §6). */}
+          {/* The buying company's own vendor directory. Gated on VIEW_VENDORS, which is wider than
+            MANAGE_VENDORS on purpose — a finance officer reconciles against what was paid without
+            maintaining the list — so the add/edit/remove affordances are gated separately inside
+            the pages rather than by blocking the route. A STOREKEEPER holds neither code and does
+            not reach these at all.
+
+            Purchase history is a route of its own rather than a tab on the detail page, on the
+            stakeholder's explicit instruction — and because it is paginated, so folding it in would
+            either truncate it silently or make the detail screen pay for a page nobody scrolled to. */}
+          <Route
+            path="vendors"
+            element={
+              <RequirePermission permission={PERMISSIONS.VIEW_VENDORS}>
+                <VendorListPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="vendors/:id"
+            element={
+              <RequirePermission permission={PERMISSIONS.VIEW_VENDORS}>
+                <VendorDetailPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="vendors/:id/purchases"
+            element={
+              <RequirePermission permission={PERMISSIONS.VIEW_VENDORS}>
+                <VendorPurchaseHistoryPage />
+              </RequirePermission>
+            }
+          />
+
+          {/* The seller's own workspace — a vendor's, or ProcurePal's. RequireSeller wraps
+            RequirePermission, not the other way round: the VENDOR role holds MANAGE_MARKETPLACE
+            and MANAGE_DELIVERY_ADDRESSES, but so does every buying company's OWNER, so the
+            company-kind check is the one that actually keeps customers out. Mirrors the API's
+            VendorGuard.requireSeller() on the same routes.
+
+            Sales analytics carries NO RequirePermission, and that is not an oversight: the API
+            accepts either VIEW_OWN_SALES_ANALYTICS (which vendors hold) or
+            VIEW_MARKETPLACE_ANALYTICS (which ProcurePal's staff hold), and RequirePermission
+            takes exactly one code — so naming either would bounce half the audience from a
+            screen the server would have answered. */}
+          <Route
+            path="selling/catalogue"
+            element={
+              <RequireSeller>
+                <RequirePermission permission={PERMISSIONS.MANAGE_MARKETPLACE}>
+                  <VendorCataloguePage />
+                </RequirePermission>
+              </RequireSeller>
+            }
+          />
+          <Route
+            path="selling/analytics"
+            element={
+              <RequireSeller>
+                <VendorSalesAnalyticsPage />
+              </RequireSeller>
+            }
+          />
+          {/* The statement carries no RequirePermission for the same reason sales analytics
+            does not: the API accepts either VIEW_OWN_SALES_ANALYTICS or
+            VIEW_MARKETPLACE_ANALYTICS, and RequirePermission takes exactly one code, so
+            naming either would bounce half the audience off a screen the server answers.
+            RequireSeller is the check that matters, and it mirrors the API's
+            VendorGuard.requireSeller() on the same route — including for ProcurePal, which
+            reaches this screen and is told, rather than refused, that it has no ledger. */}
+          <Route
+            path="selling/statement"
+            element={
+              <RequireSeller>
+                <VendorStatementPage />
+              </RequireSeller>
+            }
+          />
+          <Route
+            path="selling/pickup-addresses"
+            element={
+              <RequireSeller>
+                <RequirePermission permission={PERMISSIONS.MANAGE_DELIVERY_ADDRESSES}>
+                  <VendorPickupAddressesPage />
+                </RequirePermission>
+              </RequireSeller>
+            }
+          />
+
+          {/* The fulfilment queue: RequireSeller, NOT RequirePlatformOwner.
+
+            These two routes were ProcurePal-only until vendors could sell. The API behind them
+            has since been re-gated to MANAGE_MARKETPLACE_ORDERS + requireSeller() + a
+            seller_client_id predicate, so a vendor already sees and advances exactly its own
+            orders and ProcurePal still sees exactly its own — one screen, two audiences, and no
+            second order UI to keep in step. Leaving RequirePlatformOwner here would have locked
+            vendors out of the one screen this whole feature exists for, while the API answered
+            perfectly well: a UI-only refusal, which is the worst kind because nothing in the
+            network tab explains it.
+
+            Being the platform owner is not a widening either — ProcurePal cannot see or advance
+            a vendor's order through these routes, because the predicate is the same predicate. */}
+          <Route
+            path="marketplace/orders"
+            element={
+              <RequireSeller>
+                <RequirePermission permission={PERMISSIONS.MANAGE_MARKETPLACE_ORDERS}>
+                  <MarketplaceOrderQueuePage />
+                </RequirePermission>
+              </RequireSeller>
+            }
+          />
+          <Route
+            path="marketplace/orders/:id"
+            element={
+              <RequireSeller>
+                <RequirePermission permission={PERMISSIONS.MANAGE_MARKETPLACE_ORDERS}>
+                  <MarketplaceOrderDetailPage />
+                </RequirePermission>
+              </RequireSeller>
+            }
+          />
+
+          {/* Genuinely ProcurePal-only, and staying that way. The catalog screen carries the
+            platform-wide category taxonomy and the commercial settings (delivery fee, minimum
+            order value, pay-on-delivery rules) that govern EVERY seller's checkout, and
+            marketplace analytics means every seller's revenue. Widening either to RequireSeller
+            would hand the operator's controls to the companies they govern.
+
+            RequirePlatformOwner wraps RequirePermission, not the other way round: every tenant's
+            OWNER holds MANAGE_MARKETPLACE, so the platform-owner check is the one that actually
+            keeps other companies out (contract §6). */}
           <Route path="marketplace" element={<Navigate to="/app/marketplace/products" replace />} />
           <Route
             path="marketplace/products"
@@ -344,26 +565,6 @@ export function AppRoutes() {
               <RequirePlatformOwner>
                 <RequirePermission permission={PERMISSIONS.MANAGE_MARKETPLACE}>
                   <MarketplaceProductsPage />
-                </RequirePermission>
-              </RequirePlatformOwner>
-            }
-          />
-          <Route
-            path="marketplace/orders"
-            element={
-              <RequirePlatformOwner>
-                <RequirePermission permission={PERMISSIONS.MANAGE_MARKETPLACE_ORDERS}>
-                  <MarketplaceOrderQueuePage />
-                </RequirePermission>
-              </RequirePlatformOwner>
-            }
-          />
-          <Route
-            path="marketplace/orders/:id"
-            element={
-              <RequirePlatformOwner>
-                <RequirePermission permission={PERMISSIONS.MANAGE_MARKETPLACE_ORDERS}>
-                  <MarketplaceOrderDetailPage />
                 </RequirePermission>
               </RequirePlatformOwner>
             }
@@ -426,6 +627,28 @@ export function AppRoutes() {
             other tenant's users are read-only, on the Users section of the tenant detail page,
             because no API exists to write them. */}
           <Route path="procurepal-users" element={<AdminPlatformOwnerUsersPage />} />
+          {/* Vendor listings awaiting review. A super-admin surface, not a marketplace-admin one:
+              moderating a listing is a platform-operator action, and putting it on ProcurePal's
+              own screens would have one seller adjudicating its competitors' products. */}
+          <Route path="listings" element={<AdminListingModerationPage />} />
+          {/* Vendor onboarding. Approving here is one of only two paths in the product that create
+              a VENDOR-role account — the other is the Add vendor button on the Vendors screen —
+              which is what keeps a tenant OWNER from ever minting one. */}
+          <Route path="vendor-waitlist" element={<AdminVendorWaitlistPage />} />
+          <Route path="vendors" element={<AdminVendorsPage />} />
+          {/* Cross-seller revenue. A super-admin surface and not a marketplace-admin one for the
+              same reason listing moderation is: M6 narrowed ProcurePal's own analytics to its own
+              sales, and "every seller's revenue" on a tenant screen is one seller reading its
+              competitors' book. Kept distinct from /admin/analytics, which reports STOCK MOVEMENT
+              value per tenant — a different question from a different table. */}
+          <Route path="revenue" element={<AdminMarketplaceRevenuePage />} />
+          {/* The escrow hold: how long a vendor's confirmed money waits before it can be paid
+              out. A super-admin surface and emphatically not a marketplace-admin one — a
+              platform-owner tenant admin can already edit delivery fees and pay-on-delivery
+              caps with no re-authentication, and this setting decides when real money leaves
+              the business. Changing it needs the caller's own password and an explicit
+              acknowledgement, and every change is audited and emailed to all super admins. */}
+          <Route path="settlement-settings" element={<AdminSettlementSettingsPage />} />
           <Route path="analytics" element={<AdminAggregateAnalyticsPage />} />
         </Route>
       </Routes>

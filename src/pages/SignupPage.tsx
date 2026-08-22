@@ -87,12 +87,30 @@ export function SignupPage() {
     <AuthCard
       title="Create your account"
       footer={
-        <span className="text-neutral-500">
-          Already have an account?{' '}
-          <Link to="/login" className="font-medium text-primary-600 hover:underline">
-            Log in
-          </Link>
-        </span>
+        <div className="flex flex-col gap-2">
+          <span className="text-neutral-500">
+            Already have an account?{' '}
+            <Link to="/login" className="font-medium text-primary-600 hover:underline">
+              Log in
+            </Link>
+          </span>
+          {/* Deliberately NOT "Sign up as a vendor". This page creates a BUYING company account
+              immediately; the vendor route creates nothing at all — it puts a business on a
+              waitlist a super admin reviews by hand. Wording the two as sibling kinds of signup is
+              what would make an applicant expect a login and then go looking for one that does not
+              exist, which is the single most likely support ticket this feature can produce. The
+              question-and-answer shape also matches how the two audiences differ: one is here to
+              buy, the other to sell. */}
+          <span className="border-t border-neutral-100 pt-2 text-neutral-500">
+            Want to sell on Procure Paddy?{' '}
+            <Link
+              to="/vendor-application"
+              className="font-medium text-primary-600 hover:underline"
+            >
+              Apply to become a vendor
+            </Link>
+          </span>
+        </div>
       }
     >
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">

@@ -10,6 +10,8 @@ import {
 export interface CatalogFilters {
   q: string
   categoryId: string
+  /** "Sold by" — narrows the grid to one seller. Empty means every seller. */
+  sellerId: string
   minPrice: string
   maxPrice: string
   inStockOnly: boolean
@@ -25,6 +27,7 @@ export const CATALOG_PAGE_SIZE = 24
 const EMPTY_FILTERS: Omit<CatalogFilters, 'sort' | 'page'> = {
   q: '',
   categoryId: '',
+  sellerId: '',
   minPrice: '',
   maxPrice: '',
   inStockOnly: false,
@@ -56,6 +59,7 @@ export function useCatalogFilters() {
     return {
       q: searchParams.get('q') ?? '',
       categoryId: searchParams.get('categoryId') ?? '',
+      sellerId: searchParams.get('sellerId') ?? '',
       minPrice: searchParams.get('minPrice') ?? '',
       maxPrice: searchParams.get('maxPrice') ?? '',
       inStockOnly: searchParams.get('inStockOnly') === 'true',
@@ -78,6 +82,7 @@ export function useCatalogFilters() {
 
           if ('q' in patch) write('q', patch.q?.trim())
           if ('categoryId' in patch) write('categoryId', patch.categoryId)
+          if ('sellerId' in patch) write('sellerId', patch.sellerId)
           if ('minPrice' in patch) write('minPrice', patch.minPrice)
           if ('maxPrice' in patch) write('maxPrice', patch.maxPrice)
           if ('inStockOnly' in patch) write('inStockOnly', patch.inStockOnly ? 'true' : undefined)
@@ -106,6 +111,7 @@ export function useCatalogFilters() {
   const hasActiveFilters =
     filters.q !== EMPTY_FILTERS.q ||
     filters.categoryId !== EMPTY_FILTERS.categoryId ||
+    filters.sellerId !== EMPTY_FILTERS.sellerId ||
     filters.minPrice !== EMPTY_FILTERS.minPrice ||
     filters.maxPrice !== EMPTY_FILTERS.maxPrice ||
     filters.inStockOnly !== EMPTY_FILTERS.inStockOnly
@@ -115,6 +121,7 @@ export function useCatalogFilters() {
     () => ({
       q: filters.q.trim() || undefined,
       categoryId: filters.categoryId || undefined,
+      sellerId: filters.sellerId || undefined,
       minPrice: toPositiveNumber(filters.minPrice),
       maxPrice: toPositiveNumber(filters.maxPrice),
       inStockOnly: filters.inStockOnly || undefined,

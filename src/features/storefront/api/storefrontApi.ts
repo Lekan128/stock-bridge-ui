@@ -5,6 +5,7 @@ import {
   type CatalogParams,
   type MarketplaceCategory,
   type MarketplaceProduct,
+  type MarketplaceSeller,
   type MarketplaceSettings,
 } from '@/features/storefront/types'
 
@@ -74,6 +75,27 @@ export const storefrontApi = {
 
   categories: () =>
     api.get<MarketplaceCategory[]>('/api/marketplace/categories', { public: true }).then((r) => r.data),
+
+  /**
+   * Everyone a buyer can currently buy from: ProcurePal first, then active vendors by name.
+   *
+   * Sellers with nothing live are omitted server-side — a vendor whose first listings are still
+   * in moderation has nothing to sell yet, and linking to an empty storefront reads as a broken
+   * site. This is NOT a client listing: the endpoint returns active sellers only, so no amount of
+   * paging reveals the buying companies that share the `clients` table.
+   */
+  sellers: () =>
+    api.get<MarketplaceSeller[]>('/api/marketplace/sellers', { public: true }).then((r) => r.data),
+
+  /**
+   * One seller's storefront header. Takes an id or a slug, matching the product route.
+   *
+   * The seller's PRODUCTS come from `catalog({ sellerId })`, not from here — reusing the grid
+   * endpoint keeps every filter, sort and pagination rule identical to the main catalog instead
+   * of growing a second one that drifts.
+   */
+  seller: (idOrSlug: string) =>
+    api.get<MarketplaceSeller>(`/api/marketplace/sellers/${idOrSlug}`, { public: true }).then((r) => r.data),
 
   settings: () =>
     api.get<MarketplaceSettings>('/api/marketplace/settings', { public: true }).then((r) => r.data),

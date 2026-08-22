@@ -19,15 +19,27 @@ const itemClassName = (isActive: boolean) =>
   }`
 
 export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onCloseMobile }: SidebarProps) {
-  const { user, client, isPlatformOwner } = useAuth()
+  const { user, client, isPlatformOwner, isVendor, isSeller } = useAuth()
   const permissions = user?.type === 'tenant' ? user.permissions : []
 
-  // Two independent filters: the platform-owner flag decides whether ProcurePal's ops group
-  // exists at all, permissions decide which of its items this particular user sees.
+  // Two independent kinds of filter, and they are not interchangeable.
+  //
+  // The three group flags are about the COMPANY — is it the platform owner, does it sell, is
+  // it a vendor — and none of them can be a permission: permissions hang off global roles, so
+  // every tenant's OWNER holds MANAGE_MARKETPLACE* and MANAGE_DELIVERY_ADDRESSES whatever kind
+  // of company they work for. See NavGroup for each flag's reasoning.
+  //
+  // The item filter is about the USER — which of this group's screens is their job. Both are
+  // needed and neither is sufficient; this mirrors the two independent gates the API puts on
+  // the same routes.
   const groups: NavGroup[] = NAV_GROUPS.filter((group) => !group.platformOwnerOnly || isPlatformOwner)
+    .filter((group) => !group.sellerOnly || isSeller)
+    .filter((group) => !group.hideFromVendors || !isVendor)
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => !item.requiredPermission || permissions.includes(item.requiredPermission)),
+      items: group.items
+        .filter((item) => !item.hideFromPlatformOwner || !isPlatformOwner)
+        .filter((item) => !item.requiredPermission || permissions.includes(item.requiredPermission)),
     }))
     .filter((group) => group.items.length > 0)
 

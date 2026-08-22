@@ -7,6 +7,7 @@ import {
   MapPin,
   PackageSearch,
   Phone,
+  Store,
   Truck,
   Warehouse,
 } from 'lucide-react'
@@ -129,6 +130,9 @@ export function OrderConfirmationPage() {
   const awaitingPayment = order.status === 'PENDING_PAYMENT'
   const incomingCreated = hasIncomingStock(order.status)
   const delivery = order.delivery ?? {}
+  // Siblings are the OTHER orders from this checkout, so the trip is one larger than the list.
+  const orderCount = (order.siblingOrders?.length ?? 0) + 1
+  const isSplit = orderCount > 1
   const addressLines = [delivery.addressLine1, delivery.addressLine2, delivery.city, delivery.state]
     .filter(Boolean)
     .join(', ')
@@ -155,12 +159,22 @@ export function OrderConfirmationPage() {
           </div>
           <div className="min-w-0">
             <h1 className="text-lg font-bold text-neutral-900 sm:text-xl">
-              {awaitingPayment ? 'Your order is waiting for payment' : 'Order placed — thank you'}
+              {awaitingPayment
+                ? isSplit
+                  ? `Your ${orderCount} orders are waiting for payment`
+                  : 'Your order is waiting for payment'
+                : isSplit
+                  ? `${orderCount} orders placed — thank you`
+                  : 'Order placed — thank you'}
             </h1>
             <p className="mt-1 text-sm text-neutral-700">
               {awaitingPayment
-                ? 'We have reserved nothing yet. Complete the payment and ProcurePal will start preparing your order.'
-                : 'ProcurePal has your order and will confirm it shortly. Everything you need is on this page and in your orders list — nothing else to do for now.'}
+                ? isSplit
+                  ? `We have reserved nothing yet. One payment covers all ${orderCount} orders — complete it and each seller will start preparing their part.`
+                  : 'We have reserved nothing yet. Complete the payment and ProcurePal will start preparing your order.'
+                : isSplit
+                  ? `Each seller has their part of your basket and will confirm shortly. Everything you need is on this page and in your orders list — nothing else to do for now.`
+                  : 'ProcurePal has your order and will confirm it shortly. Everything you need is on this page and in your orders list — nothing else to do for now.'}
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <span className="rounded-md border border-neutral-200 bg-white px-2 py-1 font-mono text-xs font-medium text-neutral-700">
@@ -184,6 +198,60 @@ export function OrderConfirmationPage() {
           </div>
         )}
       </div>
+
+      {/* THE SPLIT, EXPLAINED.
+
+          A buyer who checked out one basket and got three order numbers will assume something went
+          wrong unless this says otherwise, in those words, above the fold. Two facts do the work:
+          that it was ONE payment, and that each order is delivered separately - which is also why
+          each one carried its own delivery fee on the previous screen.
+
+          Placed before the incoming-stock panel deliberately: "why are there three of these"
+          has to be answered before anything else on the page will make sense. */}
+      {isSplit && (
+        <section className="mt-5 rounded-lg border border-primary-200 bg-primary-50 p-5">
+          <h2 className="flex items-center gap-2 text-base font-semibold text-neutral-900">
+            <Store className="h-5 w-5 text-primary-600" aria-hidden="true" />
+            Your basket became {orderCount} orders
+          </h2>
+          <p className="mt-2 text-sm leading-relaxed text-neutral-700">
+            Your items came from {orderCount} different sellers, so we split them into one order per
+            seller — each is prepared, delivered and tracked on its own.{' '}
+            <strong className="font-semibold">You paid once</strong>, for all of them together.
+          </p>
+
+          <ul className="mt-3 space-y-2">
+            {[
+              { id: order.id, orderNumber: order.orderNumber, seller: order.seller, total: order.total, current: true },
+              ...order.siblingOrders.map((sibling) => ({ ...sibling, current: false })),
+            ].map((entry) => (
+              <li
+                key={entry.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary-200 bg-white px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-neutral-900">
+                    {entry.seller?.name ?? 'Unknown seller'}
+                    {entry.current && <span className="ml-2 text-xs font-normal text-neutral-400">(this page)</span>}
+                  </p>
+                  <p className="font-mono text-xs text-neutral-500">{entry.orderNumber}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                  <span className="text-sm font-semibold text-neutral-900">{formatNaira(entry.total)}</span>
+                  {!entry.current && (
+                    <Link
+                      to={`/order-confirmation/${entry.id}`}
+                      className="rounded text-sm font-medium text-primary-600 hover:text-primary-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                    >
+                      View
+                    </Link>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* The point of the whole flow. Deliberately near the top and not buried under the receipt. */}
       <section className="mt-5 rounded-lg border border-warning-200 bg-white p-5">
