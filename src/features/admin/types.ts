@@ -375,6 +375,8 @@ export interface SuperAdminVendorSummary {
   /** Nullable for a vendor — a super admin may add a business they have no email for. */
   email: string | null
   phone: string | null
+  /** The vendor's single login. Null only in a state that should not happen. */
+  username: string | null
   /** A FRACTION in 0..1, not a percentage. 0.15 is fifteen percent. Null if none agreed. */
   commissionRate: number | null
   userCount: number

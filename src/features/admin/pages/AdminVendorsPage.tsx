@@ -156,7 +156,10 @@ export function AdminVendorsPage() {
                       )}
                     </div>
 
-                    <p className="mt-1 font-mono text-xs text-neutral-500">{vendor.slug}</p>
+                    <p className="mt-1 font-mono text-xs text-neutral-500">
+                      Company ID {vendor.slug}
+                      {vendor.username && <> · {vendor.username}</>}
+                    </p>
 
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-600">
                       {/* Called out rather than left blank: a vendor with no email receives no
