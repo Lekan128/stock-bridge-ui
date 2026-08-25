@@ -1,10 +1,12 @@
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '@/auth/useAuth'
 import { IncomingStockBadge } from '@/features/products/components/IncomingStockBadge'
 import { LowStockBadge } from '@/features/products/components/LowStockBadge'
 import { ProductImage } from '@/features/products/components/ProductImage'
 import { StatusBadge } from '@/features/products/components/StatusBadge'
-import { formatCurrency } from '@/features/products/formatters'
+import { formatCurrency, formatUnitOfMeasure } from '@/features/products/formatters'
+import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import type { Product } from '@/features/products/types'
 
 export type ProductSortField = 'name' | 'sku' | 'unitPrice' | 'quantityOnHand' | 'active'
@@ -25,16 +27,38 @@ export interface ProductTableProps {
 
 // "On hand (usable)" rather than "Quantity on hand": once a second quantity exists on the row,
 // the header has to say which one it is sorting and which one you can actually use.
-const columns: { field: ProductSortField; label: string; align?: 'right' }[] = [
+//
+// Unit price is a marketplace selling price and is `null` for EVERY row a buying company owns
+// — showing the column at all for them would be an entire column of blanks, so it is built
+// conditionally in the component rather than declared here as a fixed list.
+const BASE_COLUMNS: { field: ProductSortField; label: string; align?: 'right' }[] = [
   { field: 'name', label: 'Name' },
   { field: 'sku', label: 'SKU' },
-  { field: 'unitPrice', label: 'Unit price', align: 'right' },
   { field: 'quantityOnHand', label: 'On hand (usable)', align: 'right' },
   { field: 'active', label: 'Status' },
 ]
+const UNIT_PRICE_COLUMN: { field: ProductSortField; label: string; align?: 'right' } = {
+  field: 'unitPrice',
+  label: 'Unit price',
+  align: 'right',
+}
 
 export function ProductTable({ products, sort, onSortChange, incomingFor }: ProductTableProps) {
   const navigate = useNavigate()
+  const { isVendor } = useAuth()
+  // Only fetched for the subtitle a company sees in place of the unit price column — a vendor's
+  // row already carries its price, so there is nothing extra to look up for them.
+  const { options: unitOfMeasureOptions } = useUnitOfMeasureOptions()
+
+  const columns = isVendor
+    ? [BASE_COLUMNS[0], BASE_COLUMNS[1], UNIT_PRICE_COLUMN, ...BASE_COLUMNS.slice(2)]
+    : BASE_COLUMNS
+
+  // Both `unitOfMeasure` and `packagingUnit` codes live in the same fetched list — one lookup
+  // serves both.
+  function unitOfMeasureLabel(code: string | undefined): string | undefined {
+    return unitOfMeasureOptions.find((option) => option.code === code)?.label
+  }
 
   return (
     <table className="w-full border-separate border-spacing-0 text-sm">
@@ -84,13 +108,31 @@ export function ProductTable({ products, sort, onSortChange, incomingFor }: Prod
               <td className="border-b border-neutral-100 px-4 py-2.5">
                 <div className="flex items-center gap-2.5">
                   <ProductImage src={product.imageUrl} alt={product.name} className="h-8 w-8 shrink-0 rounded-md" />
-                  <span className="font-medium text-neutral-900">{product.name}</span>
+                  <div className="min-w-0">
+                    <span className="font-medium text-neutral-900">{product.name}</span>
+                    {/* A company has no unit price column to look at, so the packaging fact that
+                        would normally sit beside a price ("Bag of 50 kg") is surfaced here
+                        instead — never shown to a vendor, who already has the unit price column
+                        and would find this redundant clutter under every name. */}
+                    {!isVendor &&
+                      (product.unitOfMeasure || product.packagingUnit || product.packagingSize != null) && (
+                        <p className="truncate text-xs text-neutral-500">
+                          {formatUnitOfMeasure(
+                            unitOfMeasureLabel(product.unitOfMeasure),
+                            unitOfMeasureLabel(product.packagingUnit),
+                            product.packagingSize,
+                          )}
+                        </p>
+                      )}
+                  </div>
                 </div>
               </td>
               <td className="border-b border-neutral-100 px-4 py-2.5 text-neutral-600">{product.sku}</td>
-              <td className="border-b border-neutral-100 px-4 py-2.5 text-right text-neutral-700">
-                {formatCurrency(product.unitPrice)}
-              </td>
+              {isVendor && (
+                <td className="border-b border-neutral-100 px-4 py-2.5 text-right text-neutral-700">
+                  {formatCurrency(product.unitPrice)}
+                </td>
+              )}
               <td className="border-b border-neutral-100 px-4 py-2.5 text-right">
                 <div className="flex items-center justify-end gap-2">
                   {product.isLowStock && <LowStockBadge />}

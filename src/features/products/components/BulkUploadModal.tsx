@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { FileSpreadsheet, Upload } from 'lucide-react'
+import { useAuth } from '@/auth/useAuth'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
 import { Modal } from '@/components/Modal'
@@ -16,6 +17,7 @@ export interface BulkUploadModalProps {
 }
 
 export function BulkUploadModal({ open, onClose, onSuccess }: BulkUploadModalProps) {
+  const { isVendor } = useAuth()
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [rowErrors, setRowErrors] = useState<AppRowError[] | null>(null)
@@ -85,13 +87,23 @@ export function BulkUploadModal({ open, onClose, onSuccess }: BulkUploadModalPro
       <div className="flex flex-col gap-4">
         <div className="flex items-start gap-2 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-sm text-neutral-600">
           <FileSpreadsheet className="mt-0.5 h-4 w-4 shrink-0 text-neutral-400" />
-          <p>
-            Use the{' '}
-            <button type="button" onClick={() => void handleDownloadTemplate()} className="font-medium text-primary-600 hover:underline">
-              downloadable template
-            </button>{' '}
-            to format your spreadsheet before uploading.
-          </p>
+          <div className="flex flex-col gap-1">
+            <p>
+              Use the{' '}
+              <button
+                type="button"
+                onClick={() => void handleDownloadTemplate()}
+                className="font-medium text-primary-600 hover:underline"
+              >
+                downloadable template
+              </button>{' '}
+              to format your spreadsheet before uploading.{' '}
+              {isVendor
+                ? 'Unit price is required — everything else (unit of measure, packaging like a 50kg bag, cost price, low stock threshold) is optional.'
+                : 'Unit of measure, packaging (like a 50kg bag), cost price and low stock threshold are all optional.'}
+            </p>
+            <p>Leave quantity on hand blank for stock you don&apos;t have yet — we&apos;ll set it to 0.</p>
+          </div>
         </div>
 
         <div>

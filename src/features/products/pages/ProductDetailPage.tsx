@@ -16,8 +16,9 @@ import { StockAdjustmentModal } from '@/features/products/components/StockAdjust
 import { StockBreakdownPanel } from '@/features/products/components/StockBreakdownPanel'
 import { StockHistoryTable } from '@/features/products/components/StockHistoryTable'
 import { StockQuantityModal } from '@/features/products/components/StockQuantityModal'
-import { formatCurrency } from '@/features/products/formatters'
+import { formatCurrency, formatUnitOfMeasure } from '@/features/products/formatters'
 import { useLowStockAlerts } from '@/features/products/hooks/useLowStockAlerts'
+import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import { VendorKindBadge } from '@/features/vendors/components/VendorKindBadge'
 import { useProduct } from '@/features/products/hooks/useProduct'
 import { useProductIncoming } from '@/features/products/hooks/useProductIncoming'
@@ -33,6 +34,7 @@ export function ProductDetailPage() {
   const { user } = useAuth()
   const { showToast } = useToast()
   const { product, setProduct, loading, error } = useProduct(id)
+  const { options: unitOfMeasureOptions } = useUnitOfMeasureOptions()
   const { refetch: refetchLowStockAlerts } = useLowStockAlerts()
   // A single-element array so the hook's "does the API send incomingQuantity?" check works the
   // same way here as it does on the list.
@@ -126,14 +128,39 @@ export function ProductDetailPage() {
         <ProductImage src={product.imageUrl} alt={product.name} className="h-40 w-40 rounded-lg" iconClassName="h-10 w-10" />
         <div className="md:col-span-2">
           <dl className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <dt className="text-neutral-500">Unit price</dt>
-              <dd className="mt-0.5 font-medium text-neutral-900">{formatCurrency(product.unitPrice)}</dd>
-            </div>
+            {/* Structurally absent, not blank, for a buying company: `unitPrice` is `null` on
+                every one of their products (it is a marketplace selling price, meaningless for
+                private stock), and a "Unit price" row rendering an em dash on every product
+                would read as broken rather than as "not applicable". `isVendor` and "value
+                present" agree in practice — a company's is always null — so gating on the
+                value is enough and needs no extra import here. */}
+            {product.unitPrice != null && (
+              <div>
+                <dt className="text-neutral-500">Unit price</dt>
+                <dd className="mt-0.5 font-medium text-neutral-900">{formatCurrency(product.unitPrice)}</dd>
+              </div>
+            )}
             <div>
               <dt className="text-neutral-500">Cost price</dt>
               <dd className="mt-0.5 font-medium text-neutral-900">{formatCurrency(product.costPrice)}</dd>
             </div>
+            {/* How this product is measured and — optionally — packaged, shown for BOTH tenant
+                types when set, unlike unit price. `unitOfMeasure`/`packagingUnit` on the product
+                are wire CODEs ("KG", "BAG"), not something to show a reader directly, so each is
+                resolved to its label via the same static list the form's pickers use before
+                formatting. */}
+            {(product.unitOfMeasure || product.packagingUnit || product.packagingSize != null) && (
+              <div className="col-span-2">
+                <dt className="text-neutral-500">Unit of measure</dt>
+                <dd className="mt-0.5 font-medium text-neutral-900">
+                  {formatUnitOfMeasure(
+                    unitOfMeasureOptions.find((option) => option.code === product.unitOfMeasure)?.label,
+                    unitOfMeasureOptions.find((option) => option.code === product.packagingUnit)?.label,
+                    product.packagingSize,
+                  )}
+                </dd>
+              </div>
+            )}
             {/* Where this stock comes from. Rendered even when unset, as an em dash, rather than
                 hidden: an absent row reads as "this product has no supplier concept", where a dash
                 reads as "nobody has said yet" — and the second is the true one. */}
