@@ -12,9 +12,11 @@ import { useToast } from '@/components/useToast'
 import { productsApi } from '@/features/products/api/productsApi'
 import { ImageUploadField } from '@/features/products/components/ImageUploadField'
 import { ProductFormSkeleton } from '@/features/products/components/ProductFormSkeleton'
+import { RequestUnitOfMeasureModal } from '@/features/products/components/RequestUnitOfMeasureModal'
 import { ReviewImpactDialog } from '@/features/products/components/ReviewImpactDialog'
 import { ReviewImpactNotice } from '@/features/products/components/ReviewImpactNotice'
 import { useProduct } from '@/features/products/hooks/useProduct'
+import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import {
   productFormDefaults,
   productFormSchema,
@@ -23,6 +25,7 @@ import {
   toVendorMarketplaceDetailsPayload,
   type ProductFormValues,
 } from '@/features/products/schemas'
+import type { UnitOfMeasureCategory } from '@/features/products/types'
 import { vendorCatalogueApi } from '@/features/vendor/api/vendorCatalogueApi'
 import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
 import { isAppError } from '@/types/api'
@@ -32,20 +35,46 @@ const KNOWN_FIELDS = new Set<keyof ProductFormValues>([
   'sku',
   'description',
   'unitPrice',
+  'unitOfMeasure',
+  'packagingUnit',
+  'packagingSize',
   'costPrice',
   'lowStockThreshold',
   'companyVendorId',
 ])
 
+// Fixed display order for the "Measured in" picker's <optgroup>s — independent of whatever
+// order the server happens to return its rows in, so the groups don't shuffle between a create
+// and an edit. WEIGHT/VOLUME/LENGTH group real entries; COUNT holds exactly one entry ("Piece"),
+// since every other COUNT code is role: PACKAGING and lives in the second picker instead. A
+// single-item "Count" optgroup was judged not worth a special case — it costs nothing to render
+// and keeps the grouping logic uniform across all four categories.
+const CATEGORY_ORDER: UnitOfMeasureCategory[] = ['COUNT', 'WEIGHT', 'VOLUME', 'LENGTH']
+const CATEGORY_LABELS: Record<UnitOfMeasureCategory, string> = {
+  COUNT: 'Count',
+  WEIGHT: 'Weight',
+  VOLUME: 'Volume',
+  LENGTH: 'Length',
+}
+
+/**
+ * The message client-side for the same rule the server's `UnitPriceRequiredException`
+ * enforces, so a vendor who left this blank sees an attributed field error before the request
+ * rather than a 400 with no field to attach it to (that exception comes back as a plain
+ * `{message}`, not a per-field error — see `save`'s catch block).
+ */
+const UNIT_PRICE_REQUIRED_MESSAGE = "Unit price is required for a marketplace seller's product."
+
 /**
  * The identity fields this form can write, paired with the label the vendor sees.
  *
- * The server's rule covers six (`ProductModerationRules.invalidatesApproval`) and this form
- * now reaches five of them by name plus the photo, which is compared by intent below — so the
- * list and the rule finally agree. Brand and unit of measure used to be missing here because
- * no vendor-facing route wrote them; they are set through the seller's marketplace-details
- * route now, which is a SECOND request from the same save (see `save`), and they re-trigger
- * review exactly as a rename does.
+ * The server's rule now covers eight (`ProductModerationRules.invalidatesApproval`): the five
+ * below plus the photo (compared by intent, not listed here), `packagingUnit` and
+ * `packagingSize`, added alongside `unitOfMeasure` because a 25kg bag silently becoming 50kg is
+ * exactly the kind of identity change this dialog exists to warn about. Brand is set through the
+ * seller's marketplace-details route (a SECOND request from the same save, see `saveBrand`);
+ * unit of measure and the packaging pair are NOT — they go to `/api/products` in the SAME
+ * request as everything else now, for every tenant, not just a vendor.
  *
  * <p>The labels are the ones on the inputs below, because `ReviewImpactDialog` reads them back
  * to the vendor at the point of no return — a dialog naming a field they cannot find on the
@@ -56,7 +85,9 @@ const IDENTITY_FIELDS: { field: keyof ProductFormValues; label: string }[] = [
   { field: 'sku', label: 'SKU' },
   { field: 'description', label: 'Description' },
   { field: 'brand', label: 'Brand' },
-  { field: 'unitOfMeasure', label: 'Unit of measure' },
+  { field: 'unitOfMeasure', label: 'Measured in' },
+  { field: 'packagingUnit', label: 'Packaged as' },
+  { field: 'packagingSize', label: 'Pack size' },
 ]
 
 /**
@@ -102,12 +133,20 @@ export function ProductFormPage() {
   // for a list the caller is not allowed to read would be a 403 in everyone's network tab.
   const canViewVendors = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.VIEW_VENDORS)
   const { vendors: vendorOptions } = useVendorOptions(canViewVendors)
+  const { baseOptions, packagingOptions } = useUnitOfMeasureOptions()
   const [formError, setFormError] = useState<string | null>(null)
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [removeImage, setRemoveImage] = useState(false)
+  const [showUnitRequestModal, setShowUnitRequestModal] = useState(false)
   /** Held while the confirmation is open, so confirming submits exactly what was validated. */
   const [pendingValues, setPendingValues] = useState<ProductFormValues | null>(null)
   const [changedIdentityFields, setChangedIdentityFields] = useState<string[]>([])
+
+  // "Measured in" picker — BASE-role codes only, grouped by category.
+  const baseUnitsByCategory = CATEGORY_ORDER.map((category) => ({
+    category,
+    options: baseOptions.filter((option) => option.category === category),
+  })).filter((group) => group.options.length > 0)
 
   const {
     register,
@@ -128,7 +167,9 @@ export function ProductFormPage() {
       description: product.description ?? '',
       brand: product.brand ?? '',
       unitOfMeasure: product.unitOfMeasure ?? '',
-      unitPrice: String(product.unitPrice),
+      packagingUnit: product.packagingUnit ?? '',
+      packagingSize: product.packagingSize != null ? String(product.packagingSize) : '',
+      unitPrice: product.unitPrice != null ? String(product.unitPrice) : '',
       costPrice: product.costPrice != null ? String(product.costPrice) : '',
       lowStockThreshold: product.lowStockThreshold != null ? String(product.lowStockThreshold) : '',
       companyVendorId: product.companyVendorId ?? '',
@@ -160,28 +201,29 @@ export function ProductFormPage() {
   }
 
   /**
-   * Whether the marketplace facets need their own request.
+   * Whether brand needs its own request.
    *
-   * On an edit, only when one of them actually moved — the route re-triggers review on a real
-   * brand or unit change and a needless call is a needless round trip. On a create there is no
-   * "before", so it is sent whenever the vendor typed something.
+   * On an edit, only when it actually moved — the route re-triggers review on a real brand
+   * change and a needless call is a needless round trip. On a create there is no "before", so
+   * it is sent whenever the vendor typed something.
+   *
+   * <p>Used to also cover `unitOfMeasure`, back when both travelled through this route. That
+   * field now goes to `/api/products` in the SAME request as everything else (see
+   * `toProductPayload`), so this only has one field left to ask about.
    */
-  function marketplaceDetailsChanged(values: ProductFormValues): boolean {
-    if (!isEdit) return values.brand.length > 0 || values.unitOfMeasure.length > 0
+  function brandChanged(values: ProductFormValues): boolean {
+    if (!isEdit) return values.brand.length > 0
     if (!product) return false
-    return (
-      values.brand.trim() !== (product.brand ?? '').trim() ||
-      values.unitOfMeasure.trim() !== (product.unitOfMeasure ?? '').trim()
-    )
+    return values.brand.trim() !== (product.brand ?? '').trim()
   }
 
   /**
    * The second request, and the reason there has to be one.
    *
-   * `/api/products` has never accepted brand or unit of measure; the seller's
-   * marketplace-details route is the only thing that writes them, and it needs a product id,
-   * which on a create does not exist until the first request has returned. So the order is
-   * fixed: save the product, then set its facets.
+   * `/api/products` has never accepted brand; the seller's marketplace-details route is the
+   * only thing that writes it, and it needs a product id, which on a create does not exist
+   * until the first request has returned. So the order is fixed: save the product, then set
+   * its brand.
    *
    * <p>The failure is handled rather than propagated, because the product IS saved by the time
    * this runs and throwing here would show a red error over a successful save and send the
@@ -191,14 +233,14 @@ export function ProductFormPage() {
    *
    * @returns null on success, or a sentence to append to the success toast.
    */
-  async function saveMarketplaceDetails(productId: string, values: ProductFormValues): Promise<string | null> {
+  async function saveBrand(productId: string, values: ProductFormValues): Promise<string | null> {
     try {
       await vendorCatalogueApi.updateMarketplaceDetails(productId, toVendorMarketplaceDetailsPayload(values))
       return null
     } catch (err) {
       return isAppError(err)
-        ? `but the brand and unit of measure could not be saved (${err.message}) — edit the product to try again.`
-        : 'but the brand and unit of measure could not be saved — edit the product to try again.'
+        ? `but the brand could not be saved (${err.message}) — edit the product to try again.`
+        : 'but the brand could not be saved — edit the product to try again.'
     }
   }
 
@@ -217,11 +259,10 @@ export function ProductFormPage() {
             )
           : await productsApi.create(toProductPayload(values), imageFile)
 
-      // Vendors only. ProcurePal's staff set these on the admin catalogue screen, and an
+      // Vendors only. ProcurePal's staff set brand on the admin catalogue screen, and an
       // ordinary buying company has no marketplace facets at all — the route would 403 them,
-      // which is why the inputs are not rendered for either.
-      const detailsWarning =
-        isVendor && marketplaceDetailsChanged(values) ? await saveMarketplaceDetails(saved.id, values) : null
+      // which is why the input is not rendered for either.
+      const detailsWarning = isVendor && brandChanged(values) ? await saveBrand(saved.id, values) : null
 
       setPendingValues(null)
 
@@ -261,6 +302,13 @@ export function ProductFormPage() {
       }
       if (mappedAny) return
 
+      // Also where UnitPriceRequiredException, InvalidUnitOfMeasureException and
+      // UnitOfMeasureAndCountRequiredTogetherException land if they ever reach the server
+      // despite the client-side checks above (`onSubmit`'s vendor check, the schema's
+      // superRefine pairing rule, and the <select> making an invalid code structurally
+      // impossible from this UI). All three are plain `{message}` bodies with no `errors`
+      // array, so `err.errors ?? []` above is empty, `mappedAny` stays false, and they fall
+      // through to here as a general form error rather than being silently dropped.
       setFormError(err.message)
     }
   }
@@ -268,8 +316,18 @@ export function ProductFormPage() {
   /**
    * Validation runs first, then the confirmation — so a vendor is never asked to accept a
    * review they were going to fail validation for anyway.
+   *
+   * <p>Unit price's "required for a vendor" rule is enforced HERE rather than in
+   * `productFormSchema`, because the schema has no way to know whether the caller is a vendor
+   * — it is one static shape shared by both tenant kinds, and baking `isVendor` into it would
+   * mean carrying a second schema instance just for this one field. This mirrors the server's
+   * own `UnitPriceRequiredException`, which is why the message matches it exactly.
    */
   async function onSubmit(values: ProductFormValues) {
+    if (isVendor && values.unitPrice.trim().length === 0) {
+      setError('unitPrice', { message: UNIT_PRICE_REQUIRED_MESSAGE })
+      return
+    }
     if (isVendor && isEdit) {
       const changed = changedIdentityLabels(values)
       if (changed.length > 0) {
@@ -342,38 +400,29 @@ export function ProductFormPage() {
           />
         </div>
 
-        {/* Brand and unit of measure. Vendors only, and inside the "what the product is" group
-            rather than after it, because that grouping is the form's whole explanation of which
-            edits cost a listing its place on the storefront — putting two identity fields
-            outside it would quietly make the rule wrong.
+        {/* Brand. Vendors only, and inside the "what the product is" group rather than after
+            it, because that grouping is the form's whole explanation of which edits cost a
+            listing its place on the storefront — putting an identity field outside it would
+            quietly make the rule wrong.
 
             Not rendered for anyone else, and the reason differs by audience rather than being
             one blanket rule: an ordinary buying company's private stock has no marketplace
             facets at all and the seller route would 403 them, while ProcurePal's staff set
-            these on the admin catalogue screen (MarketplaceDetailsModal), which also offers the
+            this on the admin catalogue screen (MarketplaceDetailsModal), which also offers the
             slug and the category a vendor deliberately does not get.
 
-            They post to a DIFFERENT endpoint from every other field on this form — see
-            `saveMarketplaceDetails`. That is invisible here on purpose: which of two routes a
-            field lands on is the API's problem, not the supplier's. */}
+            Posts to a DIFFERENT endpoint from every other field on this form — see `saveBrand`.
+            That is invisible here on purpose: which of two routes a field lands on is the API's
+            problem, not the supplier's. Unit of measure USED to sit next to this for the same
+            reason; it now goes through `/api/products` with everything else and lives below,
+            ungated, because every tenant can set it. */}
         {isVendor && (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <TextField
-              label="Brand"
-              hint="Optional. The name a buyer would recognise — Dangote, Golden Penny."
-              error={errors.brand?.message}
-              {...register('brand')}
-            />
-            <TextField
-              label="Unit of measure"
-              /* The examples are the hint rather than a placeholder: this is free text, the
-                 right answer depends entirely on the trade, and a buyer cannot judge a price
-                 without it. "50kg bag" is the single most useful thing on a cement listing. */
-              hint="How it is sold — 50kg bag, carton of 24, litre"
-              error={errors.unitOfMeasure?.message}
-              {...register('unitOfMeasure')}
-            />
-          </div>
+          <TextField
+            label="Brand"
+            hint="Optional. The name a buyer would recognise — Dangote, Golden Penny."
+            error={errors.brand?.message}
+            {...register('brand')}
+          />
         )}
 
         {/* -------------------------------------------------------- Price, stock, bookkeeping */}
@@ -389,13 +438,27 @@ export function ProductFormPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-4">
-          <TextField
-            label="Unit price"
-            inputMode="decimal"
-            error={errors.unitPrice?.message}
-            {...register('unitPrice')}
-          />
+        {/* Unit price is a marketplace selling price — meaningless for a buying company's
+            private stock, and required for a vendor (enforced in `onSubmit`, mirroring the
+            server's UnitPriceRequiredException). A company keeps only cost price, which stays
+            optional and unconstrained by tenant kind either way. */}
+        {isVendor ? (
+          <div className="grid grid-cols-2 gap-4">
+            <TextField
+              label="Unit price"
+              inputMode="decimal"
+              error={errors.unitPrice?.message}
+              {...register('unitPrice')}
+            />
+            <TextField
+              label="Cost price"
+              inputMode="decimal"
+              hint="Optional"
+              error={errors.costPrice?.message}
+              {...register('costPrice')}
+            />
+          </div>
+        ) : (
           <TextField
             label="Cost price"
             inputMode="decimal"
@@ -403,6 +466,94 @@ export function ProductFormPage() {
             error={errors.costPrice?.message}
             {...register('costPrice')}
           />
+        )}
+
+        {/* Measured in / Packaged as / Pack size. Rendered for EVERY tenant, not gated on
+            `isVendor` — unlike brand, this is now a universal product attribute: a buying
+            company gets it as new capability (it had nothing like it before), and a vendor gets
+            it moved into this same request instead of the second one brand still needs (see
+            `toProductPayload` vs `toVendorMarketplaceDetailsPayload`).
+
+            Three fields for three concepts (Odoo's model): what it's measured in, how it's
+            packaged (optional — some goods are sold loose), and how many of the former fit in
+            one of the latter. packagingUnit + packagingSize are optional together (both-or-
+            neither) but never independently, AND require unitOfMeasure to also be set — both
+            rules enforced by the schema's superRefine (see `productFormSchema`).
+
+            Both <select>s are populated only with codes the server just returned via
+            `useUnitOfMeasureOptions`, split by `role` — this is what makes an invalid or
+            wrong-role code structurally impossible from this UI, so the schema itself does not
+            need to validate the value against the list (see the comment there). */}
+        <div>
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <span className="text-sm font-medium text-neutral-700">Unit of measure</span>
+            <button
+              type="button"
+              onClick={() => setShowUnitRequestModal(true)}
+              className="shrink-0 text-xs font-medium text-primary-600 hover:underline"
+            >
+              Can&apos;t find your unit?
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="unitOfMeasure" className="mb-1.5 block text-sm font-medium text-neutral-700">
+                Measured in <span className="font-normal text-neutral-400">(optional)</span>
+              </label>
+              <select
+                id="unitOfMeasure"
+                className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
+                {...register('unitOfMeasure')}
+              >
+                <option value="">No unit selected</option>
+                {baseUnitsByCategory.map((group) => (
+                  <optgroup key={group.category} label={CATEGORY_LABELS[group.category]}>
+                    {group.options.map((option) => (
+                      <option key={option.code} value={option.code}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              {errors.unitOfMeasure?.message && (
+                <p className="mt-1.5 text-xs text-danger-600">{errors.unitOfMeasure.message}</p>
+              )}
+            </div>
+            <div>
+              <label htmlFor="packagingUnit" className="mb-1.5 block text-sm font-medium text-neutral-700">
+                Packaged as <span className="font-normal text-neutral-400">(optional)</span>
+              </label>
+              <select
+                id="packagingUnit"
+                className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
+                {...register('packagingUnit')}
+              >
+                <option value="">— None — (sold loose)</option>
+                {packagingOptions.map((option) => (
+                  <option key={option.code} value={option.code}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              {errors.packagingUnit?.message && (
+                <p className="mt-1.5 text-xs text-danger-600">{errors.packagingUnit.message}</p>
+              )}
+            </div>
+          </div>
+          <div className="mt-4">
+            <TextField
+              label="Pack size"
+              inputMode="decimal"
+              hint="Only relevant when Packaged as is set"
+              error={errors.packagingSize?.message}
+              {...register('packagingSize')}
+            />
+          </div>
+          <p className="mt-1.5 text-xs text-neutral-500">
+            How this product is measured, and — optionally — how it&apos;s packaged. E.g. Measured
+            in: Kilogram, Packaged as: Bag, Pack size: 50 → a 50kg bag.
+          </p>
         </div>
 
         <TextField
@@ -469,6 +620,16 @@ export function ProductFormPage() {
         }}
         onCancel={() => setPendingValues(null)}
       />
+
+      {showUnitRequestModal && (
+        <RequestUnitOfMeasureModal
+          onClose={() => setShowUnitRequestModal(false)}
+          onSuccess={() => {
+            setShowUnitRequestModal(false)
+            showToast("Thanks — we'll review this unit.", 'success')
+          }}
+        />
+      )}
     </div>
   )
 }
