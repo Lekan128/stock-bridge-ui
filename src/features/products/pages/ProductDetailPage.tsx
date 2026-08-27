@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ArrowLeft, Pencil } from 'lucide-react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { PERMISSIONS } from '@/auth/permissions'
 import { Button, buttonClassName } from '@/components/Button'
@@ -15,24 +15,38 @@ import { StatusBadge } from '@/features/products/components/StatusBadge'
 import { StockAdjustmentModal } from '@/features/products/components/StockAdjustmentModal'
 import { StockBreakdownPanel } from '@/features/products/components/StockBreakdownPanel'
 import { StockHistoryTable } from '@/features/products/components/StockHistoryTable'
-import { StockQuantityModal } from '@/features/products/components/StockQuantityModal'
+import { StockInModal } from '@/features/products/components/StockInModal'
+import { StockOutModal } from '@/features/products/components/StockOutModal'
 import { formatCurrency, formatUnitOfMeasure } from '@/features/products/formatters'
 import { useLowStockAlerts } from '@/features/products/hooks/useLowStockAlerts'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
-import { VendorKindBadge } from '@/features/vendors/components/VendorKindBadge'
 import { useProduct } from '@/features/products/hooks/useProduct'
 import { useProductIncoming } from '@/features/products/hooks/useProductIncoming'
 import { useStockHistory } from '@/features/products/hooks/useStockHistory'
 import type { StockMutationResponse } from '@/features/products/types'
+import { VendorsTab } from '@/features/products/vendors/components/VendorsTab'
 import { isAppError } from '@/types/api'
 
 type StockAction = 'in' | 'out' | 'adjustment' | null
+
+type ProductDetailTab = 'overview' | 'vendors'
+
+const DETAIL_TABS: { value: ProductDetailTab; label: string }[] = [
+  { value: 'overview', label: 'Overview' },
+  { value: 'vendors', label: 'Vendors' },
+]
+
+function parseDetailTab(value: string | null): ProductDetailTab {
+  return value === 'vendors' ? 'vendors' : 'overview'
+}
 
 export function ProductDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { user } = useAuth()
   const { showToast } = useToast()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab = parseDetailTab(searchParams.get('tab'))
   const { product, setProduct, loading, error } = useProduct(id)
   const { options: unitOfMeasureOptions } = useUnitOfMeasureOptions()
   const { refetch: refetchLowStockAlerts } = useLowStockAlerts()
@@ -48,8 +62,38 @@ export function ProductDetailPage() {
   const [confirmDeactivate, setConfirmDeactivate] = useState(false)
   const [deactivating, setDeactivating] = useState(false)
 
+  // A duplicate-nudge match ("pick a match" on product creation) links here with
+  // ?action=stock-in to jump straight into Stock In instead of leaving the user to find the
+  // button themselves. Consumed once, then stripped from the URL so it doesn't reopen on a
+  // back-navigation or refresh.
+  useEffect(() => {
+    if (searchParams.get('action') !== 'stock-in') return
+    setActiveAction('in')
+    setSearchParams(
+      (previous) => {
+        const params = new URLSearchParams(previous)
+        params.delete('action')
+        return params
+      },
+      { replace: true },
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
+
   const canManageInventory = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_INVENTORY)
   const canManageProducts = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_PRODUCTS)
+
+  function setTab(next: ProductDetailTab) {
+    setSearchParams(
+      (previous) => {
+        const params = new URLSearchParams(previous)
+        if (next === 'overview') params.delete('tab')
+        else params.set('tab', next)
+        return params
+      },
+      { replace: true },
+    )
+  }
 
   function handleMutationSuccess(result: StockMutationResponse) {
     setProduct(result.product)
@@ -124,10 +168,46 @@ export function ProductDetailPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-6 rounded-lg border border-neutral-200 bg-white p-5 md:grid-cols-3">
-        <ProductImage src={product.imageUrl} alt={product.name} className="h-40 w-40 rounded-lg" iconClassName="h-10 w-10" />
-        <div className="md:col-span-2">
-          <dl className="grid grid-cols-2 gap-4 text-sm">
+      <div role="tablist" aria-label="Product detail" className="flex gap-1 border-b border-neutral-200">
+        {DETAIL_TABS.map((option) => {
+          const selected = option.value === tab
+          return (
+            <button
+              key={option.value}
+              type="button"
+              role="tab"
+              id={`product-detail-tab-${option.value}`}
+              aria-selected={selected}
+              aria-controls={`product-detail-panel-${option.value}`}
+              onClick={() => setTab(option.value)}
+              className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none ${
+                selected
+                  ? 'border-primary-600 text-primary-700'
+                  : 'border-transparent text-neutral-500 hover:text-neutral-700'
+              }`}
+            >
+              {option.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {tab === 'overview' && (
+        <div
+          role="tabpanel"
+          id="product-detail-panel-overview"
+          aria-labelledby="product-detail-tab-overview"
+          className="flex flex-col gap-6"
+        >
+          <div className="grid grid-cols-1 gap-6 rounded-lg border border-neutral-200 bg-white p-5 md:grid-cols-3">
+            <ProductImage
+              src={product.imageUrl}
+              alt={product.name}
+              className="h-40 w-40 rounded-lg"
+              iconClassName="h-10 w-10"
+            />
+            <div className="md:col-span-2">
+              <dl className="grid grid-cols-2 gap-4 text-sm">
             {/* Structurally absent, not blank, for a buying company: `unitPrice` is `null` on
                 every one of their products (it is a marketplace selling price, meaningless for
                 private stock), and a "Unit price" row rendering an em dash on every product
@@ -163,23 +243,27 @@ export function ProductDetailPage() {
             )}
             {/* Where this stock comes from. Rendered even when unset, as an em dash, rather than
                 hidden: an absent row reads as "this product has no supplier concept", where a dash
-                reads as "nobody has said yet" — and the second is the true one. */}
+                reads as "nobody has said yet" — and the second is the true one.
+
+                A product can now have many vendors (see the Vendors tab), so this row shows only
+                the preferred one — `preferredVendorName` has no id/kind alongside it (unlike the
+                old single `companyVendorId`/`companyVendorName`/`companyVendorKind` trio), so it
+                renders as plain text with a link into the Vendors tab for the full picture, rather
+                than linking straight to a vendor detail page it no longer has an id for. */}
             <div className="col-span-2">
-              <dt className="text-neutral-500">Supplier</dt>
+              <dt className="text-neutral-500">Preferred vendor</dt>
               <dd className="mt-0.5 flex flex-wrap items-center gap-2">
-                {product.companyVendorId ? (
-                  <>
-                    <Link
-                      to={`/app/vendors/${product.companyVendorId}`}
-                      className="font-medium text-neutral-900 hover:text-primary-700 hover:underline"
-                    >
-                      {product.companyVendorName}
-                    </Link>
-                    {product.companyVendorKind && <VendorKindBadge kind={product.companyVendorKind} />}
-                  </>
+                {product.preferredVendorName ? (
+                  <span className="font-medium text-neutral-900">{product.preferredVendorName}</span>
                 ) : (
                   <span className="text-neutral-400">—</span>
                 )}
+                <Link
+                  to={{ search: '?tab=vendors' }}
+                  className="text-xs font-medium text-primary-600 hover:underline"
+                >
+                  View vendors
+                </Link>
               </dd>
             </div>
           </dl>
@@ -220,15 +304,25 @@ export function ProductDetailPage() {
           onPageChange={setHistoryPage}
         />
       </div>
+        </div>
+      )}
 
-      {(activeAction === 'in' || activeAction === 'out') && (
-        <StockQuantityModal
-          direction={activeAction}
-          productId={product.id}
-          currentQuantity={product.quantityOnHand}
-          onClose={() => setActiveAction(null)}
-          onSuccess={handleMutationSuccess}
-        />
+      {tab === 'vendors' && (
+        <div
+          role="tabpanel"
+          id="product-detail-panel-vendors"
+          aria-labelledby="product-detail-tab-vendors"
+          className="flex flex-col gap-4"
+        >
+          <VendorsTab product={product} canManage={canManageInventory} />
+        </div>
+      )}
+
+      {activeAction === 'in' && (
+        <StockInModal product={product} onClose={() => setActiveAction(null)} onSuccess={handleMutationSuccess} />
+      )}
+      {activeAction === 'out' && (
+        <StockOutModal product={product} onClose={() => setActiveAction(null)} onSuccess={handleMutationSuccess} />
       )}
       {activeAction === 'adjustment' && (
         <StockAdjustmentModal

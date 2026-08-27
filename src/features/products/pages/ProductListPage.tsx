@@ -6,6 +6,7 @@ import { useToast } from '@/components/useToast'
 import { BulkUploadModal } from '@/features/products/components/BulkUploadModal'
 import { EmptyProductsState } from '@/features/products/components/EmptyProductsState'
 import { IncomingStockNotice } from '@/features/products/components/IncomingStockNotice'
+import { NewProductSearchModal } from '@/features/products/components/NewProductSearchModal'
 import { ProductCard } from '@/features/products/components/ProductCard'
 import { ProductListSkeleton } from '@/features/products/components/ProductListSkeleton'
 import { ProductTable, type ProductSort, type ProductSortField } from '@/features/products/components/ProductTable'
@@ -28,6 +29,7 @@ export function ProductListPage() {
   const [page, setPage] = useState(0)
   const [sort, setSort] = useState<ProductSort>({ field: 'name', direction: 'asc' })
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false)
+  const [addProductOpen, setAddProductOpen] = useState(false)
 
   const debouncedSearch = useDebouncedValue(search, 350)
 
@@ -104,6 +106,7 @@ export function ProductListPage() {
         statusFilter={statusFilter}
         onStatusFilterChange={handleStatusFilterChange}
         canManageProducts={canManageProducts}
+        onAddProduct={() => setAddProductOpen(true)}
         onBulkUpload={() => setBulkUploadOpen(true)}
         onDownloadTemplate={() => void handleDownloadTemplate()}
         onExport={() => void handleExport()}
@@ -151,6 +154,8 @@ export function ProductListPage() {
         onClose={() => setBulkUploadOpen(false)}
         onSuccess={handleBulkUploadSuccess}
       />
+
+      <NewProductSearchModal open={addProductOpen && canManageProducts} onClose={() => setAddProductOpen(false)} />
     </div>
   )
 }
