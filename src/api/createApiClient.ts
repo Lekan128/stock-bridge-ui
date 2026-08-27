@@ -89,7 +89,13 @@ function normalizeErrorBody(error: AxiosError): AppError {
   }
 
   if (data && typeof data.message === 'string' && !Array.isArray(data.errors) && !data.title) {
-    return { status, message: data.message }
+    // Stock-out's 409 oversell body carries two extra numeric fields alongside the flat
+    // `{message}` shape every other domain exception uses (multi-vendor inventory design §5.2a).
+    // Passed through only when both are actually numbers, so every other flat-message error
+    // (which has neither field) is completely unaffected.
+    const availableQuantity = typeof data.availableQuantity === 'number' ? data.availableQuantity : undefined
+    const requestedQuantity = typeof data.requestedQuantity === 'number' ? data.requestedQuantity : undefined
+    return { status, message: data.message, availableQuantity, requestedQuantity }
   }
 
   if (data && (typeof data.title === 'string' || typeof data.detail === 'string' || Array.isArray(data.errors))) {

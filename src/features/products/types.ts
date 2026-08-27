@@ -1,5 +1,3 @@
-import type { VendorKind } from '@/features/vendors/types'
-
 export interface Product {
   id: string
   name: string
@@ -67,18 +65,15 @@ export interface Product {
   packagingSize?: number | null
   imageUrl: string | null
   /**
-   * Which supplier this item comes from, as an entry in THIS company's own vendor directory
-   * (`/app/vendors`). Set automatically to the ProcurePaddy seller when goods arrive from a
-   * marketplace order, and settable by hand to a supplier the company added itself.
-   *
-   * Absent on most rows and permanently so: a product with no supplier attached is an ordinary
-   * product, not an incomplete one. The name and kind are denormalised alongside the id so a
-   * product list can show "from Ada Millers" without a request per row — they are read-only, and
-   * the only way to change what they say is through the vendor directory itself.
+   * The name of this product's preferred vendor — whichever `ProductVendor` row (see
+   * `features/products/vendors/types.ts`) currently has `isPreferred: true`, or `null` when the
+   * product has no vendors at all, or has vendors but none is pinned (a valid resting state, not
+   * an error — see the Vendors tab). Replaces the old single `companyVendorId`/`companyVendorName`/
+   * `companyVendorKind` trio now that a product can have many vendors: a plain product row can no
+   * longer point at "the" supplier, only at whichever one is preferred right now. Read-only here —
+   * set it from the Vendors tab's preferred toggle, not from this type.
    */
-  companyVendorId?: string
-  companyVendorName?: string
-  companyVendorKind?: VendorKind
+  preferredVendorName: string | null
   active: boolean
   isLowStock: boolean
   createdAt: string
@@ -107,6 +102,29 @@ export interface ProductListParams {
   sort?: string
 }
 
+/**
+ * The first `ProductVendor` row, folded into product creation per §7.1 of the multi-vendor
+ * inventory design ("first vendor + cost + quantity in the same screen, not a separate step").
+ * Sent only inside {@link ProductFormPayload.initialVendor} on CREATE — an existing product's
+ * vendors are added/edited from the product detail page's Vendors tab, never through this form.
+ *
+ * <p>When present, the server atomically creates the product, this first `ProductVendor` row
+ * (marked preferred), and an opening stock-in movement for `quantity` at `cost`. `vendorSku`,
+ * `packagingUnit` and `packagingSize` describe how THIS vendor packages/codes the item, which
+ * may differ from the product's own base unit — all three are optional and this form does not
+ * collect them yet, so they are simply omitted rather than duplicated from the product's own
+ * fields.
+ */
+export interface InitialVendorPayload {
+  /** An entry in this company's own vendor directory (`/app/vendors`). */
+  companyVendorId: string
+  vendorSku?: string
+  cost: number
+  quantity: number
+  packagingUnit?: string
+  packagingSize?: number
+}
+
 export interface ProductFormPayload {
   name: string
   sku: string
@@ -132,10 +150,17 @@ export interface ProductFormPayload {
   packagingUnit?: string
   /** Renamed from the old `unitCount`. */
   packagingSize?: number
-  costPrice?: number
+  // No `costPrice` here: the product's cost is a server-computed weighted-average rollup from
+  // actual purchases (see MULTI_VENDOR_INVENTORY_DESIGN.md §5.3), never a value this form
+  // submits. It is still read-only on `Product` above, for the detail page to display.
   lowStockThreshold?: number
-  /** An entry in this company's own vendor directory. Resolved against the caller's tenant server-side. */
-  companyVendorId?: string
+  /**
+   * Create-only, and optional — a product may be created with zero stock and no vendor at all
+   * (e.g. cataloguing ahead of a first delivery). See {@link InitialVendorPayload}. Replaces the
+   * old flat `companyVendorId` field: a product no longer has ONE supplier, it has many
+   * `ProductVendor` rows, and this is only how the FIRST one gets created.
+   */
+  initialVendor?: InitialVendorPayload
 }
 
 export type UnitOfMeasureCategory = 'COUNT' | 'WEIGHT' | 'VOLUME' | 'LENGTH'
@@ -165,12 +190,11 @@ export interface UnitOfMeasureRequestPayload {
 export interface ProductUpdatePayload extends Partial<ProductFormPayload> {
   active?: boolean
   removeImage?: boolean
-  /**
-   * Unlinks the product from its supplier. Not redundant with sending `companyVendorId: undefined`:
-   * this is a patch-style payload where an absent field means "leave it alone", so without an
-   * explicit flag there would be no way to express "remove the link" at all. Mirrors `removeImage`.
-   */
-  clearCompanyVendor?: boolean
+  // No `clearCompanyVendor` (or `companyVendorId`) here anymore — there is no flat per-product
+  // supplier field left to clear. An existing product's vendors are added, edited and unlinked
+  // from the product detail page's Vendors tab (`ProductVendor` rows), not through this payload.
+  // `initialVendor`, inherited from `ProductFormPayload`, is create-only in practice: an update
+  // has no use for it and `ProductFormPage` never populates it outside the create form.
 }
 
 export type MovementType = 'IN' | 'OUT' | 'ADJUSTMENT'
@@ -184,24 +208,69 @@ export interface StockMovement {
   note: string | null
   createdByUserId: string | null
   createdAt: string
+  /**
+   * Multi-vendor inventory extension (design spec §5.2) — set on `IN` rows only, once the
+   * backend module lands. Deliberately optional/undefined-safe: today's `GET .../stock/history`
+   * may not send these yet, and callers (the stock-out advanced lot picker) must degrade to
+   * "vendor unknown" rather than crash when they're absent.
+   */
+  companyVendorId?: string
+  companyVendorName?: string
+  packagingUnit?: string
+  packagingSize?: number | null
+}
+
+export interface CheaperVendorHint {
+  companyVendorId: string
+  companyVendorName: string
+  unitPrice: number
+  savingsPerUnit: number
+}
+
+export interface StockOutBreakdownLine {
+  companyVendorId: string
+  companyVendorName: string
+  inMovementId: string
+  inMovementCreatedAt: string
+  quantity: number
 }
 
 export interface StockMutationResponse {
   product: Product
   movement: StockMovement | null
+  /** True when this stock-in created the product's first `ProductVendor` row for this vendor. */
+  vendorIsNewToProduct?: boolean
+  /** Informational only — never auto-switched. Null/absent when no cheaper alternative exists. */
+  cheaperVendorHint?: CheaperVendorHint | null
+  /** Stock-out only — the FIFO (or manually-overridden) lot allocation, by vendor and delivery. */
+  breakdown?: StockOutBreakdownLine[]
 }
 
 export interface StockInPayload {
   quantity: number
+  /** Which of the product's configured units the quantity was entered in — omit for base unit. */
+  unit?: string
   unitPrice?: number
+  /** Required once the product has ≥1 `ProductVendor` row. */
+  companyVendorId?: string
+  /** Nullable snapshot of what was actually delivered — may differ from the vendor's default. */
+  packagingUnit?: string
+  packagingSize?: number
   note?: string
 }
 
 export interface StockOutPayload {
   quantity: number
-  unitPrice?: number
+  unit?: string
+  /** Omitted (simple path) = server computes FIFO. Present = manual per-lot override. */
+  allocations?: { inMovementId: string; quantity: number }[]
   note?: string
 }
+
+// `ProductVendor` / `ProductVendorPriceTier` (GET /api/products/{productId}/vendors) live in
+// `features/products/vendors/types.ts`, not here — that's the sibling Vendors-tab module's file,
+// already the richer/canonical version (adds `productId`, `createdAt`/`updatedAt`). Import from
+// there rather than redeclaring a second, drifting copy here.
 
 export interface StockAdjustmentPayload {
   newQuantity: number

@@ -1,6 +1,5 @@
 import { Download, FileSpreadsheet, Plus, Search, Upload } from 'lucide-react'
-import { Link } from 'react-router-dom'
-import { buttonClassName } from '@/components/Button'
+import { Button, buttonClassName } from '@/components/Button'
 import { BulkActionsMenu } from '@/features/products/components/BulkActionsMenu'
 import type { ProductStatusFilter } from '@/features/products/types'
 
@@ -11,6 +10,12 @@ export interface ProductsToolbarProps {
   onStatusFilterChange: (value: ProductStatusFilter) => void
   /** Everything that writes to the catalog needs MANAGE_PRODUCTS; export only needs VIEW_PRODUCTS. */
   canManageProducts: boolean
+  /**
+   * Opens the search-first "Add a product" modal (§7.1 of the multi-vendor inventory design)
+   * instead of navigating straight to `/app/products/new` — the duplicate-nudge has to run
+   * BEFORE a create form exists to abandon, not inside it.
+   */
+  onAddProduct: () => void
   onBulkUpload: () => void
   onDownloadTemplate: () => void
   onExport: () => void
@@ -28,6 +33,7 @@ export function ProductsToolbar({
   statusFilter,
   onStatusFilterChange,
   canManageProducts,
+  onAddProduct,
   onBulkUpload,
   onDownloadTemplate,
   onExport,
@@ -70,10 +76,10 @@ export function ProductsToolbar({
 
       <div className="flex items-center justify-between gap-2">
         {canManageProducts ? (
-          <Link to="/app/products/new" className={buttonClassName('primary')}>
+          <Button type="button" onClick={onAddProduct}>
             <Plus className="h-4 w-4" />
             Add Product
-          </Link>
+          </Button>
         ) : (
           <span />
         )}

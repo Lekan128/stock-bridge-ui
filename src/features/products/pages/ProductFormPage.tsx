@@ -1,8 +1,8 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Clock, Zap } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Clock, Ruler, Tag, Truck, Zap } from 'lucide-react'
 import { useForm } from 'react-hook-form'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
 import { Button } from '@/components/Button'
@@ -20,12 +20,13 @@ import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeas
 import {
   productFormDefaults,
   productFormSchema,
+  toInitialVendorPayload,
   toProductPayload,
   toProductUpdatePayload,
   toVendorMarketplaceDetailsPayload,
   type ProductFormValues,
 } from '@/features/products/schemas'
-import type { UnitOfMeasureCategory } from '@/features/products/types'
+import type { Product, UnitOfMeasureCategory } from '@/features/products/types'
 import { vendorCatalogueApi } from '@/features/vendor/api/vendorCatalogueApi'
 import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
 import { isAppError } from '@/types/api'
@@ -38,9 +39,10 @@ const KNOWN_FIELDS = new Set<keyof ProductFormValues>([
   'unitOfMeasure',
   'packagingUnit',
   'packagingSize',
-  'costPrice',
   'lowStockThreshold',
-  'companyVendorId',
+  'initialVendorId',
+  'initialVendorCost',
+  'initialVendorQuantity',
 ])
 
 // Fixed display order for the "Measured in" picker's <optgroup>s — independent of whatever
@@ -80,7 +82,12 @@ const UNIT_PRICE_REQUIRED_MESSAGE = "Unit price is required for a marketplace se
  * to the vendor at the point of no return — a dialog naming a field they cannot find on the
  * form is worse than no dialog.
  */
-const IDENTITY_FIELDS: { field: keyof ProductFormValues; label: string }[] = [
+// `keyof ProductFormValues & keyof Product`, not just `keyof ProductFormValues`: this array is
+// diffed against a real `Product` in `changedIdentityLabels` below (`product[field]`), and since
+// the "First vendor" fields (`initialVendorId` etc.) exist only on the form's values — there is
+// no such thing as an existing product's "first vendor" to diff against — a wider type here
+// would let one sneak into this list and fail to compile at the one place it's actually read.
+const IDENTITY_FIELDS: { field: keyof ProductFormValues & keyof Product; label: string }[] = [
   { field: 'name', label: 'Product name' },
   { field: 'sku', label: 'SKU' },
   { field: 'description', label: 'Description' },
@@ -113,19 +120,39 @@ const IDENTITY_FIELDS: { field: keyof ProductFormValues; label: string }[] = [
  * And once more after the fact, in the success toast, because the listing has visibly
  * changed state and a silent success would leave that unexplained.
  *
- * <h2>Only vendors see any of it</h2>
- * Gated on `isVendor`, which mirrors the server's own condition:
- * `ProductModerationRules.isModerated` is true for a seller that is not the platform owner.
- * ProcurePal's own products are stamped APPROVED at write time and a buying company's private
- * stock list is never moderated at all — telling either of them their napkin count is going
- * for review would be a false statement about a queue they will never enter. The grouping
- * headings are hidden with the notice for the same reason: to a buying company they would
- * describe a rule that does not apply to them.
+ * <h2>The review-consequence framing is vendor-only; the section structure is not</h2>
+ * Every tenant sees the form broken into labelled sections (Basic details, Measurement &amp;
+ * packaging, Stock alerts, First vendor, ...) — a flat, undifferentiated field list is confusing
+ * regardless of whether re-review is a concept that applies to you. What's gated on `isVendor`
+ * (mirroring the server's own condition: `ProductModerationRules.isModerated` is true for a
+ * seller that is not the platform owner) is only the REVIEW-SPECIFIC copy layered onto the
+ * "Basic details" and "Pricing" sections — {@link ReviewImpactNotice}, the Clock/warning-600
+ * "sends the listing back for review" framing, and the Pricing section itself (it has nothing
+ * left in it for a non-vendor once cost price is gone, see below). ProcurePal's own products are
+ * stamped APPROVED at write time and a buying company's private stock list is never moderated at
+ * all — telling either of them their napkin count is going for review would be a false statement
+ * about a queue they will never enter.
+ *
+ * <h2>No standalone "Cost price" field</h2>
+ * In every mainstream system with vendor-based costing (Odoo's AVCO, NetSuite's Average Cost),
+ * a product's cost is a computed rollup from actual purchases, never a value typed alongside a
+ * separate per-vendor purchase price for the same transaction. This app's backend already works
+ * that way — `Product.costPrice` is a weighted average recalculated on every stock-in (see
+ * MULTI_VENDOR_INVENTORY_DESIGN.md §5.3) — so this form never collects it directly. The only
+ * place a cost is typed is the "First vendor" block's own `initialVendorCost`, for that first
+ * purchase; everywhere else, cost is something to look at (the detail page's Overview tab), not
+ * something to edit here.
  */
 export function ProductFormPage() {
   const { id } = useParams<{ id: string }>()
   const isEdit = !!id
   const navigate = useNavigate()
+  // The only thing a caller ever hands this page via router state: the name someone typed into
+  // the "Add a product" search (see NewProductSearchModal) before landing here having chosen
+  // "Create new product". Absent on every other way of reaching this route (a bookmark, the
+  // edit link, a browser refresh), so it is read once, on the very first render, and never
+  // fought with afterwards.
+  const location = useLocation() as { state?: { name?: string } }
   const { showToast } = useToast()
   const { user, isVendor } = useAuth()
   const { product, loading: loadingProduct } = useProduct(id)
@@ -156,7 +183,11 @@ export function ProductFormPage() {
     formState: { errors, isSubmitting },
   } = useForm<ProductFormValues>({
     resolver: zodResolver(productFormSchema),
-    defaultValues: productFormDefaults(),
+    // Prefilled with the name typed into the search-first "Add a product" flow, on create only —
+    // an edit always starts from the product below instead. `location.state` is read once here
+    // because `defaultValues` is only consulted on the form's first render; nothing re-reads it
+    // after that, which is fine, since nothing navigates within this page without unmounting it.
+    defaultValues: isEdit ? productFormDefaults() : { ...productFormDefaults(), name: location.state?.name ?? '' },
   })
 
   useEffect(() => {
@@ -170,9 +201,12 @@ export function ProductFormPage() {
       packagingUnit: product.packagingUnit ?? '',
       packagingSize: product.packagingSize != null ? String(product.packagingSize) : '',
       unitPrice: product.unitPrice != null ? String(product.unitPrice) : '',
-      costPrice: product.costPrice != null ? String(product.costPrice) : '',
       lowStockThreshold: product.lowStockThreshold != null ? String(product.lowStockThreshold) : '',
-      companyVendorId: product.companyVendorId ?? '',
+      // The "First vendor" block only ever applies at creation — an existing product's vendors
+      // live on the Vendors tab, not here — so an edit always resets these back to blank.
+      initialVendorId: '',
+      initialVendorCost: '',
+      initialVendorQuantity: '',
     })
   }, [product, reset])
 
@@ -252,12 +286,19 @@ export function ProductFormPage() {
         isEdit && id
           ? await productsApi.update(
               id,
-              // toProductUpdatePayload, not toProductPayload: clearing the supplier has to be said
-              // out loud, because an absent companyVendorId means "leave it alone" server-side.
               { ...toProductUpdatePayload(values), removeImage: removeImage || undefined },
               imageFile,
             )
-          : await productsApi.create(toProductPayload(values), imageFile)
+          : // The "First vendor" block (§7.1) rides in the SAME create request as everything
+            // else — one atomic write for the product, its first ProductVendor row, and the
+            // opening stock-in, rather than a create followed by a second stock-in call the
+            // user could abandon halfway through. `toInitialVendorPayload` returns undefined
+            // when the block was left blank, so this is a no-op for a product created with no
+            // vendor or stock yet.
+            await productsApi.create(
+              { ...toProductPayload(values), initialVendor: toInitialVendorPayload(values) },
+              imageFile,
+            )
 
       // Vendors only. ProcurePal's staff set brand on the admin catalogue screen, and an
       // ordinary buying company has no marketplace facets at all — the route would 403 them,
@@ -360,20 +401,8 @@ export function ProductFormPage() {
       {isVendor && <ReviewImpactNotice mode={isEdit ? 'edit' : 'create'} />}
 
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-5">
-        {/* ------------------------------------------------------------------ What it IS */}
-        {/* The heading and rule are rendered only for vendors: to a buying company they would
-            describe a queue their private stock list never enters. The FIELDS below are
-            identical either way — only the framing around them changes. */}
-        {isVendor && (
-          <div className="flex items-center gap-2 border-b border-neutral-200 pb-2">
-            <Clock className="h-4 w-4 shrink-0 text-warning-600" aria-hidden="true" />
-            <div>
-              <h2 className="text-sm font-semibold text-neutral-900">What the product is</h2>
-              <p className="text-xs text-neutral-500">Changing anything here sends the listing back for review.</p>
-            </div>
-          </div>
-        )}
-
+        {/* -------------------------------------------------------------- Product image */}
+        {/* No section header — self-evidently its own thing at the top of the form. */}
         <div>
           <p className="mb-1.5 text-sm font-medium text-neutral-700">Product image</p>
           <ImageUploadField
@@ -384,6 +413,33 @@ export function ProductFormPage() {
             onRemove={() => setRemoveImage(true)}
           />
         </div>
+
+        {/* -------------------------------------------------------------- Basic details */}
+        {/* Every tenant gets a section header here — a flat run of Name/SKU/Description with no
+            structure at all is the "confusing" complaint this restructuring exists to fix. Only
+            the COPY differs by audience: a vendor sees the review-consequence framing (Clock,
+            warning-600, "sends the listing back for review"), because renaming or re-describing
+            a live listing really does take it off the storefront pending re-approval. A buying
+            company's private stock is never moderated, so that warning would be describing a
+            queue it never enters — it gets a neutral heading instead. The FIELDS below are
+            identical either way; only the framing around them changes. */}
+        {isVendor ? (
+          <div className="flex items-center gap-2 border-b border-neutral-200 pb-2">
+            <Clock className="h-4 w-4 shrink-0 text-warning-600" aria-hidden="true" />
+            <div>
+              <h2 className="text-sm font-semibold text-neutral-900">What the product is</h2>
+              <p className="text-xs text-neutral-500">Changing anything here sends the listing back for review.</p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 border-b border-neutral-200 pb-2">
+            <Tag className="h-4 w-4 shrink-0 text-neutral-600" aria-hidden="true" />
+            <div>
+              <h2 className="text-sm font-semibold text-neutral-900">Basic details</h2>
+              <p className="text-xs text-neutral-500">Name, SKU, and description for this product.</p>
+            </div>
+          </div>
+        )}
 
         <TextField label="Name" error={errors.name?.message} {...register('name')} />
         <TextField label="SKU" error={errors.sku?.message} {...register('sku')} />
@@ -400,10 +456,10 @@ export function ProductFormPage() {
           />
         </div>
 
-        {/* Brand. Vendors only, and inside the "what the product is" group rather than after
-            it, because that grouping is the form's whole explanation of which edits cost a
-            listing its place on the storefront — putting an identity field outside it would
-            quietly make the rule wrong.
+        {/* Brand. Vendors only, and inside the "Basic details" group rather than after it,
+            because that grouping is the form's whole explanation of which edits cost a listing
+            its place on the storefront — putting an identity field outside it would quietly
+            make the rule wrong.
 
             Not rendered for anyone else, and the reason differs by audience rather than being
             one blanket rule: an ordinary buying company's private stock has no marketplace
@@ -425,49 +481,36 @@ export function ProductFormPage() {
           />
         )}
 
-        {/* -------------------------------------------------------- Price, stock, bookkeeping */}
+        {/* -------------------------------------------------------------- Pricing */}
+        {/* Vendor-only, and only Unit price now — the marketplace selling price, required for a
+            vendor (enforced in `onSubmit`, mirroring the server's UnitPriceRequiredException).
+            There is no standalone "Cost price" field anywhere on this form any more: a product's
+            cost is a server-computed weighted average of actual purchases (see
+            MULTI_VENDOR_INVENTORY_DESIGN.md §5.3), never a value typed here. A buying company's
+            only price entry point is the "First vendor" block's `initialVendorCost` below, for
+            its opening purchase — so a non-vendor has nothing left to show in this section, and
+            it is not rendered for them at all. */}
         {isVendor && (
-          <div className="mt-2 flex items-center gap-2 border-b border-neutral-200 pb-2">
-            <Zap className="h-4 w-4 shrink-0 text-accent-600" aria-hidden="true" />
-            <div>
-              <h2 className="text-sm font-semibold text-neutral-900">Price and stock</h2>
-              <p className="text-xs text-neutral-500">
-                These go live straight away. Your listing stays on the storefront.
-              </p>
+          <>
+            <div className="mt-2 flex items-center gap-2 border-b border-neutral-200 pb-2">
+              <Zap className="h-4 w-4 shrink-0 text-accent-600" aria-hidden="true" />
+              <div>
+                <h2 className="text-sm font-semibold text-neutral-900">Pricing</h2>
+                <p className="text-xs text-neutral-500">
+                  This goes live straight away. Your listing stays on the storefront.
+                </p>
+              </div>
             </div>
-          </div>
-        )}
-
-        {/* Unit price is a marketplace selling price — meaningless for a buying company's
-            private stock, and required for a vendor (enforced in `onSubmit`, mirroring the
-            server's UnitPriceRequiredException). A company keeps only cost price, which stays
-            optional and unconstrained by tenant kind either way. */}
-        {isVendor ? (
-          <div className="grid grid-cols-2 gap-4">
             <TextField
               label="Unit price"
               inputMode="decimal"
               error={errors.unitPrice?.message}
               {...register('unitPrice')}
             />
-            <TextField
-              label="Cost price"
-              inputMode="decimal"
-              hint="Optional"
-              error={errors.costPrice?.message}
-              {...register('costPrice')}
-            />
-          </div>
-        ) : (
-          <TextField
-            label="Cost price"
-            inputMode="decimal"
-            hint="Optional"
-            error={errors.costPrice?.message}
-            {...register('costPrice')}
-          />
+          </>
         )}
 
+        {/* -------------------------------------------------------------- Measurement & packaging */}
         {/* Measured in / Packaged as / Pack size. Rendered for EVERY tenant, not gated on
             `isVendor` — unlike brand, this is now a universal product attribute: a buying
             company gets it as new capability (it had nothing like it before), and a vendor gets
@@ -485,6 +528,13 @@ export function ProductFormPage() {
             wrong-role code structurally impossible from this UI, so the schema itself does not
             need to validate the value against the list (see the comment there). */}
         <div>
+          <div className="mb-2 flex items-center gap-2 border-b border-neutral-200 pb-2">
+            <Ruler className="h-4 w-4 shrink-0 text-primary-600" aria-hidden="true" />
+            <div>
+              <h2 className="text-sm font-semibold text-neutral-900">Measurement &amp; packaging</h2>
+              <p className="text-xs text-neutral-500">How this product is measured, and — optionally — packaged.</p>
+            </div>
+          </div>
           <div className="mb-1.5 flex items-center justify-between gap-2">
             <span className="text-sm font-medium text-neutral-700">Unit of measure</span>
             <button
@@ -551,46 +601,98 @@ export function ProductFormPage() {
             />
           </div>
           <p className="mt-1.5 text-xs text-neutral-500">
-            How this product is measured, and — optionally — how it&apos;s packaged. E.g. Measured
-            in: Kilogram, Packaged as: Bag, Pack size: 50 → a 50kg bag.
+            E.g. Measured in: Kilogram, Packaged as: Bag, Pack size: 50 → a 50kg bag.
           </p>
         </div>
 
-        <TextField
-          label="Low stock threshold"
-          inputMode="numeric"
-          hint="Get an alert when quantity on hand drops to or below this number"
-          error={errors.lowStockThreshold?.message}
-          {...register('lowStockThreshold')}
-        />
+        {/* -------------------------------------------------------------- Stock alerts */}
+        <div>
+          <div className="mb-2 flex items-center gap-2 border-b border-neutral-200 pb-2">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-warning-600" aria-hidden="true" />
+            <h2 className="text-sm font-semibold text-neutral-900">Stock alerts</h2>
+          </div>
+          <TextField
+            label="Low stock threshold"
+            inputMode="numeric"
+            hint="Get an alert when quantity on hand drops to or below this number"
+            error={errors.lowStockThreshold?.message}
+            {...register('lowStockThreshold')}
+          />
+        </div>
 
-        {canViewVendors && (
-          <div>
-            <label htmlFor="companyVendorId" className="mb-1.5 block text-sm font-medium text-neutral-700">
-              Supplier <span className="font-normal text-neutral-400">(optional)</span>
-            </label>
-            <select
-              id="companyVendorId"
-              aria-describedby="companyVendorId-hint"
-              className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
-              {...register('companyVendorId')}
-            >
-              <option value="">No supplier</option>
-              {vendorOptions.map((vendor) => (
-                <option key={vendor.id} value={vendor.id}>
-                  {vendor.name}
-                  {/* The kind is spelled out in the option text because a <select> cannot carry a
-                      badge, and "which of these is an actual ProcurePaddy seller" is the same
-                      question the directory list answers with one. */}
-                  {vendor.kind === 'VERIFIED' ? ' (ProcurePaddy seller)' : ''}
-                </option>
-              ))}
-            </select>
-            <p id="companyVendorId-hint" className="mt-1.5 text-xs text-neutral-500">
-              {/* Says the automatic case out loud: a buyer who does not know marketplace purchases
-                  fill this in themselves will assume something else set it by mistake. */}
-              Where you buy this from. Items bought on the ProcurePaddy marketplace are linked to their
-              seller automatically — set this by hand for stock you source elsewhere.{' '}
+        {/* -------------------------------------------------------------- First vendor (optional) */}
+        {/* "First vendor" (§7.1 of the multi-vendor inventory design) — create only. A product no
+            longer has ONE supplier field; it has many `ProductVendor` rows, added and edited
+            from the Vendors tab on the product detail page. This section is the exception: the
+            FIRST such row is folded into product creation itself, so someone who already knows
+            who they're buying from and how much arrived doesn't have to save the product, then
+            open a second screen to record the delivery. It stays optional — a product can still
+            be created with zero stock and no vendor, e.g. cataloguing ahead of a first delivery —
+            and is gated the same way the old Supplier field was, on VIEW_VENDORS, since it needs
+            the vendor directory to offer anyone to pick.
+
+            Unlike every section above, this one gets a real card (rounded-lg border + tinted
+            neutral-50 background) rather than a plain divider — it is the one genuinely
+            optional, skippable block on the form, and that extra visual weight is what signals
+            "distinct and skippable" rather than "another required section". Neutral-tinted, not
+            primary/accent-tinted, so it doesn't read as a call-to-action. */}
+        {!isEdit && canViewVendors && (
+          <div className="mt-2 flex flex-col gap-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+            <div className="flex items-center gap-2">
+              <Truck className="h-4 w-4 shrink-0 text-primary-600" aria-hidden="true" />
+              <div>
+                <h2 className="text-sm font-semibold text-neutral-900">
+                  First vendor <span className="font-normal text-neutral-400">(optional)</span>
+                </h2>
+                <p className="text-xs text-neutral-500">
+                  Who you're buying this from, what it cost, and how much arrived — this becomes the product's
+                  first vendor record and its opening stock, in one step.
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="initialVendorId" className="mb-1.5 block text-sm font-medium text-neutral-700">
+                Vendor
+              </label>
+              <select
+                id="initialVendorId"
+                className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
+                {...register('initialVendorId')}
+              >
+                <option value="">No vendor yet</option>
+                {vendorOptions.map((vendor) => (
+                  <option key={vendor.id} value={vendor.id}>
+                    {vendor.name}
+                    {/* The kind is spelled out in the option text because a <select> cannot carry
+                        a badge, and "which of these is an actual ProcurePaddy seller" is the same
+                        question the directory list answers with one. */}
+                    {vendor.kind === 'VERIFIED' ? ' (ProcurePaddy seller)' : ''}
+                  </option>
+                ))}
+              </select>
+              {errors.initialVendorId?.message && (
+                <p className="mt-1.5 text-xs text-danger-600">{errors.initialVendorId.message}</p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <TextField
+                label="Cost"
+                inputMode="decimal"
+                hint="Per unit"
+                error={errors.initialVendorCost?.message}
+                {...register('initialVendorCost')}
+              />
+              <TextField
+                label="Quantity received"
+                inputMode="numeric"
+                error={errors.initialVendorQuantity?.message}
+                {...register('initialVendorQuantity')}
+              />
+            </div>
+
+            <p className="text-xs text-neutral-500">
               <Link to="/app/vendors" className="font-medium text-primary-600 hover:underline">
                 Manage your vendor directory
               </Link>
