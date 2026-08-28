@@ -1,9 +1,11 @@
 import { useState } from 'react'
+import { Truck, X } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
+import { Button } from '@/components/Button'
 import { Pagination } from '@/components/Pagination'
 import { useToast } from '@/components/useToast'
-import { BulkUploadModal } from '@/features/products/components/BulkUploadModal'
 import { EmptyProductsState } from '@/features/products/components/EmptyProductsState'
 import { IncomingStockNotice } from '@/features/products/components/IncomingStockNotice'
 import { NewProductSearchModal } from '@/features/products/components/NewProductSearchModal'
@@ -23,17 +25,25 @@ const PAGE_SIZE = 20
 export function ProductListPage() {
   const { user } = useAuth()
   const { showToast } = useToast()
-  const canManageProducts = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_PRODUCTS)
+  const navigate = useNavigate()
+  const permissions = user?.type === 'tenant' ? user.permissions : []
+  const canManageProducts = permissions.includes(PERMISSIONS.MANAGE_PRODUCTS)
+  /**
+   * Who may reach the bulk import pipeline. Mirrors its controller exactly — MANAGE_PRODUCTS or
+   * MANAGE_INVENTORY (bulk-import contract §3) — so a storekeeper, who holds only the second,
+   * still sees the affordance that leads to bulk stock-in.
+   */
+  const canImport = canManageProducts || permissions.includes(PERMISSIONS.MANAGE_INVENTORY)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<ProductStatusFilter>('all')
   const [page, setPage] = useState(0)
   const [sort, setSort] = useState<ProductSort>({ field: 'name', direction: 'asc' })
-  const [bulkUploadOpen, setBulkUploadOpen] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [addProductOpen, setAddProductOpen] = useState(false)
 
   const debouncedSearch = useDebouncedValue(search, 350)
 
-  const { data, loading, error, refetch } = useProducts({
+  const { data, loading, error } = useProducts({
     search: debouncedSearch || undefined,
     active: statusFilter === 'all' ? undefined : statusFilter === 'active',
     page,
@@ -55,6 +65,28 @@ export function ProductListPage() {
   function handleSearchChange(value: string) {
     setSearch(value)
     setPage(0)
+  }
+
+  /**
+   * Entry point into bulk stock-in for a chosen set of rows (spec §8.1). The ids ride in the
+   * query string so the sheet downloaded on the next screen is pre-filled with exactly these
+   * products — contract §3's `productIds`, which wins over `filter`.
+   */
+  function handleStockInSelected() {
+    navigate(`/app/products/import/new?kind=STOCK_IN&productIds=${selectedIds.join(',')}`)
+  }
+
+  function toggleSelected(id: string, selected: boolean) {
+    setSelectedIds((current) => (selected ? [...current, id] : current.filter((entry) => entry !== id)))
+  }
+
+  function toggleAllOnPage(selected: boolean) {
+    const idsOnPage = (data?.content ?? []).map((product) => product.id)
+    setSelectedIds((current) =>
+      selected
+        ? [...current.filter((id) => !idsOnPage.includes(id)), ...idsOnPage]
+        : current.filter((id) => !idsOnPage.includes(id)),
+    )
   }
 
   function handleStatusFilterChange(value: ProductStatusFilter) {
@@ -80,12 +112,6 @@ export function ProductListPage() {
     }
   }
 
-  function handleBulkUploadSuccess(createdCount: number) {
-    showToast(`${createdCount} product${createdCount === 1 ? '' : 's'} created.`, 'success')
-    setPage(0)
-    refetch()
-  }
-
   const isUnfiltered = !debouncedSearch && statusFilter === 'all'
   const isTrulyEmpty = !loading && !error && isUnfiltered && (data?.content.length ?? 0) === 0 && page === 0
 
@@ -107,7 +133,7 @@ export function ProductListPage() {
         onStatusFilterChange={handleStatusFilterChange}
         canManageProducts={canManageProducts}
         onAddProduct={() => setAddProductOpen(true)}
-        onBulkUpload={() => setBulkUploadOpen(true)}
+        onBulkUpload={() => navigate('/app/products/import')}
         onDownloadTemplate={() => void handleDownloadTemplate()}
         onExport={() => void handleExport()}
       />
@@ -119,7 +145,7 @@ export function ProductListPage() {
       )}
 
       {!loading && !error && isTrulyEmpty && (
-        <EmptyProductsState canManageProducts={canManageProducts} onBulkUpload={() => setBulkUploadOpen(true)} />
+        <EmptyProductsState canManageProducts={canManageProducts} onBulkUpload={() => navigate('/app/products/import')} />
       )}
 
       {!loading && !error && !isTrulyEmpty && data && (
@@ -135,12 +161,40 @@ export function ProductListPage() {
                   <ProductCard key={product.id} product={product} incoming={incomingFor(product).quantity} />
                 ))}
               </div>
+              {/* The selection bar only exists on the desktop table — the mobile card list has
+                  no checkboxes, matching how the import review screen drops its grid below `md`. */}
+              {canImport && selectedIds.length > 0 && (
+                <div className="hidden items-center justify-between gap-3 rounded-lg border border-primary-200 bg-primary-50 px-4 py-2.5 md:flex">
+                  <p className="text-sm font-medium text-primary-900">
+                    {selectedIds.length} product{selectedIds.length === 1 ? '' : 's'} selected
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button variant="secondary" onClick={handleStockInSelected}>
+                      <Truck className="h-4 w-4" aria-hidden="true" />
+                      Stock in selected
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedIds([])}
+                      className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-sm font-medium text-primary-800 hover:bg-primary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                    >
+                      <X className="h-3.5 w-3.5" aria-hidden="true" />
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              )}
               <div className="hidden overflow-hidden rounded-lg border border-neutral-200 bg-white md:block">
                 <ProductTable
                   products={data.content}
                   sort={sort}
                   onSortChange={handleSortChange}
                   incomingFor={incomingFor}
+                  selection={
+                    canImport
+                      ? { selectedIds, onToggle: toggleSelected, onToggleAll: toggleAllOnPage }
+                      : undefined
+                  }
                 />
               </div>
             </>
@@ -148,12 +202,6 @@ export function ProductListPage() {
           <Pagination page={data.number} totalPages={data.totalPages} onPageChange={setPage} />
         </>
       )}
-
-      <BulkUploadModal
-        open={bulkUploadOpen && canManageProducts}
-        onClose={() => setBulkUploadOpen(false)}
-        onSuccess={handleBulkUploadSuccess}
-      />
 
       <NewProductSearchModal open={addProductOpen && canManageProducts} onClose={() => setAddProductOpen(false)} />
     </div>
