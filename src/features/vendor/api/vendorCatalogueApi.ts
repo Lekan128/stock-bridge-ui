@@ -10,19 +10,21 @@ import type {
  * moderation.
  *
  * <h2>What this API can and cannot do, and why the split is where it is</h2>
- * It can list, it can flip the seller's own `listed` flag, and it can set the four marketplace
- * facets of a product it owns — brand, unit of measure, category and minimum order quantity.
- * It CANNOT create a product, or change its name, price, photo or SKU: that is
- * `/api/products`, which every tenant already has, and which is where the moderation stamp is
- * applied at creation. Editing identity fields there is also the RESUBMISSION path for a
- * rejected listing: editing the product IS the resubmission, there is no separate button and
- * no endpoint to add one. The catalogue screen therefore links to the ordinary product form
- * rather than duplicating it.
+ * It can list, it can flip the seller's own `listed` flag, and it can set three marketplace
+ * facets of a product it owns — brand, category and minimum order quantity. It CANNOT create a
+ * product, or change its name, price, photo or SKU: that is `/api/products`, which every tenant
+ * already has, and which is where the moderation stamp is applied at creation. Editing identity
+ * fields there is also the RESUBMISSION path for a rejected listing: editing the product IS the
+ * resubmission, there is no separate button and no endpoint to add one. The catalogue screen
+ * therefore links to the ordinary product form rather than duplicating it.
  *
- * <p>Brand and unit of measure are the exception to that split, and the reason the split is
- * where it is: they are identity fields, but `/api/products` has never carried them. Setting
- * them re-triggers moderation exactly as a name change does — the server shares one service
- * between this route and the operator's, so there is one ruling rather than two.
+ * <p>Brand is the exception to that split, and the reason the split is where it is: it is an
+ * identity field, but `/api/products` has never carried it. Setting it re-triggers moderation
+ * exactly as a name change does — the server shares one service between this route and the
+ * operator's, so there is one ruling rather than two.
+ *
+ * <p>Unit of measure USED to be here alongside brand. It moved to `/api/products`, so it now
+ * saves in the same request as everything else, for every tenant — not just a seller.
  */
 const BASE = '/api/vendor/catalogue'
 
@@ -42,11 +44,11 @@ export const vendorCatalogueApi = {
     api.post<VendorCatalogueProduct>(`${BASE}/products/${productId}/listing`, { listed }).then((r) => r.data),
 
   /**
-   * Brand, unit of measure, category and minimum order quantity, on the caller's own product.
+   * Brand, category and minimum order quantity, on the caller's own product.
    *
-   * ⚠️ Changing brand or unit of measure takes the listing off the storefront until it is
-   * approved again. Any screen calling this with either field must have said so first — see
-   * `ReviewImpactNotice` and `ReviewImpactDialog`, which is the pattern the product form uses.
+   * ⚠️ Changing brand takes the listing off the storefront until it is approved again. Any
+   * screen calling this with a brand change must have said so first — see `ReviewImpactNotice`
+   * and `ReviewImpactDialog`, which is the pattern the product form uses.
    *
    * <p>404 means the product is not the caller's: the server resolves it against the caller's
    * own client id and never against anything in the request, so another seller's id is

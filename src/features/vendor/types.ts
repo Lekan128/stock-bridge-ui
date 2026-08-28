@@ -128,7 +128,12 @@ export interface VendorCatalogueProduct {
   unitPrice: number
   costPrice?: number
   imageUrl?: string
+  /** Display only here — read-only on this list view. Set through `/api/products` now, on every tenant. */
   unitOfMeasure?: string
+  /** How this product is packaged or sold, if at all — display only, same rename/addition as `Product`. */
+  packagingUnit?: string
+  /** Renamed from the old `unitCount`. */
+  packagingSize?: number
   minOrderQuantity: number
   /** Three stock numbers, not one — see the server DTO for why collapsing them lies. */
   quantityOnHand: number
@@ -167,16 +172,20 @@ export interface VendorCatalogueProduct {
  * exactly the outcome both sides are avoiding. A vendor's slug is still derived from their
  * product name when they first list it.
  *
- * <p>⚠️ `brand` and `unitOfMeasure` are IDENTITY fields: changing either sends the listing back
- * for review. `categoryId` and `minOrderQuantity` do not. See `ReviewImpactNotice`.
+ * <p>⚠️ `brand` is an IDENTITY field: changing it sends the listing back for review.
+ * `categoryId` and `minOrderQuantity` do not. See `ReviewImpactNotice`.
  *
  * <p>PATCH-like despite the PUT: an omitted field means "leave as is". `categoryId: undefined`
  * therefore cannot express "uncategorise", which is what `clearCategory` is for.
+ *
+ * <p>`unitOfMeasure` used to live here too. It moved to `/api/products` (create/update) so it
+ * can be set in the SAME request as the rest of a product, for every tenant rather than just a
+ * seller — this route's request DTO no longer carries it, and sending it here is simply not a
+ * field the type has anymore.
  */
 export interface VendorMarketplaceDetailsPayload {
   categoryId?: string
   clearCategory?: boolean
-  unitOfMeasure?: string
   minOrderQuantity?: number
   brand?: string
 }

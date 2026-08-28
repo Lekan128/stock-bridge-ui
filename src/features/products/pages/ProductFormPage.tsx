@@ -1,8 +1,8 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Clock, Zap } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Clock, Ruler, Tag, Truck, Zap } from 'lucide-react'
 import { useForm } from 'react-hook-form'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
 import { Button } from '@/components/Button'
@@ -12,17 +12,21 @@ import { useToast } from '@/components/useToast'
 import { productsApi } from '@/features/products/api/productsApi'
 import { ImageUploadField } from '@/features/products/components/ImageUploadField'
 import { ProductFormSkeleton } from '@/features/products/components/ProductFormSkeleton'
+import { RequestUnitOfMeasureModal } from '@/features/products/components/RequestUnitOfMeasureModal'
 import { ReviewImpactDialog } from '@/features/products/components/ReviewImpactDialog'
 import { ReviewImpactNotice } from '@/features/products/components/ReviewImpactNotice'
 import { useProduct } from '@/features/products/hooks/useProduct'
+import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import {
   productFormDefaults,
   productFormSchema,
+  toInitialVendorPayload,
   toProductPayload,
   toProductUpdatePayload,
   toVendorMarketplaceDetailsPayload,
   type ProductFormValues,
 } from '@/features/products/schemas'
+import type { Product, UnitOfMeasureCategory } from '@/features/products/types'
 import { vendorCatalogueApi } from '@/features/vendor/api/vendorCatalogueApi'
 import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
 import { isAppError } from '@/types/api'
@@ -32,31 +36,65 @@ const KNOWN_FIELDS = new Set<keyof ProductFormValues>([
   'sku',
   'description',
   'unitPrice',
-  'costPrice',
+  'unitOfMeasure',
+  'packagingUnit',
+  'packagingSize',
   'lowStockThreshold',
-  'companyVendorId',
+  'initialVendorId',
+  'initialVendorCost',
+  'initialVendorQuantity',
 ])
+
+// Fixed display order for the "Measured in" picker's <optgroup>s — independent of whatever
+// order the server happens to return its rows in, so the groups don't shuffle between a create
+// and an edit. WEIGHT/VOLUME/LENGTH group real entries; COUNT holds exactly one entry ("Piece"),
+// since every other COUNT code is role: PACKAGING and lives in the second picker instead. A
+// single-item "Count" optgroup was judged not worth a special case — it costs nothing to render
+// and keeps the grouping logic uniform across all four categories.
+const CATEGORY_ORDER: UnitOfMeasureCategory[] = ['COUNT', 'WEIGHT', 'VOLUME', 'LENGTH']
+const CATEGORY_LABELS: Record<UnitOfMeasureCategory, string> = {
+  COUNT: 'Count',
+  WEIGHT: 'Weight',
+  VOLUME: 'Volume',
+  LENGTH: 'Length',
+}
+
+/**
+ * The message client-side for the same rule the server's `UnitPriceRequiredException`
+ * enforces, so a vendor who left this blank sees an attributed field error before the request
+ * rather than a 400 with no field to attach it to (that exception comes back as a plain
+ * `{message}`, not a per-field error — see `save`'s catch block).
+ */
+const UNIT_PRICE_REQUIRED_MESSAGE = "Unit price is required for a marketplace seller's product."
 
 /**
  * The identity fields this form can write, paired with the label the vendor sees.
  *
- * The server's rule covers six (`ProductModerationRules.invalidatesApproval`) and this form
- * now reaches five of them by name plus the photo, which is compared by intent below — so the
- * list and the rule finally agree. Brand and unit of measure used to be missing here because
- * no vendor-facing route wrote them; they are set through the seller's marketplace-details
- * route now, which is a SECOND request from the same save (see `save`), and they re-trigger
- * review exactly as a rename does.
+ * The server's rule now covers eight (`ProductModerationRules.invalidatesApproval`): the five
+ * below plus the photo (compared by intent, not listed here), `packagingUnit` and
+ * `packagingSize`, added alongside `unitOfMeasure` because a 25kg bag silently becoming 50kg is
+ * exactly the kind of identity change this dialog exists to warn about. Brand is set through the
+ * seller's marketplace-details route (a SECOND request from the same save, see `saveBrand`);
+ * unit of measure and the packaging pair are NOT — they go to `/api/products` in the SAME
+ * request as everything else now, for every tenant, not just a vendor.
  *
  * <p>The labels are the ones on the inputs below, because `ReviewImpactDialog` reads them back
  * to the vendor at the point of no return — a dialog naming a field they cannot find on the
  * form is worse than no dialog.
  */
-const IDENTITY_FIELDS: { field: keyof ProductFormValues; label: string }[] = [
+// `keyof ProductFormValues & keyof Product`, not just `keyof ProductFormValues`: this array is
+// diffed against a real `Product` in `changedIdentityLabels` below (`product[field]`), and since
+// the "First vendor" fields (`initialVendorId` etc.) exist only on the form's values — there is
+// no such thing as an existing product's "first vendor" to diff against — a wider type here
+// would let one sneak into this list and fail to compile at the one place it's actually read.
+const IDENTITY_FIELDS: { field: keyof ProductFormValues & keyof Product; label: string }[] = [
   { field: 'name', label: 'Product name' },
   { field: 'sku', label: 'SKU' },
   { field: 'description', label: 'Description' },
   { field: 'brand', label: 'Brand' },
-  { field: 'unitOfMeasure', label: 'Unit of measure' },
+  { field: 'unitOfMeasure', label: 'Measured in' },
+  { field: 'packagingUnit', label: 'Packaged as' },
+  { field: 'packagingSize', label: 'Pack size' },
 ]
 
 /**
@@ -82,19 +120,39 @@ const IDENTITY_FIELDS: { field: keyof ProductFormValues; label: string }[] = [
  * And once more after the fact, in the success toast, because the listing has visibly
  * changed state and a silent success would leave that unexplained.
  *
- * <h2>Only vendors see any of it</h2>
- * Gated on `isVendor`, which mirrors the server's own condition:
- * `ProductModerationRules.isModerated` is true for a seller that is not the platform owner.
- * ProcurePal's own products are stamped APPROVED at write time and a buying company's private
- * stock list is never moderated at all — telling either of them their napkin count is going
- * for review would be a false statement about a queue they will never enter. The grouping
- * headings are hidden with the notice for the same reason: to a buying company they would
- * describe a rule that does not apply to them.
+ * <h2>The review-consequence framing is vendor-only; the section structure is not</h2>
+ * Every tenant sees the form broken into labelled sections (Basic details, Measurement &amp;
+ * packaging, Stock alerts, First vendor, ...) — a flat, undifferentiated field list is confusing
+ * regardless of whether re-review is a concept that applies to you. What's gated on `isVendor`
+ * (mirroring the server's own condition: `ProductModerationRules.isModerated` is true for a
+ * seller that is not the platform owner) is only the REVIEW-SPECIFIC copy layered onto the
+ * "Basic details" and "Pricing" sections — {@link ReviewImpactNotice}, the Clock/warning-600
+ * "sends the listing back for review" framing, and the Pricing section itself (it has nothing
+ * left in it for a non-vendor once cost price is gone, see below). ProcurePal's own products are
+ * stamped APPROVED at write time and a buying company's private stock list is never moderated at
+ * all — telling either of them their napkin count is going for review would be a false statement
+ * about a queue they will never enter.
+ *
+ * <h2>No standalone "Cost price" field</h2>
+ * In every mainstream system with vendor-based costing (Odoo's AVCO, NetSuite's Average Cost),
+ * a product's cost is a computed rollup from actual purchases, never a value typed alongside a
+ * separate per-vendor purchase price for the same transaction. This app's backend already works
+ * that way — `Product.costPrice` is a weighted average recalculated on every stock-in (see
+ * MULTI_VENDOR_INVENTORY_DESIGN.md §5.3) — so this form never collects it directly. The only
+ * place a cost is typed is the "First vendor" block's own `initialVendorCost`, for that first
+ * purchase; everywhere else, cost is something to look at (the detail page's Overview tab), not
+ * something to edit here.
  */
 export function ProductFormPage() {
   const { id } = useParams<{ id: string }>()
   const isEdit = !!id
   const navigate = useNavigate()
+  // The only thing a caller ever hands this page via router state: the name someone typed into
+  // the "Add a product" search (see NewProductSearchModal) before landing here having chosen
+  // "Create new product". Absent on every other way of reaching this route (a bookmark, the
+  // edit link, a browser refresh), so it is read once, on the very first render, and never
+  // fought with afterwards.
+  const location = useLocation() as { state?: { name?: string } }
   const { showToast } = useToast()
   const { user, isVendor } = useAuth()
   const { product, loading: loadingProduct } = useProduct(id)
@@ -102,12 +160,20 @@ export function ProductFormPage() {
   // for a list the caller is not allowed to read would be a 403 in everyone's network tab.
   const canViewVendors = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.VIEW_VENDORS)
   const { vendors: vendorOptions } = useVendorOptions(canViewVendors)
+  const { baseOptions, packagingOptions } = useUnitOfMeasureOptions()
   const [formError, setFormError] = useState<string | null>(null)
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [removeImage, setRemoveImage] = useState(false)
+  const [showUnitRequestModal, setShowUnitRequestModal] = useState(false)
   /** Held while the confirmation is open, so confirming submits exactly what was validated. */
   const [pendingValues, setPendingValues] = useState<ProductFormValues | null>(null)
   const [changedIdentityFields, setChangedIdentityFields] = useState<string[]>([])
+
+  // "Measured in" picker — BASE-role codes only, grouped by category.
+  const baseUnitsByCategory = CATEGORY_ORDER.map((category) => ({
+    category,
+    options: baseOptions.filter((option) => option.category === category),
+  })).filter((group) => group.options.length > 0)
 
   const {
     register,
@@ -117,7 +183,11 @@ export function ProductFormPage() {
     formState: { errors, isSubmitting },
   } = useForm<ProductFormValues>({
     resolver: zodResolver(productFormSchema),
-    defaultValues: productFormDefaults(),
+    // Prefilled with the name typed into the search-first "Add a product" flow, on create only —
+    // an edit always starts from the product below instead. `location.state` is read once here
+    // because `defaultValues` is only consulted on the form's first render; nothing re-reads it
+    // after that, which is fine, since nothing navigates within this page without unmounting it.
+    defaultValues: isEdit ? productFormDefaults() : { ...productFormDefaults(), name: location.state?.name ?? '' },
   })
 
   useEffect(() => {
@@ -128,10 +198,15 @@ export function ProductFormPage() {
       description: product.description ?? '',
       brand: product.brand ?? '',
       unitOfMeasure: product.unitOfMeasure ?? '',
-      unitPrice: String(product.unitPrice),
-      costPrice: product.costPrice != null ? String(product.costPrice) : '',
+      packagingUnit: product.packagingUnit ?? '',
+      packagingSize: product.packagingSize != null ? String(product.packagingSize) : '',
+      unitPrice: product.unitPrice != null ? String(product.unitPrice) : '',
       lowStockThreshold: product.lowStockThreshold != null ? String(product.lowStockThreshold) : '',
-      companyVendorId: product.companyVendorId ?? '',
+      // The "First vendor" block only ever applies at creation — an existing product's vendors
+      // live on the Vendors tab, not here — so an edit always resets these back to blank.
+      initialVendorId: '',
+      initialVendorCost: '',
+      initialVendorQuantity: '',
     })
   }, [product, reset])
 
@@ -160,28 +235,29 @@ export function ProductFormPage() {
   }
 
   /**
-   * Whether the marketplace facets need their own request.
+   * Whether brand needs its own request.
    *
-   * On an edit, only when one of them actually moved — the route re-triggers review on a real
-   * brand or unit change and a needless call is a needless round trip. On a create there is no
-   * "before", so it is sent whenever the vendor typed something.
+   * On an edit, only when it actually moved — the route re-triggers review on a real brand
+   * change and a needless call is a needless round trip. On a create there is no "before", so
+   * it is sent whenever the vendor typed something.
+   *
+   * <p>Used to also cover `unitOfMeasure`, back when both travelled through this route. That
+   * field now goes to `/api/products` in the SAME request as everything else (see
+   * `toProductPayload`), so this only has one field left to ask about.
    */
-  function marketplaceDetailsChanged(values: ProductFormValues): boolean {
-    if (!isEdit) return values.brand.length > 0 || values.unitOfMeasure.length > 0
+  function brandChanged(values: ProductFormValues): boolean {
+    if (!isEdit) return values.brand.length > 0
     if (!product) return false
-    return (
-      values.brand.trim() !== (product.brand ?? '').trim() ||
-      values.unitOfMeasure.trim() !== (product.unitOfMeasure ?? '').trim()
-    )
+    return values.brand.trim() !== (product.brand ?? '').trim()
   }
 
   /**
    * The second request, and the reason there has to be one.
    *
-   * `/api/products` has never accepted brand or unit of measure; the seller's
-   * marketplace-details route is the only thing that writes them, and it needs a product id,
-   * which on a create does not exist until the first request has returned. So the order is
-   * fixed: save the product, then set its facets.
+   * `/api/products` has never accepted brand; the seller's marketplace-details route is the
+   * only thing that writes it, and it needs a product id, which on a create does not exist
+   * until the first request has returned. So the order is fixed: save the product, then set
+   * its brand.
    *
    * <p>The failure is handled rather than propagated, because the product IS saved by the time
    * this runs and throwing here would show a red error over a successful save and send the
@@ -191,14 +267,14 @@ export function ProductFormPage() {
    *
    * @returns null on success, or a sentence to append to the success toast.
    */
-  async function saveMarketplaceDetails(productId: string, values: ProductFormValues): Promise<string | null> {
+  async function saveBrand(productId: string, values: ProductFormValues): Promise<string | null> {
     try {
       await vendorCatalogueApi.updateMarketplaceDetails(productId, toVendorMarketplaceDetailsPayload(values))
       return null
     } catch (err) {
       return isAppError(err)
-        ? `but the brand and unit of measure could not be saved (${err.message}) — edit the product to try again.`
-        : 'but the brand and unit of measure could not be saved — edit the product to try again.'
+        ? `but the brand could not be saved (${err.message}) — edit the product to try again.`
+        : 'but the brand could not be saved — edit the product to try again.'
     }
   }
 
@@ -210,18 +286,24 @@ export function ProductFormPage() {
         isEdit && id
           ? await productsApi.update(
               id,
-              // toProductUpdatePayload, not toProductPayload: clearing the supplier has to be said
-              // out loud, because an absent companyVendorId means "leave it alone" server-side.
               { ...toProductUpdatePayload(values), removeImage: removeImage || undefined },
               imageFile,
             )
-          : await productsApi.create(toProductPayload(values), imageFile)
+          : // The "First vendor" block (§7.1) rides in the SAME create request as everything
+            // else — one atomic write for the product, its first ProductVendor row, and the
+            // opening stock-in, rather than a create followed by a second stock-in call the
+            // user could abandon halfway through. `toInitialVendorPayload` returns undefined
+            // when the block was left blank, so this is a no-op for a product created with no
+            // vendor or stock yet.
+            await productsApi.create(
+              { ...toProductPayload(values), initialVendor: toInitialVendorPayload(values) },
+              imageFile,
+            )
 
-      // Vendors only. ProcurePal's staff set these on the admin catalogue screen, and an
+      // Vendors only. ProcurePal's staff set brand on the admin catalogue screen, and an
       // ordinary buying company has no marketplace facets at all — the route would 403 them,
-      // which is why the inputs are not rendered for either.
-      const detailsWarning =
-        isVendor && marketplaceDetailsChanged(values) ? await saveMarketplaceDetails(saved.id, values) : null
+      // which is why the input is not rendered for either.
+      const detailsWarning = isVendor && brandChanged(values) ? await saveBrand(saved.id, values) : null
 
       setPendingValues(null)
 
@@ -261,6 +343,13 @@ export function ProductFormPage() {
       }
       if (mappedAny) return
 
+      // Also where UnitPriceRequiredException, InvalidUnitOfMeasureException and
+      // UnitOfMeasureAndCountRequiredTogetherException land if they ever reach the server
+      // despite the client-side checks above (`onSubmit`'s vendor check, the schema's
+      // superRefine pairing rule, and the <select> making an invalid code structurally
+      // impossible from this UI). All three are plain `{message}` bodies with no `errors`
+      // array, so `err.errors ?? []` above is empty, `mappedAny` stays false, and they fall
+      // through to here as a general form error rather than being silently dropped.
       setFormError(err.message)
     }
   }
@@ -268,8 +357,18 @@ export function ProductFormPage() {
   /**
    * Validation runs first, then the confirmation — so a vendor is never asked to accept a
    * review they were going to fail validation for anyway.
+   *
+   * <p>Unit price's "required for a vendor" rule is enforced HERE rather than in
+   * `productFormSchema`, because the schema has no way to know whether the caller is a vendor
+   * — it is one static shape shared by both tenant kinds, and baking `isVendor` into it would
+   * mean carrying a second schema instance just for this one field. This mirrors the server's
+   * own `UnitPriceRequiredException`, which is why the message matches it exactly.
    */
   async function onSubmit(values: ProductFormValues) {
+    if (isVendor && values.unitPrice.trim().length === 0) {
+      setError('unitPrice', { message: UNIT_PRICE_REQUIRED_MESSAGE })
+      return
+    }
     if (isVendor && isEdit) {
       const changed = changedIdentityLabels(values)
       if (changed.length > 0) {
@@ -302,20 +401,8 @@ export function ProductFormPage() {
       {isVendor && <ReviewImpactNotice mode={isEdit ? 'edit' : 'create'} />}
 
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-5">
-        {/* ------------------------------------------------------------------ What it IS */}
-        {/* The heading and rule are rendered only for vendors: to a buying company they would
-            describe a queue their private stock list never enters. The FIELDS below are
-            identical either way — only the framing around them changes. */}
-        {isVendor && (
-          <div className="flex items-center gap-2 border-b border-neutral-200 pb-2">
-            <Clock className="h-4 w-4 shrink-0 text-warning-600" aria-hidden="true" />
-            <div>
-              <h2 className="text-sm font-semibold text-neutral-900">What the product is</h2>
-              <p className="text-xs text-neutral-500">Changing anything here sends the listing back for review.</p>
-            </div>
-          </div>
-        )}
-
+        {/* -------------------------------------------------------------- Product image */}
+        {/* No section header — self-evidently its own thing at the top of the form. */}
         <div>
           <p className="mb-1.5 text-sm font-medium text-neutral-700">Product image</p>
           <ImageUploadField
@@ -326,6 +413,33 @@ export function ProductFormPage() {
             onRemove={() => setRemoveImage(true)}
           />
         </div>
+
+        {/* -------------------------------------------------------------- Basic details */}
+        {/* Every tenant gets a section header here — a flat run of Name/SKU/Description with no
+            structure at all is the "confusing" complaint this restructuring exists to fix. Only
+            the COPY differs by audience: a vendor sees the review-consequence framing (Clock,
+            warning-600, "sends the listing back for review"), because renaming or re-describing
+            a live listing really does take it off the storefront pending re-approval. A buying
+            company's private stock is never moderated, so that warning would be describing a
+            queue it never enters — it gets a neutral heading instead. The FIELDS below are
+            identical either way; only the framing around them changes. */}
+        {isVendor ? (
+          <div className="flex items-center gap-2 border-b border-neutral-200 pb-2">
+            <Clock className="h-4 w-4 shrink-0 text-warning-600" aria-hidden="true" />
+            <div>
+              <h2 className="text-sm font-semibold text-neutral-900">What the product is</h2>
+              <p className="text-xs text-neutral-500">Changing anything here sends the listing back for review.</p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 border-b border-neutral-200 pb-2">
+            <Tag className="h-4 w-4 shrink-0 text-neutral-600" aria-hidden="true" />
+            <div>
+              <h2 className="text-sm font-semibold text-neutral-900">Basic details</h2>
+              <p className="text-xs text-neutral-500">Name, SKU, and description for this product.</p>
+            </div>
+          </div>
+        )}
 
         <TextField label="Name" error={errors.name?.message} {...register('name')} />
         <TextField label="SKU" error={errors.sku?.message} {...register('sku')} />
@@ -342,104 +456,243 @@ export function ProductFormPage() {
           />
         </div>
 
-        {/* Brand and unit of measure. Vendors only, and inside the "what the product is" group
-            rather than after it, because that grouping is the form's whole explanation of which
-            edits cost a listing its place on the storefront — putting two identity fields
-            outside it would quietly make the rule wrong.
+        {/* Brand. Vendors only, and inside the "Basic details" group rather than after it,
+            because that grouping is the form's whole explanation of which edits cost a listing
+            its place on the storefront — putting an identity field outside it would quietly
+            make the rule wrong.
 
             Not rendered for anyone else, and the reason differs by audience rather than being
             one blanket rule: an ordinary buying company's private stock has no marketplace
             facets at all and the seller route would 403 them, while ProcurePal's staff set
-            these on the admin catalogue screen (MarketplaceDetailsModal), which also offers the
+            this on the admin catalogue screen (MarketplaceDetailsModal), which also offers the
             slug and the category a vendor deliberately does not get.
 
-            They post to a DIFFERENT endpoint from every other field on this form — see
-            `saveMarketplaceDetails`. That is invisible here on purpose: which of two routes a
-            field lands on is the API's problem, not the supplier's. */}
+            Posts to a DIFFERENT endpoint from every other field on this form — see `saveBrand`.
+            That is invisible here on purpose: which of two routes a field lands on is the API's
+            problem, not the supplier's. Unit of measure USED to sit next to this for the same
+            reason; it now goes through `/api/products` with everything else and lives below,
+            ungated, because every tenant can set it. */}
         {isVendor && (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <TextField
-              label="Brand"
-              hint="Optional. The name a buyer would recognise — Dangote, Golden Penny."
-              error={errors.brand?.message}
-              {...register('brand')}
-            />
-            <TextField
-              label="Unit of measure"
-              /* The examples are the hint rather than a placeholder: this is free text, the
-                 right answer depends entirely on the trade, and a buyer cannot judge a price
-                 without it. "50kg bag" is the single most useful thing on a cement listing. */
-              hint="How it is sold — 50kg bag, carton of 24, litre"
-              error={errors.unitOfMeasure?.message}
-              {...register('unitOfMeasure')}
-            />
-          </div>
+          <TextField
+            label="Brand"
+            hint="Optional. The name a buyer would recognise — Dangote, Golden Penny."
+            error={errors.brand?.message}
+            {...register('brand')}
+          />
         )}
 
-        {/* -------------------------------------------------------- Price, stock, bookkeeping */}
+        {/* -------------------------------------------------------------- Pricing */}
+        {/* Vendor-only, and only Unit price now — the marketplace selling price, required for a
+            vendor (enforced in `onSubmit`, mirroring the server's UnitPriceRequiredException).
+            There is no standalone "Cost price" field anywhere on this form any more: a product's
+            cost is a server-computed weighted average of actual purchases (see
+            MULTI_VENDOR_INVENTORY_DESIGN.md §5.3), never a value typed here. A buying company's
+            only price entry point is the "First vendor" block's `initialVendorCost` below, for
+            its opening purchase — so a non-vendor has nothing left to show in this section, and
+            it is not rendered for them at all. */}
         {isVendor && (
-          <div className="mt-2 flex items-center gap-2 border-b border-neutral-200 pb-2">
-            <Zap className="h-4 w-4 shrink-0 text-accent-600" aria-hidden="true" />
+          <>
+            <div className="mt-2 flex items-center gap-2 border-b border-neutral-200 pb-2">
+              <Zap className="h-4 w-4 shrink-0 text-accent-600" aria-hidden="true" />
+              <div>
+                <h2 className="text-sm font-semibold text-neutral-900">Pricing</h2>
+                <p className="text-xs text-neutral-500">
+                  This goes live straight away. Your listing stays on the storefront.
+                </p>
+              </div>
+            </div>
+            <TextField
+              label="Unit price"
+              inputMode="decimal"
+              error={errors.unitPrice?.message}
+              {...register('unitPrice')}
+            />
+          </>
+        )}
+
+        {/* -------------------------------------------------------------- Measurement & packaging */}
+        {/* Measured in / Packaged as / Pack size. Rendered for EVERY tenant, not gated on
+            `isVendor` — unlike brand, this is now a universal product attribute: a buying
+            company gets it as new capability (it had nothing like it before), and a vendor gets
+            it moved into this same request instead of the second one brand still needs (see
+            `toProductPayload` vs `toVendorMarketplaceDetailsPayload`).
+
+            Three fields for three concepts (Odoo's model): what it's measured in, how it's
+            packaged (optional — some goods are sold loose), and how many of the former fit in
+            one of the latter. packagingUnit + packagingSize are optional together (both-or-
+            neither) but never independently, AND require unitOfMeasure to also be set — both
+            rules enforced by the schema's superRefine (see `productFormSchema`).
+
+            Both <select>s are populated only with codes the server just returned via
+            `useUnitOfMeasureOptions`, split by `role` — this is what makes an invalid or
+            wrong-role code structurally impossible from this UI, so the schema itself does not
+            need to validate the value against the list (see the comment there). */}
+        <div>
+          <div className="mb-2 flex items-center gap-2 border-b border-neutral-200 pb-2">
+            <Ruler className="h-4 w-4 shrink-0 text-primary-600" aria-hidden="true" />
             <div>
-              <h2 className="text-sm font-semibold text-neutral-900">Price and stock</h2>
-              <p className="text-xs text-neutral-500">
-                These go live straight away. Your listing stays on the storefront.
-              </p>
+              <h2 className="text-sm font-semibold text-neutral-900">Measurement &amp; packaging</h2>
+              <p className="text-xs text-neutral-500">How this product is measured, and — optionally — packaged.</p>
             </div>
           </div>
-        )}
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <span className="text-sm font-medium text-neutral-700">Unit of measure</span>
+            <button
+              type="button"
+              onClick={() => setShowUnitRequestModal(true)}
+              className="shrink-0 text-xs font-medium text-primary-600 hover:underline"
+            >
+              Can&apos;t find your unit?
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="unitOfMeasure" className="mb-1.5 block text-sm font-medium text-neutral-700">
+                Measured in <span className="font-normal text-neutral-400">(optional)</span>
+              </label>
+              <select
+                id="unitOfMeasure"
+                className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
+                {...register('unitOfMeasure')}
+              >
+                <option value="">No unit selected</option>
+                {baseUnitsByCategory.map((group) => (
+                  <optgroup key={group.category} label={CATEGORY_LABELS[group.category]}>
+                    {group.options.map((option) => (
+                      <option key={option.code} value={option.code}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              {errors.unitOfMeasure?.message && (
+                <p className="mt-1.5 text-xs text-danger-600">{errors.unitOfMeasure.message}</p>
+              )}
+            </div>
+            <div>
+              <label htmlFor="packagingUnit" className="mb-1.5 block text-sm font-medium text-neutral-700">
+                Packaged as <span className="font-normal text-neutral-400">(optional)</span>
+              </label>
+              <select
+                id="packagingUnit"
+                className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
+                {...register('packagingUnit')}
+              >
+                <option value="">— None — (sold loose)</option>
+                {packagingOptions.map((option) => (
+                  <option key={option.code} value={option.code}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              {errors.packagingUnit?.message && (
+                <p className="mt-1.5 text-xs text-danger-600">{errors.packagingUnit.message}</p>
+              )}
+            </div>
+          </div>
+          <div className="mt-4">
+            <TextField
+              label="Pack size"
+              inputMode="decimal"
+              hint="Only relevant when Packaged as is set"
+              error={errors.packagingSize?.message}
+              {...register('packagingSize')}
+            />
+          </div>
+          <p className="mt-1.5 text-xs text-neutral-500">
+            E.g. Measured in: Kilogram, Packaged as: Bag, Pack size: 50 → a 50kg bag.
+          </p>
+        </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        {/* -------------------------------------------------------------- Stock alerts */}
+        <div>
+          <div className="mb-2 flex items-center gap-2 border-b border-neutral-200 pb-2">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-warning-600" aria-hidden="true" />
+            <h2 className="text-sm font-semibold text-neutral-900">Stock alerts</h2>
+          </div>
           <TextField
-            label="Unit price"
-            inputMode="decimal"
-            error={errors.unitPrice?.message}
-            {...register('unitPrice')}
-          />
-          <TextField
-            label="Cost price"
-            inputMode="decimal"
-            hint="Optional"
-            error={errors.costPrice?.message}
-            {...register('costPrice')}
+            label="Low stock threshold"
+            inputMode="numeric"
+            hint="Get an alert when quantity on hand drops to or below this number"
+            error={errors.lowStockThreshold?.message}
+            {...register('lowStockThreshold')}
           />
         </div>
 
-        <TextField
-          label="Low stock threshold"
-          inputMode="numeric"
-          hint="Get an alert when quantity on hand drops to or below this number"
-          error={errors.lowStockThreshold?.message}
-          {...register('lowStockThreshold')}
-        />
+        {/* -------------------------------------------------------------- First vendor (optional) */}
+        {/* "First vendor" (§7.1 of the multi-vendor inventory design) — create only. A product no
+            longer has ONE supplier field; it has many `ProductVendor` rows, added and edited
+            from the Vendors tab on the product detail page. This section is the exception: the
+            FIRST such row is folded into product creation itself, so someone who already knows
+            who they're buying from and how much arrived doesn't have to save the product, then
+            open a second screen to record the delivery. It stays optional — a product can still
+            be created with zero stock and no vendor, e.g. cataloguing ahead of a first delivery —
+            and is gated the same way the old Supplier field was, on VIEW_VENDORS, since it needs
+            the vendor directory to offer anyone to pick.
 
-        {canViewVendors && (
-          <div>
-            <label htmlFor="companyVendorId" className="mb-1.5 block text-sm font-medium text-neutral-700">
-              Supplier <span className="font-normal text-neutral-400">(optional)</span>
-            </label>
-            <select
-              id="companyVendorId"
-              aria-describedby="companyVendorId-hint"
-              className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
-              {...register('companyVendorId')}
-            >
-              <option value="">No supplier</option>
-              {vendorOptions.map((vendor) => (
-                <option key={vendor.id} value={vendor.id}>
-                  {vendor.name}
-                  {/* The kind is spelled out in the option text because a <select> cannot carry a
-                      badge, and "which of these is an actual ProcurePaddy seller" is the same
-                      question the directory list answers with one. */}
-                  {vendor.kind === 'VERIFIED' ? ' (ProcurePaddy seller)' : ''}
-                </option>
-              ))}
-            </select>
-            <p id="companyVendorId-hint" className="mt-1.5 text-xs text-neutral-500">
-              {/* Says the automatic case out loud: a buyer who does not know marketplace purchases
-                  fill this in themselves will assume something else set it by mistake. */}
-              Where you buy this from. Items bought on the ProcurePaddy marketplace are linked to their
-              seller automatically — set this by hand for stock you source elsewhere.{' '}
+            Unlike every section above, this one gets a real card (rounded-lg border + tinted
+            neutral-50 background) rather than a plain divider — it is the one genuinely
+            optional, skippable block on the form, and that extra visual weight is what signals
+            "distinct and skippable" rather than "another required section". Neutral-tinted, not
+            primary/accent-tinted, so it doesn't read as a call-to-action. */}
+        {!isEdit && canViewVendors && (
+          <div className="mt-2 flex flex-col gap-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+            <div className="flex items-center gap-2">
+              <Truck className="h-4 w-4 shrink-0 text-primary-600" aria-hidden="true" />
+              <div>
+                <h2 className="text-sm font-semibold text-neutral-900">
+                  First vendor <span className="font-normal text-neutral-400">(optional)</span>
+                </h2>
+                <p className="text-xs text-neutral-500">
+                  Who you're buying this from, what it cost, and how much arrived — this becomes the product's
+                  first vendor record and its opening stock, in one step.
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="initialVendorId" className="mb-1.5 block text-sm font-medium text-neutral-700">
+                Vendor
+              </label>
+              <select
+                id="initialVendorId"
+                className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
+                {...register('initialVendorId')}
+              >
+                <option value="">No vendor yet</option>
+                {vendorOptions.map((vendor) => (
+                  <option key={vendor.id} value={vendor.id}>
+                    {vendor.name}
+                    {/* The kind is spelled out in the option text because a <select> cannot carry
+                        a badge, and "which of these is an actual ProcurePaddy seller" is the same
+                        question the directory list answers with one. */}
+                    {vendor.kind === 'VERIFIED' ? ' (ProcurePaddy seller)' : ''}
+                  </option>
+                ))}
+              </select>
+              {errors.initialVendorId?.message && (
+                <p className="mt-1.5 text-xs text-danger-600">{errors.initialVendorId.message}</p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <TextField
+                label="Cost"
+                inputMode="decimal"
+                hint="Per unit"
+                error={errors.initialVendorCost?.message}
+                {...register('initialVendorCost')}
+              />
+              <TextField
+                label="Quantity received"
+                inputMode="numeric"
+                error={errors.initialVendorQuantity?.message}
+                {...register('initialVendorQuantity')}
+              />
+            </div>
+
+            <p className="text-xs text-neutral-500">
               <Link to="/app/vendors" className="font-medium text-primary-600 hover:underline">
                 Manage your vendor directory
               </Link>
@@ -469,6 +722,16 @@ export function ProductFormPage() {
         }}
         onCancel={() => setPendingValues(null)}
       />
+
+      {showUnitRequestModal && (
+        <RequestUnitOfMeasureModal
+          onClose={() => setShowUnitRequestModal(false)}
+          onSuccess={() => {
+            setShowUnitRequestModal(false)
+            showToast("Thanks — we'll review this unit.", 'success')
+          }}
+        />
+      )}
     </div>
   )
 }
