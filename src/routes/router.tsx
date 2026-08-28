@@ -72,6 +72,35 @@ const LowStockProductsPage = lazy(() =>
     default: m.LowStockProductsPage,
   })),
 )
+// The bulk import pipeline (chooser → upload → review → confirm → result). Five chunks of its
+// own rather than one: the review screen carries the grid and is by far the heaviest, and the
+// three screens either side of it are reached by users who may never open it.
+const ImportChooserPage = lazy(() =>
+  import('@/features/imports/pages/ImportChooserPage').then((m) => ({
+    default: m.ImportChooserPage,
+  })),
+)
+const ImportUploadPage = lazy(() =>
+  import('@/features/imports/pages/ImportUploadPage').then((m) => ({
+    default: m.ImportUploadPage,
+  })),
+)
+const ImportReviewPage = lazy(() =>
+  import('@/features/imports/pages/ImportReviewPage').then((m) => ({
+    default: m.ImportReviewPage,
+  })),
+)
+const ImportConfirmPage = lazy(() =>
+  import('@/features/imports/pages/ImportConfirmPage').then((m) => ({
+    default: m.ImportConfirmPage,
+  })),
+)
+const ImportResultPage = lazy(() =>
+  import('@/features/imports/pages/ImportResultPage').then((m) => ({
+    default: m.ImportResultPage,
+  })),
+)
+
 const OrderListPage = lazy(() =>
   import('@/pages/OrderListPage').then((m) => ({ default: m.OrderListPage })),
 )
@@ -383,6 +412,60 @@ export function AppRoutes() {
               </RequirePermission>
             }
           />
+          {/* Bulk import (bulk-import contract §7). Declared above `products/:id` for the
+            reader's sake — react-router 7 ranks a static segment above a dynamic one regardless
+            of source order, so `products/import` cannot be swallowed by `products/:id`, but a
+            route table where that is only true because of a ranking rule is a trap for whoever
+            edits it next.
+
+            `anyOf`, not `permission`: the API authorizes MANAGE_PRODUCTS *or* MANAGE_INVENTORY
+            (contract §3) and re-checks the kind-specific authority server-side against the
+            loaded record, because the kind is not knowable from the URL on `/:sessionId`. The
+            guard here mirrors exactly that method-level check and no more. Naming
+            MANAGE_PRODUCTS alone would bounce a storekeeper — who holds only MANAGE_INVENTORY —
+            out of bulk stock-in, the one flow the feature exists to serve, with a UI-only
+            refusal the network tab would never explain. */}
+          <Route
+            path="products/import"
+            element={
+              <RequirePermission anyOf={[PERMISSIONS.MANAGE_PRODUCTS, PERMISSIONS.MANAGE_INVENTORY]}>
+                <ImportChooserPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="products/import/new"
+            element={
+              <RequirePermission anyOf={[PERMISSIONS.MANAGE_PRODUCTS, PERMISSIONS.MANAGE_INVENTORY]}>
+                <ImportUploadPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="products/import/:sessionId"
+            element={
+              <RequirePermission anyOf={[PERMISSIONS.MANAGE_PRODUCTS, PERMISSIONS.MANAGE_INVENTORY]}>
+                <ImportReviewPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="products/import/:sessionId/confirm"
+            element={
+              <RequirePermission anyOf={[PERMISSIONS.MANAGE_PRODUCTS, PERMISSIONS.MANAGE_INVENTORY]}>
+                <ImportConfirmPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="products/import/:sessionId/result"
+            element={
+              <RequirePermission anyOf={[PERMISSIONS.MANAGE_PRODUCTS, PERMISSIONS.MANAGE_INVENTORY]}>
+                <ImportResultPage />
+              </RequirePermission>
+            }
+          />
+
           <Route
             path="products/:id"
             element={
