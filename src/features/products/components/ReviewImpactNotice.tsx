@@ -33,7 +33,7 @@ const IDENTITY_FIELD_LABELS = [
   'Description',
   'Brand',
   'Photo',
-  'Unit of measure (50kg bag, carton, litre…)',
+  'Stock unit and pack (kg, litre, Bag of 50 kg…)',
 ]
 
 const IMMEDIATE_FIELD_LABELS = [

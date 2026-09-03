@@ -7,8 +7,7 @@ import { Button, buttonClassName } from '@/components/Button'
 import { EmptyState } from '@/components/EmptyState'
 import { ErrorState } from '@/components/ErrorState'
 import { useToast } from '@/components/useToast'
-import { IMPORTS_MOCK_ENABLED, importsApi } from '@/features/imports/api/importsApi'
-import { DevFixtureBar } from '@/features/imports/components/DevFixtureBar'
+import { importsApi } from '@/features/imports/api/importsApi'
 import { ImportDropzone } from '@/features/imports/components/ImportDropzone'
 import { ImportModeChoice } from '@/features/imports/components/ImportModeChoice'
 import { ImportStepFrame } from '@/features/imports/components/ImportStepFrame'
@@ -169,17 +168,6 @@ export function ImportUploadPage() {
             {uploading ? copy.upload.checking : copy.upload.submit}
           </Button>
         </div>
-
-        {/* Gated on the mock, not merely on DEV: against a real API these fixture buttons would
-          hand the server a six-byte file with a fixture's name on it. */}
-        {IMPORTS_MOCK_ENABLED && (
-          <DevFixtureBar
-            onPick={(fixtureFile) => {
-              setFile(fixtureFile)
-              setError(null)
-            }}
-          />
-        )}
 
         <RecentImportsList kind={kind} />
       </div>

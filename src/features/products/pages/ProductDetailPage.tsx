@@ -17,13 +17,14 @@ import { StockBreakdownPanel } from '@/features/products/components/StockBreakdo
 import { StockHistoryTable } from '@/features/products/components/StockHistoryTable'
 import { StockInModal } from '@/features/products/components/StockInModal'
 import { StockOutModal } from '@/features/products/components/StockOutModal'
-import { formatCurrency, formatUnitOfMeasure } from '@/features/products/formatters'
 import { useLowStockAlerts } from '@/features/products/hooks/useLowStockAlerts'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import { useProduct } from '@/features/products/hooks/useProduct'
 import { useProductIncoming } from '@/features/products/hooks/useProductIncoming'
 import { useStockHistory } from '@/features/products/hooks/useStockHistory'
 import type { StockMutationResponse } from '@/features/products/types'
+import { UNIT_COPY, formatPackCostEcho, formatPricePer, packPhrase, stockUnitSymbol } from '@/features/products/unitCopy'
+import { buildPackOption } from '@/features/products/unitSet'
 import { VendorsTab } from '@/features/products/vendors/components/VendorsTab'
 import { isAppError } from '@/types/api'
 
@@ -33,7 +34,7 @@ type ProductDetailTab = 'overview' | 'vendors'
 
 const DETAIL_TABS: { value: ProductDetailTab; label: string }[] = [
   { value: 'overview', label: 'Overview' },
-  { value: 'vendors', label: 'Vendors' },
+  { value: 'vendors', label: UNIT_COPY.SUPPLIERS },
 ]
 
 function parseDetailTab(value: string | null): ProductDetailTab {
@@ -131,6 +132,28 @@ export function ProductDetailPage() {
 
   const incoming = incomingFor(product)
 
+  // `unitOfMeasure`/`packagingUnit` are wire CODEs ("KG", "BAG"), never something to show a reader,
+  // so each is resolved to its label against the same static list the form's pickers use. The two
+  // are then rendered as UNIT_UX_CONTRACT.md §1's TWO concepts — Stock unit, and the Pack phrase
+  // "Bag of 50 kg" — rather than run together into one "Unit of measure" line. That collapse is
+  // exactly what the remediation plan's §2 vocabulary table records: one row that means the stock
+  // unit on some products and the pack on others, under a name §1 bans.
+  const stockUnitLabel = unitOfMeasureOptions.find((option) => option.code === product.unitOfMeasure)?.label
+  const stockUnitText = stockUnitSymbol(stockUnitLabel)
+  const packLabel = packPhrase(
+    unitOfMeasureOptions.find((option) => option.code === product.packagingUnit)?.label,
+    product.packagingSize,
+    stockUnitText,
+  )
+  /**
+   * This product's pack as a `UnitOption`, for `UNIT_UX_CONTRACT.md` §9.2's per-pack cost echo on
+   * the two price rows below. `null` for a product sold loose, which is the case the echo has
+   * nothing to add to — see `unitCopy.formatPackCostEcho`.
+   */
+  const packOption = buildPackOption(product, stockUnitText, unitOfMeasureOptions)
+  const unitPricePackEcho = formatPackCostEcho(product.unitPrice, packOption)
+  const costPricePackEcho = formatPackCostEcho(product.costPrice, packOption)
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -217,28 +240,42 @@ export function ProductDetailPage() {
             {product.unitPrice != null && (
               <div>
                 <dt className="text-neutral-500">Unit price</dt>
-                <dd className="mt-0.5 font-medium text-neutral-900">{formatCurrency(product.unitPrice)}</dd>
+                <dd className="mt-0.5 font-medium text-neutral-900">
+                  {formatPricePer(product.unitPrice, stockUnitText)}
+                </dd>
+                {unitPricePackEcho && <dd className="text-xs text-neutral-500">{unitPricePackEcho}</dd>}
               </div>
             )}
+            {/* Both price rows were bare naira figures — `UNIT_UX_CONTRACT.md` §7.2's
+                non-negotiable ("no price field is labelled without naming what it is per"), on the
+                one screen a buyer checks a cost against a supplier's invoice.
+
+                `Product.costPrice` is a weighted average held per ONE stock unit — its own entity
+                doc says so in those words, and §9.2 pins the basis. That anchoring is deliberate
+                and is what makes two suppliers with different pack sizes comparable at all, but it
+                is also why a bare "₦1,000" here reads as wrong to anyone holding an ₦80,000
+                invoice for a bag. So the row states the basis and echoes the pack equivalent
+                underneath, exactly as §9.2 requires wherever a cost meets a product with a pack. */}
             <div>
               <dt className="text-neutral-500">Cost price</dt>
-              <dd className="mt-0.5 font-medium text-neutral-900">{formatCurrency(product.costPrice)}</dd>
+              <dd className="mt-0.5 font-medium text-neutral-900">
+                {formatPricePer(product.costPrice, stockUnitText)}
+              </dd>
+              {costPricePackEcho && <dd className="text-xs text-neutral-500">{costPricePackEcho}</dd>}
             </div>
-            {/* How this product is measured and — optionally — packaged, shown for BOTH tenant
-                types when set, unlike unit price. `unitOfMeasure`/`packagingUnit` on the product
-                are wire CODEs ("KG", "BAG"), not something to show a reader directly, so each is
-                resolved to its label via the same static list the form's pickers use before
-                formatting. */}
-            {(product.unitOfMeasure || product.packagingUnit || product.packagingSize != null) && (
-              <div className="col-span-2">
-                <dt className="text-neutral-500">Unit of measure</dt>
-                <dd className="mt-0.5 font-medium text-neutral-900">
-                  {formatUnitOfMeasure(
-                    unitOfMeasureOptions.find((option) => option.code === product.unitOfMeasure)?.label,
-                    unitOfMeasureOptions.find((option) => option.code === product.packagingUnit)?.label,
-                    product.packagingSize,
-                  )}
-                </dd>
+            {/* Shown for BOTH tenant types when set, unlike unit price. Two rows, not one: the
+                stock unit is what every stored quantity on this page is counted in, and the pack
+                is an optional container described in terms of it. */}
+            {stockUnitLabel && (
+              <div>
+                <dt className="text-neutral-500">{UNIT_COPY.STOCK_UNIT}</dt>
+                <dd className="mt-0.5 font-medium text-neutral-900">{stockUnitLabel}</dd>
+              </div>
+            )}
+            {packLabel && (
+              <div>
+                <dt className="text-neutral-500">{UNIT_COPY.PACK}</dt>
+                <dd className="mt-0.5 font-medium text-neutral-900">{packLabel}</dd>
               </div>
             )}
             {/* Where this stock comes from. Rendered even when unset, as an em dash, rather than
@@ -251,7 +288,7 @@ export function ProductDetailPage() {
                 renders as plain text with a link into the Vendors tab for the full picture, rather
                 than linking straight to a vendor detail page it no longer has an id for. */}
             <div className="col-span-2">
-              <dt className="text-neutral-500">Preferred vendor</dt>
+              <dt className="text-neutral-500">Preferred {UNIT_COPY.SUPPLIER.toLowerCase()}</dt>
               <dd className="mt-0.5 flex flex-wrap items-center gap-2">
                 {product.preferredVendorName ? (
                   <span className="font-medium text-neutral-900">{product.preferredVendorName}</span>
@@ -262,7 +299,7 @@ export function ProductDetailPage() {
                   to={{ search: '?tab=vendors' }}
                   className="text-xs font-medium text-primary-600 hover:underline"
                 >
-                  View vendors
+                  View {UNIT_COPY.SUPPLIERS.toLowerCase()}
                 </Link>
               </dd>
             </div>

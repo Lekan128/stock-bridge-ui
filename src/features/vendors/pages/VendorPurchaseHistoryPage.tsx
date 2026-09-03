@@ -44,12 +44,12 @@ export function VendorPurchaseHistoryPage() {
   if (vendorError || !detail) {
     return (
       <ErrorState
-        title="Could not load this vendor"
+        title="Could not load this supplier"
         message={vendorError}
         onRetry={refetchVendor}
         action={
           <Link to="/app/vendors" className={buttonClassName('secondary')}>
-            Back to vendors
+            Back to suppliers
           </Link>
         }
       />

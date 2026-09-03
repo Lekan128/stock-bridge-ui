@@ -9,6 +9,8 @@ import { StatusBadge } from '@/features/products/components/StatusBadge'
 import { formatCurrency, formatUnitOfMeasure } from '@/features/products/formatters'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import type { Product } from '@/features/products/types'
+import { formatNumber, formatQuantityEcho, unitNoun } from '@/features/products/unitCopy'
+import { buildPackOption, fromBaseQuantity, resolveUnitSymbol } from '@/features/products/unitSet'
 
 export type ProductSortField = 'name' | 'sku' | 'unitPrice' | 'quantityOnHand' | 'active'
 export type SortDirection = 'asc' | 'desc'
@@ -64,8 +66,10 @@ const UNIT_PRICE_COLUMN: { field: ProductSortField; label: string; align?: 'righ
 export function ProductTable({ products, sort, onSortChange, incomingFor, selection }: ProductTableProps) {
   const navigate = useNavigate()
   const { isVendor } = useAuth()
-  // Only fetched for the subtitle a company sees in place of the unit price column — a vendor's
-  // row already carries its price, so there is nothing extra to look up for them.
+  // Fetched for two things now: the packaging subtitle a company sees in place of the unit price
+  // column, and — for EVERY tenant, vendor included — the stock unit stamped on the "On hand"
+  // figure. A vendor's row used to need nothing from this list; a bare quantity in the on-hand
+  // column was the reason it does now (`UNIT_UX_CONTRACT.md` §7.2).
   const { options: unitOfMeasureOptions } = useUnitOfMeasureOptions()
 
   const columns = isVendor
@@ -76,6 +80,38 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
   // serves both.
   function unitOfMeasureLabel(code: string | undefined): string | undefined {
     return unitOfMeasureOptions.find((option) => option.code === code)?.label
+  }
+
+  /**
+   * "= 20 bags" under an on-hand figure of 1,000 kg — the same treatment
+   * {@link StockBreakdownPanel} gives the detail page's headline, and the same rule.
+   *
+   * Storage stays in the stock unit: a pack size that changes must never silently rewrite what is
+   * on the shelf, which is why Odoo and NetSuite both hold stock in the base unit and let
+   * packagings ride on top. But nobody counts 1,600 kg of rice, they count 32 bags, and a list a
+   * user has to do arithmetic against is a list they stop reading.
+   *
+   * <h3>Only whole packs, and that is not a rounding convenience</h3>
+   * 19.6 bags is not a sentence anyone wants, and a part-pack is exactly the case where the stock
+   * unit is the honest answer — so a figure that does not divide evenly is left as the stock unit
+   * alone. This also keeps the second line rare rather than universal, which is what earns it the
+   * row height: on a catalog of loose goods the column looks exactly as it did.
+   *
+   * Built from the product's own pack rather than from a full unit set (`unitOptionsForProduct`)
+   * because that is all this line can ever show and the set's step-4 base units (g, t) would add a
+   * scan of the whole unit list per row for options this cell never renders.
+   */
+  function packEquivalent(product: Product): string | null {
+    if (product.quantityOnHand <= 0) return null
+    const option = buildPackOption(
+      product,
+      resolveUnitSymbol(product.unitOfMeasure, unitOfMeasureOptions),
+      unitOfMeasureOptions,
+    )
+    if (option == null) return null
+    const inPacks = fromBaseQuantity(product.quantityOnHand, option)
+    if (!Number.isInteger(inPacks) || inPacks <= 0) return null
+    return formatQuantityEcho(inPacks, unitNoun(option))
   }
 
   const selectedOnPage = products.filter((product) => selection?.selectedIds.includes(product.id)).length
@@ -142,6 +178,7 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
         {products.map((product) => {
           const incoming = incomingFor?.(product).quantity ?? 0
           const isSelected = selection?.selectedIds.includes(product.id) ?? false
+          const packLine = packEquivalent(product)
 
           return (
             <tr
@@ -202,14 +239,28 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
                 </td>
               )}
               <td className="border-b border-neutral-100 px-4 py-2.5 text-right">
-                <div className="flex items-center justify-end gap-2">
+                <div className="flex flex-wrap items-center justify-end gap-x-1.5 gap-y-1">
                   {product.isLowStock && <LowStockBadge />}
                   {/* Zero usable stock is greyed rather than bolded even when a delivery is en
                       route — the number you can act on today is still nought. */}
                   <span className={product.quantityOnHand > 0 ? 'font-medium text-neutral-900' : 'font-medium text-neutral-400'}>
-                    {product.quantityOnHand}
+                    {formatNumber(product.quantityOnHand)}
+                  </span>
+                  {/* The unit, per `UNIT_UX_CONTRACT.md` §7.2 — this column was a bare number,
+                      which on a catalog mixing kilograms, litres and pieces is not a comparable
+                      figure at all. Set in the muted secondary weight so a column of numbers still
+                      scans vertically as numbers: the eye reads down the digits and picks up the
+                      unit only where it matters. The header deliberately does NOT carry it (plan
+                      §6.7) — one table can hold several units at once, so it belongs on the row. */}
+                  <span className="text-xs text-neutral-500">
+                    {resolveUnitSymbol(product.unitOfMeasure, unitOfMeasureOptions)}
                   </span>
                 </div>
+                {/* The same figure in the pack this product is bought and sold in — see
+                    `packEquivalent`. Muted and one step smaller, so a column of ledger figures
+                    still scans vertically as ledger figures and this reads as a restatement of
+                    the number above rather than as a second number. */}
+                {packLine && <div className="text-xs text-neutral-500">{packLine}</div>}
                 {/* On its own line, never summed into the figure above. */}
                 {incoming > 0 && (
                   <div className="mt-1 flex justify-end">

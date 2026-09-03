@@ -100,7 +100,7 @@ export function VendorListPage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">Vendors</h1>
+          <h1 className="text-2xl font-semibold text-neutral-900">Suppliers</h1>
           <p className="mt-0.5 text-sm text-neutral-500">
             Everyone your company buys from — ProcurePaddy sellers you have ordered from, and the
             suppliers you deal with off-platform.
@@ -131,7 +131,7 @@ export function VendorListPage() {
             value={searchInput}
             onChange={(event) => setSearchInput(event.target.value)}
             placeholder="Search by name"
-            aria-label="Search vendors by name"
+            aria-label="Search suppliers by name"
             className="w-full rounded-md border border-neutral-200 py-2 pr-3 pl-9 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
           />
         </form>
@@ -155,7 +155,7 @@ export function VendorListPage() {
 
       {loading && <VendorListSkeleton />}
 
-      {!loading && error && <ErrorState title="Could not load your vendors" message={error} onRetry={refetch} />}
+      {!loading && error && <ErrorState title="Could not load your suppliers" message={error} onRetry={refetch} />}
 
       {!loading && !error && vendors.length === 0 && (
         <EmptyVendorsState
@@ -278,8 +278,8 @@ export function VendorListPage() {
         // orders and stock keep their record, and a marketplace seller comes back by itself.
         message={
           deleteTarget?.kind === 'VERIFIED'
-            ? `${deleteTarget.name} will stop appearing in your vendor directory. Your orders and purchase history are kept, and they will be added back automatically if you buy from them again.`
-            : `${deleteTarget?.name ?? 'This supplier'} will stop appearing in your vendor directory. Products you linked to them keep their record of where the stock came from.`
+            ? `${deleteTarget.name} will stop appearing in your supplier directory. Your orders and purchase history are kept, and they will be added back automatically if you buy from them again.`
+            : `${deleteTarget?.name ?? 'This supplier'} will stop appearing in your supplier directory. Products you linked to them keep their record of where the stock came from.`
         }
         confirmLabel="Remove"
         loading={deleting}

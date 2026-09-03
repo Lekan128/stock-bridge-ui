@@ -12,25 +12,26 @@ import { productVendorsApi } from '@/features/products/api/productVendorsApi'
 import { formatCurrency } from '@/features/products/formatters'
 import { useProductVendors } from '@/features/products/hooks/useProductVendors'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
-import type { Product, UnitOfMeasureOption } from '@/features/products/types'
+import type { Product } from '@/features/products/types'
+import {
+  UNIT_COPY,
+  formatPackCostEcho,
+  formatPricePer,
+  formatQuantity,
+  formatQuantityInUnit,
+} from '@/features/products/unitCopy'
+import {
+  buildPackOption,
+  fromBaseQuantity,
+  stockUnitLabel,
+  supplierPack,
+  unitOptionsForProduct,
+  unitOptionsForSupplier,
+} from '@/features/products/unitSet'
 import { AddPriceTierModal } from '@/features/products/vendors/components/AddPriceTierModal'
 import type { ProductVendor, ProductVendorPriceTier } from '@/features/products/vendors/types'
 import { VendorKindBadge } from '@/features/vendors/components/VendorKindBadge'
 import { isAppError } from '@/types/api'
-
-/**
- * Which unit a price-break form for this vendor should be entered in, and the factor to multiply
- * by to reach the product's base unit on save — per §5.1a, `minQuantity` is always persisted in
- * base units regardless of what the vendor's packaging looks like. A vendor with no configured
- * packaging is already in base units, so `conversionFactor` is `1` and nothing is converted.
- */
-function resolveTierUnit(vendor: ProductVendor, baseUnitLabel: string, unitOfMeasureOptions: UnitOfMeasureOption[]) {
-  if (!vendor.defaultPackagingUnit || vendor.defaultPackagingSize == null) {
-    return { unitLabel: baseUnitLabel, conversionFactor: 1 }
-  }
-  const packagingLabel = unitOfMeasureOptions.find((option) => option.code === vendor.defaultPackagingUnit)?.label
-  return { unitLabel: packagingLabel ?? vendor.defaultPackagingUnit, conversionFactor: vendor.defaultPackagingSize }
-}
 
 export interface VendorsTabProps {
   product: Product
@@ -46,8 +47,28 @@ export interface VendorsTabProps {
  * One row per `ProductVendor`. The two rules easiest to get wrong, both handled here:
  *  - Preferred is a SWAP, not a set — there is no control to turn it off, only to turn it on for
  *    a different vendor, which atomically un-sets whichever row held it before.
- *  - A deactivated vendor's row stays fully visible with all its data intact, just visually
+ *  - A deactivated supplier's row stays fully visible with all its data intact, just visually
  *    de-emphasised (muted name, "Deactivated" badge) — never hidden.
+ *
+ * <h2>Every number on this tab now states its unit and its basis</h2>
+ * None of them did. `UNIT_UX_REMEDIATION_PLAN.md` §2 lists this tab as the surface with no
+ * vocabulary at all — "Their SKU", "Last cost", "Qty on hand", every one of them unitless, with a
+ * per-pack price sitting directly beside a base-unit quantity and nothing distinguishing them.
+ * Three changes, all from `UNIT_UX_CONTRACT.md`:
+ *
+ *  - §1's locked names: **Supplier**, **Supplier's code**, **Last cost**, **On hand from them**.
+ *    A user imports "Supplier" in a spreadsheet and used to land on a "Vendors" tab reading
+ *    "Their SKU"; three names for two things is two names too many. The CODE still says vendor
+ *    (`ProductVendor`, `companyVendorId`) — §1 locks the user-facing string, not the identifier.
+ *  - §7.2: every price says what it is per. `lastCostPrice` and every tier's `unitPrice` are
+ *    stored per stock unit (§3.2), so the pack figure a supplier actually quotes is DERIVED for
+ *    display and the stored per-stock-unit figure is printed under it. Both, always, when the
+ *    supplier has a pack — that pair is what makes two suppliers with different pack sizes
+ *    comparable, which is the entire premise of the preferred-supplier decision this tab exists
+ *    to support. Odoo's vendor pricelist tab and NetSuite's item-record vendor sublist both print
+ *    the purchase-unit price and the base-unit conversion on the same line for this reason.
+ *  - §7.5: quantities carry their unit — "1,000 kg", with "(20 bags)" beside it where a pack
+ *    makes the second reading useful.
  */
 export function VendorsTab({ product, canManage }: VendorsTabProps) {
   const { data: vendors, setData, loading, error, refetch } = useProductVendors(product.id)
@@ -60,7 +81,14 @@ export function VendorsTab({ product, canManage }: VendorsTabProps) {
   const [deletingTier, setDeletingTier] = useState<{ vendor: ProductVendor; tier: ProductVendorPriceTier } | null>(null)
   const [deletingTierBusy, setDeletingTierBusy] = useState(false)
 
-  const baseUnitLabel = unitOfMeasureOptions.find((option) => option.code === product.unitOfMeasure)?.label ?? 'units'
+  /**
+   * Every stored figure on this tab — `lastCostPrice`, each tier's `minQuantity` and `unitPrice`,
+   * `quantityOnHandFromVendor` — is expressed in the PRODUCT's stock unit, not in any one
+   * supplier's pack (contract §3.2). So the label is resolved once from the product's own unit
+   * set and reused, and each supplier's pack is derived separately, per row, only to render the
+   * second, friendlier reading of the same number.
+   */
+  const stockUnit = stockUnitLabel(unitOptionsForProduct(product, unitOfMeasureOptions))
 
   function toggleExpanded(vendorId: string) {
     setExpandedIds((prev) => {
@@ -85,10 +113,13 @@ export function VendorsTab({ product, canManage }: VendorsTabProps) {
     try {
       const updated = await productVendorsApi.update(product.id, vendor.id, { isPreferred: true })
       setData((current) => current.map((v) => (v.id === updated.id ? updated : { ...v, isPreferred: false })))
-      showToast(`${vendor.companyVendorName} is now the preferred vendor.`, 'success')
+      showToast(`${vendor.companyVendorName} is now the preferred ${UNIT_COPY.SUPPLIER.toLowerCase()}.`, 'success')
     } catch (err) {
       setData(previous)
-      showToast(isAppError(err) ? err.message : 'Could not update the preferred vendor.', 'error')
+      showToast(
+        isAppError(err) ? err.message : `Could not update the preferred ${UNIT_COPY.SUPPLIER.toLowerCase()}.`,
+        'error',
+      )
     } finally {
       setPreferredPendingId(null)
     }
@@ -135,15 +166,15 @@ export function VendorsTab({ product, canManage }: VendorsTabProps) {
   }
 
   if (error) {
-    return <ErrorState title="Could not load vendors" message={error} onRetry={refetch} />
+    return <ErrorState title={`Could not load ${UNIT_COPY.SUPPLIERS.toLowerCase()}`} message={error} onRetry={refetch} />
   }
 
   if (vendors.length === 0) {
     return (
       <EmptyState
         icon={Store}
-        title="No vendors linked yet"
-        description="Vendors show up here once you record a stock-in with a supplier attached, or link one from the product's edit page — with their own cost, packaging and quantity breaks, without ever needing a second product row."
+        title={`No ${UNIT_COPY.SUPPLIERS.toLowerCase()} linked yet`}
+        description={`${UNIT_COPY.SUPPLIERS} show up here once you record a stock-in with one attached, or link one from the product's edit page — each with their own cost, pack and quantity breaks, without ever needing a second product row.`}
       />
     )
   }
@@ -155,11 +186,11 @@ export function VendorsTab({ product, canManage }: VendorsTabProps) {
           <thead className="border-b border-neutral-200 bg-neutral-50 text-left text-xs text-neutral-500 uppercase">
             <tr>
               <th className="w-10 px-2 py-2.5" />
-              <th className="px-4 py-2.5 font-medium">Vendor</th>
-              <th className="px-4 py-2.5 font-medium">Their SKU</th>
-              <th className="px-4 py-2.5 font-medium">Last cost</th>
-              <th className="px-4 py-2.5 font-medium">Qty on hand</th>
-              <th className="px-4 py-2.5 font-medium">Preferred</th>
+              <th className="px-4 py-2.5 font-medium">{UNIT_COPY.SUPPLIER}</th>
+              <th className="px-4 py-2.5 font-medium">{UNIT_COPY.SUPPLIER_CODE}</th>
+              <th className="px-4 py-2.5 font-medium">{UNIT_COPY.LAST_COST}</th>
+              <th className="px-4 py-2.5 font-medium">{UNIT_COPY.ON_HAND_FROM_THEM}</th>
+              <th className="px-4 py-2.5 font-medium">{UNIT_COPY.PREFERRED}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-neutral-100">
@@ -167,6 +198,24 @@ export function VendorsTab({ product, canManage }: VendorsTabProps) {
               const expanded = expandedIds.has(vendor.id)
               const cheapestTierPrice =
                 vendor.priceTiers.length > 0 ? Math.min(...vendor.priceTiers.map((t) => t.unitPrice)) : null
+
+              /**
+               * THIS supplier's own pack, built straight from their `defaultPackagingUnit`/
+               * `defaultPackagingSize` rather than pulled out of the merged unit set.
+               *
+               * The merged set deduplicates by code (contract §2.1), so a supplier delivering a
+               * 25 kg bag against a product whose own pack is a 50 kg bag would collapse into the
+               * product's entry and this column would quote their price against the wrong size.
+               * For a per-supplier figure only their own configuration is correct. `null` when
+               * they have no pack — then there is one reading of the price, not two.
+               */
+              const packOption = buildPackOption(supplierPack(vendor), stockUnit, unitOfMeasureOptions)
+              // Stored per stock unit either way (§3.2). The cheapest tier supersedes the flat
+              // rate for display when the supplier has tiers, as it always has — see "from ₦X".
+              const headlinePrice = cheapestTierPrice ?? vendor.lastCostPrice
+              // §9.2's per-pack restatement of that stored figure — null for a supplier with no
+              // pack, which is the case there is only one reading of the price to give.
+              const headlinePackEcho = formatPackCostEcho(headlinePrice, packOption)
 
               return (
                 <Fragment key={vendor.id}>
@@ -198,7 +247,10 @@ export function VendorsTab({ product, canManage }: VendorsTabProps) {
                         </Link>
                         <VendorKindBadge kind={vendor.companyVendorKind} />
                         {!vendor.companyVendorActive && (
-                          <Badge variant="neutral" title="This supplier has been removed from your vendor directory. Its history here stays intact.">
+                          <Badge
+                            variant="neutral"
+                            title={`This ${UNIT_COPY.SUPPLIER.toLowerCase()} has been removed from your ${UNIT_COPY.SUPPLIER.toLowerCase()} directory. Its history here stays intact.`}
+                          >
                             Deactivated
                           </Badge>
                         )}
@@ -210,16 +262,47 @@ export function VendorsTab({ product, canManage }: VendorsTabProps) {
                     <td className="px-4 py-3 text-neutral-700">
                       {vendor.vendorSku || <span className="text-neutral-400">—</span>}
                     </td>
+                    {/* Last cost — the stored per-stock-unit price on top, the pack price a
+                        buyer would recognise echoed under it. Two lines, both visible, neither on
+                        a `title`: hiding either behind a hover puts a number a decision depends on
+                        somewhere a decision cannot be made.
+
+                        THE TWO LINES SWAPPED. This column used to lead with the pack figure and
+                        echo the stock-unit one. `UNIT_UX_CONTRACT.md` §9.2 settles the order the
+                        other way: the stock-unit price is the stored, comparable figure — the
+                        whole reason the contract anchors cost there rather than to the pack the
+                        way Odoo and NetSuite do — and the pack price is the restatement that pays
+                        down the divide-by-eighty §9.2 admits that choice costs. Leading with the
+                        restatement made the comparable number the small grey one, and put this
+                        column in the opposite order from the "On hand from them" column two cells
+                        along, which has always led with the ledger's figure. */}
                     <td className="px-4 py-3">
-                      {cheapestTierPrice !== null ? (
-                        <span className="font-medium text-neutral-900">from {formatCurrency(cheapestTierPrice)}</span>
+                      {headlinePrice == null ? (
+                        <span className="text-neutral-400">{formatCurrency(null)}</span>
                       ) : (
-                        <span className={vendor.lastCostPrice != null ? 'font-medium text-neutral-900' : 'text-neutral-400'}>
-                          {formatCurrency(vendor.lastCostPrice)}
+                        <>
+                          <span className="font-medium text-neutral-900">
+                            {cheapestTierPrice != null && 'from '}
+                            {formatPricePer(headlinePrice, stockUnit)}
+                          </span>
+                          {headlinePackEcho && (
+                            <span className="mt-0.5 block text-xs text-neutral-500">{headlinePackEcho}</span>
+                          )}
+                        </>
+                      )}
+                    </td>
+                    {/* On hand from them — always in the product's stock unit, because that is
+                        what the server stores. The pack reading follows in parentheses where it
+                        exists: "1,000 kg (20 bags)" is the contract §6.3 shape, and the order
+                        matters — the ledger's figure first, the human's second. */}
+                    <td className="px-4 py-3 text-neutral-700">
+                      {formatQuantity(vendor.quantityOnHandFromVendor, stockUnit)}
+                      {packOption && vendor.quantityOnHandFromVendor > 0 && (
+                        <span className="ml-1 text-xs text-neutral-500">
+                          ({formatQuantityInUnit(fromBaseQuantity(vendor.quantityOnHandFromVendor, packOption), packOption)})
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-neutral-700">{vendor.quantityOnHandFromVendor}</td>
                     <td className="px-4 py-3">
                       {canManage ? (
                         <button
@@ -231,10 +314,10 @@ export function VendorsTab({ product, canManage }: VendorsTabProps) {
                           onClick={() => void handleSetPreferred(vendor)}
                           title={
                             vendor.isPreferred
-                              ? 'Preferred vendor — defaults into stock-in for this product'
+                              ? `Preferred ${UNIT_COPY.SUPPLIER.toLowerCase()} — defaults into stock-in for this product`
                               : !vendor.companyVendorActive
-                                ? "Deactivated vendors can't be made preferred"
-                                : 'Make this the preferred vendor'
+                                ? `Deactivated ${UNIT_COPY.SUPPLIERS.toLowerCase()} can't be made preferred`
+                                : `Make this the preferred ${UNIT_COPY.SUPPLIER.toLowerCase()}`
                           }
                           className={`inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed ${
                             vendor.isPreferred
@@ -242,10 +325,10 @@ export function VendorsTab({ product, canManage }: VendorsTabProps) {
                               : 'border-neutral-200 bg-white text-neutral-500 hover:border-neutral-300 hover:text-neutral-700 disabled:opacity-60 disabled:hover:border-neutral-200 disabled:hover:text-neutral-500'
                           }`}
                         >
-                          {vendor.isPreferred ? 'Preferred' : 'Make preferred'}
+                          {vendor.isPreferred ? UNIT_COPY.PREFERRED : 'Make preferred'}
                         </button>
                       ) : vendor.isPreferred ? (
-                        <Badge variant="info">Preferred</Badge>
+                        <Badge variant="info">{UNIT_COPY.PREFERRED}</Badge>
                       ) : (
                         <span className="text-neutral-400">—</span>
                       )}
@@ -275,33 +358,53 @@ export function VendorsTab({ product, canManage }: VendorsTabProps) {
 
                           {vendor.priceTiers.length === 0 ? (
                             <p className="mt-2 text-sm text-neutral-500">
-                              No price breaks for this vendor yet — they charge a flat rate regardless of quantity.
+                              No price breaks for this {UNIT_COPY.SUPPLIER.toLowerCase()} yet — they charge a flat
+                              rate regardless of quantity.
                             </p>
                           ) : (
                             <div className="mt-3 overflow-x-auto">
                               <table className="w-full text-sm">
                                 <thead className="text-left text-xs text-neutral-500 uppercase">
                                   <tr>
-                                    <th className="py-1.5 pr-4 font-medium">Min quantity</th>
-                                    <th className="py-1.5 pr-4 font-medium">Unit price</th>
+                                    <th className="py-1.5 pr-4 font-medium">From</th>
+                                    <th className="py-1.5 pr-4 font-medium">Price</th>
                                     <th className="py-1.5" />
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-neutral-200">
+                                  {/* Both columns were unitless, and the price column was worse
+                                      than unitless: `minQuantity` was stored in stock units while
+                                      `unitPrice` arrived per pack, so a row literally meant "at
+                                      500 kg, ₦44,000 per bag" (plan §3's P0-2). Both halves are
+                                      stored per stock unit now, and both are rendered in both
+                                      readings so the row can be checked against a supplier's own
+                                      quote without arithmetic. */}
                                   {vendor.priceTiers.map((tier) => (
                                     <tr key={tier.id}>
                                       <td className="py-1.5 pr-4 text-neutral-700">
-                                        {tier.minQuantity} {baseUnitLabel}+
+                                        {formatQuantity(tier.minQuantity, stockUnit)}+
+                                        {packOption && (
+                                          <span className="ml-1 text-xs text-neutral-500">
+                                            ({formatQuantityInUnit(fromBaseQuantity(tier.minQuantity, packOption), packOption)}+)
+                                          </span>
+                                        )}
                                       </td>
-                                      <td className="py-1.5 pr-4 font-medium text-neutral-900">
-                                        {formatCurrency(tier.unitPrice)}
+                                      <td className="py-1.5 pr-4">
+                                        <span className="font-medium text-neutral-900">
+                                          {formatPricePer(tier.unitPrice, stockUnit)}
+                                        </span>
+                                        {formatPackCostEcho(tier.unitPrice, packOption) && (
+                                          <span className="mt-0.5 block text-xs text-neutral-500">
+                                            {formatPackCostEcho(tier.unitPrice, packOption)}
+                                          </span>
+                                        )}
                                       </td>
-                                      <td className="py-1.5 text-right">
+                                      <td className="py-1.5 text-right align-top">
                                         {canManage && (
                                           <button
                                             type="button"
                                             onClick={() => setDeletingTier({ vendor, tier })}
-                                            aria-label={`Remove price break at ${tier.minQuantity} ${baseUnitLabel}`}
+                                            aria-label={`Remove the price break starting at ${formatQuantity(tier.minQuantity, stockUnit)}`}
                                             className="rounded-md p-1 text-neutral-400 hover:bg-danger-50 hover:text-danger-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-500"
                                           >
                                             <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
@@ -329,8 +432,12 @@ export function VendorsTab({ product, canManage }: VendorsTabProps) {
         <AddPriceTierModal
           productId={product.id}
           vendor={addingTierFor}
-          {...resolveTierUnit(addingTierFor, baseUnitLabel, unitOfMeasureOptions)}
-          baseUnitLabel={baseUnitLabel}
+          // The supplier-scoped unit set (contract §2.3): the product's stock unit, its own pack,
+          // this supplier's pack, and the same-category base units. The modal picks which of them
+          // the two fields are entered in and converts BOTH on save — it used to convert the
+          // quantity and not the price.
+          unitOptions={unitOptionsForSupplier(product, addingTierFor, unitOfMeasureOptions)}
+          stockUnit={stockUnit}
           onClose={() => setAddingTierFor(null)}
           onSuccess={(tier) => handleTierAdded(addingTierFor, tier)}
         />
@@ -341,7 +448,7 @@ export function VendorsTab({ product, canManage }: VendorsTabProps) {
         title="Remove price break"
         message={
           deletingTier
-            ? `Remove the ${deletingTier.tier.minQuantity} ${baseUnitLabel}+ price break for ${deletingTier.vendor.companyVendorName}? This vendor's cost will fall back to their flat rate.`
+            ? `Remove the ${formatQuantity(deletingTier.tier.minQuantity, stockUnit)}+ price break for ${deletingTier.vendor.companyVendorName}? Their cost will fall back to their flat rate.`
             : ''
         }
         confirmLabel="Remove"

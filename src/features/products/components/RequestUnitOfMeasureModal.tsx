@@ -54,7 +54,7 @@ export function RequestUnitOfMeasureModal({ onClose, onSuccess }: RequestUnitOfM
     <Modal
       open
       onClose={onClose}
-      title="Request a unit of measure"
+      title="Request a new unit"
       size="sm"
       footer={
         <>

@@ -30,7 +30,7 @@ export function useProductVendors(productId: string | undefined) {
         if (!cancelled) setData(response)
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(isAppError(err) ? err.message : 'Could not load vendors for this product.')
+        if (!cancelled) setError(isAppError(err) ? err.message : 'Could not load suppliers for this product.')
       })
       .finally(() => {
         if (!cancelled) setLoading(false)

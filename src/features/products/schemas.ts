@@ -1,27 +1,75 @@
 import { z } from 'zod'
 import type { InitialVendorPayload, ProductFormPayload, ProductUpdatePayload } from '@/features/products/types'
+import { UNIT_COPY } from '@/features/products/unitCopy'
 import type { VendorMarketplaceDetailsPayload } from '@/features/vendor/types'
 
-const packagingSizeRequiredMessage = 'Required when Packaged as is set'
-const packagingUnitRequiredMessage = 'Required when Pack size is set'
+/**
+ * Every message below is composed from `UNIT_COPY` rather than typed out, because a validation
+ * message is a user-facing surface like any other and `UNIT_UX_CONTRACT.md` §7.5 — *one name per
+ * concept* — does not stop at labels. These three in particular used to read "Packaged as" and
+ * "Pack size", §1's banned spellings, so a form whose field said **Pack** failed with an error
+ * about a field that was not on screen.
+ */
+const packagingSizeRequiredMessage = `Required when ${UNIT_COPY.PACK} is set`
+const packagingUnitRequiredMessage = `Required when ${UNIT_COPY.UNITS_PER_PACK} is set`
 /**
  * Mirrors the server's `PackagingRequiresUnitOfMeasureException`, in plainer end-user language:
  * a "Bag of 50" with no measurement unit is not a real fact — 50 what? Attached to `unitOfMeasure`
  * (the field that's missing), same pattern as the pairing rule below.
  */
-const unitOfMeasureRequiredForPackagingMessage = 'Required when Packaged as or Pack size is set'
+const unitOfMeasureRequiredForPackagingMessage = `Required when ${UNIT_COPY.PACK} or ${UNIT_COPY.UNITS_PER_PACK} is set`
+/** §1: `CompanyVendor` is a **Supplier** on every user-facing surface, errors included. */
+const supplierLower = UNIT_COPY.SUPPLIER.toLowerCase()
 
+/**
+ * `Number.isFinite` rather than `!Number.isNaN`: `Number('Infinity')` is not NaN and is `>= 0`,
+ * so the old test let "Infinity" through into a field that is then multiplied by a pack factor
+ * and rounded (`unitSet.toBaseQuantity`). Every quantity and price on this form is a real,
+ * bounded amount of something.
+ */
 function isNonNegativeNumber(value: string): boolean {
-  return value.length > 0 && !Number.isNaN(Number(value)) && Number(value) >= 0
+  return value.length > 0 && Number.isFinite(Number(value)) && Number(value) >= 0
 }
 
+/**
+ * The shape `UNIT_UX_CONTRACT.md` §9.1 requires of a quantity that counts packs.
+ *
+ * <h2>Why these fields are no longer whole numbers</h2>
+ * §9.1 is explicit: *"Decimals are accepted on both. Thirty kegs and a half-full one is a real
+ * shelf, and an integer count of packs cannot say it."* Once `opening_stock` and
+ * `low_stock_alert_at` count **packs** rather than stock units, an integer refinement is not a
+ * safety rail — it is a rule that forbids describing an ordinary shelf. The conversion to stock
+ * units still rounds, at §3.1's HALF_UP scale 0, on the way to the ledger; that rounding is the
+ * server's job and the client's preview, not a constraint on what may be typed.
+ *
+ * <h2>The regression this closes</h2>
+ * `ProductFormPage` converts a **stored** threshold back into packs when the form loads
+ * (`fromBaseQuantity`, deliberately not the inverse of `toBaseQuantity` — 1,010 kg against a
+ * 50 kg bag is 20.2 bags, and rounding that to 20 would invent 10 kg). Under the old
+ * `isNonNegativeInteger` that product could not be saved again at all: the form filled itself in
+ * with "20.2" and its own schema then refused it, so an existing product could not be edited
+ * without silently rounding its alert level. Non-negotiable 3's spirit — the number on screen and
+ * the number in the ledger are the same number — cannot hold if the number on screen is unsavable.
+ */
+function isPositiveNumber(value: string): boolean {
+  return isNonNegativeNumber(value) && Number(value) > 0
+}
+
+/**
+ * Still integer-only, and deliberately: the only field left using this is the stock ADJUSTMENT's
+ * `newQuantity`, which is a count in **stock units** and therefore whole by construction —
+ * §3.1 stores every base quantity rounded HALF_UP at scale 0, so "1,000.5 kg on hand" is not a
+ * state the ledger can hold. A pack count and a base-unit count are different things and this is
+ * the line between them; do not widen it without a reason from §9.1.
+ */
 function isNonNegativeInteger(value: string): boolean {
   return isNonNegativeNumber(value) && Number.isInteger(Number(value))
 }
 
-function isPositiveInteger(value: string): boolean {
-  return isNonNegativeInteger(value) && Number(value) > 0
-}
+/** §9.1's two error messages. Composed once so the pack-counting fields all fail the same way,
+ *  and so "Enter a whole number" — which is now simply untrue of them — cannot creep back in. */
+const nonNegativeQuantityMessage = 'Enter a number, 0 or greater'
+const positiveQuantityMessage = 'Enter a number greater than 0'
 
 export const productFormSchema = z
   .object({
@@ -65,10 +113,14 @@ export const productFormSchema = z
     // computes from actual purchases (see MULTI_VENDOR_INVENTORY_DESIGN.md §5.3), never a value
     // typed alongside the "First vendor" block's own per-unit cost for the same purchase. That
     // block's `initialVendorCost` below is the only place a cost is entered on this form.
+    // `UNIT_UX_CONTRACT.md` §9.4's `low_stock_alert_at` — labelled "Tell me when stock falls to".
+    // Counts PACKS whenever the row declares one and stock units when it does not (§9.1), which
+    // is why it is a plain number: see {@link isPositiveNumber} for the amendment and for the
+    // edit-an-existing-product regression the old integer rule caused.
     lowStockThreshold: z
       .string()
       .trim()
-      .refine((v) => v === '' || isNonNegativeInteger(v), 'Enter a whole number, 0 or greater'),
+      .refine((v) => v === '' || isNonNegativeNumber(v), nonNegativeQuantityMessage),
     // ---- "First vendor" (§7.1) — create-only, optional as a whole. A plain optional id with no
     // shape rule, same reasoning the old companyVendorId field used: the select only ever offers
     // ids the server just sent back, and the server re-resolves whatever arrives against the
@@ -81,12 +133,13 @@ export const productFormSchema = z
       .string()
       .trim()
       .refine((v) => v === '' || isNonNegativeNumber(v), 'Enter a valid non-negative cost'),
-    // The opening stock-in quantity for this vendor. Whole units, > 0 — a stock movement of zero
-    // isn't a movement.
+    // `opening_stock` (§9.4) — the opening stock-in quantity for this supplier. Counted in PACKS
+    // whenever the product declares one (§9.1), so decimals are accepted: "30.5 kegs" is a real
+    // opening shelf. Still > 0 — a stock movement of zero isn't a movement.
     initialVendorQuantity: z
       .string()
       .trim()
-      .refine((v) => v === '' || isPositiveInteger(v), 'Enter a whole number greater than 0'),
+      .refine((v) => v === '' || isPositiveNumber(v), positiveQuantityMessage),
   })
   // Mirrors the server's two packaging rules. Caught here, before the request, with each error
   // attached to whichever field is missing — the server's flat `{message}` bodies wouldn't know
@@ -121,13 +174,21 @@ export const productFormSchema = z
     const hasInitialCost = values.initialVendorCost.length > 0
     const hasInitialQuantity = values.initialVendorQuantity.length > 0
     if (hasInitialVendor && !hasInitialCost) {
-      ctx.addIssue({ code: 'custom', path: ['initialVendorCost'], message: 'Required when a vendor is selected' })
+      ctx.addIssue({ code: 'custom', path: ['initialVendorCost'], message: `Required when a ${supplierLower} is selected` })
     }
     if (hasInitialVendor && !hasInitialQuantity) {
-      ctx.addIssue({ code: 'custom', path: ['initialVendorQuantity'], message: 'Required when a vendor is selected' })
+      ctx.addIssue({
+        code: 'custom',
+        path: ['initialVendorQuantity'],
+        message: `Required when a ${supplierLower} is selected`,
+      })
     }
     if ((hasInitialCost || hasInitialQuantity) && !hasInitialVendor) {
-      ctx.addIssue({ code: 'custom', path: ['initialVendorId'], message: 'Select a vendor to record cost or quantity' })
+      ctx.addIssue({
+        code: 'custom',
+        path: ['initialVendorId'],
+        message: `Select a ${supplierLower} to record cost or quantity`,
+      })
     }
   })
 
@@ -142,6 +203,16 @@ export type ProductFormValues = z.infer<typeof productFormSchema>
  * <p>`unitPrice` is sent only when the caller typed one — omitted, not `0`, when blank. The
  * server enforces "required for a seller" itself; a buying company's blank value is correctly
  * silently discarded there.
+ *
+ * <h2>`lowStockThreshold` here is NOT ready to send — the caller must convert it</h2>
+ * `UNIT_UX_CONTRACT.md` §9.1: the form field counts **packs** whenever the product declares one.
+ * The wire field is, and stays, stock units. This function is a pure field-shaping mapper with no
+ * access to the product's unit set, so it can only pass the typed number through; `ProductFormPage`
+ * overwrites it with `toStockUnits(values.lowStockThreshold)` (§3.1's HALF_UP scale 0) immediately
+ * after spreading this result, and any future caller must do the same. The same applies to
+ * `initialVendor.quantity` in {@link toInitialVendorPayload}. Leaving the multiplication to the one
+ * component that holds the unit set beats threading the set through a schema module — but it is a
+ * seam, so it is written down here rather than left to be rediscovered.
  */
 export function toProductPayload(values: ProductFormValues): ProductFormPayload {
   return {
@@ -166,6 +237,10 @@ export function toProductPayload(values: ProductFormValues): ProductFormPayload 
  * <p>Create-only by convention, not by type: `ProductFormPage` never renders this section in
  * edit mode, so `values.initialVendorId` is always `''` there and this always returns
  * `undefined` on an update.
+ *
+ * <p>`quantity` is the typed number in the form's own unit — packs under §9.1 — and the caller
+ * converts it to stock units before sending, exactly as it does for `lowStockThreshold`. See
+ * {@link toProductPayload}.
  */
 export function toInitialVendorPayload(values: ProductFormValues): InitialVendorPayload | undefined {
   if (!values.initialVendorId) return undefined
@@ -238,23 +313,48 @@ export type RequestUnitOfMeasureFormValues = z.infer<typeof requestUnitOfMeasure
 
 const noteField = z.string().trim().max(1000, 'Must be 1000 characters or fewer')
 
+/**
+ * The quantity typed into either stock modal, in whatever unit the "Counted in" control says.
+ *
+ * Not a whole number, for the same reason §9.1 gives for the catalog's two quantities: the number
+ * being typed is usually a count of PACKS, and half a bag is an ordinary delivery. It is also what
+ * the rest of the contract already assumed — §3.1 computes `round(quantity × factorToStockUnit)`
+ * HALF_UP at scale 0 (a rounding that has nothing to do if the input is whole and the factor is an
+ * integer), and §3.3 stores what the human typed in `entered_quantity numeric(14,3)`, three
+ * decimals the old integer rule made unreachable.
+ *
+ * The ceiling is deliberately absent — see {@link stockOutSchema} — and so is any unit rule: the
+ * unit comes from the product's derived set, not from free text (see {@link makeStockInSchema}).
+ */
 const quantityField = z
   .string()
   .trim()
   .min(1, 'Quantity is required')
-  .refine((v) => v.length === 0 || isPositiveInteger(v), 'Enter a whole number greater than 0')
+  .refine((v) => v.length === 0 || isPositiveNumber(v), positiveQuantityMessage)
 
 /**
  * Stock-in's form schema. `vendorRequired` is threaded in rather than baked in statically
- * because whether a vendor must be picked depends on data fetched at runtime (does this product
- * already have a `ProductVendor` row, is the company vendor directory even non-empty) — see
- * `StockInModal`'s vendor-field logic, which mirrors §7.3 of the multi-vendor inventory design:
- * the user only ever picks a vendor when it's actually ambiguous or new.
+ * because whether a supplier must be picked depends on data fetched at runtime (does this product
+ * already have a `ProductVendor` row, is the company's supplier directory even non-empty) — see
+ * `StockInModal`'s supplier-field logic, which mirrors §7.3 of the multi-vendor inventory design:
+ * the user only ever picks a supplier when it's actually ambiguous or new.
  *
- * `packagingUnit`/`packagingSize` here are the ADVANCED "what was actually delivered differs
- * from the vendor's usual packaging" snapshot pair (design §5.2), not the simple base⟷packaging
- * unit toggle — that's tracked outside react-hook-form as plain `unit` state, since it's a
- * structurally-valid-by-construction toggle/select, not free text needing validation.
+ * <h2>The three fields behind "This delivery came in a different pack"</h2>
+ * `packagingUnit`/`packagingSize` are THIS delivery's pack — `UNIT_UX_CONTRACT.md` §3.1's
+ * per-request override, which extends the product's unit set for one request and is snapshotted
+ * onto the resulting `StockMovement`. `saveAsSupplierDefault` is §3.4's explicit opt-in for also
+ * writing that pack back to `ProductVendor` as the supplier's standing default. It is a boolean
+ * rather than a string because it is a checkbox with no invalid state, and it lives in the schema
+ * rather than in component state so that the pack and the decision about the pack are read back
+ * from one place — plan §3's P0-5 was precisely those two facts drifting apart, the UI promising
+ * a default was untouched while the request rewrote it.
+ *
+ * The unit a quantity is COUNTED IN is deliberately not here: it is chosen from the product's
+ * derived unit set (§2), which is fetched data rather than free text, so a static schema has
+ * nothing to validate that the closed set does not already guarantee. `StockInModal` holds it as
+ * plain state and resolves it through `unitSet.findUnitOption`, which is the only check that
+ * means anything — §7.1's *no quantity field offers a unit with no conversion factor* holds
+ * structurally there, not by validation here.
  */
 export function makeStockInSchema(vendorRequired: boolean) {
   return z
@@ -267,19 +367,23 @@ export function makeStockInSchema(vendorRequired: boolean) {
         .string()
         .trim()
         .refine((v) => v === '' || isNonNegativeNumber(v), 'Enter a valid non-negative number'),
+      saveAsSupplierDefault: z.boolean(),
       note: noteField,
     })
     .superRefine((values, ctx) => {
       if (vendorRequired && values.companyVendorId.trim().length === 0) {
-        ctx.addIssue({ code: 'custom', path: ['companyVendorId'], message: 'Choose a vendor' })
+        ctx.addIssue({ code: 'custom', path: ['companyVendorId'], message: `Choose a ${supplierLower}` })
       }
+      // Both or neither — mirrors the server's `PackagingUnitAndSizeRequiredTogetherException`,
+      // and more immediately: a pack with no size is not a conversion, so `unitSet.buildPackOption`
+      // would return null and the toggle would silently gain no option at all.
       const hasPackagingUnit = values.packagingUnit.length > 0
       const hasPackagingSize = values.packagingSize.length > 0
       if (hasPackagingUnit && !hasPackagingSize) {
-        ctx.addIssue({ code: 'custom', path: ['packagingSize'], message: 'Required when packaging unit is set' })
+        ctx.addIssue({ code: 'custom', path: ['packagingSize'], message: packagingSizeRequiredMessage })
       }
       if (hasPackagingSize && !hasPackagingUnit) {
-        ctx.addIssue({ code: 'custom', path: ['packagingUnit'], message: 'Required when pack size is set' })
+        ctx.addIssue({ code: 'custom', path: ['packagingUnit'], message: packagingUnitRequiredMessage })
       }
     })
 }
@@ -287,10 +391,11 @@ export function makeStockInSchema(vendorRequired: boolean) {
 export type StockInFormValues = z.infer<ReturnType<typeof makeStockInSchema>>
 
 /**
- * Stock-out's form schema — deliberately just quantity and note. No vendor, no unit-validation
+ * Stock-out's form schema — deliberately just quantity and note. No supplier, no unit-validation
  * beyond "a positive whole number": per §6/§7.5 of the design, lot allocation is either left to
- * server-side FIFO (simple path) or built from real `StockMovement` rows in the advanced
- * disclosure, neither of which is a free-text field this schema needs to police. The available-
+ * server-side FIFO (simple path) or built against the open lots from
+ * `GET /api/products/{id}/lots` in the "Choose which deliveries this comes from" disclosure,
+ * neither of which is a free-text field this schema needs to police. The available-
  * quantity ceiling is intentionally NOT enforced here (unlike the old `makeStockQuantitySchema`)
  * because once the unit toggle lets someone enter "3 bags", checking against a base-unit
  * `currentQuantity` needs a live unit conversion this static schema has no access to — the
@@ -303,6 +408,14 @@ export const stockOutSchema = z.object({
 
 export type StockOutFormValues = z.infer<typeof stockOutSchema>
 
+/**
+ * Stock adjustment — a correction that SETS the on-hand figure rather than moving it.
+ *
+ * The one quantity on this feature that is still a whole number, and it stays one on purpose:
+ * `StockAdjustmentModal` has no "Counted in" control, so `newQuantity` is read directly as **stock
+ * units**, and §3.1 keeps every base quantity at HALF_UP scale 0. §9.1's decimals apply to counts
+ * of packs; this is not one. If this modal ever grows a unit toggle, this refinement moves with it.
+ */
 export const stockAdjustmentSchema = z.object({
   newQuantity: z
     .string()

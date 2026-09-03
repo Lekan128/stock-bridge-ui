@@ -117,7 +117,7 @@ export function VendorCataloguePage() {
               line should still be able to predict what happens when they edit something. */}
           <p className="mt-1.5 max-w-2xl text-xs text-neutral-500">
             Changing what a product <span className="font-medium text-neutral-700">is</span> — its name, SKU, brand,
-            description, photo or unit of measure — sends it back for a quick review before buyers can see it again.
+            description, photo, stock unit or pack — sends it back for a quick review before buyers can see it again.
             Price and stock updates go live straight away and never take a listing down.
           </p>
         </div>

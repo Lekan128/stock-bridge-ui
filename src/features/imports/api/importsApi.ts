@@ -1,6 +1,5 @@
 import type { AxiosProgressEvent } from 'axios'
 import { api } from '@/api/client'
-import { mockAdapter } from '@/features/imports/api/mockAdapter'
 import type {
   CommitPreview,
   ImportCellValue,
@@ -21,16 +20,6 @@ import { downloadBlob } from '@/utils/downloadBlob'
 
 const BASE = '/api/imports'
 
-/**
- * Development-only escape hatch back to M3's in-memory fixtures.
- *
- * Two conditions, both required. `import.meta.env.DEV` is replaced with a literal `false` at
- * build time, so a production bundle constant-folds this to `false` and Rollup drops
- * `mockAdapter` entirely — the fixtures never ship. The second condition means the mock is off
- * by default even in `npm run dev`: point `VITE_IMPORTS_MOCK=true` in `.env` at it deliberately
- * when you want to work on a screen without a backend, and the real API the rest of the time.
- */
-export const IMPORTS_MOCK_ENABLED = import.meta.env.DEV && import.meta.env.VITE_IMPORTS_MOCK === 'true'
 
 /**
  * Everything the import screens ask of a server, in the shape both the real client and M3's
@@ -238,7 +227,7 @@ const realBackend: ImportsBackend = {
   },
 }
 
-const backend: ImportsBackend = IMPORTS_MOCK_ENABLED ? mockAdapter : realBackend
+const backend: ImportsBackend = realBackend
 
 // ------------------------------------------------------- binary downloads
 
@@ -273,8 +262,16 @@ function stockInTemplateQuery(params: {
  * The one seam between the import screens and the server.
  *
  * Signatures are frozen by `BULK_IMPORT_CONTRACT.md` §7 and every path below is quoted from its
- * §3 table. `IMPORTS_MOCK_ENABLED` swaps the whole backend for M3's fixtures in development; the
- * screens cannot tell, and no component imports anything from `api/` except this object.
+ * §3 table. No component imports anything from `api/` except this object.
+ *
+ * <h2>There is no mock behind this any more, deliberately</h2>
+ * §7 originally required an in-memory `mockAdapter` here, because the screens were built in
+ * parallel with the server that serves them and had to run against something. That reason
+ * expired the moment the backend shipped, and the fixtures then cost more than they returned: a
+ * dev server left running with `VITE_IMPORTS_MOCK=true` served a hardcoded "All 38 rows look
+ * good." for a four-row file and committed nothing, and nothing on screen said so. A screen
+ * asserting something the system never did is the exact defect the unit/pack/price remediation
+ * existed to remove, so the fixtures went with it. Develop against the real API.
  */
 export const importsApi = {
   /** POST /api/imports (multipart: file, kind, mode) */

@@ -21,7 +21,7 @@ import { copy } from '@/features/imports/copy'
 import { useImportRows, type RowFilter } from '@/features/imports/hooks/useImportRows'
 import { useImportSession } from '@/features/imports/hooks/useImportSession'
 import { useRowMutations } from '@/features/imports/hooks/useRowMutations'
-import { visibleFields } from '@/features/imports/reviewColumns'
+import { hasStaleFieldKeys, visibleFields } from '@/features/imports/reviewColumns'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { Pagination } from '@/components/Pagination'
 import { isAppError } from '@/types/api'
@@ -190,6 +190,11 @@ export function ImportReviewPage() {
     !session.needsMapping && session.errorCount === 0 && session.warningCount === 0 && unresolvedCount === 0
   const canContinue = session.errorCount === 0 && !session.needsMapping
   const fields = showAllColumns ? session.fields : visibleFields(session.fields, rows)
+  // An upload that was already in review when `UNIT_UX_CONTRACT.md` §5.1/§5.2's column renames
+  // deployed holds the old keys in its stored rows, so every cell below comes back empty. It
+  // expires within two days and heals itself; what it must not do is heal itself silently, with
+  // a live Continue button under a grid of em-dashes. See `hasStaleFieldKeys`.
+  const stale = hasStaleFieldKeys(session.fields, rows)
 
   return (
     <ImportStepFrame step={1} title={copy.review.title(session.originalFilename)}>
@@ -229,6 +234,22 @@ export function ImportReviewPage() {
                     return ok
                   }}
                 />
+
+                {stale && (
+                  <div className="flex items-start gap-3 rounded-lg border border-warning-200 bg-warning-50 px-4 py-4">
+                    <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-warning-700" aria-hidden="true" />
+                    <div>
+                      <p className="text-sm font-semibold text-warning-800">{copy.review.staleTitle}</p>
+                      <p className="mt-1 text-sm text-warning-700">{copy.review.staleBody}</p>
+                      <Link
+                        to="/app/products/import"
+                        className="mt-2 inline-flex min-h-11 items-center rounded-md text-sm font-medium text-primary-700 underline underline-offset-2 hover:text-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 sm:min-h-0"
+                      >
+                        {copy.review.staleAction}
+                      </Link>
+                    </div>
+                  </div>
+                )}
 
                 {rowsError && <ErrorState variant="inline" message={rowsError} onRetry={refetchRows} />}
 
@@ -289,6 +310,7 @@ export function ImportReviewPage() {
 
                         <ReviewGrid
                           fields={fields}
+                          allFields={session.fields}
                           rows={rows}
                           isRowBusy={mutations.isRowBusy}
                           isValueBusy={mutations.isValueBusy}

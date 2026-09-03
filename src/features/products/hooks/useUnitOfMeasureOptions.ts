@@ -68,8 +68,10 @@ export function useUnitOfMeasureOptions() {
     }
   }, [])
 
-  const baseOptions = options.filter((option) => option.role === 'BASE')
-  const packagingOptions = options.filter((option) => option.role === 'PACKAGING')
+  // `canBeStockUnit`/`canBePack`, not `role`: COUNT units serve either, so a `role` filter would
+  // drop "Piece" from the pack picker. Falls back to `role` for a response predating those fields.
+  const baseOptions = options.filter((option) => option.canBeStockUnit ?? option.role === 'BASE')
+  const packagingOptions = options.filter((option) => option.canBePack ?? option.role === 'PACKAGING')
 
   return { options, baseOptions, packagingOptions, loading, error }
 }
