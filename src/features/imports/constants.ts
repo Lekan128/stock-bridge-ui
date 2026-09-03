@@ -11,6 +11,7 @@ export const MAX_FILE_BYTES = 10 * 1024 * 1024
 export const SESSION_TTL_HOURS = 48
 /** 200 sync vs 202 async on commit. Backend-side concern; here only to explain a wait. */
 export const ASYNC_ROW_THRESHOLD = 500
+/** Suppliers offered in a dropdown before it stops being a picker. Wire name kept; see §1. */
 export const VENDOR_DROPDOWN_CAP = 200
 export const GRID_PAGE_SIZE = 50
 
@@ -40,11 +41,12 @@ export const MOBILE_BREAKPOINT_QUERY = '(max-width: 767px)'
  * Base-role units offered by the inline "create this product" form (spec §6.7) when the
  * session's field descriptors cannot supply them.
  *
- * The stock-in template has no `unit_of_measure` column — its `unit` column mixes base and
- * packaging units and the descriptor gives no way to tell them apart — so a product created
- * inline during a stock-in has no descriptor to read a BASE-only list from. Flagged to M4/M5:
- * the clean fix is for `UnresolvedValue` of kind PRODUCT to carry the option list, at which
- * point this constant is deleted.
+ * The stock-in template has no `stock_unit` column at all — it has `counted_in`, which is a
+ * different question (which unit THIS row's number is in, `UNIT_UX_CONTRACT.md` §1) and whose
+ * descriptor options are the kind-wide fallback rather than a product's stock unit. So a product
+ * created inline during a stock-in has no descriptor to read a stock-unit list from.
+ * Flagged onward: the clean fix is for `UnresolvedValue` of kind PRODUCT to carry the option
+ * list, at which point this constant is deleted.
  *
  * Until then this list IS the dropdown — the descriptor lookup beside it can never answer for a
  * stock-in session, which is the only kind that asks a PRODUCT question at all. So it has to be

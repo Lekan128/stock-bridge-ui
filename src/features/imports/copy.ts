@@ -1,5 +1,6 @@
 import type { ImportFieldDescriptor, ImportKind, ImportMode } from '@/features/imports/types'
 import { MAX_FILE_BYTES, MAX_ROWS, SESSION_TTL_HOURS } from '@/features/imports/constants'
+import { UNIT_COPY } from '@/features/products/unitCopy'
 
 /**
  * Every user-facing string in the import flow, in one file.
@@ -7,14 +8,18 @@ import { MAX_FILE_BYTES, MAX_ROWS, SESSION_TTL_HOURS } from '@/features/imports/
  * It is centralised because the copy rules (spec §9.6) are the kind of discipline that decays
  * the moment strings live next to the markup:
  *
- *  1. A column name is never the subject of a sentence the user reads. `unit_of_measure` is a
- *     wire key; "Unit of measure" is a label; "Every product needs a unit of measure — what is
- *     Garri 25kg measured in?" is the sentence. `fieldLabel()` exists so no component is ever
- *     tempted to print the key.
+ *  1. A column name is never the subject of a sentence the user reads. `stock_unit` is a
+ *     wire key; "Stock unit" is a label; "We don't recognise “KGS” as a stock unit for Garri
+ *     25kg. Did you mean Kilogram (kg)?" is the sentence. `fieldLabel()` exists so no component
+ *     is ever tempted to print the key.
  *  2. No UUID is ever rendered. Anywhere. Not for a supplier, a product, a user, or an upload.
  *  3. Every bulk affordance says its count. "Fix all 12" beats "Fix all".
  *  4. The words "escrow", "session", "staging" and "batch" appear nowhere — not in a tooltip,
  *     not in an aria-label. `assertCopyIsClean()` below enforces this in development.
+ *  5. One name per concept. `UNIT_UX_CONTRACT.md` §1 locks the words for stock unit, pack, entry
+ *     unit and supplier, and §7.5 makes it an acceptance criterion rather than a preference — so
+ *     they are IMPORTED from `features/products/unitCopy`, never retyped, and the banned
+ *     spellings are checked here alongside the four words above.
  *
  * The word for an uploaded file in this UI is "upload" or "import", and the thing the user is
  * in the middle of is "this import" or "this file" — never the fourth banned word.
@@ -54,7 +59,7 @@ export function formatMegabytes(bytes: number): string {
 /**
  * The only sanctioned way to turn a field key into something a person reads.
  * Falls back to a de-underscored, sentence-cased key so an unknown field still never renders
- * as `unit_of_measure`.
+ * as `low_stock_alert_at`.
  */
 export function fieldLabel(fields: ImportFieldDescriptor[], key: string): string {
   const found = fields.find((field) => field.key === key)
@@ -135,7 +140,7 @@ export const copy = {
     dropzoneActive: 'Release to use this file',
     templateLead: 'First time?',
     templateLink: 'Download the template',
-    templateTail: '— it comes with your vendors and units already filled into dropdowns.',
+    templateTail: '— it comes with your suppliers and units already filled into dropdowns.',
     stockInTemplateLink: 'Download your stock sheet',
     stockInTemplateTail: '— your products are already on it, so you only fill in the quantities.',
     modeQuestion: 'If a product is already in your catalog:',
@@ -234,8 +239,43 @@ export const copy = {
     okBadge: 'Ready',
     bulkFix: (count: number, value: string) =>
       `Fix all ${formatCount(count)} "${value}" rows`,
+    /**
+     * The same affordance for a value not worth quoting.
+     *
+     * `UNIT_UX_CONTRACT.md` §5.1's warning — *"20 kg — did you mean 20 bags (1,000 kg)?"* — is
+     * grouped on a bare number, and `Fix all 12 "20" rows` reads like a rendering bug. Contract
+     * §8.3 requires the count and nothing more; quoting the value is a bonus that only pays when
+     * the value is recognisable, which is what makes "KGS" worth quoting and "20" not.
+     */
+    bulkFixRows: (count: number) => `Fix all ${formatCount(count)} rows`,
     bulkFixDone: (count: number) => `Fixed ${pluralRows(count)}.`,
     bulkFixNeedsValue: 'Pick a replacement first',
+    /**
+     * The hover/announced form of the `"= 2,000 kg"` line under a quantity cell.
+     *
+     * The visible string is server-composed and stays exactly as sent (`UNIT_UX_CONTRACT.md`
+     * §6.2). This wraps it in the sentence that says what it *means*, because "= 2,000 kg" alone
+     * is a fragment and a fragment is not enough for someone hearing the cell read out. The verb
+     * is future tense on purpose: nothing has been recorded yet, and the whole point of the
+     * review step is that it is the last moment before anything is.
+     */
+    baseQuantityTitle: (text: string) => `Your stock will go up by ${text.replace(/^=\s*/, '')}.`,
+    /**
+     * The announced form of the per-pack cost echo under a cost cell — `UNIT_UX_CONTRACT.md` §9.2.
+     *
+     * §9.2 anchors every stored cost to the STOCK unit (₦ per ml, never per keg) because that is
+     * the only figure comparable across suppliers whose packs differ — and it names the price of
+     * that choice in the same breath: an invoice reading "₦80,000 a bag" has to be divided by 80
+     * before it is typed. The echo is how that is paid down, so a misplaced factor of eighty is
+     * visible in the same glance as the number that caused it, rather than three screens later as
+     * a margin nobody can explain.
+     *
+     * The visible string comes from `features/products/unitCopy.formatPackCostEcho` and is
+     * rendered exactly as that returns it. This only wraps it in a sentence, for the same reason
+     * {@link baseQuantityTitle} does: "= ₦80,000.00 / bag" read out on its own, with no column
+     * header attached to it, is a fragment nobody can place.
+     */
+    packCostTitle: (text: string) => `That works out at ${text.replace(/^=\s*/, '')}.`,
     editFailed: "That change didn't save. We've put the old value back.",
     stockInLink: 'Record stock you received',
     noIssues: 'Nothing needs attention',
@@ -262,6 +302,26 @@ export const copy = {
       'Something went wrong part-way through, so nothing was imported and nothing in your catalog or your stock was changed. Upload the file again to try once more.',
     parsing: 'Reading your file…',
     parsingBody: 'This usually takes a few seconds.',
+
+    /**
+     * Shown when an in-progress review was parsed against the old column names.
+     *
+     * `UNIT_UX_CONTRACT.md` §5.2 renamed three stock-in columns and §5.1 renamed one on the
+     * catalog sheet. Every old spelling stays a permanent read alias, so a saved template still
+     * uploads correctly — but an upload that was already sitting in review when the change went
+     * out holds the old keys in its stored rows, and the grid asks for the new ones and gets
+     * nothing back. Every cell reads "—".
+     *
+     * It clears itself: an unfinished upload is kept for two days and then expires. What it must
+     * not do is clear itself quietly. A grid of empty cells under a live Continue button is an
+     * invitation to import a file nobody can see any more, which is a worse failure than the
+     * blank cells themselves — so this says what happened, says nothing was changed, and names
+     * the one action that fixes it.
+     */
+    staleTitle: 'This upload was checked against our older column names',
+    staleBody:
+      "We've since renamed a few columns, so the rows below can't be shown properly. Nothing has been imported and nothing in your catalog has changed. Upload the same file again and it will read correctly — your saved template still works, the old column names are still accepted.",
+    staleAction: 'Upload it again',
 
     /**
      * The grid's own furniture. It used to be inline in `ReviewGrid`, which put the copy most
@@ -293,9 +353,20 @@ export const copy = {
     createNew: 'Create new',
     createNewVendor: 'Add as a new supplier',
     createNewProduct: 'Create this product',
-    baseUnitLabel: (name: string) => `What is ${name} measured in?`,
-    baseUnitHint: 'We need this before we can record a delivery of it.',
-    baseUnitMissing: 'Pick what it is measured in first',
+    /**
+     * `UNIT_UX_CONTRACT.md` §1: `Product.unitOfMeasure` is called the **Stock unit**, and
+     * "measured in" is one of the spellings the table bans by name — it was the product form's
+     * word, "(base unit)" was the stock-in modal's, and this screen's was a third. The name comes
+     * from `UNIT_COPY` so there is one place to change it and one thing to grep for.
+     *
+     * Not phrased as "What is X counted in?" even though that reads more naturally: "Counted in"
+     * is the locked name for a *different* concept (which unit a typed number is in), and reusing
+     * it here would rebuild the exact collision §1 exists to prevent.
+     */
+    baseUnitLabel: (name: string) => `${UNIT_COPY.STOCK_UNIT} for ${name}`,
+    baseUnitHint:
+      'Everything we store for it is counted this way. We need it before we can record a delivery.',
+    baseUnitMissing: `Pick its ${UNIT_COPY.STOCK_UNIT.toLowerCase()} first`,
     leaveBlank: 'Leave blank',
     skipRows: (rows: number) =>
       rows === 1 ? 'Leave that row out' : `Leave those ${pluralRows(rows)} out`,
@@ -387,8 +458,53 @@ export const copy = {
  * Development-time guard for spec §9.6 / contract §8.6: the four words must appear nowhere in
  * the UI. Copy lives here, so checking here catches it. Functions are called with plausible
  * arguments so their output is checked too, not just the literals.
+ *
+ * The list also carries `UNIT_UX_CONTRACT.md` §1's banned spellings, which is what §7.5 means by
+ * "one name per concept, everywhere". `UNIT_UX_REMEDIATION_PLAN.md` §2 traced how the four
+ * vocabularies grew, and none of them was anybody's mistake — each author picked a reasonable
+ * word for a concept that had no agreed one. A grep that fires the moment a fifth reasonable word
+ * is typed is the cheapest thing that stops it happening a fifth time.
+ *
+ * "vendor" is here rather than "Vendor": the code name stays `vendor_name` on the wire and in
+ * `UnresolvedValueKind`, and neither of those is copy. Only strings in this module are checked,
+ * so a wire key can keep its name while the sentence about it says Supplier.
  */
-const BANNED = ['escrow', 'session', 'staging', 'batch'] as const
+const BANNED = [
+  'escrow',
+  'session',
+  'staging',
+  'batch',
+  // UNIT_UX_CONTRACT.md §1, in table order.
+  'measured in',
+  'base unit',
+  'unit of measure',
+  'uom',
+  'packaged as',
+  'delivered as',
+  'packaging',
+  'pack size',
+  'unit of entry',
+  'vendor',
+  'their sku',
+  'qty on hand',
+  /*
+   * §9.4's renames, added with the pack-anchored quantity model.
+   *
+   * `unit_of_measure`→`stock_unit`, `packaging_unit`→`pack`, `packaging_size`→`units_per_pack`,
+   * `low_stock_threshold`→`low_stock_alert_at`, and `opening_stock_counted_in` deleted outright.
+   * Every old spelling survives as a header read alias so a downloaded sheet still maps — but an
+   * alias is a parsing rule, not a name, and none of these may ever be said to a user again.
+   *
+   * They are listed because both spellings now exist in the codebase at once, which is precisely
+   * the condition under which the wrong one gets typed into a tooltip by somebody who saw it in a
+   * migration comment ten minutes earlier. `UNIT_UX_REMEDIATION_PLAN.md` §2 is the record of how
+   * four vocabularies grew this way, none of them anybody's mistake.
+   */
+  'quantity on hand',
+  'low stock threshold',
+  'counted in for opening stock',
+  'opening stock counted in',
+] as const
 
 function walk(value: unknown, path: string, report: (where: string, text: string) => void): void {
   if (typeof value === 'string') {

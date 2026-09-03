@@ -47,10 +47,12 @@ function initialSelection(value: UnresolvedValue): ValueResolution | null {
 }
 
 /**
- * Creating a product inline needs its base unit as well as its name (spec §6.7: "the minimum —
- * name and base unit of measure"). Without it the product exists but cannot be stocked into, so
- * the very row that triggered the creation would fail on the next validation pass. Creating a
- * *vendor* stays name-only, which is all a supplier record needs.
+ * Creating a product inline needs its stock unit as well as its name (spec §6.7 asks for "the
+ * minimum" — the name and the unit everything about the product is counted in; §1 of
+ * `UNIT_UX_CONTRACT.md` renamed the concept, and the spec's older spelling is not repeated here).
+ * Without it the product exists but cannot be stocked into, so the very row that triggered the
+ * creation would fail on the next validation pass. Creating a *supplier* stays name-only, which
+ * is all a supplier record needs.
  */
 function needsBaseUnit(value: UnresolvedValue, selection: ValueResolution | null): boolean {
   return value.kind === 'PRODUCT' && selection?.kind === 'CREATE_NEW'
@@ -65,9 +67,18 @@ function isSelectionComplete(value: UnresolvedValue, selection: ValueResolution 
   return true
 }
 
-/** The BASE-role units to offer. Descriptor first; the constant only when it cannot answer. */
+/**
+ * The stock units to offer. Descriptor first; the constant only when it cannot answer.
+ *
+ * `stock_unit` is the key since `UNIT_UX_CONTRACT.md` §9.4 (it was `unit_of_measure`, which stays
+ * a header read alias but is not a field key any descriptor sends any more). In practice the
+ * lookup misses either way and `FALLBACK_BASE_UNITS` answers: a PRODUCT question is only ever
+ * asked by a STOCK_IN session, and the stock-in sheet has no stock-unit column to describe. It is
+ * still asked for rather than skipped, because the day that changes the descriptor is the better
+ * answer — it is the tenant's own list rather than a constant that has to be kept in step.
+ */
 function baseUnitOptions(session: ImportSession): readonly ImportFieldOption[] {
-  return session.fields.find((field) => field.key === 'unit_of_measure')?.options ?? FALLBACK_BASE_UNITS
+  return session.fields.find((field) => field.key === 'stock_unit')?.options ?? FALLBACK_BASE_UNITS
 }
 
 function describe(

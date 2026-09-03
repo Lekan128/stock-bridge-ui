@@ -1,3 +1,4 @@
+import { packPhrase, stockUnitSymbol } from '@/features/products/unitCopy'
 import { formatNaira } from '@/utils/money'
 
 const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
@@ -28,9 +29,18 @@ export function formatDateTime(value: string): string {
  *
  * Three shapes, depending on what is present:
  * - Packaging present (`packagingLabel` and `packagingSize` both given): `"Bag of 50 kg"` —
- *   `"<packagingLabel> of <packagingSize> <baseLabel>"`. If `baseLabel` is missing (should not
- *   happen given the server's pairing rule, but the formatter does not assume it), falls back to
- *   `"Bag of 50"`.
+ *   `"<packagingLabel> of <packagingSize> <short symbol of baseLabel>"`. If `baseLabel` is missing
+ *   (should not happen given the server's pairing rule, but the formatter does not assume it),
+ *   falls back to `"Bag of 50"`.
+ *
+ *   The SHORT symbol, not the full label, because this branch is `UNIT_UX_CONTRACT.md` §1's Pack
+ *   phrase and §1 fixes its rendering at `"Bag of 50 kg"`. The code used to interpolate the full
+ *   label here and print `"Bag of 50 Kilogram (kg)"` — contradicting this doc comment and §1
+ *   alike. It now delegates the whole phrase to `unitCopy.packPhrase` rather than rebuilding it
+ *   from a symbol: a second implementation of a contract-locked string is how a locked string
+ *   stops being locked, and this one had already drifted once. The visible consequence is that a
+ *   four-digit pack size is now grouped (`"Carton of 1,000 pieces"`), which is what every other
+ *   quantity in the app does.
  * - Base unit alone, no packaging: just the base label, e.g. `"Kilogram (kg)"`. A bare count with
  *   no base label (e.g. `packagingSize` set but nothing else resolved) renders as the number alone.
  * - Neither present: `''`.
@@ -46,7 +56,14 @@ export function formatUnitOfMeasure(
   const hasSize = packagingSize != null && !Number.isNaN(packagingSize)
 
   if (packagingLabel && hasSize) {
-    return baseLabel ? `${packagingLabel} of ${packagingSize} ${baseLabel}` : `${packagingLabel} of ${packagingSize}`
+    if (baseLabel) {
+      // `?? ` covers the one case packPhrase declines that this formatter historically rendered:
+      // a pack size of zero or below. "Bag of 0 kg" is not a unit, but it is what is stored, and
+      // a detail row that silently prints nothing hides the misconfiguration instead of showing it.
+      return packPhrase(packagingLabel, packagingSize, stockUnitSymbol(baseLabel)) ??
+        `${packagingLabel} of ${packagingSize} ${stockUnitSymbol(baseLabel)}`
+    }
+    return `${packagingLabel} of ${packagingSize}`
   }
   if (packagingLabel) return baseLabel ? `${packagingLabel} (${baseLabel})` : packagingLabel
   if (baseLabel) return hasSize ? `${packagingSize} ${baseLabel}` : baseLabel
