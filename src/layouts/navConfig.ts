@@ -115,7 +115,7 @@ export const NAV_GROUPS: NavGroup[] = [
       // maintaining it (finance and inventory both need it), and the page hides its own add/edit
       // controls behind MANAGE_VENDORS. A STOREKEEPER holds neither code, so this entry does not
       // render for them at all, which is the intent: prices and spend are not their business.
-      { path: '/app/vendors', label: 'Vendors', icon: Contact, requiredPermission: PERMISSIONS.VIEW_VENDORS },
+      { path: '/app/vendors', label: 'Suppliers', icon: Contact, requiredPermission: PERMISSIONS.VIEW_VENDORS },
     ],
   },
   {

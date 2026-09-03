@@ -36,12 +36,12 @@ export function VendorDetailPage() {
   if (error || !detail) {
     return (
       <ErrorState
-        title="Could not load this vendor"
+        title="Could not load this supplier"
         message={error}
         onRetry={refetch}
         action={
           <Link to="/app/vendors" className={buttonClassName('secondary')}>
-            Back to vendors
+            Back to suppliers
           </Link>
         }
       />

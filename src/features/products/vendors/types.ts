@@ -10,6 +10,7 @@
  * snapshot alongside the id" pattern `Product.companyVendorName` used to follow before this
  * feature replaced it.
  */
+import type { UnitOption } from '@/features/products/types'
 import type { VendorKind } from '@/features/vendors/types'
 
 /**
@@ -22,7 +23,17 @@ import type { VendorKind } from '@/features/vendors/types'
  */
 export interface ProductVendorPriceTier {
   id: string
+  /** Always in the product's STOCK unit — never a pack. §5.1a. */
   minQuantity: number
+  /**
+   * Always **per stock unit** — `UNIT_UX_CONTRACT.md` §3.2, and the fix for plan §3's P0-2.
+   *
+   * It used to be neither: `AddPriceTierModal` converted `minQuantity` into stock units and sent
+   * `unitPrice` straight through from a field labelled "per bag", so a stored row meant "at
+   * 500 kg, ₦44,000 per bag" — an internally mixed-unit record that `cheaperVendorHint` then
+   * compared against a stock-in price of a third, unknown basis. Both halves are converted now,
+   * and every render of this number states what it is per.
+   */
   unitPrice: number
 }
 
@@ -49,7 +60,10 @@ export interface ProductVendor {
    */
   lastCostPrice: number | null
   /** Prefills the stock-in form and the price-tier form's unit for this vendor. Both nullable — a
-   *  vendor with no configured packaging is priced/counted in the product's base unit directly. */
+   *  vendor with no configured packaging is priced/counted in the product's base unit directly.
+   *
+   *  A per-delivery pack override must NEVER write itself back here without an explicit opt-in on
+   *  the same screen (`UNIT_UX_CONTRACT.md` §3.4 / §7.7, closing plan §3's P0-5). */
   defaultPackagingUnit: string | null
   defaultPackagingSize: number | null
   /**
@@ -66,6 +80,16 @@ export interface ProductVendor {
   totalQuantityReceived: number
   /** Collapsed by default in the UI — most vendors have none. See `ProductVendorPriceTier`. */
   priceTiers: ProductVendorPriceTier[]
+  /**
+   * This supplier's unit set — `UNIT_UX_CONTRACT.md` §2.3. Same list as
+   * `Product.unitOptions` plus §2.1 step 3, THIS supplier's own default pack. Used by the
+   * stock-in form once a supplier is chosen, so "counted in" offers the pack they actually
+   * deliver in rather than only the product's own.
+   *
+   * Optional for the same two reasons as `Product.unitOptions`: the API omits null fields, and
+   * `unitSet.unitOptionsForSupplier` derives an equivalent set locally when it is absent.
+   */
+  unitOptions?: UnitOption[]
   createdAt: string
   updatedAt: string
 }
@@ -82,10 +106,19 @@ export interface ProductVendorUpdatePayload {
   isPreferred?: boolean
 }
 
-/** `POST .../price-tiers` body. `minQuantity` must already be converted to the product's base
- *  unit before this is sent — see `AddPriceTierModal`, which does that conversion at submit time
- *  so the form itself can stay in whatever unit the vendor's packaging is configured in. */
+/**
+ * `POST .../price-tiers` body. **Both** numbers must already be converted into the product's
+ * stock unit before this is sent — `minQuantity` multiplied by the entry unit's factor,
+ * `unitPrice` DIVIDED by it (`UNIT_UX_CONTRACT.md` §3.1 and §3.2).
+ *
+ * The asymmetry is the whole reason this comment exists: converting only the quantity, which is
+ * what shipped, produces a row that means "at 500 kg, ₦44,000 per bag". `AddPriceTierModal` does
+ * both conversions at submit time and shows both previews while the form is being filled, so the
+ * form itself can stay in whatever unit the supplier is easiest to think about.
+ */
 export interface PriceTierPayload {
+  /** In the product's stock unit. */
   minQuantity: number
+  /** Per the product's stock unit — never per pack. */
   unitPrice: number
 }
