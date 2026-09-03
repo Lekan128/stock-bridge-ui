@@ -378,6 +378,66 @@ export function formatPackCostEcho(
 }
 
 /**
+ * The click/tap-revealed breakdown behind the quantity echo — `(45, basketOf30kg, "kg", "= 1,350
+ * kg")` → `"45 baskets × 30 kg per basket = 1,350 kg"`.
+ *
+ * <h2>Why this exists</h2>
+ * A mango row reading **45** beside **"= 1,350 kg"** is only checkable by someone who already
+ * knows a basket holds 30 kg — and the row's own pack cells that state 30 are usually off screen
+ * (`reviewColumns.visibleFields` hides them unless flagged). This spells the multiplication out
+ * for whoever asks, behind a click/tap/keyboard-focus toggle rather than hover: hover must never
+ * be the only way to reach content that matters, since touch has no hover at all and a hover
+ * popover inside a horizontally-scrolling grid tends to cover the very cell it explains. See
+ * `CalculationDisclosure`, the toggle this feeds.
+ *
+ * <h2>No new arithmetic</h2>
+ * This file's header reserves multiplication for one documented exception ({@link
+ * formatPackCostEcho}). This is not a second one — `baseQuantityText` is taken verbatim and only
+ * has its leading `=` stripped, exactly as `copy.review.baseQuantityTitle` already does, so the
+ * total shown is still entirely the server's own number.
+ *
+ * Returns null in the same cases the quantity echo itself has nothing to say: no pack, the pack
+ * IS the stock unit, an unusable factor, no quantity, or no base text to append.
+ */
+export function quantityCalculationSentence(
+  enteredQuantity: number | null | undefined,
+  packOption: UnitOption | null | undefined,
+  stockUnitLabel: string,
+  baseQuantityText: string | null | undefined,
+): string | null {
+  if (packOption == null || packOption.isStockUnit) return null
+  if (enteredQuantity == null || !Number.isFinite(enteredQuantity) || enteredQuantity <= 0) return null
+  if (baseQuantityText == null || baseQuantityText === '') return null
+  const factor = packOption.factorToStockUnit
+  if (!Number.isFinite(factor) || factor <= 0) return null
+  return `${formatQuantityInUnit(enteredQuantity, packOption)} × ${formatNumber(factor)} ${stockUnitLabel} per ${unitNoun(packOption)} = ${baseQuantityText.replace(/^=\s*/, '')}`
+}
+
+/**
+ * The click/tap-revealed breakdown behind {@link formatStockUnitCostEcho} — `(78000,
+ * basketOf30kg, "kg")` → `"₦78,000.00 ÷ 30 = ₦2,600.00 / kg stored"`.
+ *
+ * Same reasoning as {@link quantityCalculationSentence}, for the other half of §9.2's pair: the
+ * division that turns an invoice's "₦78,000 a basket" into the stored "₦2,600.00 / kg" is not
+ * obvious to someone who cannot see the row's own pack cells. Delegates to {@link
+ * formatStockUnitCostEcho} for the total rather than dividing a second time, so the two can never
+ * disagree.
+ */
+export function costCalculationSentence(
+  pricePerPack: number | null | undefined,
+  packOption: UnitOption | null | undefined,
+  stockUnitLabel: string,
+): string | null {
+  if (packOption == null || packOption.isStockUnit) return null
+  if (pricePerPack == null || !Number.isFinite(pricePerPack) || pricePerPack <= 0) return null
+  const factor = packOption.factorToStockUnit
+  if (!Number.isFinite(factor) || factor <= 0) return null
+  const echo = formatStockUnitCostEcho(pricePerPack, packOption, stockUnitLabel)
+  if (echo == null) return null
+  return `${formatNaira(pricePerPack)} ÷ ${formatNumber(factor)} = ${echo}`
+}
+
+/**
  * The price twin of {@link formatQuantityEcho} — `"= ₦900.00 / kg"`.
  *
  * Every restatement of a price in another unit opens with the same two characters, and this is

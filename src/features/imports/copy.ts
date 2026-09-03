@@ -276,6 +276,15 @@ export const copy = {
      * header attached to it, is a fragment nobody can place.
      */
     packCostTitle: (text: string) => `That works out at ${text.replace(/^=\s*/, '')}.`,
+    /**
+     * The click/tap/keyboard-focus toggle beside the quantity and cost echoes — never hover.
+     * Hover is not reachable on touch, and a hover popover inside this grid's horizontal scroll
+     * tends to cover the very cell it explains. `aria-expanded` on the button already tells a
+     * screen reader whether it is open; the label changes too, since a sighted reader scanning
+     * the grid should not have to check an icon's rotation to know which state they're looking
+     * at.
+     */
+    calculationToggle: (open: boolean) => (open ? 'Hide the working' : 'Show the working'),
     editFailed: "That change didn't save. We've put the old value back.",
     stockInLink: 'Record stock you received',
     noIssues: 'Nothing needs attention',
