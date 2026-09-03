@@ -1,10 +1,12 @@
 import { useId, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, CircleAlert, Info } from 'lucide-react'
+import { CalculationDisclosure } from '@/features/imports/components/CalculationDisclosure'
 import { CellEditor } from '@/features/imports/components/CellEditor'
 import { PackCostEcho } from '@/features/imports/components/PackCostEcho'
 import { copy } from '@/features/imports/copy'
 import { isCostPerStockUnitField, numericCellValue } from '@/features/imports/reviewColumns'
+import { costCalculationSentence } from '@/features/products/unitCopy'
 import type {
   ImportCellValue,
   ImportFieldDescriptor,
@@ -167,14 +169,24 @@ export function CellFix({
               }}
             />
             {stacked && isCostPerStockUnitField(field) && (
-              <PackCostEcho
-                className="mt-1"
-                pricePerPack={numericCellValue(
-                  draftValue === undefined ? (row.normalized[column] ?? null) : draftValue,
-                )}
-                stockUnitLabel={stockUnitLabel}
-                packOption={packOption}
-              />
+              <>
+                <PackCostEcho
+                  className="mt-1"
+                  pricePerPack={numericCellValue(
+                    draftValue === undefined ? (row.normalized[column] ?? null) : draftValue,
+                  )}
+                  stockUnitLabel={stockUnitLabel}
+                  packOption={packOption}
+                />
+                <CalculationDisclosure
+                  className="mt-0.5"
+                  sentence={costCalculationSentence(
+                    numericCellValue(draftValue === undefined ? (row.normalized[column] ?? null) : draftValue),
+                    packOption,
+                    stockUnitLabel,
+                  )}
+                />
+              </>
             )}
           </div>
 

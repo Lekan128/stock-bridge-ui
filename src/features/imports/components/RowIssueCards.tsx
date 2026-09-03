@@ -1,13 +1,17 @@
 import { CircleSlash, CornerDownRight, Info, TriangleAlert } from 'lucide-react'
 import { Badge } from '@/components/Badge'
+import { CalculationDisclosure } from '@/features/imports/components/CalculationDisclosure'
 import { CellFix } from '@/features/imports/components/CellFix'
 import { copy } from '@/features/imports/copy'
 import {
   issuesWithoutColumn,
+  numericCellValue,
+  quantityAnchorKey,
   rowFieldOptions,
   rowPackOption,
   rowStockUnitSymbol,
 } from '@/features/imports/reviewColumns'
+import { quantityCalculationSentence } from '@/features/products/unitCopy'
 import type {
   ImportCellValue,
   ImportFieldDescriptor,
@@ -62,6 +66,12 @@ export function RowIssueCards({
         // declare the pack are always available to read the row against.
         const rowStockUnit = rowStockUnitSymbol(fields, row)
         const packOption = rowPackOption(fields, row)
+        // Same value the row-level conversion line above was built from, read directly since
+        // this card renders no cell of its own for the quantity column — `CalculationDisclosure`
+        // in `ReviewGrid` reads it off the cell it sits under instead.
+        const quantityKey = quantityAnchorKey(fields)
+        const enteredQuantity =
+          quantityKey == null ? null : numericCellValue(row.normalized[quantityKey] ?? row.raw[quantityKey])
 
         return (
           <li key={row.id} className="rounded-lg border border-neutral-200 bg-white p-4">
@@ -102,9 +112,15 @@ export function RowIssueCards({
               null — on every row that has nothing to convert.
             */}
             {row.baseQuantityText != null && row.baseQuantityText !== '' && (
-              <p className="mt-2 text-xs font-medium text-neutral-600 tabular-nums">
-                {copy.review.baseQuantityTitle(row.baseQuantityText)}
-              </p>
+              <>
+                <p className="mt-2 text-xs font-medium text-neutral-600 tabular-nums">
+                  {copy.review.baseQuantityTitle(row.baseQuantityText)}
+                </p>
+                <CalculationDisclosure
+                  className="mt-0.5"
+                  sentence={quantityCalculationSentence(enteredQuantity, packOption, rowStockUnit, row.baseQuantityText)}
+                />
+              </>
             )}
 
             <div className="mt-2 flex flex-col gap-2">
