@@ -408,3 +408,36 @@ export interface BulkUploadResponse {
   createdCount: number
   products: Product[]
 }
+
+export type SkuResetCadence = 'NEVER' | 'YEARLY' | 'MONTHLY'
+
+/**
+ * A tenant's automatic SKU generation config — GET/PUT `/api/products/sku-settings`.
+ *
+ * `pattern` is the single source of truth for both the Simple and Advanced tabs in {@link
+ * ProductSkuSettingsPage} — there is no separate stored "mode". A tenant that has never
+ * configured this feature gets the implicit default (`enabled: false, pattern: '', resetCadence:
+ * 'NEVER'`) rather than a 404 — see `ProductSkuSettingsService.get` on the backend.
+ */
+export interface ProductSkuSettings {
+  enabled: boolean
+  pattern: string
+  resetCadence: SkuResetCadence
+}
+
+export type UpdateProductSkuSettingsPayload = ProductSkuSettings
+
+/**
+ * A non-committing peek at the next SKU — GET `/api/products/sku-preview`. Never advances the
+ * real counter.
+ *
+ * `nextSequence` is the one part of this that only the server knows — the create-product form
+ * fetches it once per page load and re-renders `sku` locally (`renderSku`, `skuPattern.ts`) as
+ * the product name changes, rather than calling this endpoint on every keystroke: everything
+ * else the pattern needs (the pattern string itself, the current date) the client already has or
+ * can compute.
+ */
+export interface SkuPreview {
+  sku: string
+  nextSequence: number
+}

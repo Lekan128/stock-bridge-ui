@@ -18,6 +18,15 @@ export const PERMISSIONS = {
    */
   MANAGE_COMPANY_PROFILE: 'MANAGE_COMPANY_PROFILE',
 
+  /**
+   * Unlock and hand-edit a single product's SKU when automatic generation is on for the
+   * tenant — PUT /api/products/{id} (V23). Granted to OWNER and PROCUREMENT_MANAGER, the same
+   * two roles MANAGE_PRODUCTS goes to. Without it, a MANAGE_PRODUCTS holder can still create
+   * and edit products in every other way; the SKU field alone stays locked while auto-generation
+   * is on, and the server (not this flag) is what actually enforces that on PUT.
+   */
+  PRODUCT_SKU_OVERRIDE: 'PRODUCT_SKU_OVERRIDE',
+
   // Marketplace — buyer side (contract §4.11).
   BROWSE_MARKETPLACE: 'BROWSE_MARKETPLACE',
   PLACE_ORDERS: 'PLACE_ORDERS',
