@@ -1,4 +1,4 @@
-import { Download, FileSpreadsheet, Plus, Search, Upload } from 'lucide-react'
+import { Download, FileSpreadsheet, Plus, Search, Settings, Upload } from 'lucide-react'
 import { Button, buttonClassName } from '@/components/Button'
 import { BulkActionsMenu } from '@/features/products/components/BulkActionsMenu'
 import type { ProductStatusFilter } from '@/features/products/types'
@@ -19,6 +19,7 @@ export interface ProductsToolbarProps {
   onBulkUpload: () => void
   onDownloadTemplate: () => void
   onExport: () => void
+  onSkuSettings: () => void
 }
 
 const statusOptions: { value: ProductStatusFilter; label: string }[] = [
@@ -37,6 +38,7 @@ export function ProductsToolbar({
   onBulkUpload,
   onDownloadTemplate,
   onExport,
+  onSkuSettings,
 }: ProductsToolbarProps) {
   return (
     <div className="flex flex-col gap-3">
@@ -104,6 +106,14 @@ export function ProductsToolbar({
                   <FileSpreadsheet className="h-4 w-4" />
                   Download Template
                 </button>
+                <button
+                  type="button"
+                  onClick={onSkuSettings}
+                  className={buttonClassName('secondary')}
+                >
+                  <Settings className="h-4 w-4" />
+                  SKU Settings
+                </button>
               </>
             )}
             <button type="button" onClick={onExport} className={buttonClassName('secondary')}>
@@ -116,6 +126,7 @@ export function ProductsToolbar({
             onBulkUpload={onBulkUpload}
             onDownloadTemplate={onDownloadTemplate}
             onExport={onExport}
+            onSkuSettings={onSkuSettings}
           />
         </div>
       </div>

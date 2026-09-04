@@ -72,6 +72,11 @@ const LowStockProductsPage = lazy(() =>
     default: m.LowStockProductsPage,
   })),
 )
+const ProductSkuSettingsPage = lazy(() =>
+  import('@/pages/ProductSkuSettingsPage').then((m) => ({
+    default: m.ProductSkuSettingsPage,
+  })),
+)
 // The bulk import pipeline (chooser → upload → review → confirm → result). Five chunks of its
 // own rather than one: the review screen carries the grid and is by far the heaviest, and the
 // three screens either side of it are reached by users who may never open it.
@@ -409,6 +414,17 @@ export function AppRoutes() {
             element={
               <RequirePermission permission={PERMISSIONS.VIEW_PRODUCTS}>
                 <LowStockProductsPage />
+              </RequirePermission>
+            }
+          />
+          {/* Static segment, declared above products/:id for the same reason products/import is —
+            see that route's comment. Gated on MANAGE_PRODUCTS: configuring how SKUs get
+            generated is the same authority as creating/editing products, not a read concern. */}
+          <Route
+            path="products/sku-settings"
+            element={
+              <RequirePermission permission={PERMISSIONS.MANAGE_PRODUCTS}>
+                <ProductSkuSettingsPage />
               </RequirePermission>
             }
           />
