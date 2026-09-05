@@ -298,7 +298,7 @@ export function ImportReviewPage() {
                           void mutations.editCell(row, column, value).then(refresh)
                         }}
                         onConfirmPack={(row, packagingUnit, packagingSize) => {
-                          void mutations.confirmPack(row, packagingUnit, packagingSize)
+                          void mutations.confirmPack(row, packagingUnit, packagingSize).then(refresh)
                         }}
                         onBulkFix={(row, column, value, count) => {
                           void mutations
@@ -344,7 +344,7 @@ export function ImportReviewPage() {
                             void mutations.editCell(row, column, value).then(refresh)
                           }}
                           onConfirmPack={(row, packagingUnit, packagingSize) => {
-                            void mutations.confirmPack(row, packagingUnit, packagingSize)
+                            void mutations.confirmPack(row, packagingUnit, packagingSize).then(refresh)
                           }}
                           onBulkFix={(row, column, value, count) => {
                             void mutations
