@@ -39,6 +39,8 @@ interface ImportsBackend {
     params: { status?: ImportRowFilterStatus; page?: number; size?: number },
   ): Promise<Page<ImportRow>>
   patchRow(id: string, rowId: string, normalized: Record<string, ImportCellValue>): Promise<ImportRow>
+  /** MULTI_PACK_PER_VENDOR_DESIGN.md §6a's one-click "Confirm" on a candidate pack. */
+  confirmPack(id: string, rowId: string, packagingUnit: string, packagingSize: number): Promise<ImportRow>
   skipRow(id: string, rowId: string, skipped: boolean): Promise<ImportRow>
   patchMapping(id: string, columnMapping: Record<string, string | null>): Promise<ImportSession>
   resolveValue(id: string, body: ValueMappingRequest): Promise<ImportSession>
@@ -164,6 +166,12 @@ const realBackend: ImportsBackend = {
 
   patchRow(id, rowId, normalized) {
     return api.patch<ImportRow>(`${BASE}/${id}/rows/${rowId}`, { normalized }).then((r) => r.data)
+  },
+
+  confirmPack(id, rowId, packagingUnit, packagingSize) {
+    return api
+      .post<ImportRow>(`${BASE}/${id}/rows/${rowId}/confirm-pack`, { packagingUnit, packagingSize })
+      .then((r) => r.data)
   },
 
   skipRow(id, rowId, skipped) {
@@ -300,6 +308,12 @@ export const importsApi = {
   /** PATCH /api/imports/{id}/rows/{rowId} — returns the revalidated row, never a refetch. */
   patchRow(id: string, rowId: string, normalized: Record<string, unknown>): Promise<ImportRow> {
     return backend.patchRow(id, rowId, normalized as Record<string, ImportCellValue>)
+  },
+
+  /** POST /api/imports/{id}/rows/{rowId}/confirm-pack — MULTI_PACK_PER_VENDOR_DESIGN.md §6a's
+   *  one-click "Confirm" on a candidate pack; creates it and returns the revalidated row. */
+  confirmPack(id: string, rowId: string, packagingUnit: string, packagingSize: number): Promise<ImportRow> {
+    return backend.confirmPack(id, rowId, packagingUnit, packagingSize)
   },
 
   /** PATCH /api/imports/{id}/rows/{rowId}/skip */

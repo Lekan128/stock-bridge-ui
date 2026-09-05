@@ -18,14 +18,18 @@ import {
   roundsToZeroMessage,
   unitNoun,
 } from '@/features/products/unitCopy'
-import { convertsCleanly, defaultUnitOption, findUnitOption, toBasePrice, toBaseQuantity } from '@/features/products/unitSet'
+import { convertsCleanly, defaultUnitOption, toBasePrice, toBaseQuantity } from '@/features/products/unitSet'
 import { priceTierFormSchema, type PriceTierFormValues } from '@/features/products/vendors/schemas'
-import type { ProductVendor, ProductVendorPriceTier } from '@/features/products/vendors/types'
+import type { ProductVendor, ProductVendorPack, ProductVendorPriceTier } from '@/features/products/vendors/types'
 import { isAppError } from '@/types/api'
 
 export interface AddPriceTierModalProps {
   productId: string
   vendor: ProductVendor
+  /** The specific pack this price break belongs to (MULTI_PACK_PER_VENDOR_DESIGN.md section 4.3)
+   *  — a tier is a property of one priced offering, not of the vendor line as a whole, since a
+   *  vendor's 50 kg bags and 25 kg bags may earn independent quantity breaks. */
+  pack: ProductVendorPack
   /** This supplier's unit set (`UNIT_UX_CONTRACT.md` §2.3) — the closed list of units both fields
    *  may be entered in. Never a free list of unit codes; §7.1. */
   unitOptions: UnitOption[]
@@ -72,6 +76,7 @@ export interface AddPriceTierModalProps {
 export function AddPriceTierModal({
   productId,
   vendor,
+  pack,
   unitOptions,
   stockUnit,
   onClose,
@@ -80,19 +85,25 @@ export function AddPriceTierModal({
   const [formError, setFormError] = useState<string | null>(null)
 
   /**
-   * Defaults to the supplier's own pack when they have one, since that is the unit their quote
+   * Defaults to THIS pack when it names a real container, since that is the unit its own quote
    * will be written in — falling back to the set's own default (the product's pack, else the
-   * stock unit) per §2.1. `defaultUnitOption` never returns undefined, so there is no state where
-   * this form has no unit to convert against.
+   * stock unit) per §2.1 for the bare-stock-unit pack. `defaultUnitOption` never returns
+   * undefined, so there is no state where this form has no unit to convert against.
+   *
+   * Matched by LABEL, not `code` — a code can repeat within the set now that a vendor may have
+   * more than one pack sharing a container code (MULTI_PACK_PER_VENDOR_DESIGN.md sections 4–7);
+   * see `UnitToggle`'s own doc comment.
    */
   const [unitCode, setUnitCode] = useState<string>(
     () =>
-      (vendor.defaultPackagingUnit != null
-        ? unitOptions.find((option) => option.code === vendor.defaultPackagingUnit)
+      (pack.packagingUnit != null
+        ? unitOptions.find(
+            (option) => option.isPack && option.code === pack.packagingUnit && option.factorToStockUnit === pack.packagingSize,
+          )
         : undefined
-      )?.code ?? defaultUnitOption(unitOptions).code,
+      )?.label ?? defaultUnitOption(unitOptions).label,
   )
-  const entryOption = findUnitOption(unitOptions, unitCode) ?? defaultUnitOption(unitOptions)
+  const entryOption = unitOptions.find((option) => option.label === unitCode) ?? defaultUnitOption(unitOptions)
   const entryNoun = unitNoun(entryOption)
 
   const {
@@ -147,7 +158,7 @@ export function AddPriceTierModal({
       return
     }
     try {
-      const tier = await productVendorsApi.addPriceTier(productId, vendor.id, {
+      const tier = await productVendorsApi.addPriceTier(productId, vendor.id, pack.id, {
         // Both, together, always. Splitting these two lines apart is the defect.
         minQuantity: toBaseQuantity(quantity, entryOption),
         unitPrice: toBasePrice(price, entryOption),
@@ -162,7 +173,7 @@ export function AddPriceTierModal({
     <Modal
       open
       onClose={onClose}
-      title={`Add price break — ${vendor.companyVendorName}`}
+      title={`Add price break — ${vendor.companyVendorName} (${pack.label})`}
       size="sm"
       footer={
         <>
@@ -191,7 +202,7 @@ export function AddPriceTierModal({
             </span>
             <UnitToggle
               value={unitCode}
-              onChange={setUnitCode}
+              onChange={(option) => setUnitCode(option.label)}
               options={unitOptions}
               label={`${UNIT_COPY.COUNTED_IN} — the unit both numbers below are entered in`}
             />

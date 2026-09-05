@@ -59,6 +59,29 @@ export function useRowMutations(importId: string | undefined, callbacks: RowMuta
     [importId, applyRow, markBusy, showToast],
   )
 
+  /**
+   * MULTI_PACK_PER_VENDOR_DESIGN.md §6a's "Confirm" — not optimistic, unlike `editCell`: this
+   * creates a real `ProductVendorPack` server-side, and painting a guessed result before that
+   * write lands would risk showing a pack as confirmed that the server went on to reject (an
+   * unresolvable supplier, say). The short wait is the honest state.
+   */
+  const confirmPack = useCallback(
+    async (row: ImportRow, packagingUnit: string, packagingSize: number) => {
+      if (!importId) return
+      markBusy(row.id, true)
+      try {
+        const saved = await importsApi.confirmPack(importId, row.id, packagingUnit, packagingSize)
+        applyRow(saved)
+        showToast('Pack added.', 'success')
+      } catch (err: unknown) {
+        showToast(isAppError(err) ? err.message : 'Could not add that pack. Please try again.', 'error')
+      } finally {
+        markBusy(row.id, false)
+      }
+    },
+    [importId, applyRow, markBusy, showToast],
+  )
+
   const toggleSkip = useCallback(
     async (row: ImportRow, skipped: boolean) => {
       if (!importId) return
@@ -104,6 +127,7 @@ export function useRowMutations(importId: string | undefined, callbacks: RowMuta
 
   return {
     editCell,
+    confirmPack,
     toggleSkip,
     resolveValue,
     isRowBusy: (rowId: string) => busyRowIds.includes(rowId),
