@@ -10,6 +10,7 @@ import { useToast } from '@/components/useToast'
 import { importsApi } from '@/features/imports/api/importsApi'
 import { CleanFileSummary } from '@/features/imports/components/CleanFileSummary'
 import { ColumnMappingPanel } from '@/features/imports/components/ColumnMappingPanel'
+import { DiscardPacksDialog } from '@/features/imports/components/DiscardPacksDialog'
 import { ImportReviewSkeleton } from '@/features/imports/components/ImportSkeletons'
 import { ImportStepFrame } from '@/features/imports/components/ImportStepFrame'
 import { ReviewCounters } from '@/features/imports/components/ReviewCounters'
@@ -22,6 +23,7 @@ import { useImportRows, type RowFilter } from '@/features/imports/hooks/useImpor
 import { useImportSession } from '@/features/imports/hooks/useImportSession'
 import { useRowMutations } from '@/features/imports/hooks/useRowMutations'
 import { hasStaleFieldKeys, visibleFields } from '@/features/imports/reviewColumns'
+import type { ImportLinkedPack } from '@/features/imports/types'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { Pagination } from '@/components/Pagination'
 import { isAppError } from '@/types/api'
@@ -57,6 +59,8 @@ export function ImportReviewPage() {
   const [mappingError, setMappingError] = useState<string | null>(null)
   const [discarding, setDiscarding] = useState(false)
   const [discardOpen, setDiscardOpen] = useState(false)
+  const [checkingLinkedPacks, setCheckingLinkedPacks] = useState(false)
+  const [linkedPacks, setLinkedPacks] = useState<ImportLinkedPack[]>([])
 
   const {
     rows,
@@ -165,11 +169,30 @@ export function ImportReviewPage() {
     }
   }
 
-  async function handleDiscard() {
+  /**
+   * Looks up what discarding would take with it (MULTI_PACK_PER_VENDOR_DESIGN.md §6a's confirmed
+   * packs, which persist independently of this session) before opening the confirm dialog, so it
+   * can name them instead of the plain-discard copy claiming nothing will change. A failed lookup
+   * falls back to the plain dialog rather than blocking discard entirely over it.
+   */
+  async function openDiscardDialog() {
+    if (!sessionId) return
+    setCheckingLinkedPacks(true)
+    try {
+      setLinkedPacks(await importsApi.linkedPacks(sessionId))
+    } catch {
+      setLinkedPacks([])
+    } finally {
+      setCheckingLinkedPacks(false)
+      setDiscardOpen(true)
+    }
+  }
+
+  async function handleDiscard(removePackIds: string[] = []) {
     if (!sessionId) return
     setDiscarding(true)
     try {
-      await importsApi.discard(sessionId)
+      await importsApi.discard(sessionId, removePackIds)
       showToast(copy.review.discardedToast, 'info')
       navigate('/app/products/import', { replace: true })
     } catch (err: unknown) {
@@ -275,7 +298,7 @@ export function ImportReviewPage() {
                           void mutations.editCell(row, column, value).then(refresh)
                         }}
                         onConfirmPack={(row, packagingUnit, packagingSize) => {
-                          void mutations.confirmPack(row, packagingUnit, packagingSize)
+                          void mutations.confirmPack(row, packagingUnit, packagingSize).then(refresh)
                         }}
                         onBulkFix={(row, column, value, count) => {
                           void mutations
@@ -321,7 +344,7 @@ export function ImportReviewPage() {
                             void mutations.editCell(row, column, value).then(refresh)
                           }}
                           onConfirmPack={(row, packagingUnit, packagingSize) => {
-                            void mutations.confirmPack(row, packagingUnit, packagingSize)
+                            void mutations.confirmPack(row, packagingUnit, packagingSize).then(refresh)
                           }}
                           onBulkFix={(row, column, value, count) => {
                             void mutations
@@ -364,8 +387,9 @@ export function ImportReviewPage() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <button
                   type="button"
-                  onClick={() => setDiscardOpen(true)}
-                  className="inline-flex min-h-11 items-center rounded-md px-2 py-1.5 text-sm font-medium text-neutral-500 underline underline-offset-2 hover:text-danger-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 sm:min-h-0"
+                  disabled={checkingLinkedPacks}
+                  onClick={() => void openDiscardDialog()}
+                  className="inline-flex min-h-11 items-center rounded-md px-2 py-1.5 text-sm font-medium text-neutral-500 underline underline-offset-2 hover:text-danger-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:opacity-50 sm:min-h-0"
                 >
                   {copy.review.discard}
                 </button>
@@ -394,15 +418,25 @@ export function ImportReviewPage() {
         )}
       </div>
 
-      <ConfirmDialog
-        open={discardOpen}
-        title={copy.review.discardTitle}
-        message={copy.review.discardBody}
-        confirmLabel={copy.review.discardConfirm}
-        loading={discarding}
-        onConfirm={() => void handleDiscard()}
-        onCancel={() => setDiscardOpen(false)}
-      />
+      {linkedPacks.length > 0 ? (
+        <DiscardPacksDialog
+          open={discardOpen}
+          packs={linkedPacks}
+          loading={discarding}
+          onConfirm={(removePackIds) => void handleDiscard(removePackIds)}
+          onCancel={() => setDiscardOpen(false)}
+        />
+      ) : (
+        <ConfirmDialog
+          open={discardOpen}
+          title={copy.review.discardTitle}
+          message={copy.review.discardBody}
+          confirmLabel={copy.review.discardConfirm}
+          loading={discarding}
+          onConfirm={() => void handleDiscard()}
+          onCancel={() => setDiscardOpen(false)}
+        />
+      )}
     </ImportStepFrame>
   )
 }

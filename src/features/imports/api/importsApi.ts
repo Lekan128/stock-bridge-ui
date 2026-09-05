@@ -4,6 +4,7 @@ import type {
   CommitPreview,
   ImportCellValue,
   ImportKind,
+  ImportLinkedPack,
   ImportMode,
   ImportResult,
   ImportRow,
@@ -48,7 +49,9 @@ interface ImportsBackend {
   commit(id: string): Promise<ImportResult>
   result(id: string): Promise<ImportResult>
   undo(id: string): Promise<ImportResult>
-  discard(id: string): Promise<void>
+  /** What a discard would take with it — fetched before the confirm dialog opens. */
+  linkedPacks(id: string): Promise<ImportLinkedPack[]>
+  discard(id: string, removePackIds?: string[]): Promise<void>
   list(params: { kind?: ImportKind; page?: number; size?: number }): Promise<Page<ImportSessionSummary>>
 }
 
@@ -222,8 +225,16 @@ const realBackend: ImportsBackend = {
     throw error
   },
 
-  discard(id) {
-    return api.delete<void>(`${BASE}/${id}`).then(() => undefined)
+  linkedPacks(id) {
+    return api.get<ImportLinkedPack[]>(`${BASE}/${id}/linked-packs`).then((r) => r.data)
+  },
+
+  discard(id, removePackIds) {
+    return api
+      .delete<void>(`${BASE}/${id}`, {
+        params: removePackIds?.length ? { removePackIds: removePackIds.join(',') } : undefined,
+      })
+      .then(() => undefined)
   },
 
   list(params) {
@@ -346,9 +357,14 @@ export const importsApi = {
     return backend.undo(id)
   },
 
-  /** DELETE /api/imports/{id} */
-  discard(id: string): Promise<void> {
-    return backend.discard(id)
+  /** GET /api/imports/{id}/linked-packs — what a discard would take with it. */
+  linkedPacks(id: string): Promise<ImportLinkedPack[]> {
+    return backend.linkedPacks(id)
+  },
+
+  /** DELETE /api/imports/{id}?removePackIds=a,b — the ids come from {@link linkedPacks}. */
+  discard(id: string, removePackIds?: string[]): Promise<void> {
+    return backend.discard(id, removePackIds)
   },
 
   /** GET /api/imports?kind=&page=&size= */
