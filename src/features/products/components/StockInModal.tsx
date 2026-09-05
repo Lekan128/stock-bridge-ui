@@ -205,12 +205,15 @@ export function StockInModal({ product, onClose, onSuccess }: StockInModalProps)
   /** "This delivery came in a different pack" — the other named action. */
   const [packOverride, setPackOverride] = useState(false)
   /**
-   * The selected unit's `code`, or `null` for "not chosen yet".
+   * The selected option's `label`, or `null` for "not chosen yet" — NOT its `code`. A code is no
+   * longer unique within a set once a vendor can have more than one pack sharing a container code
+   * (MULTI_PACK_PER_VENDOR_DESIGN.md sections 4–7: "Bag of 25 kg" and "Bag of 50 kg" are both
+   * `BAG`); a label always is, by construction. See `UnitToggle`'s own doc comment.
    *
-   * `null` rather than `''` because `''` is a real code in §2.1's single-entry set (the product
+   * `null` rather than `''` because `''` is a real label in §2.1's single-entry set (the product
    * that never got a stock unit), and because the selection is resolved BACK through the live
    * option list on every render — see `selectedOption`. That makes an impossible selection
-   * self-healing: when the supplier changes, or the pack override is withdrawn, a code that is no
+   * self-healing: when the supplier changes, or the pack override is withdrawn, a label that is no
    * longer in the set simply falls back to the set's default instead of sitting there as a value
    * the server would 400 on.
    */
@@ -310,7 +313,7 @@ export function StockInModal({ product, onClose, onSuccess }: StockInModalProps)
    * second flag on `UnitOption`.
    */
   const selectedOption =
-    (unitCode == null ? undefined : unitOptions.find((option) => option.code === unitCode)) ?? defaultUnitOption(unitOptions)
+    (unitCode == null ? undefined : unitOptions.find((option) => option.label === unitCode)) ?? defaultUnitOption(unitOptions)
   const stockUnitText = stockUnitLabel(unitOptions)
 
   /**
@@ -336,14 +339,14 @@ export function StockInModal({ product, onClose, onSuccess }: StockInModalProps)
   // A completed pack override is selected the moment it exists. The user has just said, in as
   // many words, that this delivery came in it; leaving the toggle on kg would make them state the
   // same fact twice, and leaving it on the OLD pack ("Bag of 50 kg") after they typed 25 would be
-  // actively wrong. Keyed on the option's identity rather than on a boolean so that editing the
-  // size from 25 to 20 re-asserts the selection instead of only the first keystroke doing so.
-  const deliveryPackCode = deliveryPackOption?.code
-  const deliveryPackFactor = deliveryPackOption?.factorToStockUnit
+  // actively wrong. Keyed on the option's LABEL rather than on a boolean so that editing the size
+  // from 25 to 20 re-asserts the selection instead of only the first keystroke doing so — the
+  // label already changes whenever the container or the size does, so one dependency covers both.
+  const deliveryPackLabel = deliveryPackOption?.label
   useEffect(() => {
-    if (deliveryPackCode == null) return
-    setUnitCode(deliveryPackCode)
-  }, [deliveryPackCode, deliveryPackFactor])
+    if (deliveryPackLabel == null) return
+    setUnitCode(deliveryPackLabel)
+  }, [deliveryPackLabel])
 
   // ---------------------------------------------------------------- conversions (§3.1, §3.2)
   const baseQuantity = toBaseQuantity(quantityNumber, selectedOption)
@@ -470,10 +473,21 @@ export function StockInModal({ product, onClose, onSuccess }: StockInModalProps)
       // factor it multiplies the quantity by. Converting here as well would halve the price.
       unitPrice: values.unitPrice ? Number(values.unitPrice) : undefined,
       companyVendorId: values.companyVendorId || undefined,
-      packagingUnit: hasDeliveryPack ? values.packagingUnit : undefined,
-      packagingSize: hasDeliveryPack ? Number(values.packagingSize) : undefined,
+      // Sent whenever the RESOLVED option is a pack — not only for the manual override.
+      // MULTI_PACK_PER_VENDOR_DESIGN.md's grounding found this the moment a vendor could have
+      // more than one pack: `resolveEntry` only ever builds its set from the PRODUCT's own pack
+      // plus whatever concrete packagingUnit/packagingSize the request supplies, so picking a
+      // vendor's own configured pack from the toggle (not the override) used to send `unit` alone
+      // — silently resolving against the product's pack size instead of the vendor's chosen one
+      // whenever the two differ. `StockInRowHandler.packOverrideUnit`/`packOverrideSize` on the
+      // bulk-import path already derives the override from the resolved option's `isPack`, not
+      // from a manual flag, for the identical reason; this mirrors it.
+      packagingUnit: selectedOption.isPack ? selectedOption.code : undefined,
+      packagingSize: selectedOption.isPack ? selectedOption.factorToStockUnit : undefined,
       // Absent means false and false means "touch nothing" (§3.4) — so this is only ever sent as
-      // `true`, and only when there is a pack for it to be about.
+      // `true`, and only when the user explicitly asked, via the named override, for THIS
+      // delivery's pack to become the supplier's standing default — not merely because they
+      // picked one of the vendor's already-configured packs from the toggle.
       saveAsSupplierDefault: hasDeliveryPack && values.saveAsSupplierDefault ? true : undefined,
       note: values.note || undefined,
     }
@@ -580,8 +594,8 @@ export function StockInModal({ product, onClose, onSuccess }: StockInModalProps)
               </div>
               <div className="sm:pb-0.5">
                 <UnitToggle
-                  value={selectedOption.code}
-                  onChange={setUnitCode}
+                  value={selectedOption.label}
+                  onChange={(option) => setUnitCode(option.label)}
                   options={offeredUnits}
                   label={UNIT_COPY.COUNTED_IN}
                 />

@@ -25,6 +25,8 @@ export interface RowIssueCardsProps {
   isRowBusy: (rowId: string) => boolean
   isValueBusy: (column: string, from: string) => boolean
   onEdit: (row: ImportRow, column: string, value: ImportCellValue) => void
+  /** MULTI_PACK_PER_VENDOR_DESIGN.md §6a's one-click "Confirm" on a candidate pack. */
+  onConfirmPack: (row: ImportRow, packagingUnit: string, packagingSize: number) => void
   onBulkFix: (row: ImportRow, column: string, value: string, count: number) => void
   onToggleSkip: (row: ImportRow, skipped: boolean) => void
 }
@@ -50,6 +52,7 @@ export function RowIssueCards({
   isRowBusy,
   isValueBusy,
   onEdit,
+  onConfirmPack,
   onBulkFix,
   onToggleSkip,
 }: RowIssueCardsProps) {
@@ -145,6 +148,7 @@ export function RowIssueCards({
                     busy={busy}
                     bulkBusy={isValueBusy(column, String(row.raw[column] ?? ''))}
                     onEdit={(value) => onEdit(row, column, value)}
+                    onConfirmPack={(packagingUnit, packagingSize) => onConfirmPack(row, packagingUnit, packagingSize)}
                     onBulkFix={(value, count) => onBulkFix(row, column, value, count)}
                   />
                 )
@@ -166,6 +170,7 @@ export function RowIssueCards({
                     busy={busy}
                     bulkBusy={isValueBusy(column, String(row.raw[column] ?? ''))}
                     onEdit={(value) => onEdit(row, column, value)}
+                    onConfirmPack={(packagingUnit, packagingSize) => onConfirmPack(row, packagingUnit, packagingSize)}
                     onBulkFix={(value, count) => onBulkFix(row, column, value, count)}
                   />
                 )

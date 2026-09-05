@@ -42,6 +42,8 @@ export interface ReviewGridProps {
   isRowBusy: (rowId: string) => boolean
   isValueBusy: (column: string, from: string) => boolean
   onEdit: (row: ImportRow, column: string, value: ImportCellValue) => void
+  /** MULTI_PACK_PER_VENDOR_DESIGN.md §6a's one-click "Confirm" on a candidate pack. */
+  onConfirmPack: (row: ImportRow, packagingUnit: string, packagingSize: number) => void
   onBulkFix: (row: ImportRow, column: string, value: string, count: number) => void
   onToggleSkip: (row: ImportRow, skipped: boolean) => void
 }
@@ -72,6 +74,7 @@ interface GridCellProps {
   busy: boolean
   bulkBusy: boolean
   onEdit: (value: ImportCellValue) => void
+  onConfirmPack: (packagingUnit: string, packagingSize: number) => void
   onBulkFix: (value: string, count: number) => void
 }
 
@@ -85,6 +88,7 @@ function GridCell({
   busy,
   bulkBusy,
   onEdit,
+  onConfirmPack,
   onBulkFix,
 }: GridCellProps) {
   const [editing, setEditing] = useState(false)
@@ -282,6 +286,7 @@ function GridCell({
           busy={busy}
           bulkBusy={bulkBusy}
           onEdit={onEdit}
+          onConfirmPack={onConfirmPack}
           onBulkFix={onBulkFix}
         />
       )}
@@ -294,6 +299,7 @@ function GridCell({
           busy={busy}
           bulkBusy={bulkBusy}
           onEdit={onEdit}
+          onConfirmPack={onConfirmPack}
           onBulkFix={onBulkFix}
         />
       )}
@@ -319,6 +325,7 @@ export function ReviewGrid({
   isRowBusy,
   isValueBusy,
   onEdit,
+  onConfirmPack,
   onBulkFix,
   onToggleSkip,
 }: ReviewGridProps) {
@@ -423,6 +430,7 @@ export function ReviewGrid({
                     busy={busy}
                     bulkBusy={isValueBusy(field.key, String(row.raw[field.key] ?? ''))}
                     onEdit={(value) => onEdit(row, field.key, value)}
+                    onConfirmPack={(packagingUnit, packagingSize) => onConfirmPack(row, packagingUnit, packagingSize)}
                     onBulkFix={(value, count) => onBulkFix(row, field.key, value, count)}
                   />
                 ))}

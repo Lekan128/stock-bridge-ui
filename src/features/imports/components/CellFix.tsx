@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { ArrowRight, CircleAlert, Info } from 'lucide-react'
 import { CalculationDisclosure } from '@/features/imports/components/CalculationDisclosure'
 import { CellEditor } from '@/features/imports/components/CellEditor'
+import { ConfirmPackPopup } from '@/features/imports/components/ConfirmPackPopup'
 import { PackCostEcho } from '@/features/imports/components/PackCostEcho'
 import { copy } from '@/features/imports/copy'
 import { isCostPerStockUnitField, numericCellValue } from '@/features/imports/reviewColumns'
@@ -39,9 +40,32 @@ export interface CellFixProps {
   busy?: boolean
   bulkBusy?: boolean
   onEdit: (value: ImportCellValue) => void
+  /** MULTI_PACK_PER_VENDOR_DESIGN.md §6a's one-click "Confirm" on a candidate pack — see
+   *  {@link parseCandidatePackSuggestion}. Also what "Edit"'s {@link ConfirmPackPopup} calls once
+   *  its own fields are adjusted; the two buttons share this one call so there is exactly one path
+   *  to the `confirm-pack` endpoint regardless of which button was pressed. */
+  onConfirmPack: (packagingUnit: string, packagingSize: number) => void
   onBulkFix: (value: string, count: number) => void
   /** Compact enough for a phone card; the grid passes false. */
   stacked?: boolean
+}
+
+/**
+ * Recognises a {@code counted_in} suggestion as a parsed-but-unconfirmed pack rather than an
+ * ordinary "did you mean" guess (MULTI_PACK_PER_VENDOR_DESIGN.md §6a). The server's `RowIssue.code`
+ * never reaches the wire by design (see that class's own doc comment) so this cannot switch on it;
+ * instead it reads the one shape no ordinary unit suggestion has — `value` encoded as
+ * `"{packagingUnit}|{packagingSize}"`, which a bare unit code such as `"KG"` never contains.
+ */
+function parseCandidatePackSuggestion(
+  fieldKey: string,
+  suggestionValue: string | null | undefined,
+): { packagingUnit: string; packagingSize: number } | null {
+  if (fieldKey !== 'counted_in' || !suggestionValue || !suggestionValue.includes('|')) return null
+  const [packagingUnit, sizeText] = suggestionValue.split('|')
+  const packagingSize = Number(sizeText)
+  if (!packagingUnit || !Number.isFinite(packagingSize) || packagingSize <= 0) return null
+  return { packagingUnit, packagingSize }
 }
 
 /**
@@ -77,6 +101,7 @@ export function CellFix({
   busy = false,
   bulkBusy = false,
   onEdit,
+  onConfirmPack,
   onBulkFix,
   stacked = false,
 }: CellFixProps) {
@@ -85,6 +110,10 @@ export function CellFix({
   const issue = error ?? warning
   const suggestion = issue?.suggestion ?? null
   const [chosen, setChosen] = useState<string>(suggestion?.value ?? '')
+  const candidatePack = parseCandidatePackSuggestion(field.key, suggestion?.value)
+  // The lightweight view is the default for a candidate; "Edit" drops to the ordinary repair
+  // editor below, pre-filled, for the rare case the parse guessed wrong.
+  const [editingCandidate, setEditingCandidate] = useState(false)
   // What §9.2's echo is restating while the user types. `undefined` means "nothing typed yet",
   // distinct from a real null — see the same field on `ReviewGrid`'s `GridCell`.
   const [draftValue, setDraftValue] = useState<ImportCellValue | undefined>(undefined)
@@ -103,10 +132,14 @@ export function CellFix({
   const bulkCount = issue?.bulkFixCount ?? null
   const canBulkFix = repairable && bulkCount != null && bulkCount > 1 && rawText !== ''
 
-  const tone = error
-    ? 'border-danger-200 bg-danger-50 text-danger-700'
-    : 'border-warning-200 bg-warning-50 text-warning-700'
-  const Icon = error ? CircleAlert : Info
+  // A candidate pack reads as "worth a look, one click to accept" rather than "wrong" — same
+  // amber treatment a warning gets, even though it is structurally an error (it still blocks
+  // commit until acted on; see `parseCandidatePackSuggestion`'s own doc comment for why).
+  const tone =
+    error && !candidatePack
+      ? 'border-danger-200 bg-danger-50 text-danger-700'
+      : 'border-warning-200 bg-warning-50 text-warning-700'
+  const Icon = error && !candidatePack ? CircleAlert : Info
 
   // Non-negotiable §8.8: an update row's quantity is ignored, and it must say so out loud and
   // point at the tool that does move stock — never a silent drop. `opening_stock` is the column's
@@ -142,7 +175,46 @@ export function CellFix({
         </Link>
       )}
 
-      {repairable && !field.readOnly && (
+      {candidatePack && !editingCandidate && !field.readOnly && (
+        <div className={`mt-2 flex gap-2 ${stacked ? 'flex-col' : 'flex-wrap items-center'}`}>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onConfirmPack(candidatePack.packagingUnit, candidatePack.packagingSize)}
+            className={`inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-primary-200 bg-primary-50 px-2.5 py-1.5 text-xs font-medium text-primary-700 transition-colors hover:bg-primary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-60 ${
+              stacked ? 'min-h-11 w-full' : ''
+            }`}
+          >
+            Confirm
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setEditingCandidate(true)}
+            className={`inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-neutral-200 bg-white px-2.5 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-60 ${
+              stacked ? 'min-h-11 w-full' : ''
+            }`}
+          >
+            Edit
+          </button>
+        </div>
+      )}
+
+      {candidatePack && editingCandidate && (
+        <ConfirmPackPopup
+          rawText={rawText}
+          packagingUnit={candidatePack.packagingUnit}
+          packagingSize={candidatePack.packagingSize}
+          busy={busy}
+          onCancel={() => setEditingCandidate(false)}
+          onConfirm={(packagingUnit, packagingSize) => {
+            setEditingCandidate(false)
+            onConfirmPack(packagingUnit, packagingSize)
+          }}
+        />
+      )}
+
+      {repairable && !field.readOnly && !candidatePack && (
         <div className={`mt-2 flex gap-2 ${stacked ? 'flex-col' : 'flex-wrap items-center'}`}>
           <div className={stacked ? 'w-full' : 'min-w-40 flex-1'}>
             <CellEditor
