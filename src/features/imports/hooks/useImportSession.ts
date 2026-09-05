@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { importsApi } from '@/features/imports/api/importsApi'
 import type { ImportSession } from '@/features/imports/types'
 import { isAppError } from '@/types/api'
@@ -47,6 +47,13 @@ export function useImportSession(id: string | undefined) {
   const apply = useCallback((next: ImportSession) => setSession(next), [])
   const refetch = useCallback(() => setReloadToken((token) => token + 1), [])
 
+  // Fixing rows back-to-back (easy to do from the "All" view, where issues aren't grouped
+  // together) fires overlapping `refresh()` calls. Without a sequence guard, a slow response to
+  // an *earlier* fix can land after a faster response to a *later* one and overwrite it — pinning
+  // the counters, and the Continue gate, on a stale count forever with nothing left to re-trigger
+  // a refresh. Only the response to the most recently issued refresh is allowed to apply.
+  const refreshSeq = useRef(0)
+
   /**
    * Re-read the counters without blanking the screen.
    *
@@ -57,9 +64,12 @@ export function useImportSession(id: string | undefined) {
    */
   const refresh = useCallback(() => {
     if (!id) return
+    const seq = ++refreshSeq.current
     importsApi
       .get(id)
-      .then(setSession)
+      .then((response) => {
+        if (seq === refreshSeq.current) setSession(response)
+      })
       .catch(() => {
         /* the screen already has a usable record; a failed counter refresh is not worth a toast */
       })
