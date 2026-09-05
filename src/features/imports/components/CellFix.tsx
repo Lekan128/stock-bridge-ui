@@ -55,17 +55,24 @@ export interface CellFixProps {
  * ordinary "did you mean" guess (MULTI_PACK_PER_VENDOR_DESIGN.md §6a). The server's `RowIssue.code`
  * never reaches the wire by design (see that class's own doc comment) so this cannot switch on it;
  * instead it reads the one shape no ordinary unit suggestion has — `value` encoded as
- * `"{packagingUnit}|{packagingSize}"`, which a bare unit code such as `"KG"` never contains.
+ * `"{packagingUnit}|{packagingSize}|{recognized}"`, which a bare unit code such as `"KG"` never
+ * contains.
+ *
+ * `recognized` is `StockInRowHandler.CandidatePack`'s flag for whether the container word the
+ * person typed (if any) matched a real packaging unit — `false` for `"Cart of 90 kg"` ("Cart"
+ * isn't one of ours, so the generic "Pack" label is the system's guess standing in for what they
+ * typed), `true` for `"Bag of 50 g"` and for a bare `"100 kg"` (no word to get wrong). It decides
+ * whether this cell renders one-click Confirm beside Edit, or Edit alone — see the buttons below.
  */
 function parseCandidatePackSuggestion(
   fieldKey: string,
   suggestionValue: string | null | undefined,
-): { packagingUnit: string; packagingSize: number } | null {
+): { packagingUnit: string; packagingSize: number; recognized: boolean } | null {
   if (fieldKey !== 'counted_in' || !suggestionValue || !suggestionValue.includes('|')) return null
-  const [packagingUnit, sizeText] = suggestionValue.split('|')
+  const [packagingUnit, sizeText, recognizedText] = suggestionValue.split('|')
   const packagingSize = Number(sizeText)
   if (!packagingUnit || !Number.isFinite(packagingSize) || packagingSize <= 0) return null
-  return { packagingUnit, packagingSize }
+  return { packagingUnit, packagingSize, recognized: recognizedText !== 'false' }
 }
 
 /**
@@ -177,16 +184,22 @@ export function CellFix({
 
       {candidatePack && !editingCandidate && !field.readOnly && (
         <div className={`mt-2 flex gap-2 ${stacked ? 'flex-col' : 'flex-wrap items-center'}`}>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => onConfirmPack(candidatePack.packagingUnit, candidatePack.packagingSize)}
-            className={`inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-primary-200 bg-primary-50 px-2.5 py-1.5 text-xs font-medium text-primary-700 transition-colors hover:bg-primary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-60 ${
-              stacked ? 'min-h-11 w-full' : ''
-            }`}
-          >
-            Confirm
-          </button>
+          {/* One-click Confirm is only offered when the container word the person typed (if
+              any) matched a real packaging unit — see `parseCandidatePackSuggestion`'s doc
+              comment. An unrecognised word ("Cart") gets Edit alone, so accepting the system's
+              generic "Pack" guess is always a deliberate choice, never a stray click. */}
+          {candidatePack.recognized && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onConfirmPack(candidatePack.packagingUnit, candidatePack.packagingSize)}
+              className={`inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-primary-200 bg-primary-50 px-2.5 py-1.5 text-xs font-medium text-primary-700 transition-colors hover:bg-primary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-60 ${
+                stacked ? 'min-h-11 w-full' : ''
+              }`}
+            >
+              Confirm
+            </button>
+          )}
           <button
             type="button"
             disabled={busy}
