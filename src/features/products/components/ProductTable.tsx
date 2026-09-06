@@ -227,6 +227,10 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
                             unitOfMeasureLabel(product.packagingUnit),
                             product.packagingSize,
                           )}
+                          {/* Terse on purpose — this subtitle already carries the pack name, so
+                              the list only needs to flag that it is not the only one, not restate
+                              detail the product page already owns. */}
+                          {product.hasMultiplePacks && ' (default)'}
                         </p>
                       )}
                   </div>

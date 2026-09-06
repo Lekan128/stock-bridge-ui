@@ -104,6 +104,14 @@ export interface Product {
   createdAt: string
   updatedAt: string
   warnings?: string[] | null
+  /**
+   * True when `packagingUnit`/`packagingSize` above are the DEFAULT among more than one distinct
+   * pack shape in play for this product — its own plus every vendor's `ProductVendorPack` rows
+   * (batched server-side; see `ProductManagementService.hasMultiplePacksFor`). `false`, never
+   * absent, when this product's pack is the only one — the Overview "Pack" row and the inventory
+   * list use it to decide whether "(default)" and a link to the Vendors tab earn their place.
+   */
+  hasMultiplePacks?: boolean
 }
 
 /** Mirrors Spring Data's Page<T> JSON shape. */
@@ -339,6 +347,16 @@ export interface StockMovement {
   companyVendorName?: string
   packagingUnit?: string
   packagingSize?: number | null
+  /**
+   * What the human actually typed for this delivery — "10 bags at ₦28,000/bag" — kept beside
+   * `quantity`/`unitPriceAtTime` (base units, per stock unit) rather than replacing them
+   * (`UNIT_UX_CONTRACT.md` §7 non-negotiable 3). Null on OUT/ADJUSTMENT and on any IN entered
+   * directly in the stock unit — same absence rule as `packagingUnit`/`packagingSize`, which is
+   * what `enteredUnit` equals whenever both are present.
+   */
+  enteredUnit?: string
+  enteredQuantity?: number | null
+  enteredUnitPrice?: number | null
 }
 
 export interface CheaperVendorHint {

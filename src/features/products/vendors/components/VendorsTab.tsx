@@ -102,6 +102,10 @@ export function VendorsTab({ product, canManage }: VendorsTabProps) {
    */
   const stockUnit = stockUnitLabel(unitOptionsForProduct(product, unitOfMeasureOptions))
 
+  /** The product's OWN pack — what a vendor with zero packs on file falls back to. Named here so
+   *  the empty state below can say so instead of leaving "no packs" looking like nothing applies. */
+  const productPackOption = buildPackOption(product, stockUnit, unitOfMeasureOptions)
+
   function toggleExpanded(vendorId: string) {
     setExpandedIds((prev) => {
       const next = new Set(prev)
@@ -394,8 +398,14 @@ export function VendorsTab({ product, canManage }: VendorsTabProps) {
 
                           {vendor.packs.length === 0 ? (
                             <p className="mt-2 text-sm text-neutral-500">
-                              No packs on file for this {UNIT_COPY.SUPPLIER.toLowerCase()} yet — record a stock-in from
-                              them, or add one directly.
+                              {productPackOption ? (
+                                <>
+                                  No packs on file — deliveries use the product's default,{' '}
+                                  <span className="font-medium text-neutral-700">{productPackOption.label}</span>.
+                                </>
+                              ) : (
+                                'No packs on file — record a stock-in, or add one directly.'
+                              )}
                             </p>
                           ) : (
                             <div className="mt-3 flex flex-col gap-2">

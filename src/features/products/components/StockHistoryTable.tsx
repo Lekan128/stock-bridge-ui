@@ -3,7 +3,9 @@ import { Pagination } from '@/components/Pagination'
 import { Skeleton } from '@/components/Skeleton'
 import { useAuth } from '@/auth/useAuth'
 import { formatCurrency, formatDateTime } from '@/features/products/formatters'
-import type { MovementType, PageResponse, StockMovement } from '@/features/products/types'
+import type { MovementType, PageResponse, StockMovement, UnitOfMeasureOption } from '@/features/products/types'
+import { formatEnteredAndBase, formatPricePerOption } from '@/features/products/unitCopy'
+import { buildPackOption } from '@/features/products/unitSet'
 
 const movementLabels: Record<MovementType, string> = { IN: 'Stock in', OUT: 'Stock out', ADJUSTMENT: 'Adjustment' }
 const movementVariants: Record<MovementType, BadgeVariant> = { IN: 'success', OUT: 'danger', ADJUSTMENT: 'neutral' }
@@ -14,15 +16,50 @@ function formatQuantity(movement: StockMovement): string {
   return movement.quantity > 0 ? `+${movement.quantity}` : String(movement.quantity)
 }
 
+/**
+ * The one-off-pack echo `UNIT_UX_CONTRACT.md` §7 non-negotiable 3 requires and the ledger was
+ * silently dropping — see `StockMovementResponse`'s V21 javadoc for the backend half of this fix.
+ * A delivery entered as "10 bags" with "make this the usual pack" left unticked never becomes a
+ * `ProductVendorPack`, so this row is the ONLY place that fact survives; without it, "10 bags of
+ * 30 g" and "300 g typed straight in the stock unit" become indistinguishable the moment the
+ * modal closes. Built from the movement's own `packagingUnit`/`packagingSize` snapshot rather
+ * than the product's current unit set, because a delivery from six months ago must keep reading
+ * the pack it actually arrived in even if the product's packaging has since changed.
+ */
+function enteredPackEcho(
+  movement: StockMovement,
+  stockUnit: string,
+  unitOfMeasureOptions: UnitOfMeasureOption[],
+): string | null {
+  if (movement.enteredQuantity == null || movement.packagingUnit == null) return null
+  const option = buildPackOption(movement, stockUnit, unitOfMeasureOptions)
+  if (!option) return null
+  const quantityEcho = formatEnteredAndBase(movement.enteredQuantity, option, movement.quantity, stockUnit)
+  const priceEcho = movement.enteredUnitPrice != null ? formatPricePerOption(movement.enteredUnitPrice, option) : null
+  return priceEcho ? `${quantityEcho} · ${priceEcho}` : quantityEcho
+}
+
 export interface StockHistoryTableProps {
   data: PageResponse<StockMovement> | null
   loading: boolean
   error: string | null
   page: number
   onPageChange: (page: number) => void
+  /** The product's stock unit and the unit-of-measure catalog, needed only to echo a delivery's
+   *  one-off pack (see {@link enteredPackEcho}) — every other column is unit-agnostic. */
+  stockUnit: string
+  unitOfMeasureOptions: UnitOfMeasureOption[]
 }
 
-export function StockHistoryTable({ data, loading, error, page, onPageChange }: StockHistoryTableProps) {
+export function StockHistoryTable({
+  data,
+  loading,
+  error,
+  page,
+  onPageChange,
+  stockUnit,
+  unitOfMeasureOptions,
+}: StockHistoryTableProps) {
   const { user } = useAuth()
 
   if (loading) {
@@ -77,6 +114,10 @@ export function StockHistoryTable({ data, loading, error, page, onPageChange }: 
                   {movement.unitPriceAtTime != null && (
                     <span className="ml-1 font-normal text-neutral-400">@ {formatCurrency(movement.unitPriceAtTime)}</span>
                   )}
+                  {(() => {
+                    const echo = enteredPackEcho(movement, stockUnit, unitOfMeasureOptions)
+                    return echo && <span className="mt-0.5 block text-xs font-normal text-neutral-500">{echo}</span>
+                  })()}
                 </td>
                 <td className="max-w-xs truncate border-b border-neutral-100 px-4 py-2.5 text-neutral-600">
                   {movement.note || '—'}
