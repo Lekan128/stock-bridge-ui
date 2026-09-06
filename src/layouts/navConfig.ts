@@ -3,6 +3,7 @@ import {
   ChartLine,
   Contact,
   ClipboardList,
+  History,
   LayoutDashboard,
   MapPin,
   PackageSearch,
@@ -116,6 +117,14 @@ export const NAV_GROUPS: NavGroup[] = [
       // controls behind MANAGE_VENDORS. A STOREKEEPER holds neither code, so this entry does not
       // render for them at all, which is the intent: prices and spend are not their business.
       { path: '/app/vendors', label: 'Suppliers', icon: Contact, requiredPermission: PERMISSIONS.VIEW_VENDORS },
+      // The company-wide feed above the per-supplier screen reached from a Suppliers card —
+      // same VIEW_VENDORS gate, since reading what was bought and from whom is one authority.
+      {
+        path: '/app/purchases',
+        label: 'Purchase History',
+        icon: History,
+        requiredPermission: PERMISSIONS.VIEW_VENDORS,
+      },
     ],
   },
   {

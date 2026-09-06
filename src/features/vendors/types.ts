@@ -9,7 +9,6 @@
  * ⚠️ Null fields are omitted from the JSON entirely (`default-property-inclusion: non_null`), so
  * every nullable column is typed optional rather than `| null` — same as the addresses feature.
  */
-import type { OrderStatus } from '@/constants/orderStatus'
 
 /**
  * VERIFIED — created automatically when the company bought from a ProcurePaddy seller. The company
@@ -105,42 +104,6 @@ export interface CompanyVendorDetail {
   platformVendor?: PlatformVendorSummary
   spend: VendorSpendSummary
   products: VendorProductPrice[]
-}
-
-export interface VendorPurchaseLine {
-  orderItemId: string
-  buyerProductId?: string
-  productName: string
-  productSku: string
-  unitOfMeasure?: string
-  unitPrice: number
-  quantity: number
-  receivedQuantity: number
-  lineTotal: number
-}
-
-/**
- * One past order in the purchase history.
- *
- * Cancelled orders appear here (badged) even though they are excluded from the spend figures —
- * "we ordered from them and pulled out" is a fact about the relationship worth seeing.
- */
-export interface VendorPurchase {
-  orderId: string
-  orderNumber: string
-  // The OrderStatus union, not a bare string: this feeds OrderStatusBadge, which indexes
-  // ORDER_STATUS_LABELS/VARIANTS by it. A widened string would push the failure from compile
-  // time to an undefined label in the UI.
-  status: OrderStatus
-  paymentStatus: string
-  placedAt: string
-  deliveredAt?: string
-  receivedAt?: string
-  currency: string
-  subtotal: number
-  deliveryFee: number
-  total: number
-  lines: VendorPurchaseLine[]
 }
 
 /**

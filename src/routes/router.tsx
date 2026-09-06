@@ -134,6 +134,11 @@ const VendorPurchaseHistoryPage = lazy(() =>
     default: m.VendorPurchaseHistoryPage,
   })),
 )
+const PurchaseHistoryPage = lazy(() =>
+  import('@/pages/PurchaseHistoryPage').then((m) => ({
+    default: m.PurchaseHistoryPage,
+  })),
+)
 const ProfilePage = lazy(() =>
   import('@/pages/ProfilePage').then((m) => ({ default: m.ProfilePage })),
 )
@@ -555,6 +560,16 @@ export function AppRoutes() {
             element={
               <RequirePermission permission={PERMISSIONS.VIEW_VENDORS}>
                 <VendorPurchaseHistoryPage />
+              </RequirePermission>
+            }
+          />
+          {/* The company-wide feed above the per-vendor screen just above — same permission,
+            since reading what was bought and from whom is the same authority either way. */}
+          <Route
+            path="purchases"
+            element={
+              <RequirePermission permission={PERMISSIONS.VIEW_VENDORS}>
+                <PurchaseHistoryPage />
               </RequirePermission>
             }
           />
