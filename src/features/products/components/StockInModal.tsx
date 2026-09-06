@@ -643,6 +643,19 @@ export function StockInModal({ product, onClose, onSuccess }: StockInModalProps)
             </div>
           )}
 
+          {/* The single-supplier case hides the picker above (comment at §7.3) and used to leave
+              this screen naming no supplier at all — "Use a different supplier" was the only
+              supplier-related text on the form, which reads as an offer to CHOOSE one rather than
+              a way to override the one already silently selected. A user with exactly one supplier
+              on file had no way to confirm who it was without clicking that link and reading the
+              directory it opens. Named plainly instead, the same "state the fact, don't make the
+              reader infer it" rule §7.2 already applies to price and quantity. */}
+          {!vendorFieldVisible && defaultVendor && (
+            <p className="text-sm text-neutral-600">
+              {UNIT_COPY.SUPPLIER}: <span className="font-medium text-neutral-900">{defaultVendor.companyVendorName}</span>
+            </p>
+          )}
+
           {/* Named action 1. Only offered when there is somewhere else to go: with no directory
               (or no permission to read it) this would reveal an empty select, which reads as
               broken rather than as "nothing to choose". */}
