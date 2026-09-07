@@ -39,6 +39,13 @@ export interface OrderItem {
   /** Exactly the amount still sitting as incoming stock on the buyer's product row. */
   outstandingQuantity: number
   lineTotal: number
+  /**
+   * Whether `buyerProductId` is a brand new row materialize() had to create, rather than one the
+   * buyer already had. Gates the "set your own SKU/unit/pack" panel on the confirm-receipt
+   * screen — editing an already-established product's identity from there would be the wrong
+   * surface for that action, even though the backend would safely refuse anything unsafe either way.
+   */
+  buyerProductNewlyCreated: boolean
 }
 
 export interface OrderStatusEvent {
@@ -142,11 +149,48 @@ export interface OrderListParams {
 export interface ReceiveOrderLine {
   orderItemId: string
   quantity: number
+  /**
+   * The buyer answering the duplicate nudge (see `OrderItemMatchSuggestion`) with "yes, same
+   * item" — receive into this existing product instead of the one materialize() auto-matched
+   * or created. Omit for the overwhelmingly common case where there's nothing to redirect.
+   */
+  linkToExistingProductId?: string
+  /**
+   * The buyer's own "1 of mine = N of theirs" answer when the linked product's unit didn't
+   * already match this line's — extends that product's accepted units for this receipt only,
+   * exactly like the manual Stock In screen's own per-delivery pack override. Both absent
+   * whenever the units already agreed, which is the common case.
+   */
+  packagingUnit?: string
+  packagingSize?: number
+  /** Keeps the conversion above for future deliveries from this seller. False/absent means once only. */
+  saveAsSupplierDefault?: boolean
 }
 
 /** An absent/empty `lines` means "everything still outstanding" — the common case. */
 export interface ReceiveOrderPayload {
   lines?: ReceiveOrderLine[]
+}
+
+/** One candidate in a duplicate-nudge suggestion — see `OrderItemMatchSuggestion`. */
+export interface ProductMatchCandidate {
+  id: string
+  name: string
+  quantityOnHand: number
+  imageUrl?: string
+  unitOfMeasure?: string
+}
+
+/**
+ * MULTI_VENDOR_INVENTORY_DESIGN.md §7.2: for an order line whose buyer product was freshly
+ * created rather than matched to something the buyer already had, other products in their
+ * inventory whose name looks like the same real-world item. Only present for lines actually
+ * worth asking about — a line that matched cleanly, or has no close-enough candidate, never
+ * appears in the list at all.
+ */
+export interface OrderItemMatchSuggestion {
+  orderItemId: string
+  candidates: ProductMatchCandidate[]
 }
 
 export interface SkippedReorderLine {

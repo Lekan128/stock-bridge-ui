@@ -2,6 +2,7 @@ import { api } from '@/api/client'
 import type {
   InitializePaymentResult,
   Order,
+  OrderItemMatchSuggestion,
   OrderListParams,
   OrderSummary,
   PageResponse,
@@ -26,6 +27,10 @@ export const ordersApi = {
   /** The pivotal call: turns incoming stock into usable on-hand stock. Returns the updated order. */
   receive: (id: string, payload: ReceiveOrderPayload) =>
     api.post<Order>(`/api/orders/${id}/receive`, payload).then((r) => r.data),
+
+  /** The §7.2 duplicate-nudge candidates for this order's "confirm receipt" screen. */
+  receiveSuggestions: (id: string) =>
+    api.get<OrderItemMatchSuggestion[]>(`/api/orders/${id}/receive-suggestions`).then((r) => r.data),
 
   reorder: (id: string) => api.post<ReorderResult>(`/api/orders/${id}/reorder`).then((r) => r.data),
 
