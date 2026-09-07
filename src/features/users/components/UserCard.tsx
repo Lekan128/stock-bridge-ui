@@ -27,7 +27,7 @@ export function UserCard({ user, currentUserId, onEdit, onResetPassword, onDeact
         {fullName && <p className="mt-0.5 truncate text-xs text-neutral-500">{user.username}</p>}
         {secondary && <p className="mt-0.5 truncate text-xs text-neutral-500">{secondary}</p>}
         <div className="mt-1.5 flex flex-wrap items-center gap-2">
-          <RoleBadge role={user.role} />
+          <RoleBadge roleName={user.roleName} isSystem={user.roleIsSystem} />
           {user.root && <AccountOwnerBadge />}
           <span className="text-xs text-neutral-500">Created {formatDate(user.createdAt)}</span>
         </div>

@@ -83,6 +83,10 @@ export function ProductDetailPage() {
 
   const canManageInventory = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_INVENTORY)
   const canManageProducts = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_PRODUCTS)
+  // Independently grantable since V27 — a role may receive stock, issue it, both or neither,
+  // separately from MANAGE_INVENTORY (which still gates Adjust below). See StockController.
+  const canStockIn = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.STOCK_IN)
+  const canStockOut = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.STOCK_OUT)
 
   function setTab(next: ProductDetailTab) {
     setSearchParams(
@@ -330,17 +334,23 @@ export function ProductDetailPage() {
         product={product}
         incoming={incoming}
         actions={
-          canManageInventory ? (
+          canStockIn || canStockOut || canManageInventory ? (
             <>
-              <Button variant="secondary" onClick={() => setActiveAction('in')}>
-                Stock In
-              </Button>
-              <Button variant="secondary" onClick={() => setActiveAction('out')}>
-                Stock Out
-              </Button>
-              <Button variant="secondary" onClick={() => setActiveAction('adjustment')}>
-                Adjust
-              </Button>
+              {canStockIn && (
+                <Button variant="secondary" onClick={() => setActiveAction('in')}>
+                  Stock In
+                </Button>
+              )}
+              {canStockOut && (
+                <Button variant="secondary" onClick={() => setActiveAction('out')}>
+                  Stock Out
+                </Button>
+              )}
+              {canManageInventory && (
+                <Button variant="secondary" onClick={() => setActiveAction('adjustment')}>
+                  Adjust
+                </Button>
+              )}
             </>
           ) : undefined
         }

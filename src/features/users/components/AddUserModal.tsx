@@ -42,7 +42,7 @@ export function AddUserModal({ onClose, onSuccess }: AddUserModalProps) {
       const user = await usersApi.create({
         username: values.username,
         password: values.password,
-        role: values.role,
+        roleId: values.roleId,
         firstName: optional(values.firstName),
         lastName: optional(values.lastName),
         email: optional(values.email),
@@ -92,9 +92,9 @@ export function AddUserModal({ onClose, onSuccess }: AddUserModalProps) {
         />
         <Controller
           control={control}
-          name="role"
+          name="roleId"
           render={({ field }) => (
-            <RoleSelectField value={field.value} onChange={field.onChange} error={errors.role?.message} />
+            <RoleSelectField value={field.value} onChange={field.onChange} error={errors.roleId?.message} />
           )}
         />
 

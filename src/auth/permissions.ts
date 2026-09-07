@@ -12,6 +12,16 @@ export const PERMISSIONS = {
   VIEW_ANALYTICS: 'VIEW_ANALYTICS',
 
   /**
+   * Receive/issue stock — POST .../stock/stock-in and .../stock-out (V27). Split out of
+   * MANAGE_INVENTORY so a role can be given one, both, or neither: separation of duties between
+   * who receives deliveries and who issues stock out. Everything else the stock ledger does
+   * (adjustments, history, the lot list, movements, the cost-basis report) still runs on
+   * MANAGE_INVENTORY unchanged — see StockController.
+   */
+  STOCK_IN: 'STOCK_IN',
+  STOCK_OUT: 'STOCK_OUT',
+
+  /**
    * Edit the caller's own company record — PUT /api/company. Granted to OWNER alone (V7).
    * Reading the company (GET /api/company) is deliberately ungated on the backend, so this
    * code gates the *edit affordance* on the company settings page, never the page itself.

@@ -57,8 +57,8 @@ export function AdminPlatformOwnerUsersPage() {
     // back as root/OWNER whichever role the form sent.
     showToast(
       created.root
-        ? `"${created.username}" created as ProcurePal's account owner (${formatRoleName(created.role)}).`
-        : `User "${created.username}" created with the ${formatRoleName(created.role)} role.`,
+        ? `"${created.username}" created as ProcurePal's account owner (${formatRoleName(created.roleName)}).`
+        : `User "${created.username}" created with the ${formatRoleName(created.roleName)} role.`,
       'success',
     )
     setPage(0)
@@ -67,7 +67,7 @@ export function AdminPlatformOwnerUsersPage() {
 
   function handleEditSuccess(updated: SuperAdminUserSummary) {
     setModal(null)
-    showToast(`"${updated.username}" updated — ${formatRoleName(updated.role)}, ${updated.active ? 'active' : 'inactive'}.`, 'success')
+    showToast(`"${updated.username}" updated — ${formatRoleName(updated.roleName)}, ${updated.active ? 'active' : 'inactive'}.`, 'success')
     refetch()
   }
 

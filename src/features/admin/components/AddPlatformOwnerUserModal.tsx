@@ -41,8 +41,10 @@ export function AddPlatformOwnerUserModal({ isFirstUser, onClose, onSuccess }: A
   } = useForm<CreateUserFormValues>({
     resolver: zodResolver(createUserSchema),
     // Pre-selecting OWNER for the first account keeps the form's own validation satisfied
-    // without pretending the choice was ever open.
-    defaultValues: { ...createUserFormDefaults(), role: isFirstUser ? 'OWNER' : '' },
+    // without pretending the choice was ever open. This form reuses the tenant-side schema,
+    // whose field is named `roleId` for the id-based tenant path — here it holds a system role
+    // NAME instead, since AdminRoleSelectField has no id to offer (see PlatformOwnerCreateUserPayload).
+    defaultValues: { ...createUserFormDefaults(), roleId: isFirstUser ? 'OWNER' : '' },
   })
 
   async function onSubmit(values: CreateUserFormValues) {
@@ -51,7 +53,7 @@ export function AddPlatformOwnerUserModal({ isFirstUser, onClose, onSuccess }: A
       const user = await superAdminApiClient.createPlatformOwnerUser({
         username: values.username,
         password: values.password,
-        role: values.role,
+        role: values.roleId,
         firstName: optional(values.firstName),
         lastName: optional(values.lastName),
         email: optional(values.email),
@@ -122,14 +124,14 @@ export function AddPlatformOwnerUserModal({ isFirstUser, onClose, onSuccess }: A
 
         <Controller
           control={control}
-          name="role"
+          name="roleId"
           render={({ field }) => (
             <AdminRoleSelectField
               value={field.value}
               onChange={field.onChange}
               disabled={isFirstUser}
               disabledHint={isFirstUser ? 'The first ProcurePal account is always the Owner' : undefined}
-              error={errors.role?.message}
+              error={errors.roleId?.message}
             />
           )}
         />

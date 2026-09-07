@@ -26,7 +26,7 @@ export function ProfileIdentityHeader({ profile }: { profile: Profile }) {
         <h2 className="truncate text-lg font-semibold text-neutral-900">{displayName}</h2>
         {profile.jobTitle && <p className="mt-0.5 text-sm text-neutral-500">{profile.jobTitle}</p>}
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          <RoleBadge role={profile.role} />
+          <RoleBadge roleName={profile.role} isSystem={profile.roleIsSystem} />
           {profile.root && <AccountOwnerBadge />}
           <UserStatusBadge active={profile.active} />
         </div>

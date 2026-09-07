@@ -66,6 +66,37 @@ export interface UpdateClientPayload {
  */
 export type SuperAdminUserSummary = TenantUserSummary
 
+/**
+ * POST /api/superadmin/platform-owner/users. NOT the tenant-facing CreateUserPayload: that one
+ * carries `roleId` because a tenant can define its own custom roles (unique per tenant, so a
+ * name alone is ambiguous), but this screen has no access to GET /api/roles at all — it carries
+ * the super-admin token audience, not a tenant one — so it can only ever hand back one of the
+ * fixed system role NAMES from AdminRoleSelectField's hardcoded list. ProcurePal's platform-owner
+ * tenant has no custom roles either, so a name is unambiguous here. See the backend's
+ * PlatformOwnerCreateUserRequest for the same split.
+ */
+export interface PlatformOwnerCreateUserPayload {
+  username: string
+  password: string
+  role: string
+  firstName?: string | null
+  lastName?: string | null
+  email?: string | null
+  phone?: string | null
+  jobTitle?: string | null
+}
+
+/** PUT /api/superadmin/platform-owner/users/{id} — see PlatformOwnerCreateUserPayload. */
+export interface PlatformOwnerUpdateUserPayload {
+  role?: string
+  active?: boolean
+  firstName?: string
+  lastName?: string
+  email?: string
+  phone?: string
+  jobTitle?: string
+}
+
 export interface TenantBreakdownEntry {
   clientId: string
   clientName: string
