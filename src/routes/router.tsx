@@ -12,6 +12,7 @@ import { BootstrappingScreen } from '@/components/BootstrappingScreen'
 import { AdminLayout } from '@/layouts/AdminLayout'
 import { AppLayout } from '@/layouts/AppLayout'
 import { StorefrontLayout } from '@/layouts/StorefrontLayout'
+import { ScrollToTop } from '@/routes/ScrollToTop'
 
 // Eager: the public storefront and auth. These are the first paint for an anonymous visitor
 // arriving at `/`, so they must not wait on a second network round trip.
@@ -290,6 +291,7 @@ export function AppRoutes() {
     // while a lazy chunk is in flight, which on a warm cache is imperceptible, and a single
     // boundary keeps route definitions readable.
     <Suspense fallback={<BootstrappingScreen />}>
+      <ScrollToTop />
       <Routes>
         {/* ---------------------------------------------------------------- Public storefront */}
         <Route element={<StorefrontLayout />}>
