@@ -8,6 +8,7 @@ import {
   MapPin,
   PackageSearch,
   ReceiptText,
+  ShieldCheck,
   Store,
   Tags,
   Truck,
@@ -91,6 +92,12 @@ export const NAV_GROUPS: NavGroup[] = [
       // VIEW_PRODUCTS, not MANAGE_PRODUCTS — read-only roles can browse the catalog.
       { path: '/app/products', label: 'Inventory', icon: Warehouse, requiredPermission: PERMISSIONS.VIEW_PRODUCTS },
       { path: '/app/users', label: 'Users', icon: Users, requiredPermission: PERMISSIONS.MANAGE_USERS },
+      {
+        path: '/app/roles',
+        label: 'Roles & Privileges',
+        icon: ShieldCheck,
+        requiredPermission: PERMISSIONS.MANAGE_ROLES,
+      },
       // No permission gate, matching GET /api/company: everyone can read their own company, and
       // the Company ID shown there is what a colleague has to be told before they can log in.
       // Only the edit form inside is gated, on MANAGE_COMPANY_PROFILE.

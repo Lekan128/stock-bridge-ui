@@ -70,7 +70,7 @@ export function AdminUserDetailModal({ clientId, clientName, user, onClose }: Ad
     >
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-1.5">
-          <RoleBadge role={detail.role} />
+          <RoleBadge roleName={detail.roleName} isSystem={detail.roleIsSystem} />
           {detail.root && <AccountOwnerBadge title="The first user created in this company — its account owner" />}
           <UserStatusBadge active={detail.active} />
         </div>

@@ -144,6 +144,7 @@ const ProfilePage = lazy(() =>
   import('@/pages/ProfilePage').then((m) => ({ default: m.ProfilePage })),
 )
 const UsersPage = lazy(() => import('@/pages/UsersPage').then((m) => ({ default: m.UsersPage })))
+const RolesPage = lazy(() => import('@/pages/RolesPage').then((m) => ({ default: m.RolesPage })))
 const CompanySettingsPage = lazy(() =>
   import('@/pages/CompanySettingsPage').then((m) => ({
     default: m.CompanySettingsPage,
@@ -708,6 +709,14 @@ export function AppRoutes() {
             element={
               <RequirePermission permission={PERMISSIONS.MANAGE_USERS}>
                 <UsersPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="roles"
+            element={
+              <RequirePermission permission={PERMISSIONS.MANAGE_ROLES}>
+                <RolesPage />
               </RequirePermission>
             }
           />

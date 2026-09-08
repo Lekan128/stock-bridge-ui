@@ -18,6 +18,8 @@ import type {
   ModerationProduct,
   ModerationQueueParams,
   PlatformAggregateResponse,
+  PlatformOwnerCreateUserPayload,
+  PlatformOwnerUpdateUserPayload,
   PlatformRevenueParams,
   PlatformRevenuePoint,
   PlatformRevenueSummary,
@@ -37,7 +39,7 @@ import type {
   VendorWaitlistParams,
 } from '@/features/admin/types'
 import type { PageResponse } from '@/features/products/types'
-import type { CreateUserPayload, ResetPasswordPayload, UpdateUserPayload } from '@/features/users/types'
+import type { ResetPasswordPayload } from '@/features/users/types'
 
 export const superAdminApiClient = {
   listClients: (params: ClientListParams) =>
@@ -117,11 +119,11 @@ export const superAdminApiClient = {
    * forced to OWNER whatever role was asked for — always render the returned record rather
    * than assuming the request was honoured verbatim.
    */
-  createPlatformOwnerUser: (payload: CreateUserPayload) =>
+  createPlatformOwnerUser: (payload: PlatformOwnerCreateUserPayload) =>
     superAdminApi.post<SuperAdminUserSummary>('/api/superadmin/platform-owner/users', payload).then((r) => r.data),
 
   /** PATCH semantics despite the verb — an omitted key is left unchanged. */
-  updatePlatformOwnerUser: (userId: string, payload: UpdateUserPayload) =>
+  updatePlatformOwnerUser: (userId: string, payload: PlatformOwnerUpdateUserPayload) =>
     superAdminApi
       .put<SuperAdminUserSummary>(`/api/superadmin/platform-owner/users/${userId}`, payload)
       .then((r) => r.data),

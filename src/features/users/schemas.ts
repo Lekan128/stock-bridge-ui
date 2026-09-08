@@ -22,15 +22,15 @@ export const profileFieldSchemas = {
   jobTitle: z.string().trim().max(100, 'Must be 100 characters or fewer'),
 }
 
-// Role codes come from GET /api/roles, so the form only checks that one was picked.
-const roleSchema = z.string().min(1, 'Select a role')
+// Role ids come from GET /api/roles, so the form only checks that one was picked.
+const roleIdSchema = z.string().min(1, 'Select a role')
 
 export const createUserSchema = z
   .object({
     username: z.string().trim().min(1, 'Username is required'),
     password: z.string().min(8, 'Must be at least 8 characters'),
     confirmPassword: z.string().min(1, 'Please confirm the password'),
-    role: roleSchema,
+    roleId: roleIdSchema,
     ...profileFieldSchemas,
   })
   .refine((values) => values.password === values.confirmPassword, {
@@ -45,7 +45,7 @@ export function createUserFormDefaults(): CreateUserFormValues {
     username: '',
     password: '',
     confirmPassword: '',
-    role: '',
+    roleId: '',
     firstName: '',
     lastName: '',
     email: '',
@@ -55,7 +55,7 @@ export function createUserFormDefaults(): CreateUserFormValues {
 }
 
 export const editUserSchema = z.object({
-  role: roleSchema,
+  roleId: roleIdSchema,
   active: z.boolean(),
   ...profileFieldSchemas,
 })
