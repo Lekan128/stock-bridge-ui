@@ -4,6 +4,7 @@ import type {
   CommitPreview,
   ImportCellValue,
   ImportKind,
+  ImportLinkedPack,
   ImportMode,
   ImportResult,
   ImportRow,
@@ -39,6 +40,8 @@ interface ImportsBackend {
     params: { status?: ImportRowFilterStatus; page?: number; size?: number },
   ): Promise<Page<ImportRow>>
   patchRow(id: string, rowId: string, normalized: Record<string, ImportCellValue>): Promise<ImportRow>
+  /** MULTI_PACK_PER_VENDOR_DESIGN.md §6a's one-click "Confirm" on a candidate pack. */
+  confirmPack(id: string, rowId: string, packagingUnit: string, packagingSize: number): Promise<ImportRow>
   skipRow(id: string, rowId: string, skipped: boolean): Promise<ImportRow>
   patchMapping(id: string, columnMapping: Record<string, string | null>): Promise<ImportSession>
   resolveValue(id: string, body: ValueMappingRequest): Promise<ImportSession>
@@ -46,7 +49,9 @@ interface ImportsBackend {
   commit(id: string): Promise<ImportResult>
   result(id: string): Promise<ImportResult>
   undo(id: string): Promise<ImportResult>
-  discard(id: string): Promise<void>
+  /** What a discard would take with it — fetched before the confirm dialog opens. */
+  linkedPacks(id: string): Promise<ImportLinkedPack[]>
+  discard(id: string, removePackIds?: string[]): Promise<void>
   list(params: { kind?: ImportKind; page?: number; size?: number }): Promise<Page<ImportSessionSummary>>
 }
 
@@ -166,6 +171,12 @@ const realBackend: ImportsBackend = {
     return api.patch<ImportRow>(`${BASE}/${id}/rows/${rowId}`, { normalized }).then((r) => r.data)
   },
 
+  confirmPack(id, rowId, packagingUnit, packagingSize) {
+    return api
+      .post<ImportRow>(`${BASE}/${id}/rows/${rowId}/confirm-pack`, { packagingUnit, packagingSize })
+      .then((r) => r.data)
+  },
+
   skipRow(id, rowId, skipped) {
     return api.patch<ImportRow>(`${BASE}/${id}/rows/${rowId}/skip`, { skipped }).then((r) => r.data)
   },
@@ -214,8 +225,16 @@ const realBackend: ImportsBackend = {
     throw error
   },
 
-  discard(id) {
-    return api.delete<void>(`${BASE}/${id}`).then(() => undefined)
+  linkedPacks(id) {
+    return api.get<ImportLinkedPack[]>(`${BASE}/${id}/linked-packs`).then((r) => r.data)
+  },
+
+  discard(id, removePackIds) {
+    return api
+      .delete<void>(`${BASE}/${id}`, {
+        params: removePackIds?.length ? { removePackIds: removePackIds.join(',') } : undefined,
+      })
+      .then(() => undefined)
   },
 
   list(params) {
@@ -302,6 +321,12 @@ export const importsApi = {
     return backend.patchRow(id, rowId, normalized as Record<string, ImportCellValue>)
   },
 
+  /** POST /api/imports/{id}/rows/{rowId}/confirm-pack — MULTI_PACK_PER_VENDOR_DESIGN.md §6a's
+   *  one-click "Confirm" on a candidate pack; creates it and returns the revalidated row. */
+  confirmPack(id: string, rowId: string, packagingUnit: string, packagingSize: number): Promise<ImportRow> {
+    return backend.confirmPack(id, rowId, packagingUnit, packagingSize)
+  },
+
   /** PATCH /api/imports/{id}/rows/{rowId}/skip */
   skipRow(id: string, rowId: string, skipped: boolean): Promise<ImportRow> {
     return backend.skipRow(id, rowId, skipped)
@@ -332,9 +357,14 @@ export const importsApi = {
     return backend.undo(id)
   },
 
-  /** DELETE /api/imports/{id} */
-  discard(id: string): Promise<void> {
-    return backend.discard(id)
+  /** GET /api/imports/{id}/linked-packs — what a discard would take with it. */
+  linkedPacks(id: string): Promise<ImportLinkedPack[]> {
+    return backend.linkedPacks(id)
+  },
+
+  /** DELETE /api/imports/{id}?removePackIds=a,b — the ids come from {@link linkedPacks}. */
+  discard(id: string, removePackIds?: string[]): Promise<void> {
+    return backend.discard(id, removePackIds)
   },
 
   /** GET /api/imports?kind=&page=&size= */

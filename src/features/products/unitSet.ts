@@ -53,24 +53,40 @@ export interface PackConfiguration {
 }
 
 /**
- * A supplier line as it arrives on the wire. `ProductVendor` spells its pack
- * `defaultPackagingUnit`/`defaultPackagingSize` — "default" because it is a standing
- * configuration a delivery may depart from, never a per-delivery fact (§3.4).
+ * A supplier line as it arrives on the wire. `ProductVendor.packs` is the actual data now
+ * (MULTI_PACK_PER_VENDOR_DESIGN.md sections 4–7 — a vendor is no longer limited to one pack);
+ * `defaultPackagingUnit`/`defaultPackagingSize` stay on the response as a permanent alias for the
+ * default pack, and this module reads `packs` directly rather than the alias.
  *
  * Structural rather than a `ProductVendor` import so a supplier picker's lighter row, or a
- * not-yet-saved form value, can be passed without adapting. {@link supplierPack} is the one place
- * that renames the fields, so no caller has to remember which of the two spellings it is holding.
+ * not-yet-saved form value, can be passed without adapting. {@link supplierPack} and
+ * {@link supplierPacks} are the two places that read `packs`, so no other caller has to know its
+ * shape.
  */
 export interface SupplierPackSource {
-  defaultPackagingUnit?: string | null
-  defaultPackagingSize?: number | null
+  packs?: SupplierPackEntry[] | null
   unitOptions?: UnitOption[] | null
 }
 
-/** `ProductVendor`'s `default*` pack fields as a plain {@link PackConfiguration}. */
+/** One entry of `ProductVendor.packs` — just the fields this module needs. */
+export interface SupplierPackEntry {
+  packagingUnit?: string | null
+  packagingSize?: number | null
+  isDefault?: boolean
+}
+
+/** This supplier's DEFAULT pack, as a plain {@link PackConfiguration} — what a per-vendor summary
+ *  (the Vendors tab's collapsed row) shows before any one pack is chosen. `null` when the vendor
+ *  has no packs at all, or none marked default. */
 export function supplierPack(supplier: SupplierPackSource | null | undefined): PackConfiguration | null {
-  if (supplier == null) return null
-  return { packagingUnit: supplier.defaultPackagingUnit, packagingSize: supplier.defaultPackagingSize }
+  const pack = supplier?.packs?.find((p) => p.isDefault)
+  return pack ? { packagingUnit: pack.packagingUnit, packagingSize: pack.packagingSize } : null
+}
+
+/** Every one of this supplier's packs, as plain {@link PackConfiguration}s — §2.1 step 3's input
+ *  now that a vendor can have more than one. */
+export function supplierPacks(supplier: SupplierPackSource | null | undefined): PackConfiguration[] {
+  return (supplier?.packs ?? []).map((p) => ({ packagingUnit: p.packagingUnit, packagingSize: p.packagingSize }))
 }
 
 /**
@@ -168,8 +184,8 @@ export interface BuildUnitOptionsInput {
   /** The fetched list from `GET /api/products/units-of-measure` — supplies labels, and (once M1
    *  lands it) the `factorToCanonical` that step 4's same-category base units depend on. */
   unitsOfMeasure: UnitOfMeasureOption[]
-  /** §2.1 step 3 — one supplier's own default pack. Omit for a product-scoped set. */
-  supplier?: PackConfiguration | null
+  /** §2.1 step 3 — every one of a supplier's own packs. Omit (or empty) for a product-scoped set. */
+  supplier?: PackConfiguration[] | null
   /**
    * §3.1's per-request override: a pack that applies to THIS delivery only. It *extends* the set,
    * it does not replace it and it does not bypass matching — and it must never write itself back
@@ -190,17 +206,19 @@ export interface BuildUnitOptionsInput {
 }
 
 /**
- * `UNIT_UX_CONTRACT.md` §2.1's algorithm, verbatim: stock unit, then the product's own pack,
- * then the supplier's pack, then same-category base units — deduplicated by `code`, first
- * occurrence wins, exactly one `isDefault`.
+ * `UNIT_UX_CONTRACT.md` §2.1's algorithm: stock unit, then the product's own pack, then EVERY
+ * ONE of the supplier's packs, then same-category base units — deduplicated by `(code, size)`,
+ * first occurrence wins, exactly one `isDefault`.
  *
- * <h3>Why dedup is by code and what that costs</h3>
- * The wire's `unit` field is a code, so two options sharing one code would be unresolvable on
- * arrival — "BAG" could not be matched back to either. That makes code-dedup forced rather than
- * chosen, and it has a known consequence: a supplier who delivers the same product in a 25 kg bag
- * when the product's own pack is a 50 kg bag contributes nothing to the set, because both are
- * `BAG`. Multi-pack per product is explicitly out of scope (plan §10) and the shape here accepts
- * it later without another rewrite; until then that supplier's delivery is entered in kg.
+ * <h3>Why dedup is by `(code, size)`, not `code` alone</h3>
+ * It used to be `code` alone, and that was the bug (MULTI_PACK_PER_VENDOR_DESIGN.md section 5): a
+ * supplier who delivers the same product in a 25 kg bag when the product's own pack is a 50 kg bag
+ * contributed nothing to the set, because both were `BAG`. Two entries with the same code AND the
+ * same size really are the same unit and still collapse to one; two with the same code and
+ * DIFFERENT sizes are genuinely different options now, distinguished by their label — "Bag of
+ * 25 kg" vs "Bag of 50 kg" — which already states the size. `unit` on the wire is still a bare
+ * code, so the interactive stock-in form must send `packagingUnit`/`packagingSize` alongside it
+ * whenever the resolved option {@link UnitOption.isPack} — see `StockInModal.submit`.
  */
 export function buildUnitOptions(input: BuildUnitOptionsInput): UnitOption[] {
   const { product, unitsOfMeasure, supplier, extraPack, serverOptions } = input
@@ -210,9 +228,12 @@ export function buildUnitOptions(input: BuildUnitOptionsInput): UnitOption[] {
 
   const collected: UnitOption[] = []
   const seen = new Set<string>()
+  function keyOf(option: UnitOption): string {
+    return `${option.code}|${option.factorToStockUnit}`
+  }
   function add(option: UnitOption | null) {
-    if (option == null || seen.has(option.code)) return
-    seen.add(option.code)
+    if (option == null || seen.has(keyOf(option))) return
+    seen.add(keyOf(option))
     collected.push(option)
   }
 
@@ -225,7 +246,7 @@ export function buildUnitOptions(input: BuildUnitOptionsInput): UnitOption[] {
   } else {
     add({ code: stockCode, label: stockSymbol, factorToStockUnit: 1, isStockUnit: true, isDefault: false, isPack: false })
     add(buildPackOption(product, stockSymbol, unitsOfMeasure))
-    if (supplier) add(buildPackOption(supplier, stockSymbol, unitsOfMeasure))
+    for (const pack of supplier ?? []) add(buildPackOption(pack, stockSymbol, unitsOfMeasure))
     for (const option of sameCategoryBaseOptions(stockCode, unitsOfMeasure)) add(option)
   }
 
@@ -327,7 +348,7 @@ export function unitOptionsForSupplier(
   return buildUnitOptions({
     product,
     unitsOfMeasure,
-    supplier: supplierPack(supplier),
+    supplier: supplierPacks(supplier),
     serverOptions: supplier?.unitOptions ?? null,
   })
 }

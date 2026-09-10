@@ -5,7 +5,6 @@ import type {
   CompanyVendorDetail,
   CompanyVendorPayload,
   VendorListParams,
-  VendorPurchase,
 } from '@/features/vendors/types'
 
 /**
@@ -20,15 +19,6 @@ export const vendorsApi = {
 
   /** The detail screen's single round trip: the row, the live seller, spend, and products supplied. */
   get: (id: string) => api.get<CompanyVendorDetail>(`/api/company-vendors/${id}`).then((r) => r.data),
-
-  /**
-   * Purchase history — its own endpoint because it is its own screen and it is paginated.
-   * Always an empty page for an EXTERNAL vendor, by definition rather than by accident.
-   */
-  purchases: (id: string, page: number, size = 20) =>
-    api
-      .get<PageResponse<VendorPurchase>>(`/api/company-vendors/${id}/purchases`, { params: { page, size } })
-      .then((r) => r.data),
 
   /** Creates an EXTERNAL supplier. There is no endpoint for creating a VERIFIED one, by design. */
   create: (payload: CompanyVendorPayload) =>

@@ -104,6 +104,14 @@ export interface Product {
   createdAt: string
   updatedAt: string
   warnings?: string[] | null
+  /**
+   * True when `packagingUnit`/`packagingSize` above are the DEFAULT among more than one distinct
+   * pack shape in play for this product — its own plus every vendor's `ProductVendorPack` rows
+   * (batched server-side; see `ProductManagementService.hasMultiplePacksFor`). `false`, never
+   * absent, when this product's pack is the only one — the Overview "Pack" row and the inventory
+   * list use it to decide whether "(default)" and a link to the Vendors tab earn their place.
+   */
+  hasMultiplePacks?: boolean
 }
 
 /** Mirrors Spring Data's Page<T> JSON shape. */
@@ -339,6 +347,16 @@ export interface StockMovement {
   companyVendorName?: string
   packagingUnit?: string
   packagingSize?: number | null
+  /**
+   * What the human actually typed for this delivery — "10 bags at ₦28,000/bag" — kept beside
+   * `quantity`/`unitPriceAtTime` (base units, per stock unit) rather than replacing them
+   * (`UNIT_UX_CONTRACT.md` §7 non-negotiable 3). Null on OUT/ADJUSTMENT and on any IN entered
+   * directly in the stock unit — same absence rule as `packagingUnit`/`packagingSize`, which is
+   * what `enteredUnit` equals whenever both are present.
+   */
+  enteredUnit?: string
+  enteredQuantity?: number | null
+  enteredUnitPrice?: number | null
 }
 
 export interface CheaperVendorHint {
@@ -407,4 +425,37 @@ export interface ProductRowError {
 export interface BulkUploadResponse {
   createdCount: number
   products: Product[]
+}
+
+export type SkuResetCadence = 'NEVER' | 'YEARLY' | 'MONTHLY'
+
+/**
+ * A tenant's automatic SKU generation config — GET/PUT `/api/products/sku-settings`.
+ *
+ * `pattern` is the single source of truth for both the Simple and Advanced tabs in {@link
+ * ProductSkuSettingsPage} — there is no separate stored "mode". A tenant that has never
+ * configured this feature gets the implicit default (`enabled: false, pattern: '', resetCadence:
+ * 'NEVER'`) rather than a 404 — see `ProductSkuSettingsService.get` on the backend.
+ */
+export interface ProductSkuSettings {
+  enabled: boolean
+  pattern: string
+  resetCadence: SkuResetCadence
+}
+
+export type UpdateProductSkuSettingsPayload = ProductSkuSettings
+
+/**
+ * A non-committing peek at the next SKU — GET `/api/products/sku-preview`. Never advances the
+ * real counter.
+ *
+ * `nextSequence` is the one part of this that only the server knows — the create-product form
+ * fetches it once per page load and re-renders `sku` locally (`renderSku`, `skuPattern.ts`) as
+ * the product name changes, rather than calling this endpoint on every keystroke: everything
+ * else the pattern needs (the pattern string itself, the current date) the client already has or
+ * can compute.
+ */
+export interface SkuPreview {
+  sku: string
+  nextSequence: number
 }

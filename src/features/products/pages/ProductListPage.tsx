@@ -136,6 +136,7 @@ export function ProductListPage() {
         onBulkUpload={() => navigate('/app/products/import')}
         onDownloadTemplate={() => void handleDownloadTemplate()}
         onExport={() => void handleExport()}
+        onSkuSettings={() => navigate('/app/products/sku-settings')}
       />
 
       {loading && <ProductListSkeleton />}

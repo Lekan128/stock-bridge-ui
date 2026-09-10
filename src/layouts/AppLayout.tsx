@@ -25,7 +25,10 @@ export function AppLayout() {
           nothing. Its own shrink-0 keeps it from being squeezed by the scroll area beneath it.
         */}
         <EmailVerificationBanner />
-        <main className="flex-1 overflow-y-auto p-6">
+        {/* data-scroll-container: this is the actual scroll region in this layout (the window
+            itself never scrolls, since the root is h-screen overflow-hidden) - ScrollToTop
+            targets it by that attribute on every navigation. */}
+        <main data-scroll-container className="flex-1 overflow-y-auto p-6">
           <Outlet />
         </main>
       </div>

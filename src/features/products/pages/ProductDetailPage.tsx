@@ -83,6 +83,10 @@ export function ProductDetailPage() {
 
   const canManageInventory = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_INVENTORY)
   const canManageProducts = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_PRODUCTS)
+  // Independently grantable since V27 — a role may receive stock, issue it, both or neither,
+  // separately from MANAGE_INVENTORY (which still gates Adjust below). See StockController.
+  const canStockIn = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.STOCK_IN)
+  const canStockOut = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.STOCK_OUT)
 
   function setTab(next: ProductDetailTab) {
     setSearchParams(
@@ -275,7 +279,22 @@ export function ProductDetailPage() {
             {packLabel && (
               <div>
                 <dt className="text-neutral-500">{UNIT_COPY.PACK}</dt>
-                <dd className="mt-0.5 font-medium text-neutral-900">{packLabel}</dd>
+                <dd className="mt-0.5 flex flex-wrap items-center gap-2">
+                  <span className="font-medium text-neutral-900">
+                    {packLabel}
+                    {/* This row is always the product's OWN pack, singular by design
+                        (MULTI_PACK_PER_VENDOR_DESIGN.md §3) — but a vendor can have others, and
+                        with no signal here that reads as "the only pack" rather than "the
+                        default among several", same gap the Preferred-supplier row solved with
+                        a name plus a link. */}
+                    {product.hasMultiplePacks && <span className="font-normal text-neutral-500"> (default)</span>}
+                  </span>
+                  {product.hasMultiplePacks && (
+                    <Link to={{ search: '?tab=vendors' }} className="text-xs font-medium text-primary-600 hover:underline">
+                      View packs
+                    </Link>
+                  )}
+                </dd>
               </div>
             )}
             {/* Where this stock comes from. Rendered even when unset, as an em dash, rather than
@@ -315,17 +334,23 @@ export function ProductDetailPage() {
         product={product}
         incoming={incoming}
         actions={
-          canManageInventory ? (
+          canStockIn || canStockOut || canManageInventory ? (
             <>
-              <Button variant="secondary" onClick={() => setActiveAction('in')}>
-                Stock In
-              </Button>
-              <Button variant="secondary" onClick={() => setActiveAction('out')}>
-                Stock Out
-              </Button>
-              <Button variant="secondary" onClick={() => setActiveAction('adjustment')}>
-                Adjust
-              </Button>
+              {canStockIn && (
+                <Button variant="secondary" onClick={() => setActiveAction('in')}>
+                  Stock In
+                </Button>
+              )}
+              {canStockOut && (
+                <Button variant="secondary" onClick={() => setActiveAction('out')}>
+                  Stock Out
+                </Button>
+              )}
+              {canManageInventory && (
+                <Button variant="secondary" onClick={() => setActiveAction('adjustment')}>
+                  Adjust
+                </Button>
+              )}
             </>
           ) : undefined
         }
@@ -339,6 +364,8 @@ export function ProductDetailPage() {
           error={historyError}
           page={historyPage}
           onPageChange={setHistoryPage}
+          stockUnit={stockUnitText}
+          unitOfMeasureOptions={unitOfMeasureOptions}
         />
       </div>
         </div>

@@ -119,9 +119,10 @@ export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProp
   const { options: unitOfMeasureOptions } = useUnitOfMeasureOptions()
 
   const [choosingLots, setChoosingLots] = useState(false)
-  /** The selected unit's `code`, or `null` for "not chosen yet" — same self-healing resolution as
-   *  `StockInModal`'s, for the same reason: an option list that arrives asynchronously must not
-   *  leave a stale code sitting in state. */
+  /** The selected option's `label`, or `null` for "not chosen yet" — not its `code`, per
+   *  `UnitToggle`'s own doc comment (a code can repeat once a vendor has more than one pack). Same
+   *  self-healing resolution as `StockInModal`'s, for the same reason: an option list that arrives
+   *  asynchronously must not leave a stale label sitting in state. */
   const [unitCode, setUnitCode] = useState<string | null>(null)
   const [step, setStep] = useState<'form' | 'receipt'>('form')
   const [submitting, setSubmitting] = useState(false)
@@ -198,7 +199,7 @@ export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProp
    * away in the toggle, and a code the user has picked (`unitCode`) always wins over this.
    */
   const selectedOption =
-    (unitCode == null ? undefined : unitOptions.find((option) => option.code === unitCode)) ?? stockUnitOption(unitOptions)
+    (unitCode == null ? undefined : unitOptions.find((option) => option.label === unitCode)) ?? stockUnitOption(unitOptions)
   const stockUnitText = stockUnitLabel(unitOptions)
 
   /**
@@ -414,8 +415,8 @@ export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProp
               </div>
               <div className="sm:pb-0.5">
                 <UnitToggle
-                  value={selectedOption.code}
-                  onChange={setUnitCode}
+                  value={selectedOption.label}
+                  onChange={(option) => setUnitCode(option.label)}
                   options={offeredUnits}
                   label={UNIT_COPY.COUNTED_IN}
                 />

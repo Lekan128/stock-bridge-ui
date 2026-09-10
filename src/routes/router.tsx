@@ -12,6 +12,7 @@ import { BootstrappingScreen } from '@/components/BootstrappingScreen'
 import { AdminLayout } from '@/layouts/AdminLayout'
 import { AppLayout } from '@/layouts/AppLayout'
 import { StorefrontLayout } from '@/layouts/StorefrontLayout'
+import { ScrollToTop } from '@/routes/ScrollToTop'
 
 // Eager: the public storefront and auth. These are the first paint for an anonymous visitor
 // arriving at `/`, so they must not wait on a second network round trip.
@@ -72,6 +73,11 @@ const LowStockProductsPage = lazy(() =>
     default: m.LowStockProductsPage,
   })),
 )
+const ProductSkuSettingsPage = lazy(() =>
+  import('@/pages/ProductSkuSettingsPage').then((m) => ({
+    default: m.ProductSkuSettingsPage,
+  })),
+)
 // The bulk import pipeline (chooser → upload → review → confirm → result). Five chunks of its
 // own rather than one: the review screen carries the grid and is by far the heaviest, and the
 // three screens either side of it are reached by users who may never open it.
@@ -129,10 +135,16 @@ const VendorPurchaseHistoryPage = lazy(() =>
     default: m.VendorPurchaseHistoryPage,
   })),
 )
+const PurchaseHistoryPage = lazy(() =>
+  import('@/pages/PurchaseHistoryPage').then((m) => ({
+    default: m.PurchaseHistoryPage,
+  })),
+)
 const ProfilePage = lazy(() =>
   import('@/pages/ProfilePage').then((m) => ({ default: m.ProfilePage })),
 )
 const UsersPage = lazy(() => import('@/pages/UsersPage').then((m) => ({ default: m.UsersPage })))
+const RolesPage = lazy(() => import('@/pages/RolesPage').then((m) => ({ default: m.RolesPage })))
 const CompanySettingsPage = lazy(() =>
   import('@/pages/CompanySettingsPage').then((m) => ({
     default: m.CompanySettingsPage,
@@ -280,6 +292,7 @@ export function AppRoutes() {
     // while a lazy chunk is in flight, which on a warm cache is imperceptible, and a single
     // boundary keeps route definitions readable.
     <Suspense fallback={<BootstrappingScreen />}>
+      <ScrollToTop />
       <Routes>
         {/* ---------------------------------------------------------------- Public storefront */}
         <Route element={<StorefrontLayout />}>
@@ -412,6 +425,17 @@ export function AppRoutes() {
               </RequirePermission>
             }
           />
+          {/* Static segment, declared above products/:id for the same reason products/import is —
+            see that route's comment. Gated on MANAGE_PRODUCTS: configuring how SKUs get
+            generated is the same authority as creating/editing products, not a read concern. */}
+          <Route
+            path="products/sku-settings"
+            element={
+              <RequirePermission permission={PERMISSIONS.MANAGE_PRODUCTS}>
+                <ProductSkuSettingsPage />
+              </RequirePermission>
+            }
+          />
           {/* Bulk import (bulk-import contract §7). Declared above `products/:id` for the
             reader's sake — react-router 7 ranks a static segment above a dynamic one regardless
             of source order, so `products/import` cannot be swallowed by `products/:id`, but a
@@ -539,6 +563,16 @@ export function AppRoutes() {
             element={
               <RequirePermission permission={PERMISSIONS.VIEW_VENDORS}>
                 <VendorPurchaseHistoryPage />
+              </RequirePermission>
+            }
+          />
+          {/* The company-wide feed above the per-vendor screen just above — same permission,
+            since reading what was bought and from whom is the same authority either way. */}
+          <Route
+            path="purchases"
+            element={
+              <RequirePermission permission={PERMISSIONS.VIEW_VENDORS}>
+                <PurchaseHistoryPage />
               </RequirePermission>
             }
           />
@@ -675,6 +709,14 @@ export function AppRoutes() {
             element={
               <RequirePermission permission={PERMISSIONS.MANAGE_USERS}>
                 <UsersPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="roles"
+            element={
+              <RequirePermission permission={PERMISSIONS.MANAGE_ROLES}>
+                <RolesPage />
               </RequirePermission>
             }
           />

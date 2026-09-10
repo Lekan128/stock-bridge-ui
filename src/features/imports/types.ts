@@ -360,6 +360,21 @@ export interface UndoBlockedResponse {
   blockers: UndoBlocker[]
 }
 
+// -------------------------------------------------------- linked packs
+
+/**
+ * A row of `GET /api/imports/{id}/linked-packs` — a pack this session's review screen confirmed
+ * into existence (MULTI_PACK_PER_VENDOR_DESIGN.md §6a). Confirming persists independently of the
+ * session, so discarding it does not take the pack with it unless the discard dialog offers to
+ * remove it — this is what that dialog lists.
+ */
+export interface ImportLinkedPack {
+  packId: string
+  productName: string
+  vendorName: string
+  packLabel: string
+}
+
 // -------------------------------------------------------------- pagination
 
 /** Spring Data's `Page<T>` on the wire, same shape products already uses. */

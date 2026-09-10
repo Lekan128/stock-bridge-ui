@@ -37,6 +37,39 @@ export interface ProductVendorPriceTier {
   unitPrice: number
 }
 
+/**
+ * One priced offering a vendor makes for this product — a real pack (a container and a size) or,
+ * when {@link packagingUnit} is `null`, the bare stock unit with no container.
+ * MULTI_PACK_PER_VENDOR_DESIGN.md sections 4-7: a vendor is no longer limited to one of these —
+ * the same rice can arrive from the same supplier in both 25 kg and 50 kg bags, each with its own
+ * code, cost and price breaks.
+ */
+export interface ProductVendorPack {
+  id: string
+  /** A packaging code (`"BAG"`), or `null` meaning "priced in the stock unit directly, no
+   *  container" — see this interface's own doc comment. Pairs with `packagingSize`: both null or
+   *  both set, never one without the other. */
+  packagingUnit: string | null
+  packagingSize: number | null
+  /** Section 1's Pack phrase (`"Bag of 50 kg"`), or the stock unit's short symbol (`"kg"`) for the
+   *  bare case — server-composed, never built from `packagingUnit`/`packagingSize` on this side. */
+  label: string
+  /** That vendor's own code for THIS pack specifically — vendors routinely barcode a 25 kg bag
+   *  differently from a 50 kg bag of the same item. */
+  vendorSku: string | null
+  /** Per STOCK UNIT (`UNIT_UX_CONTRACT.md` §3.2), refreshed on every stock-in against this pack.
+   *  `null` until the first delivery against it is recorded. */
+  lastCostPrice: number | null
+  /** Which pack pre-fills the stock-in form for this vendor when nothing else disambiguates.
+   *  Exactly one `true` per vendor — a swap, not an independent boolean, same convention as
+   *  `ProductVendor.isPreferred` one level up. */
+  isDefault: boolean
+  /** Collapsed by default in the UI — most packs have none. */
+  priceTiers: ProductVendorPriceTier[]
+  createdAt: string
+  updatedAt: string
+}
+
 export interface ProductVendor {
   id: string
   productId: string
@@ -51,20 +84,20 @@ export interface ProductVendor {
    * (stock-in's vendor selector, the "create product" form) — never from this tab.
    */
   companyVendorActive: boolean
-  /** That vendor's own code for this item, if known. Not this company's SKU. */
-  vendorSku: string | null
   /**
-   * The flat, most-recent cost from this vendor, refreshed on every stock-in from them.
-   * `null` until the first delivery is recorded. Superseded for display purposes by
-   * `priceTiers` when the vendor has any — see the Vendors tab's "from ₦X" treatment.
+   * This vendor's packs (MULTI_PACK_PER_VENDOR_DESIGN.md sections 4-7) — the actual data now;
+   * `vendorSku`/`lastCostPrice`/`defaultPackagingUnit`/`defaultPackagingSize` below mirror
+   * whichever of these has `isDefault: true` and exist only as a permanent alias for code not yet
+   * updated to read this array directly.
    */
+  packs: ProductVendorPack[]
+  /** Alias for `packs.find(p => p.isDefault)?.vendorSku`. Prefer `packs` directly. */
+  vendorSku: string | null
+  /** Alias for `packs.find(p => p.isDefault)?.lastCostPrice`. Prefer `packs` directly. */
   lastCostPrice: number | null
-  /** Prefills the stock-in form and the price-tier form's unit for this vendor. Both nullable — a
-   *  vendor with no configured packaging is priced/counted in the product's base unit directly.
-   *
-   *  A per-delivery pack override must NEVER write itself back here without an explicit opt-in on
-   *  the same screen (`UNIT_UX_CONTRACT.md` §3.4 / §7.7, closing plan §3's P0-5). */
+  /** Alias for `packs.find(p => p.isDefault)?.packagingUnit`. Prefer `packs` directly. */
   defaultPackagingUnit: string | null
+  /** Alias for `packs.find(p => p.isDefault)?.packagingSize`. Prefer `packs` directly. */
   defaultPackagingSize: number | null
   /**
    * NetSuite-style manual pin — at most one `true` per product. A swap, not an independent
@@ -78,12 +111,12 @@ export interface ProductVendor {
   quantityOnHandFromVendor: number
   /** Lifetime total received from this vendor, regardless of what has since sold. */
   totalQuantityReceived: number
-  /** Collapsed by default in the UI — most vendors have none. See `ProductVendorPriceTier`. */
+  /** Alias for `packs.find(p => p.isDefault)?.priceTiers`. Prefer `packs` directly. */
   priceTiers: ProductVendorPriceTier[]
   /**
    * This supplier's unit set — `UNIT_UX_CONTRACT.md` §2.3. Same list as
-   * `Product.unitOptions` plus §2.1 step 3, THIS supplier's own default pack. Used by the
-   * stock-in form once a supplier is chosen, so "counted in" offers the pack they actually
+   * `Product.unitOptions` plus §2.1 step 3, EVERY ONE of this supplier's own packs. Used by the
+   * stock-in form once a supplier is chosen, so "counted in" offers every pack they actually
    * deliver in rather than only the product's own.
    *
    * Optional for the same two reasons as `Product.unitOptions`: the API omits null fields, and
@@ -121,4 +154,29 @@ export interface PriceTierPayload {
   minQuantity: number
   /** Per the product's stock unit — never per pack. */
   unitPrice: number
+}
+
+/**
+ * `POST .../vendors/{vendorId}/packs` body. `packagingUnit`/`packagingSize` both omitted (or
+ * both null) means the bare stock unit — see `ProductVendorPack`'s own doc comment. The pairing
+ * and sign rules are cross-field and enforced server-side (`InvalidProductVendorPackException`).
+ */
+export interface AddPackPayload {
+  packagingUnit?: string | null
+  packagingSize?: number | null
+  vendorSku?: string
+  lastCostPrice?: number
+}
+
+/**
+ * `PATCH .../vendors/{vendorId}/packs/{packId}` body — patch semantics, every field optional.
+ * Packaging is deliberately not here: a pack's container/size is not editable in place, since
+ * changing it would silently reinterpret every past receipt recorded against it. `isDefault` is a
+ * swap when `true`, same convention `ProductVendorUpdatePayload.isPreferred` already uses one
+ * level up.
+ */
+export interface UpdatePackPayload {
+  vendorSku?: string
+  lastCostPrice?: number
+  isDefault?: boolean
 }

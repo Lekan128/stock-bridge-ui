@@ -46,7 +46,7 @@ export function UserTable({ users, currentUserId, onEdit, onResetPassword, onDea
                 <td className="border-b border-neutral-100 px-4 py-2.5 text-neutral-600">{user.email || '—'}</td>
                 <td className="border-b border-neutral-100 px-4 py-2.5">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <RoleBadge role={user.role} />
+                    <RoleBadge roleName={user.roleName} isSystem={user.roleIsSystem} />
                     {user.root && <AccountOwnerBadge />}
                   </div>
                 </td>

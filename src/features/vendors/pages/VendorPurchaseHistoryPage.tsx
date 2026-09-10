@@ -4,15 +4,13 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { buttonClassName } from '@/components/Button'
 import { EmptyState } from '@/components/EmptyState'
 import { ErrorState } from '@/components/ErrorState'
-import { OrderStatusBadge } from '@/components/OrderStatusBadge'
 import { Pagination } from '@/components/Pagination'
 import { Skeleton } from '@/components/Skeleton'
-import { formatDateTime } from '@/features/products/formatters'
+import { PurchaseHistoryCard } from '@/features/purchases/components/PurchaseHistoryCard'
+import { PurchaseSourceFilter, type SourceFilter } from '@/features/purchases/components/PurchaseSourceFilter'
+import { usePurchaseHistory } from '@/features/purchases/hooks/usePurchaseHistory'
 import { VendorKindBadge } from '@/features/vendors/components/VendorKindBadge'
 import { useVendor } from '@/features/vendors/hooks/useVendor'
-import { useVendorPurchases } from '@/features/vendors/hooks/useVendorPurchases'
-import type { VendorPurchase } from '@/features/vendors/types'
-import { formatNaira } from '@/utils/money'
 
 /**
  * Everything this company ever bought from one supplier — `/app/vendors/:id/purchases`.
@@ -20,6 +18,12 @@ import { formatNaira } from '@/utils/money'
  * **Its own screen, on the stakeholder's explicit instruction**, and not a section of the vendor
  * detail page. That is also the right call technically: it is paginated, so folding it in would
  * either truncate it silently or make the detail screen pay for a page nobody scrolled to.
+ *
+ * Merges two ledgers into one date-ordered list (see `PurchaseHistoryRepository` on the API for
+ * why that merge has to happen server-side): placed marketplace orders, and manual stock-ins
+ * recorded by hand against this supplier. The latter is the ONLY way an EXTERNAL supplier ever
+ * shows anything here at all, since they have no seller account to place an order against. The
+ * source filter lets a reader split the two apart.
  *
  * Cancelled orders appear here even though they are excluded from the spend figures on the detail
  * screen. That is not an inconsistency: "we ordered from them and pulled out" is a fact about the
@@ -29,8 +33,18 @@ export function VendorPurchaseHistoryPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [page, setPage] = useState(0)
+  const [source, setSource] = useState<SourceFilter>('all')
   const { detail, loading: loadingVendor, error: vendorError, refetch: refetchVendor } = useVendor(id)
-  const { data, loading, error, refetch } = useVendorPurchases(id, page)
+  const { data, loading, error, refetch } = usePurchaseHistory({
+    companyVendorId: id,
+    source: source === 'all' ? undefined : source,
+    page,
+  })
+
+  function handleSourceChange(next: SourceFilter) {
+    setSource(next)
+    setPage(0)
+  }
 
   if (loadingVendor) {
     return (
@@ -59,6 +73,7 @@ export function VendorPurchaseHistoryPage() {
   const { vendor, platformVendor } = detail
   const displayName = platformVendor?.name ?? vendor.name
   const purchases = data?.content ?? []
+  const filtered = source !== 'all'
 
   return (
     <div className="flex flex-col gap-6">
@@ -77,13 +92,17 @@ export function VendorPurchaseHistoryPage() {
             <VendorKindBadge kind={vendor.kind} />
           </div>
           <p className="mt-0.5 text-sm text-neutral-500">
-            Everything your company has ordered from{' '}
+            Everything your company has ordered or recorded from{' '}
             <Link to={`/app/vendors/${vendor.id}`} className="font-medium text-primary-600 hover:underline">
               {displayName}
             </Link>
             .
           </p>
         </div>
+      </div>
+
+      <div className="flex justify-end">
+        <PurchaseSourceFilter value={source} onChange={handleSourceChange} />
       </div>
 
       {loading && <Skeleton className="h-64 w-full rounded-lg" />}
@@ -93,14 +112,15 @@ export function VendorPurchaseHistoryPage() {
       {!loading && !error && purchases.length === 0 && (
         <EmptyState
           icon={ReceiptText}
-          title={vendor.kind === 'EXTERNAL' ? 'No history to show for this supplier' : 'No purchases yet'}
+          title={filtered ? 'Nothing matches this filter' : 'No purchases yet'}
           description={
-            vendor.kind === 'EXTERNAL'
-              ? // A permanent, explained empty state rather than "nothing found". This supplier is
-                // off-platform by definition, so there is nothing to wait for and nothing broken —
-                // and recording off-platform purchases by hand is not a feature that exists.
-                'You buy from this supplier outside ProcurePaddy, so their orders do not pass through here. Purchase history is only recorded for sellers you order from on the marketplace.'
-              : 'Once you place an order with this seller, every purchase will be listed here with what you paid.'
+            filtered
+              ? 'Try a different filter, or view all purchases from this supplier.'
+              : vendor.kind === 'EXTERNAL'
+                ? // A permanent, explained empty state rather than "nothing found" — until a
+                  // stock-in is recorded against this supplier, there is genuinely nothing yet.
+                  'Nothing has been recorded from this supplier yet. Purchase history shows both orders placed on the marketplace and deliveries you record by hand against this supplier.'
+                : 'Once you place an order with this seller, or record a delivery from them by hand, it will be listed here with what you paid.'
           }
         />
       )}
@@ -108,79 +128,14 @@ export function VendorPurchaseHistoryPage() {
       {!loading && !error && purchases.length > 0 && (
         <>
           <div className="flex flex-col gap-3">
-            {purchases.map((purchase) => (
-              <PurchaseCard key={purchase.orderId} purchase={purchase} />
+            {purchases.map((entry) => (
+              <PurchaseHistoryCard key={entry.id} entry={entry} />
             ))}
           </div>
 
           <Pagination page={data?.number ?? 0} totalPages={data?.totalPages ?? 1} onPageChange={setPage} />
         </>
       )}
-    </div>
-  )
-}
-
-/**
- * One past order with its lines. Every figure is a snapshot taken at checkout, so a rename or a
- * repricing on the marketplace never changes what a past purchase says it cost.
- */
-function PurchaseCard({ purchase }: { purchase: VendorPurchase }) {
-  return (
-    <div className="rounded-lg border border-neutral-200 bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-100 px-4 py-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Link
-            to={`/app/orders/${purchase.orderId}`}
-            className="text-sm font-semibold text-neutral-900 hover:text-primary-700 hover:underline"
-          >
-            {purchase.orderNumber}
-          </Link>
-          <OrderStatusBadge status={purchase.status} />
-          <span className="text-xs text-neutral-500">{formatDateTime(purchase.placedAt)}</span>
-        </div>
-        <span className="text-sm font-semibold text-neutral-900">{formatNaira(purchase.total)}</span>
-      </div>
-
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="text-left text-xs text-neutral-500 uppercase">
-            <tr>
-              <th className="px-4 py-2 font-medium">Item</th>
-              <th className="px-4 py-2 font-medium">Unit price</th>
-              <th className="px-4 py-2 font-medium">Qty</th>
-              <th className="px-4 py-2 font-medium">Line total</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-neutral-100">
-            {purchase.lines.map((line) => (
-              <tr key={line.orderItemId}>
-                <td className="px-4 py-2.5">
-                  <span className="text-neutral-900">{line.productName}</span>
-                  <p className="text-xs text-neutral-500">
-                    {line.productSku}
-                    {line.unitOfMeasure ? ` · ${line.unitOfMeasure}` : ''}
-                  </p>
-                </td>
-                <td className="px-4 py-2.5 text-neutral-700">{formatNaira(line.unitPrice)}</td>
-                <td className="px-4 py-2.5 text-neutral-700">
-                  {line.quantity}
-                  {/* Partial receipt is normal in wholesale, and a line where 8 of 10 bags arrived
-                      is a different fact from one that landed in full. */}
-                  {line.receivedQuantity < line.quantity && (
-                    <span className="block text-xs text-warning-700">{line.receivedQuantity} received</span>
-                  )}
-                </td>
-                <td className="px-4 py-2.5 font-medium text-neutral-900">{formatNaira(line.lineTotal)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="flex flex-wrap justify-end gap-x-6 gap-y-1 border-t border-neutral-100 px-4 py-2.5 text-xs text-neutral-500">
-        <span>Subtotal {formatNaira(purchase.subtotal)}</span>
-        <span>Delivery {formatNaira(purchase.deliveryFee)}</span>
-      </div>
     </div>
   )
 }

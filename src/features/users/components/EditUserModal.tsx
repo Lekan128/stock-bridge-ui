@@ -39,7 +39,7 @@ export function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) 
   } = useForm<EditUserFormValues>({
     resolver: zodResolver(editUserSchema),
     defaultValues: {
-      role: user.role,
+      roleId: user.roleId,
       active: user.active,
       firstName: user.firstName ?? '',
       lastName: user.lastName ?? '',
@@ -56,7 +56,7 @@ export function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) 
     setFormError(null)
 
     const payload: UpdateUserPayload = {}
-    if (!lockAccess && dirtyFields.role) payload.role = values.role
+    if (!lockAccess && dirtyFields.roleId) payload.roleId = values.roleId
     if (!lockAccess && dirtyFields.active) payload.active = values.active
     if (dirtyFields.firstName) payload.firstName = values.firstName.trim()
     if (dirtyFields.lastName) payload.lastName = values.lastName.trim()
@@ -112,14 +112,14 @@ export function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) 
 
         <Controller
           control={control}
-          name="role"
+          name="roleId"
           render={({ field }) => (
             <RoleSelectField
               value={field.value}
               onChange={field.onChange}
               disabled={lockAccess}
               disabledHint={lockAccess ? lockHint : undefined}
-              error={errors.role?.message}
+              error={errors.roleId?.message}
             />
           )}
         />

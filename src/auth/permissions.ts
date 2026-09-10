@@ -12,11 +12,30 @@ export const PERMISSIONS = {
   VIEW_ANALYTICS: 'VIEW_ANALYTICS',
 
   /**
+   * Receive/issue stock — POST .../stock/stock-in and .../stock-out (V27). Split out of
+   * MANAGE_INVENTORY so a role can be given one, both, or neither: separation of duties between
+   * who receives deliveries and who issues stock out. Everything else the stock ledger does
+   * (adjustments, history, the lot list, movements, the cost-basis report) still runs on
+   * MANAGE_INVENTORY unchanged — see StockController.
+   */
+  STOCK_IN: 'STOCK_IN',
+  STOCK_OUT: 'STOCK_OUT',
+
+  /**
    * Edit the caller's own company record — PUT /api/company. Granted to OWNER alone (V7).
    * Reading the company (GET /api/company) is deliberately ungated on the backend, so this
    * code gates the *edit affordance* on the company settings page, never the page itself.
    */
   MANAGE_COMPANY_PROFILE: 'MANAGE_COMPANY_PROFILE',
+
+  /**
+   * Unlock and hand-edit a single product's SKU when automatic generation is on for the
+   * tenant — PUT /api/products/{id} (V23). Granted to OWNER and PROCUREMENT_MANAGER, the same
+   * two roles MANAGE_PRODUCTS goes to. Without it, a MANAGE_PRODUCTS holder can still create
+   * and edit products in every other way; the SKU field alone stays locked while auto-generation
+   * is on, and the server (not this flag) is what actually enforces that on PUT.
+   */
+  PRODUCT_SKU_OVERRIDE: 'PRODUCT_SKU_OVERRIDE',
 
   // Marketplace — buyer side (contract §4.11).
   BROWSE_MARKETPLACE: 'BROWSE_MARKETPLACE',

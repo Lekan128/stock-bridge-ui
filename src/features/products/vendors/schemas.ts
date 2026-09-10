@@ -16,3 +16,18 @@ export const priceTierFormSchema = z.object({
 })
 
 export type PriceTierFormValues = z.infer<typeof priceTierFormSchema>
+
+/**
+ * "+ Add pack" (MULTI_PACK_PER_VENDOR_DESIGN.md sections 4–7). Every field is format-only here —
+ * the real cross-field rule ("a size only if a container was chosen") depends on which the user
+ * picked, which this schema cannot see, so `AddPackModal` checks it itself before submit, the
+ * same split `AddPriceTierRequest`'s own doc comment describes for its cross-field rules.
+ */
+export const addPackFormSchema = z.object({
+  packagingUnit: z.string(),
+  packagingSize: z.string(),
+  vendorSku: z.string(),
+  lastCostPrice: z.string(),
+})
+
+export type AddPackFormValues = z.infer<typeof addPackFormSchema>

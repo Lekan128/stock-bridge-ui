@@ -26,6 +26,7 @@ export interface Profile {
   phone?: string | null
   jobTitle?: string | null
   role: string
+  roleIsSystem: boolean
   permissions: string[]
   root: boolean
   active: boolean

@@ -43,22 +43,23 @@ export function RoleSelectField({ value, onChange, disabled, disabledHint, error
         roles.length > 0 && (
           <div role="radiogroup" aria-label="Role" className="flex flex-col gap-1.5">
             {roles.map((role) => {
-              const selected = value === role.name
+              const selected = value === role.id
+              const displayName = role.isSystem ? formatRoleName(role.name) : role.name
               return (
                 <button
-                  key={role.name}
+                  key={role.id}
                   type="button"
                   role="radio"
                   aria-checked={selected}
                   disabled={disabled}
-                  onClick={() => onChange(role.name)}
+                  onClick={() => onChange(role.id)}
                   className={`rounded-md border px-3 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                     selected
                       ? 'border-primary-300 bg-primary-50'
                       : 'border-neutral-200 bg-white hover:bg-neutral-50'
                   }`}
                 >
-                  <span className="block text-sm font-medium text-neutral-900">{formatRoleName(role.name)}</span>
+                  <span className="block text-sm font-medium text-neutral-900">{displayName}</span>
                   <span className="mt-0.5 block text-xs text-neutral-500">{role.description}</span>
                   {selected && role.permissions.length > 0 && (
                     <span className="mt-1.5 block text-xs text-neutral-500">

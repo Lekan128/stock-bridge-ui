@@ -1,5 +1,6 @@
 import { Fragment, useRef, useState } from 'react'
 import { CircleCheck, CircleSlash, CornerDownRight, Info, TriangleAlert } from 'lucide-react'
+import { CalculationDisclosure } from '@/features/imports/components/CalculationDisclosure'
 import { CellEditor } from '@/features/imports/components/CellEditor'
 import { CellFix } from '@/features/imports/components/CellFix'
 import { PackCostEcho } from '@/features/imports/components/PackCostEcho'
@@ -21,6 +22,7 @@ import type {
   ImportFieldDescriptor,
   ImportRow,
 } from '@/features/imports/types'
+import { costCalculationSentence, quantityCalculationSentence } from '@/features/products/unitCopy'
 import type { UnitOption } from '@/features/products/types'
 
 export interface ReviewGridProps {
@@ -40,6 +42,8 @@ export interface ReviewGridProps {
   isRowBusy: (rowId: string) => boolean
   isValueBusy: (column: string, from: string) => boolean
   onEdit: (row: ImportRow, column: string, value: ImportCellValue) => void
+  /** MULTI_PACK_PER_VENDOR_DESIGN.md §6a's one-click "Confirm" on a candidate pack. */
+  onConfirmPack: (row: ImportRow, packagingUnit: string, packagingSize: number) => void
   onBulkFix: (row: ImportRow, column: string, value: string, count: number) => void
   onToggleSkip: (row: ImportRow, skipped: boolean) => void
 }
@@ -70,6 +74,7 @@ interface GridCellProps {
   busy: boolean
   bulkBusy: boolean
   onEdit: (value: ImportCellValue) => void
+  onConfirmPack: (packagingUnit: string, packagingSize: number) => void
   onBulkFix: (value: string, count: number) => void
 }
 
@@ -83,6 +88,7 @@ function GridCell({
   busy,
   bulkBusy,
   onEdit,
+  onConfirmPack,
   onBulkFix,
 }: GridCellProps) {
   const [editing, setEditing] = useState(false)
@@ -226,10 +232,16 @@ function GridCell({
         reliably announced and is unreachable by keyboard and touch.
       */}
       {isQuantityAnchor && row.baseQuantityText != null && row.baseQuantityText !== '' && (
-        <p className="mt-1 px-2 text-xs font-medium whitespace-nowrap text-neutral-600 tabular-nums">
-          <span aria-hidden="true">{row.baseQuantityText}</span>
-          <span className="sr-only">{copy.review.baseQuantityTitle(row.baseQuantityText)}</span>
-        </p>
+        <>
+          <p className="mt-1 px-2 text-xs font-medium whitespace-nowrap text-neutral-600 tabular-nums">
+            <span aria-hidden="true">{row.baseQuantityText}</span>
+            <span className="sr-only">{copy.review.baseQuantityTitle(row.baseQuantityText)}</span>
+          </p>
+          <CalculationDisclosure
+            className="mt-0.5 px-2"
+            sentence={quantityCalculationSentence(numericCellValue(value), packOption, stockUnitLabel, row.baseQuantityText)}
+          />
+        </>
       )}
 
       {/*
@@ -247,12 +259,22 @@ function GridCell({
         echo with — so the sentence is identical wherever a cost is entered.
       */}
       {isCostPerStockUnitField(field) && (
-        <PackCostEcho
-          className="mt-1 px-2"
-          pricePerPack={numericCellValue(draftValue === undefined ? value : draftValue)}
-          stockUnitLabel={stockUnitLabel}
-          packOption={packOption}
-        />
+        <>
+          <PackCostEcho
+            className="mt-1 px-2"
+            pricePerPack={numericCellValue(draftValue === undefined ? value : draftValue)}
+            stockUnitLabel={stockUnitLabel}
+            packOption={packOption}
+          />
+          <CalculationDisclosure
+            className="mt-0.5 px-2"
+            sentence={costCalculationSentence(
+              numericCellValue(draftValue === undefined ? value : draftValue),
+              packOption,
+              stockUnitLabel,
+            )}
+          />
+        </>
       )}
 
       {error && (
@@ -264,6 +286,7 @@ function GridCell({
           busy={busy}
           bulkBusy={bulkBusy}
           onEdit={onEdit}
+          onConfirmPack={onConfirmPack}
           onBulkFix={onBulkFix}
         />
       )}
@@ -276,6 +299,7 @@ function GridCell({
           busy={busy}
           bulkBusy={bulkBusy}
           onEdit={onEdit}
+          onConfirmPack={onConfirmPack}
           onBulkFix={onBulkFix}
         />
       )}
@@ -301,6 +325,7 @@ export function ReviewGrid({
   isRowBusy,
   isValueBusy,
   onEdit,
+  onConfirmPack,
   onBulkFix,
   onToggleSkip,
 }: ReviewGridProps) {
@@ -405,6 +430,7 @@ export function ReviewGrid({
                     busy={busy}
                     bulkBusy={isValueBusy(field.key, String(row.raw[field.key] ?? ''))}
                     onEdit={(value) => onEdit(row, field.key, value)}
+                    onConfirmPack={(packagingUnit, packagingSize) => onConfirmPack(row, packagingUnit, packagingSize)}
                     onBulkFix={(value, count) => onBulkFix(row, field.key, value, count)}
                   />
                 ))}

@@ -3,10 +3,18 @@ import type { UnitOption } from '@/features/products/types'
 import { UNIT_COPY } from '@/features/products/unitCopy'
 
 export interface UnitToggleProps {
-  /** The selected unit's `code`. */
+  /**
+   * The selected option's `label`, not its `code`. A label is unique within one set by
+   * construction (`unitSet.buildUnitOptions` never produces two entries with the same label); a
+   * `code` no longer is, once a vendor can have more than one pack sharing a container code
+   * (MULTI_PACK_PER_VENDOR_DESIGN.md sections 4–7) — two `<option value="BAG">` elements would be
+   * indistinguishable to a native `<select>`, which matches by the literal `value` string.
+   */
   value: string
-  /** Receives the chosen option's `code` — the value to put on the wire's `unit` field. */
-  onChange: (code: string) => void
+  /** Receives the chosen option itself, not just a string — a caller needs more than `code` to
+   *  submit a request unambiguously once a code can repeat (see `StockInModal.submit`, which also
+   *  reads `factorToStockUnit` off it). */
+  onChange: (option: UnitOption) => void
   /** The product's unit set, from `unitSet.unitOptionsForProduct`/`unitOptionsForSupplier`. */
   options: readonly UnitOption[]
   /** Accessible name for the control. Defaults to §1's locked name for the wire's `unit`. */
@@ -84,11 +92,14 @@ export function UnitToggle({ value, onChange, options, label = UNIT_COPY.COUNTED
         aria-label={label}
         value={value}
         disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) => {
+          const picked = normalised.find((option) => option.label === event.target.value)
+          if (picked) onChange(picked)
+        }}
         className="w-full rounded-md border border-neutral-200 bg-white px-2.5 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none disabled:cursor-not-allowed disabled:bg-neutral-50 disabled:text-neutral-400 sm:w-auto"
       >
         {normalised.map((option) => (
-          <option key={option.code} value={option.code}>
+          <option key={option.label} value={option.label}>
             {option.label}
           </option>
         ))}
@@ -103,14 +114,14 @@ export function UnitToggle({ value, onChange, options, label = UNIT_COPY.COUNTED
       aria-label={label}
     >
       {normalised.map((option) => {
-        const selected = value === option.code
+        const selected = value === option.label
         return (
           <button
-            key={option.code}
+            key={option.label}
             type="button"
             aria-pressed={selected}
             disabled={disabled}
-            onClick={() => onChange(option.code)}
+            onClick={() => onChange(option)}
             className={`rounded-sm px-2.5 py-1 text-xs whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-60 ${
               selected
                 ? 'border border-neutral-200 bg-white font-semibold text-neutral-900 shadow-sm'
