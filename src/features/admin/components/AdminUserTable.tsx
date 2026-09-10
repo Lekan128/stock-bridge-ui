@@ -62,7 +62,7 @@ export function AdminUserTable({ users, renderActions, onRowClick }: AdminUserTa
                 <td className="border-b border-neutral-100 px-4 py-2.5 text-neutral-600">{user.phone || '—'}</td>
                 <td className="border-b border-neutral-100 px-4 py-2.5">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <RoleBadge role={user.role} />
+                    <RoleBadge roleName={user.roleName} isSystem={user.roleIsSystem} />
                     {user.root && <AccountOwnerBadge title="The first user created in this company — its account owner" />}
                   </div>
                 </td>

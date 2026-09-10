@@ -160,7 +160,7 @@ export function CatalogFilterPanel({
           <p className="mt-1.5 text-xs text-neutral-500">
             {filters.minPrice || filters.maxPrice
               ? `Showing ${filters.minPrice ? formatNairaWhole(Number(filters.minPrice)) : 'any'} to ${filters.maxPrice ? formatNairaWhole(Number(filters.maxPrice)) : 'any'}`
-              : 'Naira, per unit of measure.'}
+              : 'Naira, per stock unit.'}
           </p>
           {/* Submit exists for keyboard users pressing Enter; blur covers the mouse path. */}
           <button type="submit" className="sr-only">

@@ -14,6 +14,12 @@ export interface StepIndicatorProps {
    * `currentIndex` — jumping *forward* would skip validation, so it is not offered.
    */
   onStepClick?: (index: number) => void
+  /**
+   * Accessible name for the `<nav>`. It used to be hard-coded to "Checkout progress", which is
+   * what a screen reader announced on the bulk-import flow too — the wrong flow, named
+   * confidently, which is worse than no name at all.
+   */
+  label?: string
   className?: string
 }
 
@@ -22,9 +28,15 @@ export interface StepIndicatorProps {
  * indicator with no dead ends, so completed steps are navigable backwards while the remaining
  * ones stay inert.
  */
-export function StepIndicator({ steps, currentIndex, onStepClick, className = '' }: StepIndicatorProps) {
+export function StepIndicator({
+  steps,
+  currentIndex,
+  onStepClick,
+  label = 'Checkout progress',
+  className = '',
+}: StepIndicatorProps) {
   return (
-    <nav aria-label="Checkout progress" className={className}>
+    <nav aria-label={label} className={className}>
       <ol className="flex items-center">
         {steps.map((step, index) => {
           const isComplete = index < currentIndex
@@ -45,9 +57,12 @@ export function StepIndicator({ steps, currentIndex, onStepClick, className = ''
                 {isComplete ? <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden="true" /> : index + 1}
               </span>
               {/* Labels are hidden below sm — at 375px three labels plus connectors don't fit,
-                  and the numbered markers alone still convey position. */}
+                  and the numbered markers alone still convey position *visually*. `sr-only`
+                  rather than `hidden`, though: `display:none` takes them out of the
+                  accessibility tree as well, which left a phone user with "2" and no idea what
+                  step 2 is. */}
               <span
-                className={`hidden text-sm font-medium sm:inline ${
+                className={`sr-only text-sm font-medium sm:not-sr-only sm:inline ${
                   isCurrent ? 'text-primary-700' : isComplete ? 'text-neutral-700' : 'text-neutral-400'
                 }`}
               >

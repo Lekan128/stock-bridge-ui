@@ -34,6 +34,54 @@ export const superAdminAuthStorage = {
   },
 }
 
+/**
+ * When the email-verification banner may come back, per user id.
+ *
+ * Dismissal persists across reloads but *expires*, and both halves are deliberate. It must
+ * persist, because a banner that reappears on every navigation is noise the user learns to look
+ * past — the opposite of what a one-off "your receipts are not being delivered" message needs.
+ * It must expire, because the consequence does not: an unverified account keeps missing every
+ * order receipt and payment confirmation for as long as it stays unverified, so permanent
+ * dismissal would let someone silently opt out of ever being told again.
+ *
+ * A day is the interval because that is roughly the cadence at which the reminder is new
+ * information — long enough that the user has had time to go and find the email, short enough
+ * that they have not yet placed a week of orders they will never get receipts for. Verifying
+ * removes the banner outright, so nobody who acts ever sees it a second time.
+ */
+const VERIFY_BANNER_DISMISSED_KEY = 'procurepal.emailVerifyBannerDismissed.v1'
+const VERIFY_BANNER_DISMISS_MS = 24 * 60 * 60 * 1000
+
+interface StoredBannerDismissal {
+  userId: string
+  until: number
+}
+
+export const emailVerificationStorage = {
+  /** Keyed by user id so a shared browser never hides one person's banner for another's. */
+  isBannerDismissed: (userId: string): boolean => {
+    try {
+      const raw = localStorage.getItem(VERIFY_BANNER_DISMISSED_KEY)
+      if (!raw) return false
+      const parsed = JSON.parse(raw) as StoredBannerDismissal | null
+      if (!parsed || parsed.userId !== userId || typeof parsed.until !== 'number') return false
+      return parsed.until > Date.now()
+    } catch {
+      return false
+    }
+  },
+
+  dismissBanner: (userId: string): void => {
+    try {
+      const payload: StoredBannerDismissal = { userId, until: Date.now() + VERIFY_BANNER_DISMISS_MS }
+      localStorage.setItem(VERIFY_BANNER_DISMISSED_KEY, JSON.stringify(payload))
+    } catch {
+      // Private browsing / quota. The banner then simply reappears next load, which is the
+      // safe direction to fail in.
+    }
+  },
+}
+
 /** A line in the anonymous cart. Only ids and quantities — never prices, which go stale. */
 export interface StoredCartLine {
   productId: string

@@ -8,10 +8,9 @@ import { Modal } from '@/components/Modal'
 import { TextField } from '@/components/TextField'
 import { superAdminApiClient } from '@/features/admin/api/superAdminApi'
 import { AdminRoleSelectField } from '@/features/admin/components/AdminRoleSelectField'
-import type { SuperAdminUserSummary } from '@/features/admin/types'
+import type { PlatformOwnerUpdateUserPayload, SuperAdminUserSummary } from '@/features/admin/types'
 import { formatDisplayName } from '@/features/users/formatters'
 import { editUserSchema, type EditUserFormValues } from '@/features/users/schemas'
-import type { UpdateUserPayload } from '@/features/users/types'
 import { isAppError } from '@/types/api'
 
 export interface EditPlatformOwnerUserModalProps {
@@ -45,7 +44,8 @@ export function EditPlatformOwnerUserModal({ user, onClose, onSuccess }: EditPla
   } = useForm<EditUserFormValues>({
     resolver: zodResolver(editUserSchema),
     defaultValues: {
-      role: user.role,
+      // Holds a system role NAME, not an id — see PlatformOwnerUpdateUserPayload.
+      roleId: user.roleName,
       active: user.active,
       firstName: user.firstName ?? '',
       lastName: user.lastName ?? '',
@@ -60,8 +60,8 @@ export function EditPlatformOwnerUserModal({ user, onClose, onSuccess }: EditPla
   async function onSubmit(values: EditUserFormValues) {
     setFormError(null)
 
-    const payload: UpdateUserPayload = {}
-    if (!isRoot && dirtyFields.role) payload.role = values.role
+    const payload: PlatformOwnerUpdateUserPayload = {}
+    if (!isRoot && dirtyFields.roleId) payload.role = values.roleId
     if (!isRoot && dirtyFields.active) payload.active = values.active
     if (dirtyFields.firstName) payload.firstName = values.firstName.trim()
     if (dirtyFields.lastName) payload.lastName = values.lastName.trim()
@@ -117,14 +117,14 @@ export function EditPlatformOwnerUserModal({ user, onClose, onSuccess }: EditPla
 
         <Controller
           control={control}
-          name="role"
+          name="roleId"
           render={({ field }) => (
             <AdminRoleSelectField
               value={field.value}
               onChange={field.onChange}
               disabled={isRoot}
               disabledHint={isRoot ? ROOT_HINT : undefined}
-              error={errors.role?.message}
+              error={errors.roleId?.message}
             />
           )}
         />

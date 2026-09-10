@@ -29,7 +29,7 @@ export function AdminLayout() {
       <header className="flex items-center justify-between border-b border-primary-800 bg-primary-900 px-6 py-3 text-white">
         <div className="flex items-center gap-3">
           <Logo size={28} variant="icon" />
-          <span className="font-semibold">Stock Bridge</span>
+          <span className="font-semibold">Procure Paddy</span>
           <span className="rounded-md bg-primary-700 px-2 py-0.5 text-xs font-medium uppercase tracking-wide">
             Super Admin
           </span>

@@ -24,6 +24,12 @@ export interface SummaryCardsProps {
  * The headline grid. Ten figures, in the order an operator asks about them: what did we
  * make, how much did we sell, who bought, and what is still owed to somebody.
  *
+ * Every one of them is ProcurePal's OWN book — see `MarketplaceAnalyticsPage` for the M6
+ * scope change and why the page states it out loud. The hints below say so wherever a tile
+ * could otherwise be read as a marketplace-wide figure; "buying companies" is the one most
+ * at risk of that, since the platform plainly has more companies than bought from
+ * ProcurePal this month.
+ *
  * Money uses the compact formatter on the tile face (`₦4.2M` — the full form wraps at
  * 375px and turns a stat card into three lines) with the exact figure in the hint beneath
  * or in the `title` attribute, so nothing is only ever shown rounded.
@@ -51,7 +57,7 @@ export function SummaryCards({ summary }: SummaryCardsProps) {
         icon={ClipboardList}
         current={current.orderCount}
         previous={previous.orderCount}
-        hint="Excludes cancelled and unpaid checkouts"
+        hint="ProcurePal's own · excludes cancelled and unpaid checkouts"
       />
       <MetricCard
         label="Average order value"
@@ -75,7 +81,7 @@ export function SummaryCards({ summary }: SummaryCardsProps) {
         icon={Building2}
         current={current.activeBuyingCompanies}
         previous={previous.activeBuyingCompanies}
-        hint="Placed at least one order in this period"
+        hint="Bought from ProcurePal at least once in this period"
       />
       <MetricCard
         label="New companies"
@@ -83,7 +89,7 @@ export function SummaryCards({ summary }: SummaryCardsProps) {
         icon={Sparkles}
         current={current.newBuyingCompanies}
         previous={previous.newBuyingCompanies}
-        hint="First ever order landed in this period"
+        hint="First ever order from ProcurePal landed in this period"
       />
       <MetricCard
         label="Repeat order rate"
@@ -91,7 +97,7 @@ export function SummaryCards({ summary }: SummaryCardsProps) {
         icon={Repeat}
         current={current.repeatOrderRate}
         previous={previous.repeatOrderRate}
-        hint="Orders from companies that had bought before"
+        hint="Orders from companies that had bought from ProcurePal before"
       />
       <MetricCard
         label="Awaiting delivery"

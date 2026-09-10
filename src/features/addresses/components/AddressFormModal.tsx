@@ -13,14 +13,73 @@ import {
   toAddressPayload,
   type AddressFormValues,
 } from '@/features/addresses/schemas'
-import type { DeliveryAddress } from '@/features/addresses/types'
+import type { DeliveryAddress, DeliveryAddressPayload } from '@/features/addresses/types'
 import { isAppError } from '@/types/api'
+
+/**
+ * The two write calls this modal makes. An interface rather than a hard import of
+ * `addressesApi` so the seller's pickup-address screen can pass its own endpoints — the
+ * payload, the validation and the ten fields are identical, and the ONLY difference between a
+ * delivery address and a pickup point is which URL it is written to (the server sets the
+ * discriminator from the route, never from the body). Two near-copies of a ten-field form
+ * drift within a week; one form with a swapped API cannot.
+ */
+export interface AddressBookApi {
+  create: (payload: DeliveryAddressPayload) => Promise<DeliveryAddress>
+  update: (id: string, payload: DeliveryAddressPayload) => Promise<DeliveryAddress>
+}
+
+/**
+ * `delivery` is a buyer's address book — where goods arrive. `pickup` is a seller's — where
+ * goods are collected FROM. Only the words change; the fields, the schema and the Nigerian
+ * state list are shared, which is the point of having one component.
+ */
+export type AddressFormVariant = 'delivery' | 'pickup'
+
+const COPY: Record<AddressFormVariant, {
+  addTitle: string
+  editTitle: string
+  addSubmit: string
+  labelHint: string
+  phoneHint: string
+  notesLabel: string
+  notesPlaceholder: string
+  firstNote: string
+  defaultLabel: string
+}> = {
+  delivery: {
+    addTitle: 'Add delivery address',
+    editTitle: 'Edit delivery address',
+    addSubmit: 'Add address',
+    labelHint: 'Something you will recognise at checkout, e.g. "Ikeja warehouse".',
+    phoneHint: 'The driver calls this number on arrival.',
+    notesLabel: 'Delivery notes',
+    notesPlaceholder: 'e.g. deliveries accepted 8am–4pm, use the back gate',
+    firstNote: 'This is your first address, so it becomes your default delivery location.',
+    defaultLabel: 'Make this the default delivery address',
+  },
+  pickup: {
+    addTitle: 'Add pickup address',
+    editTitle: 'Edit pickup address',
+    addSubmit: 'Add pickup address',
+    labelHint: 'Something your team will recognise, e.g. "Main warehouse".',
+    phoneHint: 'The rider calls this number before collecting.',
+    notesLabel: 'Collection notes',
+    notesPlaceholder: 'e.g. collections 9am–5pm, ask for the storekeeper at the side gate',
+    firstNote: 'This is your first pickup address, so it becomes your default collection point.',
+    defaultLabel: 'Make this the default pickup address',
+  },
+}
 
 export interface AddressFormModalProps {
   /** Omit to add a new address; pass one to edit it. */
   address?: DeliveryAddress
   /** True when this would be the company's first address — it then becomes the default whatever. */
   isFirstAddress: boolean
+  /** Defaults to the buyer address book. See AddressFormVariant. */
+  variant?: AddressFormVariant
+  /** Defaults to `addressesApi`, so every existing caller is unchanged. See AddressBookApi. */
+  api?: AddressBookApi
   onClose: () => void
   onSaved: (address: DeliveryAddress) => void
 }
@@ -38,14 +97,25 @@ const FIELDS = new Set<keyof AddressFormValues>([
 ])
 
 /**
- * Add/edit an address. One modal for both, because the fields are identical and two near-copies
- * of a ten-field form drift within a week.
+ * Add/edit an address. One modal for four cases — add and edit, delivery and pickup — because
+ * the fields are identical in all of them and near-copies of a ten-field form drift within a
+ * week. The variant swaps the words; `api` swaps the endpoint. Nothing else differs, which is
+ * itself the argument for one component: if a pickup point ever needs a field a delivery
+ * address does not, that is the moment to split, and not before.
  *
  * `branchId` is carried through unchanged rather than exposed: branch management is deliberately
  * out of scope, so an address created against Head Office keeps that association when edited.
  */
-export function AddressFormModal({ address, isFirstAddress, onClose, onSaved }: AddressFormModalProps) {
+export function AddressFormModal({
+  address,
+  isFirstAddress,
+  variant = 'delivery',
+  api = addressesApi,
+  onClose,
+  onSaved,
+}: AddressFormModalProps) {
   const isEdit = !!address
+  const copy = COPY[variant]
   const [formError, setFormError] = useState<string | null>(null)
 
   const {
@@ -68,7 +138,7 @@ export function AddressFormModal({ address, isFirstAddress, onClose, onSaved }: 
     )
 
     try {
-      const saved = isEdit && address ? await addressesApi.update(address.id, payload) : await addressesApi.create(payload)
+      const saved = isEdit && address ? await api.update(address.id, payload) : await api.create(payload)
       onSaved(saved)
     } catch (err: unknown) {
       if (!isAppError(err)) {
@@ -90,7 +160,7 @@ export function AddressFormModal({ address, isFirstAddress, onClose, onSaved }: 
     <Modal
       open
       onClose={onClose}
-      title={isEdit ? 'Edit delivery address' : 'Add delivery address'}
+      title={isEdit ? copy.editTitle : copy.addTitle}
       size="lg"
       footer={
         <>
@@ -98,7 +168,7 @@ export function AddressFormModal({ address, isFirstAddress, onClose, onSaved }: 
             Cancel
           </Button>
           <Button type="submit" form="address-form" loading={isSubmitting}>
-            {isEdit ? 'Save changes' : 'Add address'}
+            {isEdit ? 'Save changes' : copy.addSubmit}
           </Button>
         </>
       }
@@ -106,7 +176,7 @@ export function AddressFormModal({ address, isFirstAddress, onClose, onSaved }: 
       <form id="address-form" onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
         <TextField
           label="Name for this address"
-          hint='Something you will recognise at checkout, e.g. "Ikeja warehouse".'
+          hint={copy.labelHint}
           error={errors.label?.message}
           {...register('label')}
         />
@@ -117,7 +187,7 @@ export function AddressFormModal({ address, isFirstAddress, onClose, onSaved }: 
             label="Contact phone"
             type="tel"
             inputMode="tel"
-            hint="The driver calls this number on arrival."
+            hint={copy.phoneHint}
             error={errors.contactPhone?.message}
             {...register('contactPhone')}
           />
@@ -175,12 +245,12 @@ export function AddressFormModal({ address, isFirstAddress, onClose, onSaved }: 
 
         <div>
           <label htmlFor="deliveryNotes" className="mb-1.5 block text-sm font-medium text-neutral-700">
-            Delivery notes <span className="font-normal text-neutral-400">(optional)</span>
+            {copy.notesLabel} <span className="font-normal text-neutral-400">(optional)</span>
           </label>
           <textarea
             id="deliveryNotes"
             rows={2}
-            placeholder="e.g. deliveries accepted 8am–4pm, use the back gate"
+            placeholder={copy.notesPlaceholder}
             className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100"
             {...register('deliveryNotes')}
           />
@@ -193,7 +263,7 @@ export function AddressFormModal({ address, isFirstAddress, onClose, onSaved }: 
 
         {isFirstAddress && !isEdit ? (
           <p className="rounded-md bg-neutral-50 px-3 py-2 text-sm text-neutral-600">
-            This is your first address, so it becomes your default delivery location.
+            {copy.firstNote}
           </p>
         ) : (
           <label className="flex items-start gap-2.5 text-sm text-neutral-700">
@@ -204,7 +274,7 @@ export function AddressFormModal({ address, isFirstAddress, onClose, onSaved }: 
               {...register('makeDefault')}
             />
             <span>
-              Make this the default delivery address
+              {copy.defaultLabel}
               {address?.isDefault && <span className="block text-xs text-neutral-500">This is already your default.</span>}
             </span>
           </label>

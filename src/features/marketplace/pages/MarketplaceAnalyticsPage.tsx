@@ -28,14 +28,29 @@ const RANKING_LIMIT = 8
 const MS_PER_DAY = 86_400_000
 
 /**
- * ProcurePal marketplace analytics — route `/app/marketplace/analytics`, already behind
+ * ProcurePal's own sales analytics — route `/app/marketplace/analytics`, already behind
  * `RequirePlatformOwner` and the VIEW_MARKETPLACE_ANALYTICS permission.
+ *
+ * <h2>These are ProcurePal's sales, not the marketplace's — and the page has to say so</h2>
+ * Until M6 every number here spanned every seller, which was correct while ProcurePal was
+ * the only one and wrong the moment third-party vendors could sell: the revenue card
+ * included money ProcurePal does not receive. The API narrowed to `seller_client_id =
+ * ProcurePal`, and this page changed with it. The relabelling is not cosmetic. A screen
+ * whose numbers quietly shrink between releases, under the same title, is how an operator
+ * concludes the business collapsed — so the heading, the definitions line and the empty
+ * state all now name whose sales these are, and a note says where the cross-seller total
+ * went.
+ *
+ * <p>Cross-vendor revenue is a super admin screen (`/admin/revenue`). It is not LINKED from
+ * here, deliberately: that is a different principal behind a separate login, and offering a
+ * link a tenant session can never follow would read as a permissions bug.
  *
  * Composed the way `DashboardAnalytics` is — a header carrying the DateRangeControl, then
  * a stat grid, then ChartCards down the page — so the two analytics screens read as one
- * product. What differs is what a MARKETPLACE operator needs and a single tenant does not:
- * period-over-period deltas on every headline, a customer ranking, and the fulfilment
- * funnel with its hop durations, which is the only figure here that says where ops is slow.
+ * product. What differs is what a MARKETPLACE OPERATOR needs about its own book and a
+ * single tenant does not: period-over-period deltas on every headline, a customer ranking,
+ * and the fulfilment funnel with its hop durations, which is the only figure here that says
+ * where ops is slow.
  *
  * <h2>Six requests, six independent panels</h2>
  * Each endpoint has its own hook, skeleton, empty state and retry. One failing panel must
@@ -88,9 +103,10 @@ export function MarketplaceAnalyticsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">Marketplace analytics</h1>
+          <h1 className="text-2xl font-semibold text-neutral-900">ProcurePal sales analytics</h1>
           <p className="text-sm text-neutral-500">
-            Revenue, customers and fulfilment across every company buying from ProcurePal.
+            Revenue, customers and fulfilment for the goods <span className="font-medium">ProcurePal sells</span>.
+            Third-party vendors' sales are not counted.
           </p>
         </div>
         <DateRangeControl value={range} onChange={setRange} />
@@ -100,8 +116,10 @@ export function MarketplaceAnalyticsPage() {
           to guess at is worse than no number, and "revenue" is the one everybody assumes
           they already understand. */}
       <p className="text-xs leading-relaxed text-neutral-500">
-        {rangeLabel} · Revenue counts every order placed in this period except cancelled ones and checkouts that were
-        never paid for. Deltas compare against the {rangeDays} day{rangeDays === 1 ? '' : 's'} immediately before it.
+        {rangeLabel} · Revenue counts every order <span className="font-medium">ProcurePal sold</span> in this period,
+        except cancelled ones and checkouts that were never paid for. Orders fulfilled by third-party vendors are
+        excluded from every figure on this page — the customer, product and category breakdowns and the fulfilment
+        funnel included. Deltas compare against the {rangeDays} day{rangeDays === 1 ? '' : 's'} immediately before it.
       </p>
 
       {summary.error && !summary.data && (
@@ -114,7 +132,7 @@ export function MarketplaceAnalyticsPage() {
         <EmptyState
           icon={ShoppingBag}
           title="No orders yet"
-          description="Once companies start buying from the marketplace, this is where revenue, your best customers, what is selling and how fast you are fulfilling will appear."
+          description="Once companies start buying ProcurePal's own goods, this is where your revenue, your best customers, what is selling and how fast you are fulfilling will appear. Vendors' sales are reported separately and are not shown here."
           action={
             <>
               <Link to="/app/marketplace/products" className={buttonClassName('primary')}>
@@ -136,7 +154,7 @@ export function MarketplaceAnalyticsPage() {
 
           <ChartCard
             title="Revenue over time"
-            subtitle="Bars are revenue; the dashed area is order count, rescaled to share the axis"
+            subtitle="ProcurePal's own revenue as bars; the dashed area is order count, rescaled to share the axis"
           >
             <div className="flex flex-col gap-4">
               <div className="flex flex-wrap items-center gap-3">
@@ -167,7 +185,10 @@ export function MarketplaceAnalyticsPage() {
           </ChartCard>
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <ChartCard title="Top customers" subtitle="Ranked by what they spent or how often they ordered">
+            <ChartCard
+              title="Top customers"
+              subtitle="Ranked by what they spent with ProcurePal, or how often they ordered from it"
+            >
               <TopCustomersPanel
                 data={customers.data}
                 loading={customers.loading}
@@ -178,7 +199,10 @@ export function MarketplaceAnalyticsPage() {
               />
             </ChartCard>
 
-            <ChartCard title="Top products" subtitle="Goods revenue only — a delivery fee belongs to no product">
+            <ChartCard
+              title="Top products"
+              subtitle="ProcurePal's own goods revenue — a delivery fee belongs to no product"
+            >
               <TopProductsPanel
                 data={products.data}
                 loading={products.loading}
@@ -190,7 +214,7 @@ export function MarketplaceAnalyticsPage() {
             </ChartCard>
           </div>
 
-          <ChartCard title="Category mix" subtitle="Share of goods revenue by catalog category">
+          <ChartCard title="Category mix" subtitle="Share of ProcurePal's goods revenue by catalog category">
             <CategoryMixChart
               data={categories.data}
               loading={categories.loading}
@@ -201,7 +225,7 @@ export function MarketplaceAnalyticsPage() {
 
           <ChartCard
             title="Fulfilment funnel"
-            subtitle="Where orders got to, where they are now, and how long each step takes"
+            subtitle="Where ProcurePal's own orders got to, where they are now, and how long each step takes"
           >
             <FulfilmentFunnelPanel
               data={funnel.data}
@@ -216,7 +240,7 @@ export function MarketplaceAnalyticsPage() {
           {summary.data?.current.orderCount === 0 && (
             <p className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-neutral-300 bg-white px-4 py-6 text-center text-sm text-neutral-500">
               <LineChart className="h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
-              No orders were placed in {rangeLabel}. Try a wider date range.
+              ProcurePal sold nothing in {rangeLabel}. Try a wider date range.
             </p>
           )}
         </>

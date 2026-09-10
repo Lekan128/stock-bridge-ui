@@ -1,4 +1,5 @@
 import { ChangePasswordForm } from '@/features/profile/components/ChangePasswordForm'
+import { EmailSettingsPanel } from '@/features/profile/components/EmailSettingsPanel'
 import { ProfileAccountFacts } from '@/features/profile/components/ProfileAccountFacts'
 import { ProfileIdentityHeader } from '@/features/profile/components/ProfileIdentityHeader'
 import { ProfileSkeleton } from '@/features/profile/components/ProfileSkeleton'
@@ -29,6 +30,13 @@ export function ProfilePage() {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <div className="flex flex-col gap-6 lg:col-span-2">
               <ProfileDetailsForm profile={profile} onUpdated={setProfile} />
+              {/*
+                Directly beneath the details form, because the two are causally linked: editing
+                the address in the form above un-confirms it, and this panel is where that
+                becomes visible and fixable. Shares setProfile with the form so a resend or a
+                preference change updates the same profile object the form is rendering.
+              */}
+              <EmailSettingsPanel profile={profile} onUpdated={setProfile} />
               <ChangePasswordForm />
             </div>
             <ProfileAccountFacts profile={profile} />

@@ -1,5 +1,7 @@
 /**
- * `stockBridge` is the inventory workspace; `procurePal` is the public marketplace storefront.
+ * `stockBridge` is the inventory workspace (wordmark: "Procure Paddy" — the key kept its original
+ * name so call sites did not churn during the rebrand); `procurePal` is the public marketplace
+ * storefront.
  * Same platform, same mark — only the wordmark changes, because the bridge/arrow icon means the
  * same thing in both places (goods moving into stock) and two separate marks would read as two
  * unrelated products.
@@ -16,7 +18,7 @@ export interface LogoProps {
 }
 
 const brandNames: Record<LogoBrand, string> = {
-  stockBridge: 'Stock Bridge',
+  stockBridge: 'Procure Paddy',
   procurePal: 'ProcurePal',
 }
 
@@ -49,7 +51,7 @@ export function Logo({ size = 32, variant = 'full', brand = 'stockBridge', class
             </>
           ) : (
             <>
-              <span className="text-neutral-900">Stock</span> <span className="text-primary-600">Bridge</span>
+              <span className="text-neutral-900">Procure</span> <span className="text-primary-600">Paddy</span>
             </>
           )}
         </span>

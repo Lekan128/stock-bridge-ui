@@ -32,10 +32,38 @@ function normalizeFieldErrors(errors: unknown): AppFieldError[] {
   })
 }
 
+/**
+ * RFC 9110 allows `Retry-After` to be either a delay in seconds or an HTTP date; the API sends
+ * seconds, and the date form is parsed only so a proxy that rewrites it cannot break the caller.
+ *
+ * Returns undefined when the header is unreadable — which includes the ordinary cross-origin
+ * case, since `Retry-After` is not CORS-safelisted and the browser hides it unless the API
+ * exposes it. Every caller must have a sensible answer for "we were throttled but do not know
+ * for how long".
+ */
+function parseRetryAfterSeconds(error: AxiosError): number | undefined {
+  const raw = error.response?.headers?.['retry-after']
+  if (typeof raw !== 'string' && typeof raw !== 'number') return undefined
+
+  const asNumber = Number(raw)
+  if (Number.isFinite(asNumber)) return asNumber > 0 ? Math.ceil(asNumber) : undefined
+
+  const asDate = Date.parse(String(raw))
+  if (Number.isNaN(asDate)) return undefined
+  const seconds = Math.ceil((asDate - Date.now()) / 1000)
+  return seconds > 0 ? seconds : undefined
+}
+
 // The backend has two error shapes in the wild: domain exceptions return a flat
 // `{ message }` (ApiError), while @Valid failures fall through to Spring's default
 // RFC 7807 ProblemDetail (`title`/`detail`/`errors`). Normalize both into one AppError.
 function normalizeError(error: AxiosError): AppError {
+  const normalized = normalizeErrorBody(error)
+  const retryAfterSeconds = parseRetryAfterSeconds(error)
+  return retryAfterSeconds === undefined ? normalized : { ...normalized, retryAfterSeconds }
+}
+
+function normalizeErrorBody(error: AxiosError): AppError {
   if (!error.response) {
     return { status: 0, message: 'Network error. Please check your connection and try again.' }
   }
@@ -61,7 +89,13 @@ function normalizeError(error: AxiosError): AppError {
   }
 
   if (data && typeof data.message === 'string' && !Array.isArray(data.errors) && !data.title) {
-    return { status, message: data.message }
+    // Stock-out's 409 oversell body carries two extra numeric fields alongside the flat
+    // `{message}` shape every other domain exception uses (multi-vendor inventory design §5.2a).
+    // Passed through only when both are actually numbers, so every other flat-message error
+    // (which has neither field) is completely unaffected.
+    const availableQuantity = typeof data.availableQuantity === 'number' ? data.availableQuantity : undefined
+    const requestedQuantity = typeof data.requestedQuantity === 'number' ? data.requestedQuantity : undefined
+    return { status, message: data.message, availableQuantity, requestedQuantity }
   }
 
   if (data && (typeof data.title === 'string' || typeof data.detail === 'string' || Array.isArray(data.errors))) {

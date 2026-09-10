@@ -17,6 +17,26 @@ export interface CartContextValue {
   /** Set when the last load or mutation failed. Mutations also toast, so this is for inline UI. */
   error: string | null
   /**
+   * Whether this visitor may buy at all.
+   *
+   * False for exactly one audience: a signed-in VENDOR. A vendor sells on the marketplace and
+   * does not buy from it — the VENDOR role holds neither BROWSE_MARKETPLACE nor PLACE_ORDERS,
+   * so `/api/cart` answers 403 for them on every call. Two things follow, and both live here
+   * rather than in each caller:
+   *
+   *  - The load effect below does not call the API for a vendor at all. Without that, every
+   *    vendor page load would produce a "Could not load your cart" banner explaining a failure
+   *    that is really a correct refusal.
+   *  - Callers read this to drop the affordance entirely — the header cart button, the add-to-cart
+   *    controls on the storefront. A vendor browsing the public catalogue (which is public, and
+   *    which they should be able to see, not least to check their own listings) must not be
+   *    offered a basket they can never check out.
+   *
+   * Anonymous visitors are TRUE: an anonymous cart is legitimate and merges on login, and the
+   * server is what refuses at checkout if the account that logs in turns out to be a seller.
+   */
+  canShop: boolean
+  /**
    * Adds to the cart, summing with any existing line for the same product. `product` is optional
    * and purely an optimisation: pass the catalog row you already have on screen and the anonymous
    * cart can render the new line without a round trip.
@@ -71,6 +91,13 @@ function itemFromProduct(product: MarketplaceProduct, quantity: number): CartIte
     lineTotal: round2(product.unitPrice * quantity),
     addedByUserId: null,
     addedByUsername: null,
+    // Carried through from the catalog row so the ANONYMOUS cart groups by seller exactly as the
+    // server-backed one does. Without this a visitor would see a flat list before signing in and a
+    // grouped one after, which reads as the cart having changed during login.
+    sellerId: product.seller?.id ?? null,
+    sellerName: product.seller?.name ?? null,
+    sellerLogoUrl: product.seller?.logoUrl ?? null,
+    sellerIsPlatformOwner: product.seller?.platformOwner ?? false,
   }
 }
 
@@ -96,6 +123,12 @@ function unresolvedItem(productId: string, quantity: number): CartItem {
     lineTotal: 0,
     addedByUserId: null,
     addedByUsername: null,
+    // Unknown by definition — the product could not be fetched. Grouped under "Unavailable items"
+    // rather than guessed at.
+    sellerId: null,
+    sellerName: null,
+    sellerLogoUrl: null,
+    sellerIsPlatformOwner: false,
   }
 }
 
@@ -122,7 +155,7 @@ function errorMessage(err: unknown, fallback: string): string {
 }
 
 export function CartProvider({ children }: { children: ReactNode }) {
-  const { isAuthenticated, isBootstrapping } = useAuth()
+  const { isAuthenticated, isBootstrapping, isVendor } = useAuth()
   const { showToast } = useToast()
   const [cart, setCart] = useState<Cart>(EMPTY_CART)
   const [isLoading, setIsLoading] = useState(true)
@@ -206,6 +239,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setError(null)
 
     async function load() {
+      // A vendor has no cart and cannot get one — see `canShop`. Answering with an empty cart
+      // here rather than letting `/api/cart` 403 keeps a correct refusal from rendering as a
+      // broken storefront on every page they open.
+      if (isVendor) {
+        if (!cancelled) setCart(EMPTY_CART)
+        return
+      }
+
       if (!isAuthenticated) {
         const stored = cartStorage.read()
         const { cart: hydrated, failed } = await hydrateAnonymousCart(stored?.items ?? [])
@@ -261,7 +302,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
     // showToast is stable (useCallback in ToastProvider); listing it would not change behaviour.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, isBootstrapping, reloadToken, hydrateAnonymousCart])
+  }, [isAuthenticated, isVendor, isBootstrapping, reloadToken, hydrateAnonymousCart])
 
   const applyServerCart = useCallback((raw: Cart | undefined | null): boolean => {
     const next = normalizeServerCart(raw)
@@ -424,6 +465,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     subtotal: cart.subtotal,
     isLoading,
     error,
+    canShop: !isVendor,
     addItem,
     updateQuantity,
     removeItem,

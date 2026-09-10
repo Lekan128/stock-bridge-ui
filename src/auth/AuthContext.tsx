@@ -1,7 +1,7 @@
 import { createContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { authApi } from '@/api/authApi'
 import { setAccessToken, setAuthFailureHandler } from '@/api/client'
-import type { ClientSignupRequest, TenantLoginRequest, TenantUser } from '@/types/auth'
+import type { ClientSignupRequest, ClientType, TenantLoginRequest, TenantUser } from '@/types/auth'
 import { decodeJwtPayload, type TenantAccessTokenClaims } from '@/utils/jwt'
 import { authStorage } from '@/utils/storage'
 
@@ -19,6 +19,12 @@ export interface AuthClient {
   name?: string
   /** True when this tenant is ProcurePal itself — `clients.is_platform_owner`. */
   platformOwner: boolean
+  /**
+   * `clients.client_type`. ORTHOGONAL to `platformOwner` — ProcurePal is a COMPANY that
+   * happens to own the platform, so neither flag implies anything about the other.
+   * Defaults to COMPANY when the API has not sent it.
+   */
+  clientType: ClientType
 }
 
 export interface AuthContextValue {
@@ -30,6 +36,23 @@ export interface AuthContextValue {
    * null-check the client. Never a substitute for the backend's own platform-owner check.
    */
   isPlatformOwner: boolean
+  /**
+   * Convenience mirror of `client.clientType === 'VENDOR'`, exactly parallel to
+   * `isPlatformOwner` and used the same way: it decides what to RENDER. The server's
+   * `VendorGuard` re-reads the clients row on every request and is the only thing that
+   * decides what may be DONE, so a stale token grants nothing.
+   *
+   * Note it is false for ProcurePal, which sells but is not a vendor — see `isSeller`.
+   */
+  isVendor: boolean
+  /**
+   * "May this tenant sell" — a vendor OR the platform owner. The mirror of the backend's
+   * `VendorGuard.requireSeller()`, and the flag almost every selling surface wants: the
+   * order queue, the seller catalogue, own-sales analytics and pickup addresses all belong
+   * to both. Using `isVendor` for those would hide ProcurePal from its own marketplace,
+   * which is the single most likely mistake in this feature.
+   */
+  isSeller: boolean
   isBootstrapping: boolean
   loginTenant: (payload: TenantLoginRequest) => Promise<void>
   signup: (payload: ClientSignupRequest) => Promise<TenantUser>
@@ -80,6 +103,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           id: claims?.clientId,
           identifier: lastIdentifier ?? '',
           platformOwner: claims?.platformOwner === true,
+          // An absent claim degrades to COMPANY: a buyer refused a vendor screen is an
+          // inconvenience, a vendor shown a buyer screen the server would refuse is a bug.
+          clientType: claims?.clientType === 'VENDOR' ? 'VENDOR' : 'COMPANY',
         })
       } catch {
         setAccessToken(null)
@@ -123,6 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       identifier: tenantUser.clientIdentifier,
       name: tenantUser.clientName,
       platformOwner: tenantUser.platformOwner === true,
+      clientType: tenantUser.clientType === 'VENDOR' ? 'VENDOR' : 'COMPANY',
     })
   }
 
@@ -148,6 +175,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       client,
       isAuthenticated: user !== null,
       isPlatformOwner: client?.platformOwner === true,
+      isVendor: client?.clientType === 'VENDOR',
+      isSeller: client?.clientType === 'VENDOR' || client?.platformOwner === true,
       isBootstrapping,
       loginTenant,
       signup,
