@@ -6,6 +6,7 @@ import { isAppError } from '@/types/api'
 export function useClientMovementsOverTime(
   id: string | undefined,
   params: AnalyticsDateRangeParams & { granularity: Granularity },
+  version = 0,
 ) {
   const [data, setData] = useState<MovementsOverTimePoint[] | null>(null)
   const [loading, setLoading] = useState(true)
@@ -36,7 +37,7 @@ export function useClientMovementsOverTime(
     }
     // paramsKey is a stable stand-in for params (a fresh object each render).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, paramsKey])
+  }, [id, paramsKey, version])
 
   return { data, loading, error }
 }

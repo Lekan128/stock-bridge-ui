@@ -47,6 +47,7 @@ import {
   defaultUnitOption,
   fromBaseQuantity,
   resolveUnitSymbol,
+  toBasePrice,
   toBaseQuantity,
   unitOptionsForProduct,
 } from '@/features/products/unitSet'
@@ -552,6 +553,30 @@ export function ProductFormPage() {
     return quantityOption ? toBaseQuantity(value, quantityOption) : value
   }
 
+  /**
+   * The price half of {@link toStockUnits}, and the reason it has to exist: `§9.2`, as amended,
+   * has the cost on this form typed **per pack** — the label reads "Cost (₦ per bag)" and
+   * {@link formatStockUnitCostEcho} echoes the per-stock-unit figure underneath it — while
+   * `CreateProductRequest.InitialVendor.cost` is per STOCK UNIT, with no `unit` toggle on the
+   * wire to say otherwise (the server passes `unit: null` into `stockIn`, so its own V21
+   * conversion is an identity on this path and cannot rescue an unconverted price).
+   *
+   * Without this, the quantity was converted and the price beside it was not — which is P0-1
+   * exactly, reintroduced on the create-product path: "20 bags at ₦12,000 a bag" on a 10 kg
+   * bag stored ₦12,000 **per kg**, ten times the truth, contradicting the echo the user had
+   * just read and then compounding into every later weighted average.
+   *
+   * Same guard clauses as {@link toStockUnits}, for the same reasons: a blank cost is
+   * `undefined`, never `0`, and no pack means factor 1 means the typed number is already per
+   * stock unit.
+   */
+  function toStockUnitPrice(typed: string): number | undefined {
+    if (!typed) return undefined
+    const value = Number(typed)
+    if (!Number.isFinite(value)) return undefined
+    return quantityOption ? toBasePrice(value, quantityOption) : value
+  }
+
   async function save(values: ProductFormValues) {
     setFormError(null)
     try {
@@ -582,6 +607,10 @@ export function ProductFormPage() {
                   ...initialVendor,
                   // Opening stock, in packs, as the stock units the stock-in ledger records.
                   quantity: toStockUnits(values.initialVendorQuantity) ?? initialVendor.quantity,
+                  // Cost, typed per pack (§9.2 as amended), as the per-stock-unit price the
+                  // ledger records — converted by the SAME factor as the quantity above, in the
+                  // same place, because converting one without the other is the whole of P0-1.
+                  cost: toStockUnitPrice(values.initialVendorCost) ?? initialVendor.cost,
                 },
               },
               imageFile,
@@ -1124,9 +1153,10 @@ export function ProductFormPage() {
                 directions, which is why each one says its own on its face rather than inheriting
                 a basis from the block around it.
 
-                  Cost           per STOCK UNIT (§9.2) — the only figure comparable across
-                                 suppliers whose packs differ, which is the job it does. It
-                                 becomes `Product.costPrice`, per kg.
+                  Cost           typed per PACK (§9.2 as amended — the figure that is on the
+                                 invoice), converted by `toStockUnitPrice` and STORED per stock
+                                 unit, which is the only basis comparable across suppliers whose
+                                 packs differ and the job `Product.costPrice` does.
                   Opening stock  in PACKS when the row declares one (§9.1) — deliveries arrive
                                  in bags and an invoice counts bags (§9.3's receiving default).
 
@@ -1141,9 +1171,11 @@ export function ProductFormPage() {
                 inputMode="decimal"
                 hint={
                   formatStockUnitCostEcho(Number(watchedInitialCost), quantityOption, stockUnitLabel ?? '') ??
-                  (stockUnitLabel
-                    ? `What you pay for one ${stockUnitLabel} — not for a whole pack`
-                    : `Per ${UNIT_COPY.STOCK_UNIT.toLowerCase()}`)
+                  (packNoun
+                    ? `What you pay for one whole ${packNoun} — stored per ${stockUnitLabel}`
+                    : stockUnitLabel
+                      ? `What you pay for one ${stockUnitLabel}`
+                      : `Per ${UNIT_COPY.STOCK_UNIT.toLowerCase()}`)
                 }
                 error={errors.initialVendorCost?.message}
                 {...register('initialVendorCost')}

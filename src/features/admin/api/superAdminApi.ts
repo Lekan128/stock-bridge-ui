@@ -1,4 +1,5 @@
 import { superAdminApi } from '@/api/superAdminClient'
+import type { AppError } from '@/types/api'
 import type {
   AnalyticsDateRangeParams,
   AnalyticsSummary,
@@ -10,10 +11,12 @@ import type {
 } from '@/components/analytics/types'
 import type {
   AdminUserListParams,
-  EscrowHoldSettings,
   ApproveVendorApplicationPayload,
+  CatalogResetPayload,
+  CatalogResetPreview,
   ClientListParams,
   CreateVendorPayload,
+  EscrowHoldSettings,
   ModerationCounts,
   ModerationProduct,
   ModerationQueueParams,
@@ -23,11 +26,11 @@ import type {
   PlatformRevenueParams,
   PlatformRevenuePoint,
   PlatformRevenueSummary,
+  RejectVendorApplicationPayload,
   SellerRevenueBreakdown,
   SellerRevenueSort,
   SuperAdminClientDetail,
   SuperAdminClientSummary,
-  RejectVendorApplicationPayload,
   SuperAdminUserSummary,
   SuperAdminVendorDetail,
   SuperAdminVendorSummary,
@@ -56,6 +59,37 @@ export const superAdminApiClient = {
     superAdminApi
       .put<SuperAdminClientDetail>(`/api/superadmin/clients/${id}/status`, { active })
       .then((r) => r.data),
+
+  /** Dry run — writes nothing. Safe to call whenever the reset dialog is opened. */
+  previewCatalogReset: (id: string, params: { includeVendorDirectory: boolean; resetSkuCounters: boolean }) =>
+    superAdminApi
+      .get<CatalogResetPreview>(`/api/superadmin/clients/${id}/catalog-reset`, { params })
+      .then((r) => r.data),
+
+  /**
+   * Irreversible. Clears the tenant's products, stock ledger and upload history; leaves the
+   * account, its users and its settings alone.
+   *
+   * 409 is not an error here, it is the blocked CatalogResetPreview — same situation as the
+   * import undo (see importsApi.undo), and handled the same way: the shared interceptor would
+   * flatten it to `{status, message}` and lose the blocker list, so 409 opts into the success
+   * path and is re-thrown in one piece with the body attached.
+   */
+  resetCatalog: async (id: string, payload: CatalogResetPayload) => {
+    const response = await superAdminApi.post<CatalogResetPreview>(
+      `/api/superadmin/clients/${id}/catalog-reset`,
+      payload,
+      { validateStatus: (status) => status === 200 || status === 409 },
+    )
+    if (response.status !== 409) return response.data
+
+    const error: AppError & { catalogResetBlocked: CatalogResetPreview } = {
+      status: 409,
+      message: response.data.message,
+      catalogResetBlocked: response.data,
+    }
+    throw error
+  },
 
   // ------------------------------------------------------------------ Listing moderation (M4)
   // Vendors' products only. The server pins this queue to the vendor-seller set, so a buying
