@@ -42,6 +42,96 @@ export interface SuperAdminClientDetail extends SuperAdminClientSummary {
 }
 
 /**
+ * GET and POST /api/superadmin/clients/{id}/catalog-reset.
+ *
+ * One shape for both the dry run and the result, so "what we said would happen" and "what
+ * happened" are directly comparable. `blocked` is how a 409 body is told apart from a plain
+ * ApiError — the products in `blockers` have been ordered, and are the reason the reset
+ * refused.
+ */
+export interface CatalogResetPreview {
+  clientId: string
+  clientName: string
+  clientSlug: string
+  blocked: boolean
+  /** Absent when not blocked. The two reasons are not interchangeable — see CatalogResetBlockedReason. */
+  blockedReason?: CatalogResetBlockedReason
+  message: string
+  blockers: CatalogResetBlocker[]
+  counts: CatalogResetCounts
+  activity: CatalogResetActivity
+}
+
+/**
+ * `ORDERED_PRODUCTS` is a dead end — deleting would orphan real order lines, and there is no
+ * flag that gets past it. `ESTABLISHED_CUSTOMER` is an are-you-sure that a caller can clear by
+ * sending `acknowledgeEstablished`. Rendering them the same way would either hide the escape
+ * hatch or promise one that does not exist.
+ */
+export type CatalogResetBlockedReason = 'ORDERED_PRODUCTS' | 'ESTABLISHED_CUSTOMER'
+
+/**
+ * Whether this tenant looks like a fresh onboarding or a going concern.
+ *
+ * `firstActivityAt` is absent for a tenant that has never moved stock. Measured from when the
+ * movements were recorded, not the dates written on them — backdated opening stock is normal on
+ * a first import and must not make a brand-new client look like a year-old one.
+ */
+export interface CatalogResetActivity {
+  firstActivityAt?: string
+  daysActive: number
+  receivedOrders: number
+  established: boolean
+}
+
+export interface CatalogResetBlocker {
+  productId: string
+  productName: string
+  sku: string
+  orderLines: number
+}
+
+/**
+ * `foreignCartLines`, `orderLinksCleared` and `derivedProductLinksCleared` describe collateral
+ * outside this tenant — cart lines that vanish, and links from other rows that get nulled. They
+ * are shown before the button is pressed rather than reported afterwards, because they are the
+ * part an ops user cannot undo and would not otherwise think to ask about.
+ */
+export interface CatalogResetCounts {
+  products: number
+  activeProducts: number
+  stockMovements: number
+  stockAllocations: number
+  productVendors: number
+  importSessions: number
+  companyVendors: number
+  skuCounters: number
+  foreignCartLines: number
+  orderLinksCleared: number
+  derivedProductLinksCleared: number
+}
+
+/**
+ * `confirmPhrase` must be `delete <slug>` — the server rejects anything else with a 400. The
+ * slug is in the phrase rather than a bare "delete" so the same keystrokes do not clear every
+ * tenant in the list.
+ *
+ * `acknowledgeEstablished` is only consulted when `activity.established` is true, and without it
+ * such a reset is refused rather than performed.
+ */
+export interface CatalogResetPayload {
+  confirmPhrase: string
+  acknowledgeEstablished: boolean
+  includeVendorDirectory: boolean
+  resetSkuCounters: boolean
+}
+
+/** One definition of the phrase, shared by the field hint and the equality check. */
+export function catalogResetPhraseFor(slug: string): string {
+  return `delete ${slug}`
+}
+
+/**
  * PUT /api/superadmin/clients/{id}. Replace semantics for everything except `slug`.
  *
  * `slug` is optional and null/absent means "do not rename" — there is no such thing as
