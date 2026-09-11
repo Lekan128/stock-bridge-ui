@@ -27,6 +27,7 @@ import { useToast } from '@/components/useToast'
 import { superAdminApiClient } from '@/features/admin/api/superAdminApi'
 import { ClientStatusBadge } from '@/features/admin/components/ClientStatusBadge'
 import { EditClientModal } from '@/features/admin/components/EditClientModal'
+import { ResetCatalogModal } from '@/features/admin/components/ResetCatalogModal'
 import { SuspendClientDialog } from '@/features/admin/components/SuspendClientDialog'
 import { TenantUsersPanel } from '@/features/admin/components/TenantUsersPanel'
 import { formatDate, formatPaymentTerms } from '@/features/admin/formatters'
@@ -50,22 +51,26 @@ export function AdminTenantDetailPage() {
   const [confirmSuspend, setConfirmSuspend] = useState(false)
   const [statusUpdating, setStatusUpdating] = useState(false)
   const [editing, setEditing] = useState(false)
+  const [resettingCatalog, setResettingCatalog] = useState(false)
+  // Bumped after a catalog reset so the analytics below refetch — the id and date range are
+  // unchanged, so nothing else would tell them their data is gone.
+  const [dataVersion, setDataVersion] = useState(0)
 
   const params = { from: toApiDateTime(range.from), to: toApiDateTime(range.to) }
   const granularity = granularityForRange(range.from, range.to)
   const rangeLabel = formatDateRange(range.from, range.to)
 
-  const { data: summary, loading: summaryLoading, error: summaryError } = useClientAnalyticsSummary(id, params)
+  const { data: summary, loading: summaryLoading, error: summaryError } = useClientAnalyticsSummary(id, params, dataVersion)
   const {
     data: movements,
     loading: movementsLoading,
     error: movementsError,
-  } = useClientMovementsOverTime(id, { ...params, granularity })
+  } = useClientMovementsOverTime(id, { ...params, granularity }, dataVersion)
   const {
     data: topProducts,
     loading: topProductsLoading,
     error: topProductsError,
-  } = useClientTopProducts(id, { ...params, by: metric, direction, limit: TOP_PRODUCTS_LIMIT })
+  } = useClientTopProducts(id, { ...params, by: metric, direction, limit: TOP_PRODUCTS_LIMIT }, dataVersion)
 
   async function handleActivate() {
     if (!client) return
@@ -170,6 +175,9 @@ export function AdminTenantDetailPage() {
             <Pencil className="h-4 w-4" />
             Edit
           </Button>
+          <Button variant="secondary" onClick={() => setResettingCatalog(true)}>
+            Clear catalog
+          </Button>
           {client.active ? (
             <Button variant="danger" onClick={() => setConfirmSuspend(true)}>
               Suspend
@@ -256,6 +264,22 @@ export function AdminTenantDetailPage() {
 
       {editing && (
         <EditClientModal client={client} onClose={() => setEditing(false)} onSuccess={handleEditSuccess} />
+      )}
+
+      {resettingCatalog && (
+        <ResetCatalogModal
+          client={client}
+          onClose={() => setResettingCatalog(false)}
+          onSuccess={(result) => {
+            setResettingCatalog(false)
+            showToast(result.message, 'success')
+            // Everything on this page now describes a tenant that no longer has any of it.
+            // Re-read the tenant rather than patching counts locally, and bump dataVersion so
+            // the analytics do not sit there showing the stock that was just deleted.
+            void superAdminApiClient.getClient(client.id).then(setClient)
+            setDataVersion((v) => v + 1)
+          }}
+        />
       )}
 
       <SuspendClientDialog
