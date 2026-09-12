@@ -73,6 +73,11 @@ const LowStockProductsPage = lazy(() =>
     default: m.LowStockProductsPage,
   })),
 )
+const StockMovementsPage = lazy(() =>
+  import('@/pages/StockMovementsPage').then((m) => ({
+    default: m.StockMovementsPage,
+  })),
+)
 const ProductSkuSettingsPage = lazy(() =>
   import('@/pages/ProductSkuSettingsPage').then((m) => ({
     default: m.ProductSkuSettingsPage,
@@ -422,6 +427,20 @@ export function AppRoutes() {
             element={
               <RequirePermission permission={PERMISSIONS.VIEW_PRODUCTS}>
                 <LowStockProductsPage />
+              </RequirePermission>
+            }
+          />
+          {/* The stock in/out report. MANAGE_INVENTORY rather than VIEW_ANALYTICS, matching the
+            API: this is the raw ledger with costs and suppliers on every row — the same data the
+            per-product stock history shows, across all products at once — not an aggregate.
+
+            Sits at /app/stock-movements rather than under products/, because it is not about one
+            product and does not start from the catalog. */}
+          <Route
+            path="stock-movements"
+            element={
+              <RequirePermission permission={PERMISSIONS.MANAGE_INVENTORY}>
+                <StockMovementsPage />
               </RequirePermission>
             }
           />

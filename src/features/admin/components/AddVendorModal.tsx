@@ -45,6 +45,10 @@ export function AddVendorModal({ open, submitting, onCancel, onConfirm }: AddVen
   const [city, setCity] = useState('')
   const [state, setState] = useState('')
   const [commissionPercent, setCommissionPercent] = useState('')
+  const [bankName, setBankName] = useState('')
+  const [bankAccountNumber, setBankAccountNumber] = useState('')
+  const [bankAccountName, setBankAccountName] = useState('')
+  const [cacNumber, setCacNumber] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -60,6 +64,10 @@ export function AddVendorModal({ open, submitting, onCancel, onConfirm }: AddVen
     setCity('')
     setState('')
     setCommissionPercent('')
+    setBankName('')
+    setBankAccountNumber('')
+    setBankAccountName('')
+    setCacNumber('')
     setUsername('')
     setPassword('')
     setConfirmPassword('')
@@ -109,6 +117,10 @@ export function AddVendorModal({ open, submitting, onCancel, onConfirm }: AddVen
                 // Percentage in, fraction out — the column is 0..1 with a CHECK, but nobody
                 // negotiates "nought point one five".
                 commissionRate: percentValue === null ? undefined : percentValue / 100,
+                bankName: bankName.trim() || undefined,
+                bankAccountNumber: bankAccountNumber.trim() || undefined,
+                bankAccountName: bankAccountName.trim() || undefined,
+                cacNumber: cacNumber.trim() || undefined,
                 username: username.trim(),
                 password,
                 confirmPassword,
@@ -204,6 +216,51 @@ export function AddVendorModal({ open, submitting, onCancel, onConfirm }: AddVen
           hint="Optional. Blank means no rate agreed, which is different from agreeing zero."
           error={commissionValid ? undefined : 'Enter a percentage between 0 and 100'}
         />
+
+        {/* Optional in full, and not gated behind anything: a vendor recruited offline usually
+            hands these over in the same conversation that produced the phone number, and the
+            alternative is coming back to this record later. Nothing pays out off these fields
+            automatically — a person reads them before money moves. */}
+        <div className="border-t border-neutral-100 pt-4">
+          <h3 className="text-sm font-semibold text-neutral-900">Payout &amp; registration</h3>
+          <p className="mt-0.5 text-xs text-neutral-500">
+            All optional. Where Procure Paddy pays this vendor out, and their CAC number. Never
+            shown to buyers.
+          </p>
+          <div className="mt-3 flex flex-col gap-4">
+            <TextField
+              label="Bank name (optional)"
+              name="new-vendor-bank-name"
+              value={bankName}
+              onChange={(event) => setBankName(event.target.value)}
+            />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <TextField
+                label="Account number (optional)"
+                name="new-vendor-bank-account-number"
+                // inputMode, not type="number": a NUBAN is a 10-digit identifier, not a quantity.
+                // type="number" would strip a leading zero and let a scroll wheel change it.
+                inputMode="numeric"
+                value={bankAccountNumber}
+                onChange={(event) => setBankAccountNumber(event.target.value)}
+              />
+              <TextField
+                label="Account name (optional)"
+                name="new-vendor-bank-account-name"
+                value={bankAccountName}
+                onChange={(event) => setBankAccountName(event.target.value)}
+                hint="If it differs from the business name."
+              />
+            </div>
+            <TextField
+              label="CAC number (optional)"
+              name="new-vendor-cac-number"
+              value={cacNumber}
+              onChange={(event) => setCacNumber(event.target.value)}
+              hint="Corporate Affairs Commission registration number, e.g. RC 123456."
+            />
+          </div>
+        </div>
 
         <div className="border-t border-neutral-100 pt-4">
           <h3 className="text-sm font-semibold text-neutral-900">Their login</h3>
