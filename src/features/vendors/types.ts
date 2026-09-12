@@ -39,6 +39,21 @@ export interface CompanyVendor {
   state?: string
   notes?: string
   /**
+   * How *this company* pays this supplier, and the registration number they hold for them. All
+   * four optional.
+   *
+   * ⚠️ Never the seller's own banking details. A VERIFIED row points at a ProcurePaddy seller
+   * that has its own bank account on file — the one ProcurePaddy pays *them* out to — and these
+   * fields are deliberately not sourced from it: our banking relationship with a seller is not
+   * the buyer's to see. In practice these are filled in on EXTERNAL suppliers, since that is
+   * where an off-platform payment actually happens, and a VERIFIED row is not editable anyway.
+   */
+  bankName?: string
+  bankAccountNumber?: string
+  bankAccountName?: string
+  /** Corporate Affairs Commission registration number, as written ("RC 123456"). */
+  cacNumber?: string
+  /**
    * Whether this company may edit the row's own fields. Sent by the server rather than derived
    * from `kind` on this side, so the pencil icon and the 409 the server would answer with can
    * never disagree.
@@ -120,6 +135,10 @@ export interface CompanyVendorPayload {
   city?: string
   state?: string
   notes?: string
+  bankName?: string
+  bankAccountNumber?: string
+  bankAccountName?: string
+  cacNumber?: string
 }
 
 export interface VendorListParams {

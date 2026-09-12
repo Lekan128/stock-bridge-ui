@@ -331,12 +331,38 @@ export type MovementType = 'IN' | 'OUT' | 'ADJUSTMENT'
 export interface StockMovement {
   id: string
   productId: string
+  /**
+   * The V28 report fields. Present on `GET /api/stock/movements`, which fetch-joins the product;
+   * absent on `GET /api/products/{id}/stock/history`, where the caller already knows which
+   * product it asked about. Optional rather than `| null` because the API omits null fields
+   * entirely (`default-property-inclusion: non_null`).
+   */
+  productName?: string
+  productSku?: string
+  unitOfMeasure?: string
   movementType: MovementType
   quantity: number
   unitPriceAtTime: number | null
   note: string | null
   createdByUserId: string | null
+  /**
+   * ⚠️ Two different questions, and they must not be used interchangeably. `occurredAt` is when
+   * the delivery or sale actually HAPPENED; `createdAt` is when the row was WRITTEN. They are
+   * equal for anything recorded as it happens, and differ for anything bulk-imported or
+   * backdated. Anything showing a user "when did this arrive" wants `occurredAt` — which is also
+   * what the report's date range filters on.
+   */
+  occurredAt?: string
   createdAt: string
+  /**
+   * `quantity × unitPriceAtTime`, computed server-side so the rows and the totals beside them are
+   * the same arithmetic.
+   *
+   * ⚠️ Absent — never zero — when the movement recorded no price (every ADJUSTMENT, a free
+   * sample, a delivery entered before anyone knew what it cost). Render an em dash, never ₦0.00:
+   * "we don't know what this was worth" is a different claim from "it was worth nothing".
+   */
+  lineValue?: number
   /**
    * Multi-vendor inventory extension (design spec §5.2) — set on `IN` rows only, once the
    * backend module lands. Deliberately optional/undefined-safe: today's `GET .../stock/history`

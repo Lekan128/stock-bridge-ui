@@ -1,4 +1,5 @@
 import {
+  ArrowLeftRight,
   Building2,
   ChartLine,
   Contact,
@@ -91,6 +92,14 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: '/app', label: 'Dashboard', icon: LayoutDashboard, exact: true },
       // VIEW_PRODUCTS, not MANAGE_PRODUCTS — read-only roles can browse the catalog.
       { path: '/app/products', label: 'Inventory', icon: Warehouse, requiredPermission: PERMISSIONS.VIEW_PRODUCTS },
+      // MANAGE_INVENTORY, not VIEW_PRODUCTS: this screen shows cost prices and suppliers on every
+      // row, which browsing the catalog does not. Matches the API's own gate on the endpoint.
+      {
+        path: '/app/stock-movements',
+        label: 'Stock Movements',
+        icon: ArrowLeftRight,
+        requiredPermission: PERMISSIONS.MANAGE_INVENTORY,
+      },
       { path: '/app/users', label: 'Users', icon: Users, requiredPermission: PERMISSIONS.MANAGE_USERS },
       {
         path: '/app/roles',
