@@ -153,7 +153,8 @@ export const copy = {
      * "sheet" made the product one sound like a list of what you already have.
      */
     templateLink: 'Download blank template',
-    templateBody: 'A blank spreadsheet with three example rows. Add one row per product: its name, what it comes in, and what is inside one.',
+    templateBody:
+      'One row per product: its name, what it comes in and what is inside one — and, if you like, how many you have now and what you paid. It opens with a short how-to and three examples to type over.',
     stockInTemplateLink: 'Download stock sheet',
     stockInTemplateBody:
       'Your products are already listed, one row for each way you buy them. Just type how many arrived.',
@@ -163,10 +164,14 @@ export const copy = {
     sheetScopeAll: 'All my products',
     sheetScopeSupplier: "One supplier's products",
     sheetScopeLowStock: 'Only products running low',
+    sheetScopeCategory: "One category's products",
     sheetScopeSelected: (count: number) =>
       `The ${count} product${count === 1 ? '' : 's'} you selected on the products page.`,
     sheetSupplierLabel: 'Supplier',
     sheetSupplierPlaceholder: 'Choose a supplier',
+    sheetCategoryLabel: 'Category',
+    sheetCategoryPlaceholder: 'Choose a category',
+    sheetCategoryNone: 'You have no categories yet. You can add them from the products page.',
     stepDelivery: 'Step 2 — About this delivery',
     deliveryBody: 'Asked once for the whole sheet. A row that says something different keeps its own.',
     deliveryDate: 'Date it arrived',

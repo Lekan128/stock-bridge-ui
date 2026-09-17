@@ -25,7 +25,10 @@ export function ProductCard({ product, incoming = 0 }: ProductCardProps) {
           <p className="truncate text-sm font-medium text-neutral-900">{product.name}</p>
           <StatusBadge active={product.active} />
         </div>
-        <p className="mt-0.5 truncate text-xs text-neutral-500">{product.sku}</p>
+        <p className="mt-0.5 truncate text-xs text-neutral-500">
+          {product.sku}
+          {product.categoryName != null && ` · ${product.categoryName}`}
+        </p>
         <div className="mt-1.5 flex flex-wrap items-center gap-2">
           {/* "usable" is spelled out rather than implied by the absence of a badge — this is the
               line someone reads before deciding whether they can fulfil an order today, and

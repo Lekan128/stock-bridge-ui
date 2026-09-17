@@ -14,6 +14,9 @@ import { ProductListSkeleton } from '@/features/products/components/ProductListS
 import { ProductTable, type ProductSort, type ProductSortField } from '@/features/products/components/ProductTable'
 import { ProductsToolbar } from '@/features/products/components/ProductsToolbar'
 import { productsApi } from '@/features/products/api/productsApi'
+import { ManageCategoriesModal } from '@/features/products/categories/ManageCategoriesModal'
+import type { CompanyCategory } from '@/features/products/categories/types'
+import { useCompanyCategories } from '@/features/products/categories/useCompanyCategories'
 import { useProductIncoming } from '@/features/products/hooks/useProductIncoming'
 import { useProducts } from '@/features/products/hooks/useProducts'
 import type { ProductStatusFilter } from '@/features/products/types'
@@ -36,6 +39,9 @@ export function ProductListPage() {
   const canImport = canManageProducts || permissions.includes(PERMISSIONS.MANAGE_INVENTORY)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<ProductStatusFilter>('all')
+  /** A company category id, or '' for all of them. */
+  const [categoryFilter, setCategoryFilter] = useState('')
+  const [manageCategoriesOpen, setManageCategoriesOpen] = useState(false)
   const [page, setPage] = useState(0)
   const [sort, setSort] = useState<ProductSort>({ field: 'name', direction: 'asc' })
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -43,9 +49,13 @@ export function ProductListPage() {
 
   const debouncedSearch = useDebouncedValue(search, 350)
 
-  const { data, loading, error } = useProducts({
+  // The route requires VIEW_PRODUCTS, which is all the category list needs.
+  const categoryList = useCompanyCategories(true)
+
+  const { data, loading, error, refetch } = useProducts({
     search: debouncedSearch || undefined,
     active: statusFilter === 'all' ? undefined : statusFilter === 'active',
+    categoryId: categoryFilter || undefined,
     page,
     size: PAGE_SIZE,
     sort: `${sort.field},${sort.direction}`,
@@ -94,6 +104,38 @@ export function ProductListPage() {
     setPage(0)
   }
 
+  function handleCategoryFilterChange(categoryId: string) {
+    setCategoryFilter(categoryId)
+    setPage(0)
+  }
+
+  /** Whether any row on screen shows this category — and so says something stale after a change. */
+  function isOnScreen(categoryId: string) {
+    return (data?.content ?? []).some((product) => product.categoryId === categoryId)
+  }
+
+  /**
+   * A rename changes what rows on screen say, so the page is reloaded when one of them is in that
+   * category. A delete does the same, and a filter on the deleted category falls back to all of
+   * them (which reloads anyway).
+   */
+  function handleCategorySaved(category: CompanyCategory) {
+    categoryList.upsert(category)
+    if (isOnScreen(category.id)) refetch()
+  }
+
+  function handleCategoryDeleted(category: CompanyCategory) {
+    categoryList.remove(category.id)
+    if (categoryFilter === category.id) handleCategoryFilterChange('')
+    else if (isOnScreen(category.id)) refetch()
+  }
+
+  function closeManageCategories() {
+    setManageCategoriesOpen(false)
+    // Product counts are the server's to work out; fetch them fresh for next time.
+    categoryList.reload()
+  }
+
   async function handleExport() {
     try {
       const blob = await productsApi.export()
@@ -103,7 +145,7 @@ export function ProductListPage() {
     }
   }
 
-  const isUnfiltered = !debouncedSearch && statusFilter === 'all'
+  const isUnfiltered = !debouncedSearch && statusFilter === 'all' && !categoryFilter
   const isTrulyEmpty = !loading && !error && isUnfiltered && (data?.content.length ?? 0) === 0 && page === 0
 
   return (
@@ -122,11 +164,15 @@ export function ProductListPage() {
         onSearchChange={handleSearchChange}
         statusFilter={statusFilter}
         onStatusFilterChange={handleStatusFilterChange}
+        categories={categoryList.categories}
+        categoryFilter={categoryFilter}
+        onCategoryFilterChange={handleCategoryFilterChange}
         canManageProducts={canManageProducts}
         onAddProduct={() => setAddProductOpen(true)}
         onBulkUpload={() => navigate('/app/products/import')}
         onExport={() => void handleExport()}
         onSkuSettings={() => navigate('/app/products/sku-settings')}
+        onManageCategories={() => setManageCategoriesOpen(true)}
       />
 
       {loading && <ProductListSkeleton />}
@@ -143,7 +189,9 @@ export function ProductListPage() {
         <>
           {data.content.length === 0 ? (
             <p className="rounded-lg border border-neutral-200 bg-white px-4 py-10 text-center text-sm text-neutral-500">
-              No products match your search.
+              {categoryFilter && !debouncedSearch && statusFilter === 'all'
+                ? 'No products in this category yet. Choose a category on a product to add it here.'
+                : 'No products match your search.'}
             </p>
           ) : (
             <>
@@ -193,6 +241,17 @@ export function ProductListPage() {
           <Pagination page={data.number} totalPages={data.totalPages} onPageChange={setPage} />
         </>
       )}
+
+      <ManageCategoriesModal
+        open={manageCategoriesOpen && canManageProducts}
+        onClose={closeManageCategories}
+        categories={categoryList.categories}
+        loading={categoryList.loading}
+        loadError={categoryList.error}
+        onRetry={categoryList.reload}
+        onSaved={handleCategorySaved}
+        onDeleted={handleCategoryDeleted}
+      />
 
       <NewProductSearchModal open={addProductOpen && canManageProducts} onClose={() => setAddProductOpen(false)} />
     </div>

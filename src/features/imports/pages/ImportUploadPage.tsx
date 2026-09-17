@@ -15,6 +15,7 @@ import { ImportStepFrame } from '@/features/imports/components/ImportStepFrame'
 import { RecentImportsList } from '@/features/imports/components/RecentImportsList'
 import { copy } from '@/features/imports/copy'
 import type { ImportKind, ImportMode, StockInFilter } from '@/features/imports/types'
+import { useCompanyCategories } from '@/features/products/categories/useCompanyCategories'
 import { useProductSkuSettings } from '@/features/products/hooks/useProductSkuSettings'
 import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
 import { isAppError } from '@/types/api'
@@ -81,7 +82,13 @@ export function ImportUploadPage() {
   const [deliveryDate, setDeliveryDate] = useState(todayIso)
   const [invoiceNo, setInvoiceNo] = useState('')
   const [deliveryVendorId, setDeliveryVendorId] = useState('')
-  const sheetNeedsVendor = sheetScope === 'BY_VENDOR' && sheetVendorId === ''
+  // A storekeeper here holds MANAGE_INVENTORY; the category list needs VIEW_PRODUCTS, which every
+  // role has today but is checked anyway, the same way suppliers are.
+  const canSeeCategories = permissions.includes(PERMISSIONS.VIEW_PRODUCTS)
+  const { categories, loading: loadingCategories } = useCompanyCategories(isStockIn && canSeeCategories)
+  const [sheetCategoryId, setSheetCategoryId] = useState('')
+  const sheetNeedsChoice =
+    (sheetScope === 'BY_VENDOR' && sheetVendorId === '') || (sheetScope === 'BY_CATEGORY' && sheetCategoryId === '')
 
   /**
    * With SKU auto-generation on, the file has no sku column for CREATE_OR_UPDATE/UPDATE_ONLY to
@@ -130,7 +137,12 @@ export function ImportUploadPage() {
     setDownloading(true)
     try {
       if (isStockIn) {
-        await importsApi.downloadStockInTemplate({ productIds, filter: sheetScope, vendorId: sheetVendorId })
+        await importsApi.downloadStockInTemplate({
+          productIds,
+          filter: sheetScope,
+          vendorId: sheetVendorId,
+          categoryId: sheetCategoryId,
+        })
       }
       else await importsApi.downloadProductTemplate()
     } catch {
@@ -189,7 +201,7 @@ export function ImportUploadPage() {
               variant="secondary"
               className="shrink-0"
               loading={downloading}
-              disabled={isStockIn && productIds.length === 0 && sheetNeedsVendor}
+              disabled={isStockIn && productIds.length === 0 && sheetNeedsChoice}
               onClick={() => void handleDownloadTemplate()}
             >
               <Download className="h-4 w-4" aria-hidden="true" />
@@ -207,6 +219,7 @@ export function ImportUploadPage() {
                     [
                       ['ALL', copy.upload.sheetScopeAll],
                       ...(canSeeSuppliers ? [['BY_VENDOR', copy.upload.sheetScopeSupplier]] : []),
+                      ...(canSeeCategories ? [['BY_CATEGORY', copy.upload.sheetScopeCategory]] : []),
                       ['LOW_STOCK', copy.upload.sheetScopeLowStock],
                     ] as [StockInFilter, string][]
                   ).map(([value, label]) => (
@@ -241,6 +254,35 @@ export function ImportUploadPage() {
                         </option>
                       ))}
                     </select>
+                  </div>
+                )}
+                {sheetScope === 'BY_CATEGORY' && (
+                  <div className="max-w-sm">
+                    <label htmlFor="sheet-category" className="sr-only">
+                      {copy.upload.sheetCategoryLabel}
+                    </label>
+                    <select
+                      id="sheet-category"
+                      value={sheetCategoryId}
+                      onChange={(event) => setSheetCategoryId(event.target.value)}
+                      disabled={!loadingCategories && categories.length === 0}
+                      aria-describedby={
+                        !loadingCategories && categories.length === 0 ? 'sheet-category-none' : undefined
+                      }
+                      className={SELECT_CLASS}
+                    >
+                      <option value="">{copy.upload.sheetCategoryPlaceholder}</option>
+                      {categories.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </select>
+                    {!loadingCategories && categories.length === 0 && (
+                      <p id="sheet-category-none" className="mt-1.5 text-xs text-primary-900">
+                        {copy.upload.sheetCategoryNone}
+                      </p>
+                    )}
                   </div>
                 )}
               </fieldset>

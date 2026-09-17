@@ -271,17 +271,22 @@ function absoluteUrl(path: string): string {
   return `${api.defaults.baseURL ?? ''}${path}`
 }
 
-function stockInTemplateQuery(params: {
+/** Which products a stock sheet lists. `vendorId` / `categoryId` only mean something with their filter. */
+interface StockInTemplateParams {
   productIds?: string[]
   filter?: StockInFilter
   vendorId?: string
-}): Record<string, string> {
+  categoryId?: string
+}
+
+function stockInTemplateQuery(params: StockInTemplateParams): Record<string, string> {
   const query: Record<string, string> = {}
   // `productIds` wins over `filter` when present (contract §3), so it is never sent alongside.
   if (params.productIds?.length) query.productIds = params.productIds.join(',')
   else if (params.filter) {
     query.filter = params.filter
     if (params.filter === 'BY_VENDOR' && params.vendorId) query.vendorId = params.vendorId
+    if (params.filter === 'BY_CATEGORY' && params.categoryId) query.categoryId = params.categoryId
   }
   return query
 }
@@ -398,7 +403,7 @@ export const importsApi = {
   },
 
   /** GET /api/imports/templates/stock-in?productIds=&filter= — see the note on `reportUrl`. */
-  stockInTemplateUrl(params: { productIds?: string[]; filter?: StockInFilter; vendorId?: string }): string {
+  stockInTemplateUrl(params: StockInTemplateParams): string {
     const query = new URLSearchParams(stockInTemplateQuery(params)).toString()
     return absoluteUrl(`${BASE}/templates/stock-in${query ? `?${query}` : ''}`)
   },
@@ -414,7 +419,7 @@ export const importsApi = {
   },
 
   /** GET /api/imports/templates/stock-in, fetched with the bearer token and saved. */
-  downloadStockInTemplate(params: { productIds?: string[]; filter?: StockInFilter; vendorId?: string }): Promise<void> {
+  downloadStockInTemplate(params: StockInTemplateParams): Promise<void> {
     return download(`${BASE}/templates/stock-in`, 'stock-sheet.xlsx', stockInTemplateQuery(params))
   },
 

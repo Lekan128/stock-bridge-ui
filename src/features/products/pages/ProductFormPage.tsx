@@ -10,6 +10,9 @@ import { FormError } from '@/components/FormError'
 import { TextField } from '@/components/TextField'
 import { useToast } from '@/components/useToast'
 import { productsApi } from '@/features/products/api/productsApi'
+import { CategoryField } from '@/features/products/categories/CategoryField'
+import type { CompanyCategory } from '@/features/products/categories/types'
+import { useCompanyCategories } from '@/features/products/categories/useCompanyCategories'
 import { ImageUploadField } from '@/features/products/components/ImageUploadField'
 import { ProductFormSkeleton } from '@/features/products/components/ProductFormSkeleton'
 import { RequestUnitOfMeasureModal } from '@/features/products/components/RequestUnitOfMeasureModal'
@@ -68,6 +71,7 @@ const KNOWN_FIELDS = new Set<keyof ProductFormValues>([
   'initialVendorId',
   'initialVendorCost',
   'initialVendorQuantity',
+  'categoryId',
 ])
 
 // Fixed display order for the "Stock unit" picker's <optgroup>s — independent of whatever
@@ -222,6 +226,17 @@ export function ProductFormPage() {
   const canOverrideSku = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.PRODUCT_SKU_OVERRIDE)
   const [skuUnlocked, setSkuUnlocked] = useState(false)
   const { vendors: vendorOptions } = useVendorOptions(canViewVendors)
+  // The route already requires MANAGE_PRODUCTS; checked again here only so "+ New category" never
+  // appears for someone the server would refuse, should the route guard ever loosen.
+  const tenantPermissions = user?.type === 'tenant' ? user.permissions : []
+  const canManageProducts = tenantPermissions.includes(PERMISSIONS.MANAGE_PRODUCTS)
+  const canViewCategories = canManageProducts || tenantPermissions.includes(PERMISSIONS.VIEW_PRODUCTS)
+  const {
+    categories,
+    loading: loadingCategories,
+    error: categoriesError,
+    upsert: addCategory,
+  } = useCompanyCategories(canViewCategories)
   // `options` (the whole fetched list) as well as the two role-filtered slices: §9.1's quantity
   // fields are counted in the product's PACK, and building that pack as a `UnitOption` needs to
   // resolve a PACKAGING-role code against the same list the stock unit is resolved against.
@@ -348,6 +363,7 @@ export function ProductFormPage() {
       initialVendorId: '',
       initialVendorCost: '',
       initialVendorQuantity: '',
+      categoryId: product.categoryId ?? '',
     })
   }, [product, reset, unitOfMeasureOptions, baseOptions])
 
@@ -642,7 +658,11 @@ export function ProductFormPage() {
         isEdit && id
           ? await productsApi.update(
               id,
-              { ...toProductUpdatePayload(values), lowStockThreshold, removeImage: removeImage || undefined },
+              {
+                ...toProductUpdatePayload(values, product?.categoryId),
+                lowStockThreshold,
+                removeImage: removeImage || undefined,
+              },
               imageFile,
             )
           : // The "First supplier" block (§7.1) rides in the SAME create request as everything
@@ -764,9 +784,32 @@ export function ProductFormPage() {
     await save(values)
   }
 
+  /**
+   * The saved category is always offered, even when the list has not loaded (or failed to): a
+   * picker missing the product's own category would show "No category" and invite a save that
+   * looks like it keeps the category while the screen says otherwise.
+   */
+  const categoryOptions: CompanyCategory[] =
+    product?.categoryId != null && !categories.some((category) => category.id === product.categoryId)
+      ? [...categories, { id: product.categoryId, name: product.categoryName ?? 'Current category', productCount: 0 }]
+      : categories
+
   if (isEdit && loadingProduct) {
     return <ProductFormSkeleton />
   }
+
+  const categoryField = canViewCategories ? (
+    <CategoryField
+      value={watch('categoryId')}
+      onChange={(categoryId) => setValue('categoryId', categoryId, { shouldDirty: true, shouldValidate: true })}
+      categories={categoryOptions}
+      loading={loadingCategories}
+      loadError={categoriesError}
+      canCreate={canManageProducts}
+      onCreated={addCategory}
+      error={errors.categoryId?.message}
+    />
+  ) : null
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
@@ -820,7 +863,7 @@ export function ProductFormPage() {
             <Tag className="h-4 w-4 shrink-0 text-neutral-600" aria-hidden="true" />
             <div>
               <h2 className="text-sm font-semibold text-neutral-900">Basic details</h2>
-              <p className="text-xs text-neutral-500">Name, SKU, and description for this product.</p>
+              <p className="text-xs text-neutral-500">Name, SKU, description, and category for this product.</p>
             </div>
           </div>
         )}
@@ -905,6 +948,11 @@ export function ProductFormPage() {
             {...register('brand')}
           />
         )}
+
+        {/* A seller's category goes further down, under its own heading: it is the company's own
+            grouping, the server does not count it as an identity change, and placing it under
+            "Changing anything here sends the listing back for review" would say otherwise. */}
+        {!isVendor && categoryField}
 
         {/* ------------------------------------------------- How you count and pack this product */}
         {/* Rendered for EVERY tenant, not gated on `isVendor` — unlike brand, this is a universal
@@ -1174,6 +1222,21 @@ export function ProductFormPage() {
               error={errors.unitPrice?.message}
               {...register('unitPrice')}
             />
+          </>
+        )}
+
+        {isVendor && categoryField && (
+          <>
+            <div className="mt-2 flex items-center gap-2 border-b border-neutral-200 pb-2">
+              <Tag className="h-4 w-4 shrink-0 text-neutral-600" aria-hidden="true" />
+              <div>
+                <h2 className="text-sm font-semibold text-neutral-900">Your category</h2>
+                <p className="text-xs text-neutral-500">
+                  Only your team sees this. Changing it does not affect your listing.
+                </p>
+              </div>
+            </div>
+            {categoryField}
           </>
         )}
 

@@ -99,6 +99,13 @@ export interface Product {
    * set it from the Vendors tab's preferred toggle, not from this type.
    */
   preferredVendorName: string | null
+  /**
+   * The company's own category for this product (`/api/company-categories`), if it has one.
+   * Both are omitted from the JSON when the product is uncategorised (the API drops null fields),
+   * so compare with `== null`, never `=== null`.
+   */
+  categoryId?: string | null
+  categoryName?: string | null
   active: boolean
   isLowStock: boolean
   createdAt: string
@@ -130,6 +137,8 @@ export type ProductStatusFilter = 'all' | 'active' | 'inactive'
 export interface ProductListParams {
   search?: string
   active?: boolean
+  /** Only products in this company category. */
+  categoryId?: string
   page?: number
   size?: number
   sort?: string
@@ -210,6 +219,11 @@ export interface ProductFormPayload {
    * `ProductVendor` rows, and this is only how the FIRST one gets created.
    */
   initialVendor?: InitialVendorPayload
+  /**
+   * A company category id. On create, omitted means uncategorised. On update, omitted means
+   * "leave it as it is" — removing a category takes {@link ProductUpdatePayload.clearCategory}.
+   */
+  categoryId?: string
 }
 
 export type UnitOfMeasureCategory = 'COUNT' | 'WEIGHT' | 'VOLUME' | 'LENGTH'
@@ -319,6 +333,8 @@ export interface UnitOfMeasureRequestPayload {
 export interface ProductUpdatePayload extends Partial<ProductFormPayload> {
   active?: boolean
   removeImage?: boolean
+  /** Removes the product's category. Needed because an absent `categoryId` leaves it unchanged. */
+  clearCategory?: boolean
   // No `clearCompanyVendor` (or `companyVendorId`) here anymore — there is no flat per-product
   // supplier field left to clear. An existing product's vendors are added, edited and unlinked
   // from the product detail page's Vendors tab (`ProductVendor` rows), not through this payload.

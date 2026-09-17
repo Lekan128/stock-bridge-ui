@@ -215,6 +215,12 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
                   <ProductImage src={product.imageUrl} alt={product.name} className="h-8 w-8 shrink-0 rounded-md" />
                   <div className="min-w-0">
                     <span className="font-medium text-neutral-900">{product.name}</span>
+                    {/* The company's own category, on its own line so it reads as a label rather
+                        than as part of the pack description below it. Absent (not null) when the
+                        product has none — hence `!= null`. */}
+                    {product.categoryName != null && (
+                      <p className="truncate text-xs font-medium text-neutral-600">{product.categoryName}</p>
+                    )}
                     {/* A company has no unit price column to look at, so the packaging fact that
                         would normally sit beside a price ("Bag of 50 kg") is surfaced here
                         instead — never shown to a vendor, who already has the unit price column

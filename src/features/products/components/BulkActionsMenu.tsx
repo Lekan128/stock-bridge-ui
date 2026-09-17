@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Download, MoreVertical, Settings, Upload } from 'lucide-react'
+import { Download, MoreVertical, Settings, Tags, Upload } from 'lucide-react'
 import { useClickOutside } from '@/hooks/useClickOutside'
 
 export interface BulkActionsMenuProps {
@@ -8,6 +8,8 @@ export interface BulkActionsMenuProps {
   onBulkUpload: () => void
   onExport: () => void
   onSkuSettings: () => void
+  /** Opens the categories dialog. MANAGE_PRODUCTS, like the other catalog writes here. */
+  onManageCategories: () => void
 }
 
 export function BulkActionsMenu({
@@ -15,6 +17,7 @@ export function BulkActionsMenu({
   onBulkUpload,
   onExport,
   onSkuSettings,
+  onManageCategories,
 }: BulkActionsMenuProps) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -24,6 +27,7 @@ export function BulkActionsMenu({
     ...(canManageProducts
       ? [
           { label: 'Bulk upload', icon: Upload, onClick: onBulkUpload },
+          { label: 'Manage categories', icon: Tags, onClick: onManageCategories },
           { label: 'SKU settings', icon: Settings, onClick: onSkuSettings },
         ]
       : []),
