@@ -24,6 +24,7 @@ import {
   formatQuantity,
   howYouCountIt,
   priceBasisNote,
+  notAWholeCountMessage,
   roundsToZeroMessage,
   unitNoun,
   unitsPerPackHint,
@@ -31,10 +32,14 @@ import {
 import {
   buildPackOption,
   convertsCleanly,
+  convertsToWholeCount,
   defaultUnitOption,
+  exactBaseQuantity,
+  isCountedInWholeUnits,
   productsOwnUnits,
   resolveUnitLabel,
   stockUnitLabel,
+  stockUnitOption,
   toBasePrice,
   toBaseQuantity,
   unitOptionsForProduct,
@@ -368,6 +373,14 @@ export function StockInModal({ product, onClose, onSuccess }: StockInModalProps)
    *  through the same-category base units — 1 g against a KG stock unit is a real entry that
    *  disappears when converted, and a silent 0 is a disappearing delivery. */
   const roundsToZero = quantityNumber > 0 && !convertsCleanly(quantityNumber, selectedOption)
+  /** §7.1: a quarter of a pack of ten pieces is two and a half pieces, which the server refuses.
+   *  Said here, beside the field, for the same reason as {@link roundsToZero}. */
+  const notAWholeCount = !convertsToWholeCount(
+    quantityNumber,
+    selectedOption,
+    isCountedInWholeUnits(product.unitOfMeasure, unitOfMeasureOptions),
+  )
+  const quantityRefused = roundsToZero || notAWholeCount
 
   const unitPriceNumber = unitPriceStr ? Number(unitPriceStr) : null
   const basePriceNumber = unitPriceNumber == null ? null : toBasePrice(unitPriceNumber, selectedOption)
@@ -454,7 +467,7 @@ export function StockInModal({ product, onClose, onSuccess }: StockInModalProps)
   }
 
   function goToConfirm() {
-    if (roundsToZero) return
+    if (quantityRefused) return
     setStep('confirm')
   }
 
@@ -541,7 +554,7 @@ export function StockInModal({ product, onClose, onSuccess }: StockInModalProps)
             <Button variant="secondary" onClick={onClose}>
               Cancel
             </Button>
-            <Button onClick={handleSubmit(goToConfirm)} disabled={productVendorsLoading || roundsToZero}>
+            <Button onClick={handleSubmit(goToConfirm)} disabled={productVendorsLoading || quantityRefused}>
               Continue
             </Button>
           </>
@@ -602,10 +615,20 @@ export function StockInModal({ product, onClose, onSuccess }: StockInModalProps)
               </div>
             </div>
             {/* Both numbers, live, on the path that used to go dark (P1-2). */}
-            {showConversion && !roundsToZero && <p className="mt-1.5 text-xs text-neutral-500">{quantityBothWays}</p>}
+            {showConversion && !quantityRefused && <p className="mt-1.5 text-xs text-neutral-500">{quantityBothWays}</p>}
             {roundsToZero && (
               <p role="alert" className="mt-1.5 text-xs text-danger-600">
                 {roundsToZeroMessage(quantityNumber, selectedOption, stockUnitText)}
+              </p>
+            )}
+            {notAWholeCount && !roundsToZero && (
+              <p role="alert" className="mt-1.5 text-xs text-danger-600">
+                {notAWholeCountMessage(
+                  quantityNumber,
+                  selectedOption,
+                  exactBaseQuantity(quantityNumber, selectedOption),
+                  unitNoun(stockUnitOption(unitOptions)),
+                )}
               </p>
             )}
           </div>

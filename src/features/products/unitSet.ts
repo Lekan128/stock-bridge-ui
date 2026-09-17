@@ -567,6 +567,40 @@ export function fromBasePrice(basePrice: number, option: UnitOption): number {
 }
 
 /**
+ * `PACK_ENTRY_REDESIGN.md` §7.1 — the frontend half of `UnitOptions.isCountedInWholeUnits`. A
+ * stock unit you count (pieces) cannot hold a fraction; one you measure (kg) can be rounded. A
+ * product with no stock unit is counted in plain units. An unknown code — the catalog has not
+ * loaded yet — answers `false`, leaving the server's identical check as the only gate.
+ */
+export function isCountedInWholeUnits(
+  stockUnitCode: string | null | undefined,
+  unitsOfMeasure: UnitOfMeasureOption[],
+): boolean {
+  if (!stockUnitCode) return true
+  return unitsOfMeasure.find((option) => option.code === stockUnitCode)?.category === 'COUNT'
+}
+
+/**
+ * `quantity` in stock units before the §3.1 rounding — `0.25` of a pack of ten is `2.5`. Rounded at
+ * scale 9 only to remove floating-point noise (`0.1 × 30` is `3.0000000000000004`), which is far
+ * below anything a person types.
+ */
+export function exactBaseQuantity(quantity: number, option: UnitOption): number {
+  if (!Number.isFinite(quantity)) return 0
+  return roundHalfUp(quantity * option.factorToStockUnit, 9)
+}
+
+/**
+ * §7.1's refusal, checked before the request: `false` when `quantity` of `option` is not a whole
+ * number of a counted stock unit. Zero and blank are never refused here, same as
+ * {@link convertsCleanly}.
+ */
+export function convertsToWholeCount(quantity: number, option: UnitOption, countedInWholeUnits: boolean): boolean {
+  if (!countedInWholeUnits || !Number.isFinite(quantity) || quantity <= 0) return true
+  return Number.isInteger(exactBaseQuantity(quantity, option))
+}
+
+/**
  * `UNIT_UX_CONTRACT.md` §3.1's round-to-zero guard: *a conversion that rounds to zero ⇒ 400,
  * never a silent 0.*
  *

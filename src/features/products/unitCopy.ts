@@ -706,6 +706,27 @@ export function priceBasisNote(stockUnitLabel: string): string {
  * disappearing delivery. The message names the way out (both ways out) rather than only
  * reporting the refusal.
  */
+/**
+ * `PACK_ENTRY_REDESIGN.md` §7.1's message, worded as the server words it
+ * (`InvalidStockUnitException.notAWholeCount`): the arithmetic, then the whole numbers either
+ * side, so the way out is on the screen rather than left to guesswork.
+ *
+ * `"0.25 packs is 2.5 pieces — that isn't a whole number of pieces. Enter 2 or 3 pieces instead."`
+ */
+export function notAWholeCountMessage(
+  quantity: number,
+  option: UnitOption,
+  exactStockUnits: number,
+  stockUnitNoun: string,
+): string {
+  const plural = pluraliseUnitNoun(stockUnitNoun, 2)
+  const below = Math.floor(exactStockUnits)
+  const above = Math.ceil(exactStockUnits)
+  const suggestion =
+    below > 0 ? `Enter ${formatNumber(below)} or ${formatNumber(above)} ${plural} instead.` : `Enter ${formatQuantity(above, stockUnitNoun)} instead.`
+  return `${formatQuantityInUnit(quantity, option)} is ${formatNumber(exactStockUnits)} ${plural} — that isn't a whole number of ${plural}. ${suggestion}`
+}
+
 export function roundsToZeroMessage(quantity: number, option: UnitOption, stockUnitLabel: string): string {
   return `${formatQuantityInUnit(quantity, option)} is less than one whole ${stockUnitLabel} — enter a larger amount, or change this product's ${UNIT_COPY.STOCK_UNIT.toLowerCase()}.`
 }
