@@ -10,6 +10,7 @@ import { useToast } from '@/components/useToast'
 import { importsApi } from '@/features/imports/api/importsApi'
 import { CleanFileSummary } from '@/features/imports/components/CleanFileSummary'
 import { ColumnMappingPanel } from '@/features/imports/components/ColumnMappingPanel'
+import { DeliverySummary } from '@/features/imports/components/DeliverySummary'
 import { DiscardPacksDialog } from '@/features/imports/components/DiscardPacksDialog'
 import { ImportReviewSkeleton } from '@/features/imports/components/ImportSkeletons'
 import { ImportStepFrame } from '@/features/imports/components/ImportStepFrame'
@@ -232,6 +233,8 @@ export function ImportReviewPage() {
             onSave={(mapping) => void handleMapping(mapping)}
           />
         )}
+
+        <DeliverySummary delivery={session.delivery} />
 
         {!session.needsMapping && (
           <>

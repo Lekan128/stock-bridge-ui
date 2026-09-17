@@ -285,6 +285,26 @@ export interface ImportSession {
   createdAt: string
   expiresAt: string
   committedAt: string | null
+  /**
+   * A stock-in's date, invoice number and supplier, asked once on the upload screen
+   * (`BULK_IMPORT_CX_PLAN.md` task 1.5). Absent when none were given — `== null`, never `=== null`.
+   */
+  delivery?: ImportDeliveryDetails | null
+}
+
+/** What the upload screen asked once for a whole delivery. Each value fills the rows that leave it blank. */
+export interface ImportDeliveryDetails {
+  /** ISO date, `YYYY-MM-DD`. Absent means today. */
+  date?: string | null
+  invoiceNo?: string | null
+  supplierName?: string | null
+}
+
+/** The upload screen's delivery fields as sent. Blank fields are left out. */
+export interface DeliveryDetailsInput {
+  deliveryDate?: string
+  invoiceNo?: string
+  vendorId?: string
 }
 
 /**

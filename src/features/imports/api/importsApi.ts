@@ -12,6 +12,7 @@ import type {
   ImportSession,
   ImportSessionSummary,
   Page,
+  DeliveryDetailsInput,
   StockInFilter,
   UndoBlockedResponse,
   ValueMappingRequest,
@@ -33,6 +34,7 @@ interface ImportsBackend {
     kind: ImportKind,
     mode: ImportMode,
     onProgress?: (pct: number) => void,
+    delivery?: DeliveryDetailsInput,
   ): Promise<ImportSession>
   get(id: string): Promise<ImportSession>
   rows(
@@ -134,11 +136,14 @@ function asUndoBlocked(body: unknown): UndoBlockedResponse | null {
 // ------------------------------------------------------------- real client
 
 const realBackend: ImportsBackend = {
-  create(file, kind, mode, onProgress) {
+  create(file, kind, mode, onProgress, delivery) {
     const form = new FormData()
     form.append('file', file)
     form.append('kind', kind)
     form.append('mode', mode)
+    if (delivery?.deliveryDate) form.append('deliveryDate', delivery.deliveryDate)
+    if (delivery?.invoiceNo) form.append('invoiceNo', delivery.invoiceNo)
+    if (delivery?.vendorId) form.append('vendorId', delivery.vendorId)
     onProgress?.(0)
     // The Content-Type header is deliberately not set: the browser has to write it itself so it
     // carries the multipart boundary. Setting it by hand is how multipart uploads silently 400.
@@ -269,11 +274,15 @@ function absoluteUrl(path: string): string {
 function stockInTemplateQuery(params: {
   productIds?: string[]
   filter?: StockInFilter
+  vendorId?: string
 }): Record<string, string> {
   const query: Record<string, string> = {}
   // `productIds` wins over `filter` when present (contract §3), so it is never sent alongside.
   if (params.productIds?.length) query.productIds = params.productIds.join(',')
-  else if (params.filter) query.filter = params.filter
+  else if (params.filter) {
+    query.filter = params.filter
+    if (params.filter === 'BY_VENDOR' && params.vendorId) query.vendorId = params.vendorId
+  }
   return query
 }
 
@@ -299,8 +308,9 @@ export const importsApi = {
     kind: ImportKind,
     mode: ImportMode,
     onProgress?: (pct: number) => void,
+    delivery?: DeliveryDetailsInput,
   ): Promise<ImportSession> {
-    return backend.create(file, kind, mode, onProgress)
+    return backend.create(file, kind, mode, onProgress, delivery)
   },
 
   /** GET /api/imports/{id} */
@@ -388,7 +398,7 @@ export const importsApi = {
   },
 
   /** GET /api/imports/templates/stock-in?productIds=&filter= — see the note on `reportUrl`. */
-  stockInTemplateUrl(params: { productIds?: string[]; filter?: StockInFilter }): string {
+  stockInTemplateUrl(params: { productIds?: string[]; filter?: StockInFilter; vendorId?: string }): string {
     const query = new URLSearchParams(stockInTemplateQuery(params)).toString()
     return absoluteUrl(`${BASE}/templates/stock-in${query ? `?${query}` : ''}`)
   },
@@ -404,7 +414,7 @@ export const importsApi = {
   },
 
   /** GET /api/imports/templates/stock-in, fetched with the bearer token and saved. */
-  downloadStockInTemplate(params: { productIds?: string[]; filter?: StockInFilter }): Promise<void> {
+  downloadStockInTemplate(params: { productIds?: string[]; filter?: StockInFilter; vendorId?: string }): Promise<void> {
     return download(`${BASE}/templates/stock-in`, 'stock-sheet.xlsx', stockInTemplateQuery(params))
   },
 
