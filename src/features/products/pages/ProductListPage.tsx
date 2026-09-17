@@ -14,6 +14,7 @@ import { ProductListSkeleton } from '@/features/products/components/ProductListS
 import { ProductTable, type ProductSort, type ProductSortField } from '@/features/products/components/ProductTable'
 import { ProductsToolbar } from '@/features/products/components/ProductsToolbar'
 import { productsApi } from '@/features/products/api/productsApi'
+import { DataIssuesBanner } from '@/features/products/quality/DataIssuesBanner'
 import { ManageCategoriesModal } from '@/features/products/categories/ManageCategoriesModal'
 import type { CompanyCategory } from '@/features/products/categories/types'
 import { useCompanyCategories } from '@/features/products/categories/useCompanyCategories'
@@ -151,6 +152,8 @@ export function ProductListPage() {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl font-semibold text-neutral-900">Inventory</h1>
+
+      <DataIssuesBanner />
 
       <IncomingStockNotice
         units={incomingTotals.units}

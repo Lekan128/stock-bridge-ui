@@ -78,6 +78,11 @@ const StockMovementsPage = lazy(() =>
     default: m.StockMovementsPage,
   })),
 )
+const FixProductDetailsPage = lazy(() =>
+  import('@/pages/FixProductDetailsPage').then((m) => ({
+    default: m.FixProductDetailsPage,
+  })),
+)
 const ProductSkuSettingsPage = lazy(() =>
   import('@/pages/ProductSkuSettingsPage').then((m) => ({
     default: m.ProductSkuSettingsPage,
@@ -419,6 +424,17 @@ export function AppRoutes() {
             element={
               <RequirePermission permission={PERMISSIONS.MANAGE_PRODUCTS}>
                 <ProductFormPage />
+              </RequirePermission>
+            }
+          />
+          {/* The one-time "fix product details" screen. Static segment, so it ranks above
+            products/:id. VIEW_PRODUCTS like the list that links here — the page itself hides its
+            save controls from anyone without MANAGE_PRODUCTS. */}
+          <Route
+            path="products/fix"
+            element={
+              <RequirePermission permission={PERMISSIONS.VIEW_PRODUCTS}>
+                <FixProductDetailsPage />
               </RequirePermission>
             }
           />
