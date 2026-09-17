@@ -155,7 +155,8 @@ export const copy = {
     templateLink: 'Download blank template',
     templateBody: 'A blank spreadsheet with three example rows. Add one row per product: its name, what it comes in, and what is inside one.',
     stockInTemplateLink: 'Download stock sheet',
-    stockInTemplateBody: 'Your products are already listed. Just type how many you received.',
+    stockInTemplateBody:
+      'Your products are already listed, one row for each way you buy them. Just type how many arrived.',
     alreadyHaveFile: 'Already filled one in? Skip to step 2.',
     modeQuestion: 'If a product is already in your catalog:',
     submit: 'Upload and check it',

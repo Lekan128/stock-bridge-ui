@@ -22,7 +22,7 @@ import { copy } from '@/features/imports/copy'
 import { useImportRows, type RowFilter } from '@/features/imports/hooks/useImportRows'
 import { useImportSession } from '@/features/imports/hooks/useImportSession'
 import { useRowMutations } from '@/features/imports/hooks/useRowMutations'
-import { hasStaleFieldKeys, visibleFields } from '@/features/imports/reviewColumns'
+import { HIDDEN_FIELD_KEYS, hasStaleFieldKeys, visibleFields } from '@/features/imports/reviewColumns'
 import type { ImportLinkedPack } from '@/features/imports/types'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { Pagination } from '@/components/Pagination'
@@ -212,7 +212,9 @@ export function ImportReviewPage() {
   const isClean =
     !session.needsMapping && session.errorCount === 0 && session.warningCount === 0 && unresolvedCount === 0
   const canContinue = session.errorCount === 0 && !session.needsMapping
-  const fields = showAllColumns ? session.fields : visibleFields(session.fields, rows)
+  // The stock sheet's Ref is how the server recognises a row; it means nothing on screen.
+  const displayableFields = session.fields.filter((field) => !HIDDEN_FIELD_KEYS.includes(field.key))
+  const fields = showAllColumns ? displayableFields : visibleFields(displayableFields, rows)
   // An upload that was already in review when `UNIT_UX_CONTRACT.md` §5.1/§5.2's column renames
   // deployed holds the old keys in its stored rows, so every cell below comes back empty. It
   // expires within two days and heals itself; what it must not do is heal itself silently, with

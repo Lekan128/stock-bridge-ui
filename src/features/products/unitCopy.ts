@@ -159,7 +159,17 @@ export function packPhrase(
 ): string | null {
   if (!packagingLabel) return null
   if (packagingSize == null || Number.isNaN(packagingSize) || packagingSize <= 0) return null
-  return `${packagingLabel.trim()} of ${formatNumber(packagingSize)} ${stockUnitSymbolText}`
+  return `${packagingLabel.trim()} of ${formatNumber(packagingSize)} ${sizeUnitWord(stockUnitSymbolText, packagingSize)}`
+}
+
+/**
+ * The unit after a pack's size, as `UnitOptions.sizeUnitWord` writes it on the server: a symbol
+ * stays as it is ("50 kg"), a word reads like one ("10 pieces", "1 piece") rather than the bare
+ * label ("10 Piece").
+ */
+function sizeUnitWord(stockUnitSymbolText: string, packagingSize: number): string {
+  if (!/^[A-Z][a-z]+$/.test(stockUnitSymbolText)) return stockUnitSymbolText
+  return pluraliseUnitNoun(stockUnitSymbolText.toLowerCase(), packagingSize)
 }
 
 /**
