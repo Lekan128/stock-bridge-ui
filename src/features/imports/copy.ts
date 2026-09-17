@@ -1,4 +1,4 @@
-import type { ImportFieldDescriptor, ImportKind, ImportMode } from '@/features/imports/types'
+import type { ImportFieldDescriptor, ImportKind } from '@/features/imports/types'
 import { MAX_FILE_BYTES, MAX_ROWS, SESSION_TTL_HOURS } from '@/features/imports/constants'
 import { UNIT_COPY } from '@/features/products/unitCopy'
 
@@ -79,28 +79,6 @@ export const KIND_COPY: Record<ImportKind, { title: string; shortTitle: string }
   STOCK_IN: { title: 'Record stock you received', shortTitle: 'Stock received' },
 }
 
-/**
- * Plain language for `ImportMode` — the enum spelling never reaches the screen. The question is
- * asked before upload because the answer changes what counts as an error during validation
- * (spec §9.2), so it is phrased as a condition, not as a setting.
- */
-export const MODE_OPTIONS: { value: ImportMode; label: string; hint: string }[] = [
-  {
-    value: 'CREATE_ONLY',
-    label: 'Skip it',
-    hint: 'Leave what you already have untouched. Only brand-new products are added.',
-  },
-  {
-    value: 'CREATE_OR_UPDATE',
-    label: 'Update it',
-    hint: 'Change the details that differ, and add anything new. Best for a supplier price list.',
-  },
-  {
-    value: 'UPDATE_ONLY',
-    label: 'Only update, never add',
-    hint: "Nothing new is created. A product you don't already have is flagged instead.",
-  },
-]
 
 export const copy = {
   chooser: {
@@ -120,6 +98,73 @@ export const copy = {
         footnote: 'We pre-fill your products — you just add the quantities.',
       },
     },
+    /** Under the stock card: the no-spreadsheet route for a small delivery (task 2.1). */
+    quickEntry: 'Only a few items?',
+    quickEntryLink: 'Record them here',
+  },
+
+  /*
+   * "Record a delivery" (BULK_IMPORT_CX_PLAN.md task 2.1) — the same stock-in import, typed on a
+   * phone instead of filled into a sheet. Worded for the storekeeper at the gate: what arrived,
+   * from whom, for how much.
+   */
+  delivery: {
+    title: 'Record a delivery',
+    subtitle: 'Pick the supplier, then type how many of each arrived.',
+    useSheet: 'Lots of lines? Use a spreadsheet instead',
+    supplier: 'Supplier',
+    supplierAny: 'Any supplier',
+    date: 'Date it arrived',
+    dateFuture: "The date can't be in the future.",
+    dateMissing: 'Pick the date it arrived.',
+    invoiceNo: 'Invoice or waybill number',
+    invoiceHint: 'Optional',
+    linesHeading: 'What arrived',
+    search: 'Find a product',
+    searchPlaceholder: 'Search by name or code',
+    quantityLabel: (productName: string, comesIn: string) => `${productName}, ${comesIn} — how many arrived`,
+    quantityInvalid: 'Type a number above 0.',
+    priceLabel: (productName: string, comesIn: string) => `${productName}, ${comesIn} — price for one`,
+    pricePlaceholder: 'Price for one (optional)',
+    priceInvalid: 'Type a price of 0 or more, or leave it blank.',
+    /** "₦42,000 a bag · same as last time" — the amount and unit words arrive already formatted. */
+    priceSame: (amount: string, per: string) => `${amount} ${per} · same as last time`,
+    priceLast: (amount: string, per: string) => `Last time: ${amount} ${per}`,
+    priceChange: 'Change',
+    priceChangeLabel: (productName: string, comesIn: string) => `Change the price for ${productName}, ${comesIn}`,
+    somethingElse: '+ Something not on this list',
+    notInCatalog: 'Not on the list at all?',
+    notInCatalogLink: 'Add it on the products page first',
+    noProductsTitle: 'No products yet',
+    noProductsBody: 'Add your products first — then you can record what arrives.',
+    noProductsAction: 'Go to products',
+    supplierEmpty: (supplierName: string) => `${supplierName} has no products yet`,
+    supplierEmptyAction: 'Show all products',
+    noMatch: (query: string) => `Nothing matches “${query}”.`,
+    loadFailed: "We couldn't load your products.",
+    hiddenTyped: (count: number) =>
+      `${count} more ${count === 1 ? 'item you typed is' : 'items you typed are'} not shown in this list, and will be added too.`,
+    showAll: 'Show them',
+    submit: (count: number, total: string | null) =>
+      `Add ${count} ${count === 1 ? 'item' : 'items'}${total ? ` · ${total}` : ''}`,
+    submitEmpty: 'Type a quantity to add items',
+    totalPartial: 'Total excludes lines without a price',
+    /** Read out politely as the total changes; the visible button says the same. */
+    totalAnnounce: (count: number, total: string | null) =>
+      count === 0
+        ? 'No items yet'
+        : `${count} ${count === 1 ? 'item' : 'items'}${total ? `, ${total} in total` : ''}`,
+    saving: 'Checking…',
+    failed: "We couldn't record that delivery. Nothing was changed.",
+    previewFailed: "We saved your lines but couldn't check them. Have a look here.",
+    confirmTitle: 'Add this delivery?',
+    confirmReassure: 'No stock has been recorded yet.',
+    needsLook: (count: number) => `${count} ${count === 1 ? 'line needs' : 'lines need'} a look`,
+    reviewFirst: 'Review first',
+    notYet: 'Not yet',
+    committing: 'Adding…',
+    commitFailed: 'The delivery was not recorded. Nothing was changed.',
+    done: 'Delivery recorded',
   },
 
   upload: {
@@ -159,6 +204,10 @@ export const copy = {
     stockInTemplateBody:
       'Your products are already listed, one row for each way you buy them. Just type how many arrived.',
     alreadyHaveFile: 'Already filled one in? Skip to step 2.',
+    /* BULK_IMPORT_CX_PLAN.md task 2.3 — how an existing product is changed in bulk. */
+    editExistingPrompt: 'Changing products you already have?',
+    editExistingLink: 'Download my products',
+    editExistingRest: ', edit that sheet and upload it here. Rows you leave alone stay as they are.',
     /* BULK_IMPORT_CX_PLAN.md task 1.5 — which products the sheet lists, and the delivery asked once. */
     sheetScopeLabel: 'Which products should the sheet list?',
     sheetScopeAll: 'All my products',
@@ -181,7 +230,6 @@ export const copy = {
     deliverySupplierAny: 'As written on each row',
     deliverySupplierHint: 'Used for rows that leave the supplier blank.',
     stockInStepUpload: 'Step 3 — Upload it',
-    modeQuestion: 'If a product is already in your catalog:',
     submit: 'Upload and check it',
     checking: 'Checking your file…',
     /** Drawn *and* written: a bar on its own tells nobody how much longer to wait. */
@@ -595,7 +643,6 @@ function walk(value: unknown, path: string, report: (where: string, text: string
 export function assertCopyIsClean(): string[] {
   const problems: string[] = []
   walk(copy, 'copy', (where, text) => problems.push(`${where}: ${text}`))
-  walk(MODE_OPTIONS, 'MODE_OPTIONS', (where, text) => problems.push(`${where}: ${text}`))
   walk(KIND_COPY, 'KIND_COPY', (where, text) => problems.push(`${where}: ${text}`))
   return problems
 }

@@ -307,6 +307,54 @@ export interface DeliveryDetailsInput {
   vendorId?: string
 }
 
+// ------------------------------------------- "Record a delivery" (task 2.1/2.2)
+
+/**
+ * One line of the "Record a delivery" screen: one product, bought one way — the same row the
+ * stock sheet has. A product has one line per pack plus one for its own unit.
+ *
+ * Nullable fields are left off the wire when empty, so compare with `== null`.
+ */
+export interface DeliveryLine {
+  productId: string
+  productName: string
+  sku: string
+  /** Opaque — sent back unchanged as the line's `unit`. */
+  unit: string
+  /** The words for it: "Bag · 50 kg", "Loose · kg", "Piece". */
+  comesIn: string
+  pack: boolean
+  /** What was last paid for ONE of `unit` — per bag on a bag line. Absent when unknown. */
+  lastPrice?: number | null
+  /** The product's usual supplier. */
+  supplierName?: string | null
+}
+
+/** Which products the delivery list shows. `vendorId` / `categoryId` only mean something with their filter. */
+export interface DeliveryLinesParams {
+  filter?: StockInFilter
+  vendorId?: string
+  categoryId?: string
+  productIds?: string[]
+}
+
+export interface DeliveryLineInput {
+  productId: string
+  unit: string
+  /** Above zero; decimals allowed (2.5 bags). */
+  quantity: number
+  /** Price of ONE `unit`. Left out, the last price paid is used. */
+  price?: number
+}
+
+/** POST /api/imports/delivery. Blank fields are left out. */
+export interface DeliveryInput {
+  deliveryDate?: string
+  invoiceNo?: string
+  vendorId?: string
+  lines: DeliveryLineInput[]
+}
+
 /**
  * Row of the recent-imports list. Pinned by contract §4 `ImportSessionSummaryResponse`.
  *

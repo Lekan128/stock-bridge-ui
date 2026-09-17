@@ -116,6 +116,12 @@ const ImportResultPage = lazy(() =>
     default: m.ImportResultPage,
   })),
 )
+// The no-spreadsheet way into the same stock-in import (BULK_IMPORT_CX_PLAN.md task 2.1).
+const RecordDeliveryPage = lazy(() =>
+  import('@/features/imports/pages/RecordDeliveryPage').then((m) => ({
+    default: m.RecordDeliveryPage,
+  })),
+)
 
 const OrderListPage = lazy(() =>
   import('@/pages/OrderListPage').then((m) => ({ default: m.OrderListPage })),
@@ -484,6 +490,16 @@ export function AppRoutes() {
             MANAGE_PRODUCTS alone would bounce a storekeeper — who holds only MANAGE_INVENTORY —
             out of bulk stock-in, the one flow the feature exists to serve, with a UI-only
             refusal the network tab would never explain. */}
+          {/* "Record a delivery" — static, so declared above products/:id like the import routes.
+            MANAGE_INVENTORY alone, matching both endpoints it calls: it only ever records stock. */}
+          <Route
+            path="products/receive"
+            element={
+              <RequirePermission permission={PERMISSIONS.MANAGE_INVENTORY}>
+                <RecordDeliveryPage />
+              </RequirePermission>
+            }
+          />
           <Route
             path="products/import"
             element={

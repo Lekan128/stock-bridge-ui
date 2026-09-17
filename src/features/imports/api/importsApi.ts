@@ -2,6 +2,9 @@ import type { AxiosProgressEvent } from 'axios'
 import { api } from '@/api/client'
 import type {
   CommitPreview,
+  DeliveryInput,
+  DeliveryLine,
+  DeliveryLinesParams,
   ImportCellValue,
   ImportKind,
   ImportLinkedPack,
@@ -55,6 +58,8 @@ interface ImportsBackend {
   linkedPacks(id: string): Promise<ImportLinkedPack[]>
   discard(id: string, removePackIds?: string[]): Promise<void>
   list(params: { kind?: ImportKind; page?: number; size?: number }): Promise<Page<ImportSessionSummary>>
+  deliveryLines(params: DeliveryLinesParams): Promise<DeliveryLine[]>
+  createDelivery(body: DeliveryInput): Promise<ImportSession>
 }
 
 // ------------------------------------------------------------------ commit
@@ -249,6 +254,16 @@ const realBackend: ImportsBackend = {
       })
       .then((r) => r.data)
   },
+
+  deliveryLines(params) {
+    return api
+      .get<DeliveryLine[]>(`${BASE}/delivery-lines`, { params: stockInTemplateQuery(params) })
+      .then((r) => r.data)
+  },
+
+  createDelivery(body) {
+    return api.post<ImportSession>(`${BASE}/delivery`, body).then((r) => r.data)
+  },
 }
 
 const backend: ImportsBackend = realBackend
@@ -385,6 +400,22 @@ export const importsApi = {
   /** GET /api/imports?kind=&page=&size= */
   list(params: { kind?: ImportKind; page?: number; size?: number }): Promise<Page<ImportSessionSummary>> {
     return backend.list(params)
+  },
+
+  /**
+   * GET /api/imports/delivery-lines?filter=&vendorId=&categoryId=&productIds= — the stock sheet's
+   * rows as data, for the "Record a delivery" screen.
+   */
+  deliveryLines(params: DeliveryLinesParams): Promise<DeliveryLine[]> {
+    return backend.deliveryLines(params)
+  },
+
+  /**
+   * POST /api/imports/delivery — a delivery typed into the app becomes an ordinary stock-in
+   * import, so `preview`, `commit` and `undo` work on it unchanged.
+   */
+  createDelivery(body: DeliveryInput): Promise<ImportSession> {
+    return backend.createDelivery(body)
   },
 
   /**

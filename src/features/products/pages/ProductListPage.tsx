@@ -171,8 +171,10 @@ export function ProductListPage() {
         categoryFilter={categoryFilter}
         onCategoryFilterChange={handleCategoryFilterChange}
         canManageProducts={canManageProducts}
+        canRecordDelivery={permissions.includes(PERMISSIONS.MANAGE_INVENTORY)}
         onAddProduct={() => setAddProductOpen(true)}
         onBulkUpload={() => navigate('/app/products/import')}
+        onRecordDelivery={() => navigate('/app/products/receive')}
         onExport={() => void handleExport()}
         onSkuSettings={() => navigate('/app/products/sku-settings')}
         onManageCategories={() => setManageCategoriesOpen(true)}

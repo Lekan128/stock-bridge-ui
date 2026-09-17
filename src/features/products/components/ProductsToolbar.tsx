@@ -1,4 +1,4 @@
-import { Download, Plus, Search, Settings, Tags, Upload } from 'lucide-react'
+import { Download, Plus, Search, Settings, Tags, Truck, Upload } from 'lucide-react'
 import { Button, buttonClassName } from '@/components/Button'
 import type { CompanyCategory } from '@/features/products/categories/types'
 import { BulkActionsMenu } from '@/features/products/components/BulkActionsMenu'
@@ -16,6 +16,8 @@ export interface ProductsToolbarProps {
   onCategoryFilterChange: (categoryId: string) => void
   /** Everything that writes to the catalog needs MANAGE_PRODUCTS; export only needs VIEW_PRODUCTS. */
   canManageProducts: boolean
+  /** "Record a delivery" needs MANAGE_INVENTORY — which a storekeeper has without MANAGE_PRODUCTS. */
+  canRecordDelivery: boolean
   /**
    * Opens the search-first "Add a product" modal (§7.1 of the multi-vendor inventory design)
    * instead of navigating straight to `/app/products/new` — the duplicate-nudge has to run
@@ -23,6 +25,7 @@ export interface ProductsToolbarProps {
    */
   onAddProduct: () => void
   onBulkUpload: () => void
+  onRecordDelivery: () => void
   onExport: () => void
   onSkuSettings: () => void
   onManageCategories: () => void
@@ -43,8 +46,10 @@ export function ProductsToolbar({
   categoryFilter,
   onCategoryFilterChange,
   canManageProducts,
+  canRecordDelivery,
   onAddProduct,
   onBulkUpload,
+  onRecordDelivery,
   onExport,
   onSkuSettings,
   onManageCategories,
@@ -124,6 +129,12 @@ export function ProductsToolbar({
 
         <div className="flex items-center gap-2">
           <div className="hidden items-center gap-2 md:flex">
+            {canRecordDelivery && (
+              <button type="button" onClick={onRecordDelivery} className={buttonClassName('secondary')}>
+                <Truck className="h-4 w-4" />
+                Record a delivery
+              </button>
+            )}
             {canManageProducts && (
               <>
                 <button
@@ -154,12 +165,14 @@ export function ProductsToolbar({
             )}
             <button type="button" onClick={onExport} className={buttonClassName('secondary')}>
               <Download className="h-4 w-4" />
-              Export
+              Download my products
             </button>
           </div>
           <BulkActionsMenu
             canManageProducts={canManageProducts}
+            canRecordDelivery={canRecordDelivery}
             onBulkUpload={onBulkUpload}
+            onRecordDelivery={onRecordDelivery}
             onExport={onExport}
             onSkuSettings={onSkuSettings}
             onManageCategories={onManageCategories}

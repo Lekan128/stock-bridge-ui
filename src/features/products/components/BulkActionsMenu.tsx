@@ -1,11 +1,14 @@
 import { useRef, useState } from 'react'
-import { Download, MoreVertical, Settings, Tags, Upload } from 'lucide-react'
+import { Download, MoreVertical, Settings, Tags, Truck, Upload } from 'lucide-react'
 import { useClickOutside } from '@/hooks/useClickOutside'
 
 export interface BulkActionsMenuProps {
   /** Bulk upload and SKU settings need MANAGE_PRODUCTS; export only needs VIEW_PRODUCTS. */
   canManageProducts: boolean
+  /** "Record a delivery" needs MANAGE_INVENTORY. */
+  canRecordDelivery: boolean
   onBulkUpload: () => void
+  onRecordDelivery: () => void
   onExport: () => void
   onSkuSettings: () => void
   /** Opens the categories dialog. MANAGE_PRODUCTS, like the other catalog writes here. */
@@ -14,7 +17,9 @@ export interface BulkActionsMenuProps {
 
 export function BulkActionsMenu({
   canManageProducts,
+  canRecordDelivery,
   onBulkUpload,
+  onRecordDelivery,
   onExport,
   onSkuSettings,
   onManageCategories,
@@ -24,6 +29,7 @@ export function BulkActionsMenu({
   useClickOutside(ref, () => setOpen(false))
 
   const items = [
+    ...(canRecordDelivery ? [{ label: 'Record a delivery', icon: Truck, onClick: onRecordDelivery }] : []),
     ...(canManageProducts
       ? [
           { label: 'Bulk upload', icon: Upload, onClick: onBulkUpload },
@@ -31,7 +37,7 @@ export function BulkActionsMenu({
           { label: 'SKU settings', icon: Settings, onClick: onSkuSettings },
         ]
       : []),
-    { label: 'Export', icon: Download, onClick: onExport },
+    { label: 'Download my products', icon: Download, onClick: onExport },
   ]
 
   return (
