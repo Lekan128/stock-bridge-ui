@@ -175,7 +175,7 @@ function withDeliveryPack(options: UnitOption[], deliveryPack: UnitOption | null
  *       is the one genuinely required escape hatch, and the one the old disclosure's own notes
  *       called out: picking a supplier that is real but not yet linked to this product.</li>
  *   <li><b>"This delivery came in a different pack"</b> — reveals {@link UNIT_COPY.PACK} +
- *       {@link UNIT_COPY.UNITS_PER_PACK}, adds that pack to the toggle live, and carries an
+ *       {@link UNIT_COPY.CONTAINS}, adds that pack to the toggle live, and carries an
  *       explicit, unchecked opt-in for making it the supplier's standing default (§3.4). Until
  *       now the help text promised *"the vendor's default stays unchanged"* while
  *       `ProductVendorService.findOrCreateForReceipt` overwrote it from those very fields
@@ -723,7 +723,7 @@ export function StockInModal({ product, onClose, onSuccess }: StockInModalProps)
                       {errors.packagingUnit?.message && <p className="mt-1.5 text-xs text-danger-600">{errors.packagingUnit.message}</p>}
                     </div>
                     <TextField
-                      label={UNIT_COPY.UNITS_PER_PACK}
+                      label={UNIT_COPY.CONTAINS}
                       inputMode="decimal"
                       hint={overridePackHint ?? `How many ${stockUnitText} came in one of them`}
                       error={errors.packagingSize?.message}

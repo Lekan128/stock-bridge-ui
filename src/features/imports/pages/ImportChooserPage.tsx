@@ -25,7 +25,7 @@ const CARDS: { kind: ImportKind; Icon: typeof Package; permission: Permission }[
  * our two pipelines they want before they can start, and this is what makes that true.
  *
  * A card the signed-in user cannot use is not shown. A storekeeper holds `MANAGE_INVENTORY` and
- * not `MANAGE_PRODUCTS`, so "Add or update products" was an offer the server would refuse the
+ * not `MANAGE_PRODUCTS`, so "Add products" was an offer the server would refuse the
  * moment they picked a file — a dead end dressed as a choice, and the worst kind, because it
  * only reveals itself after the work of finding the spreadsheet. The route guard stays a
  * disjunction because the two imports share one URL; this is the narrower, per-kind check the

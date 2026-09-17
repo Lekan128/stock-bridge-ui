@@ -343,6 +343,12 @@ export interface ImportResult {
   undoBlockedReason: string | null
   reportUrl: string
   targetUrl: string
+  /**
+   * Which import this was — `PACK_ENTRY_REDESIGN.md` §16. Lets the result screen hand a finished
+   * product import straight on to recording stock. Optional so a result cached from before the
+   * field existed still renders; absent means "don't offer the handoff".
+   */
+  kind?: ImportKind
 }
 
 // -------------------------------------------------- §4 UndoBlockedResponse

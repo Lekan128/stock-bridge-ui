@@ -36,16 +36,17 @@ import {
   formatPackCostEcho,
   formatStockUnitCostEcho,
   formatQuantityEcho,
-  packSummarySentence,
   pluraliseUnitNoun,
   roundsToZeroMessage,
   unitNoun,
   unitsPerPackHint,
+  packEchoLines,
 } from '@/features/products/unitCopy'
 import {
   convertsCleanly,
   defaultUnitOption,
   fromBaseQuantity,
+  parsePackContents,
   resolveUnitSymbol,
   toBasePrice,
   toBaseQuantity,
@@ -71,10 +72,14 @@ const KNOWN_FIELDS = new Set<keyof ProductFormValues>([
 
 // Fixed display order for the "Stock unit" picker's <optgroup>s — independent of whatever
 // order the server happens to return its rows in, so the groups don't shuffle between a create
-// and an edit. WEIGHT/VOLUME/LENGTH group real entries; COUNT holds exactly one entry ("Piece"),
-// since every other COUNT code is role: PACKAGING and lives in the second picker instead. A
-// single-item "Count" optgroup was judged not worth a special case — it costs nothing to render
-// and keeps the grouping logic uniform across all four categories.
+// and an edit.
+//
+// COUNT is first, and since PACK_ENTRY_REDESIGN.md §4 it is no longer the single-entry group it
+// used to be: "Piece" has been joined by Bottle, Sachet, Tin and Tube, the sealed retail items
+// that are BASE-role precisely so they can be chosen HERE. That is the fix for the reported
+// defect — a user stocking bottled water needs "Bottle" to be a legal stock unit, or they reach
+// for Milliliter and the 750 ends up in the pack size. Every other COUNT code is role: PACKAGING
+// and still lives in the second picker.
 const CATEGORY_ORDER: UnitOfMeasureCategory[] = ['COUNT', 'WEIGHT', 'VOLUME', 'LENGTH']
 const CATEGORY_LABELS: Record<UnitOfMeasureCategory, string> = {
   COUNT: 'Count',
@@ -122,7 +127,7 @@ const IDENTITY_FIELDS: { field: keyof ProductFormValues & keyof Product; label: 
   // vocabularies `UNIT_UX_REMEDIATION_PLAN.md` §2 counted.
   { field: 'unitOfMeasure', label: UNIT_COPY.STOCK_UNIT },
   { field: 'packagingUnit', label: UNIT_COPY.PACK },
-  { field: 'packagingSize', label: UNIT_COPY.UNITS_PER_PACK },
+  { field: 'packagingSize', label: UNIT_COPY.CONTAINS },
 ]
 
 /**
@@ -240,6 +245,7 @@ export function ProductFormPage() {
     handleSubmit,
     reset,
     setError,
+    setValue,
     watch,
     formState: { errors, isSubmitting },
   } = useForm<ProductFormValues>({
@@ -315,6 +321,18 @@ export function ProductFormPage() {
     const savedLowStock =
       product.lowStockThreshold != null ? fromBaseQuantity(product.lowStockThreshold, savedEntryOption) : null
 
+    // §15: the Contains text is an input to two fields rather than a field of its own, so it is
+    // seeded here from the same product the form is reset from. `packContentsText` renders the
+    // stored pair back into the one string the user typed — "50 kg" — never the "12 x 750" form,
+    // because only the product of those factors is stored.
+    const seededUnit = product.unitOfMeasure ? resolveUnitSymbol(product.unitOfMeasure, baseOptions) : null
+    setContainsText(
+      seededUnit == null
+        ? ''
+        : product.packagingSize == null
+          ? seededUnit
+          : `${product.packagingSize} ${seededUnit}`,
+    )
     reset({
       name: product.name,
       sku: product.sku,
@@ -331,7 +349,7 @@ export function ProductFormPage() {
       initialVendorCost: '',
       initialVendorQuantity: '',
     })
-  }, [product, reset, unitOfMeasureOptions])
+  }, [product, reset, unitOfMeasureOptions, baseOptions])
 
   /**
    * Live values for the pack group's self-explaining copy. Read through `watch` rather than
@@ -353,7 +371,41 @@ export function ProductFormPage() {
     : null
   const unitsPerPackNumber = watchedUnitsPerPack ? Number(watchedUnitsPerPack) : null
   const packHint = unitsPerPackHint(unitsPerPackNumber, stockUnitLabel, packLabel)
-  const packSummary = packSummarySentence(packLabel, unitsPerPackNumber, stockUnitLabel)
+  // PACK_ENTRY_REDESIGN.md §6.3 — reads the LIVE stock unit, so the echo re-states itself the
+  // moment the picker changes: the point is to be true of the product being edited right now,
+  // not of an example product in a static hint.
+  const echoLines = packEchoLines(packLabel, unitsPerPackNumber, stockUnitLabel)
+
+  /**
+   * §15's single field. `containsText` is what the user is typing; `unitOfMeasure` and
+   * `packagingSize` are derived from it on every keystroke, so the form state the payload is built
+   * from stays exactly what it always was and nothing downstream had to change.
+   *
+   * Seeded from the loaded product rather than kept in the form schema: it is an INPUT to two
+   * fields, not a field of its own, and adding it to the schema would make it a third thing that
+   * can disagree with the two it feeds.
+   */
+  const [containsText, setContainsText] = useState('')
+  const [containsError, setContainsError] = useState<string | null>(null)
+
+  const onContainsChange = (next: string) => {
+    setContainsText(next)
+    if (!next.trim()) {
+      setContainsError(null)
+      setValue('packagingSize', '', { shouldDirty: true })
+      return
+    }
+    const parsed = parsePackContents(next, baseOptions)
+    if (!parsed) {
+      setContainsError('Write what is inside one of them with its unit — “50 kg”, or “12 x 750 ml”.')
+      return
+    }
+    setContainsError(null)
+    if (!stockUnitLocked) setValue('unitOfMeasure', parsed.unitCode, { shouldDirty: true })
+    setValue('packagingSize', parsed.packSize == null ? '' : String(parsed.packSize), {
+      shouldDirty: true,
+    })
+  }
 
   /**
    * The unit every quantity on this form is counted in — `UNIT_UX_CONTRACT.md` §9.1.
@@ -903,7 +955,7 @@ export function ProductFormPage() {
             <div>
               <h2 className="text-sm font-semibold text-neutral-900">How you count and pack this product</h2>
               <p className="text-xs text-neutral-500">
-                What one unit of it means, and — optionally — what it arrives in.
+                Read it as one sentence: “Bag contains 50 kg.”
               </p>
             </div>
           </div>
@@ -918,6 +970,11 @@ export function ProductFormPage() {
                   htmlFor={stockUnitLocked ? undefined : 'unitOfMeasure'}
                   className="block text-sm font-medium text-neutral-700"
                 >
+                  {/* PACK_ENTRY_REDESIGN.md §6.1: the locked term names the concept, the
+                      question names the DECISION — and it is the decision that separates "Bottle"
+                      from "Milliliter" for a sealed 750 ml bottle. The concept word stays as the
+                      label so §1's vocabulary lock still holds and the field is still findable by
+                      the name used everywhere else; the question rides underneath it. */}
                   {UNIT_COPY.STOCK_UNIT}{' '}
                   {!stockUnitLocked && <span className="font-normal text-neutral-400">(optional)</span>}
                 </label>
@@ -969,8 +1026,17 @@ export function ProductFormPage() {
                       </optgroup>
                     ))}
                   </select>
+                  {/* PACK_ENTRY_REDESIGN.md §2, as corrected. The stock unit names the SUBSTANCE
+                      and has to stay the same whatever it arrives in — the same water bought as a
+                      750 ml bottle today and a 2 L keg tomorrow is one product with one balance.
+                      This field is immutable once stock moves, so a container word here would
+                      strand the user on a second product for the same water. Containers go in
+                      Pack, where there can be many of them over time. */}
                   <p className="mt-1.5 text-xs text-neutral-500">
-                    What every quantity of this product is counted in. Fixed once stock starts moving.
+                    What the amount above is <span className="font-medium text-neutral-700">measured in</span>.
+                    Pick the one that stays true whatever it arrives in: water is{' '}
+                    <span className="font-medium text-neutral-700">ml</span> whether it comes as a 750 ml
+                    bottle or a 2 L keg. Fixed once stock starts moving.
                   </p>
                 </>
               )}
@@ -1002,17 +1068,29 @@ export function ProductFormPage() {
                 )}
               </div>
 
-              {/* The live suffix. "Units per pack" alone leaves "units of what?" unanswered, and
-                  the answer is already on screen one field up — so it is read from there and
-                  repeated here as you type ("50 kg per bag") rather than left to be inferred.
-                  Before a stock unit is chosen there is nothing truthful to say, so the field
-                  falls back to naming what it needs instead of guessing. */}
+              {/* PACK_ENTRY_REDESIGN.md §15 — one field, the same text the spreadsheet takes.
+
+                  The stock unit is already inside the answer: somebody who types "50 kg" has said
+                  the unit is kg, so a separate picker asked the same question twice in the most
+                  abstract words on the form. And "12 x 750 ml" — a pack of twelve 750 ml bottles —
+                  is the case that had no expression at all until this field existed; the system
+                  does the multiplying, which is what the buyer asked for at the very start.
+
+                  This input is the single source of truth. It writes `unitOfMeasure` and
+                  `packagingSize` through setValue, and the picker above is the read-back — so the
+                  two can never disagree, which is what a second editable control would risk. */}
               <TextField
-                label={UNIT_COPY.UNITS_PER_PACK}
-                inputMode="decimal"
-                hint={packHint ?? `Set a ${UNIT_COPY.STOCK_UNIT.toLowerCase()} and a ${UNIT_COPY.PACK.toLowerCase()} first`}
-                error={errors.packagingSize?.message}
-                {...register('packagingSize')}
+                label={UNIT_COPY.CONTAINS}
+                placeholder="50 kg"
+                hint={
+                  containsError ??
+                  (echoLines.length > 0
+                    ? echoLines[0]
+                    : 'What is inside one of them, with the unit — “50 kg”, or “12 x 750 ml”.')
+                }
+                error={containsError ?? errors.packagingSize?.message}
+                value={containsText}
+                onChange={(event) => onContainsChange(event.target.value)}
               />
             </div>
 
@@ -1032,9 +1110,17 @@ export function ProductFormPage() {
                 point the decision is made, is cheaper than being surprised by it two fields
                 later — and it is said again on each of those fields, because a reader filling one
                 in is looking at one field, not at this box. */}
-            {(packSummary || stockUnitLabel) && (
+            {echoLines.length > 0 && (
               <p className="rounded-md border border-primary-200 bg-primary-50 px-3 py-2 text-xs text-primary-900">
-                {packSummary ?? `Stock is counted in ${stockUnitLabel}. Every quantity you enter will be in ${stockUnitLabel}.`}
+                {/* PACK_ENTRY_REDESIGN.md §6.3 — the echo, from the one shared function so this
+                    form, the stock-in modal and the import review grid cannot drift apart.
+
+                    It states the CONSEQUENCE, never the input: repeating "12 units per pack" back
+                    at somebody who just typed it is worthless, where "1 pack = 12 bottles" is a
+                    fact they can check against a shelf. The §0 defect renders here as
+                    "1 pack = 750 bottles", and nobody believes that — which is how a user catches
+                    the error without being told the rule. */}
+                {echoLines.join(' ')}
                 {countsInPacks && quantityOption && (
                   <>
                     {' '}

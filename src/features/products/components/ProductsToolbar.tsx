@@ -1,4 +1,4 @@
-import { Download, FileSpreadsheet, Plus, Search, Settings, Upload } from 'lucide-react'
+import { Download, Plus, Search, Settings, Upload } from 'lucide-react'
 import { Button, buttonClassName } from '@/components/Button'
 import { BulkActionsMenu } from '@/features/products/components/BulkActionsMenu'
 import type { ProductStatusFilter } from '@/features/products/types'
@@ -17,7 +17,6 @@ export interface ProductsToolbarProps {
    */
   onAddProduct: () => void
   onBulkUpload: () => void
-  onDownloadTemplate: () => void
   onExport: () => void
   onSkuSettings: () => void
 }
@@ -36,7 +35,6 @@ export function ProductsToolbar({
   canManageProducts,
   onAddProduct,
   onBulkUpload,
-  onDownloadTemplate,
   onExport,
   onSkuSettings,
 }: ProductsToolbarProps) {
@@ -100,14 +98,6 @@ export function ProductsToolbar({
                 </button>
                 <button
                   type="button"
-                  onClick={onDownloadTemplate}
-                  className={buttonClassName('secondary')}
-                >
-                  <FileSpreadsheet className="h-4 w-4" />
-                  Download Template
-                </button>
-                <button
-                  type="button"
                   onClick={onSkuSettings}
                   className={buttonClassName('secondary')}
                 >
@@ -124,7 +114,6 @@ export function ProductsToolbar({
           <BulkActionsMenu
             canManageProducts={canManageProducts}
             onBulkUpload={onBulkUpload}
-            onDownloadTemplate={onDownloadTemplate}
             onExport={onExport}
             onSkuSettings={onSkuSettings}
           />

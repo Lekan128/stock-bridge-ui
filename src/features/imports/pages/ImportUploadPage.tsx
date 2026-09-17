@@ -142,36 +142,48 @@ export function ImportUploadPage() {
       }
     >
       <div className="flex flex-col gap-6">
-        <ImportDropzone
-          file={file}
-          disabled={uploading}
-          uploadPercent={uploading ? uploadPercent : null}
-          onSelect={(picked) => {
-            setError(null)
-            setFile(picked)
-          }}
-          onReject={(message) => {
-            setFile(null)
-            setError(message)
-          }}
-          onClear={() => setFile(null)}
-        />
+        {/* Step 1. Above the dropzone, because it comes first — see copy.upload.stepDownload. */}
+        <section aria-labelledby="import-step-download">
+          <h2 id="import-step-download" className="text-sm font-semibold text-neutral-900">
+            {copy.upload.stepDownload}
+          </h2>
+          <div className="mt-2 flex flex-col gap-3 rounded-lg border border-primary-200 bg-primary-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-primary-900">
+              {isStockIn ? copy.upload.stockInTemplateBody : copy.upload.templateBody}
+            </p>
+            <Button
+              variant="secondary"
+              className="shrink-0"
+              loading={downloading}
+              onClick={() => void handleDownloadTemplate()}
+            >
+              <Download className="h-4 w-4" aria-hidden="true" />
+              {isStockIn ? copy.upload.stockInTemplateLink : copy.upload.templateLink}
+            </Button>
+          </div>
+          <p className="mt-2 text-xs text-neutral-500">{copy.upload.alreadyHaveFile}</p>
+        </section>
 
-        {error && <ErrorState variant="inline" message={error} />}
-
-        <p className="text-sm text-neutral-600">
-          <span className="font-medium text-neutral-800">{copy.upload.templateLead}</span>{' '}
-          <button
-            type="button"
-            onClick={() => void handleDownloadTemplate()}
-            disabled={downloading}
-            className="inline-flex items-center gap-1 rounded-md font-medium text-primary-700 underline underline-offset-2 hover:text-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:opacity-60"
-          >
-            <Download className="h-3.5 w-3.5" aria-hidden="true" />
-            {isStockIn ? copy.upload.stockInTemplateLink : copy.upload.templateLink}
-          </button>{' '}
-          {isStockIn ? copy.upload.stockInTemplateTail : copy.upload.templateTail}
-        </p>
+        <section aria-labelledby="import-step-upload" className="flex flex-col gap-3">
+          <h2 id="import-step-upload" className="text-sm font-semibold text-neutral-900">
+            {copy.upload.stepUpload}
+          </h2>
+          <ImportDropzone
+            file={file}
+            disabled={uploading}
+            uploadPercent={uploading ? uploadPercent : null}
+            onSelect={(picked) => {
+              setError(null)
+              setFile(picked)
+            }}
+            onReject={(message) => {
+              setFile(null)
+              setError(message)
+            }}
+            onClear={() => setFile(null)}
+          />
+          {error && <ErrorState variant="inline" message={error} />}
+        </section>
 
         {/* Meaningless for a delivery — the contract persists CREATE_ONLY and ignores it (§1). */}
         {!isStockIn && (

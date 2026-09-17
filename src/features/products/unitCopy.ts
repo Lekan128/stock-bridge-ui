@@ -54,8 +54,12 @@ export const UNIT_COPY = {
   STOCK_UNIT: 'Stock unit',
   /** `packagingUnit` + `packagingSize` as ONE idea. Never "Packaged as" or "Delivered as". */
   PACK: 'Pack',
-  /** `packagingSize` alone, when a number must be typed. Never "Pack size". */
-  UNITS_PER_PACK: 'Units per pack',
+  /**
+   * `packagingSize` alone — `PACK_ENTRY_REDESIGN.md` §14. Was "Units per pack", which names a
+   * RATIO where the reader answers with a SIZE. The counting fields now read as one sentence,
+   * "Bag contains 50 kg", and this is its verb.
+   */
+  CONTAINS: 'Contains',
   /** The wire's `unit` — which unit the number a human just typed is expressed in. */
   COUNTED_IN: 'Counted in',
   /** `CompanyVendor`, the buyer's own directory. Never "Vendor" in user-facing text. */
@@ -547,6 +551,137 @@ export function unitsPerPackHint(
     return `How many ${stockUnitSymbolText} are in one ${noun}`
   }
   return `${formatNumber(packagingSize)} ${stockUnitSymbolText} per ${noun}`
+}
+
+/**
+ * A balance stated the way a storekeeper says it — `"2 bags + 20 kg"`.
+ *
+ * <h2>The gap this fills</h2>
+ * `StockBreakdownPanel` has always shown whole-pack equivalents and deliberately gone silent on
+ * anything else: *"19.6 bags is not a sentence anyone wants... a figure that does not divide
+ * evenly is left as the stock unit alone rather than rounded into a number that would then
+ * disagree with the shelf."* That reasoning is right about **rounding** and wrong about the
+ * conclusion. 180 kg of rice against an 80 kg bag is the case it gives up on, and the reading
+ * falls back to "180 kg" exactly where the bag framing is most useful.
+ *
+ * A mixed radix rounds nothing, so it cannot disagree with the shelf:
+ *
+ * | rendering | |
+ * |---|---|
+ * | `2.25 bags` | decimal — needs mental arithmetic, and invites rounding to 2 |
+ * | `180 kg` | true, but nobody counts rice in kilograms |
+ * | **`2 bags + 20 kg`** | exact, and how the quantity is actually spoken |
+ *
+ * <h2>Display only — never an input, and never applied to history</h2>
+ * Two rules, both load-bearing:
+ *
+ * 1. **Balances only, never a movement.** A balance is a derived aggregate with no single entry
+ *    unit, so stating it against the *current* default pack is honest. A movement is not: it was
+ *    typed in a specific unit, kept in `StockMovement.entered_unit`/`entered_quantity`
+ *    (`UNIT_UX_CONTRACT.md` §3.3 — "facts about the entry, not inputs to any calculation"), and
+ *    must always render as entered. Re-render a movement against a changed default and
+ *    yesterday's "received 1 bag" silently becomes "0.8 bags" — the audit trail starts lying
+ *    about what a person typed.
+ * 2. **Never parse this back.** Reading "2 bags + 20 kg" is safe; typing "2 bags" *out* is not.
+ *    That is 160 kg, but the person may hand over the 100 kg bag, and the system cannot tell —
+ *    `MULTI_PACK_PER_VENDOR_DESIGN.md` is explicit that stock is fungible once received,
+ *    whichever pack it arrived in. Stock-out entry stays on labelled pack options ("Bag of
+ *    80 kg"), where choosing one is an explicit statement of 2 × 80 kg.
+ *
+ * The division itself is `unitSet.packRemainder` — it has a rounding scale, and this file's
+ * header rule is that anything with one lives there. This half only writes the sentence.
+ *
+ * @param breakdown the result of `unitSet.packRemainder`, or null.
+ * @param option the pack it was computed against, for the noun.
+ * @param stockUnitSymbolText the short symbol for the remainder — `"kg"`.
+ * @returns `"2 bags + 20 kg"`, `"2 bags"` when it divides evenly, `"20 kg"` when there is not
+ *     even one whole pack, or null when there is nothing true to say.
+ */
+export function packRemainderPhrase(
+  breakdown: { wholePacks: number; remainder: number } | null | undefined,
+  option: UnitOption | null | undefined,
+  stockUnitSymbolText: string | null | undefined,
+): string | null {
+  if (breakdown == null || option == null || !stockUnitSymbolText) return null
+  const { wholePacks, remainder } = breakdown
+
+  const packNoun = unitNoun(option)
+  const packPart =
+    wholePacks > 0 ? `${formatNumber(wholePacks)} ${pluraliseUnitNoun(packNoun, wholePacks)}` : null
+  const remainderPart = remainder > 0 ? `${formatNumber(remainder)} ${stockUnitSymbolText}` : null
+
+  if (packPart && remainderPart) return `${packPart} + ${remainderPart}`
+  return packPart ?? remainderPart
+}
+
+/**
+ * A stock unit written as a countable plural noun — `"Bottle"` → `"bottles"`, `"kg"` → `"kg"`.
+ *
+ * `PACK_ENTRY_REDESIGN.md` §6.1 and §6.3 both read the stock unit inside a sentence ("How many
+ * **bottles** in one pack?", "= 360 **bottles**"), and a sentence needs the plural. The two kinds
+ * of label behave differently and the distinction is structural rather than a word list:
+ * `UNIT_UX_CONTRACT.md` §2.1 labels a stock unit with the SHORT SYMBOL from the parenthetical of
+ * `UnitOfMeasure.label()` when it has one (`"Kilogram (kg)"` → `"kg"`) and with the full label
+ * when it does not (`"Piece"` → `"Piece"`, `"Bottle"` → `"Bottle"`).
+ *
+ * So a capitalised word IS the full label — a countable thing, which pluralises — and anything
+ * else is a measurement symbol, which never does. Nobody writes "360 kgs".
+ */
+export function pluralStockUnit(stockUnitSymbolText: string | null | undefined): string | null {
+  if (!stockUnitSymbolText) return null
+  if (!/^[A-Z][a-z]+$/.test(stockUnitSymbolText)) return stockUnitSymbolText
+  return `${stockUnitSymbolText.toLowerCase()}s`
+}
+
+/**
+ * The echo — `PACK_ENTRY_REDESIGN.md` §6.3, and the one sentence that makes a wrong row visible.
+ *
+ * <h2>It states the consequence, never the input</h2>
+ * Repeating "750 units per pack" back at somebody is worthless; they just typed it. *"1 bottle =
+ * 750 ml"* is a sentence they can check against the label on the bottle, and *"30 bottles on hand
+ * = 22,500 ml"* is a figure they can check against a shelf. The §0 defect renders as *"1 pack =
+ * 750 ml"* — visibly not a pack of twelve — which is how a user catches it without being told the
+ * rule.
+ *
+ * This is the single function behind the echo on all three surfaces (this form, the stock-in
+ * modal, the import review grid), per that document's §6.3 rule 4. Do not re-derive the sentence
+ * anywhere else.
+ *
+ * @param onHandPacks when present and positive, adds the second line. Omit it and only the
+ *     per-pack line is returned — correct for a form that has no quantity on it yet.
+ * @returns the lines to render, or an empty array when there is nothing true to say (no stock
+ *     unit, or a pack with no size). Rule 3: never fake a label the unit set could not build.
+ */
+export function packEchoLines(
+  packagingLabel: string | null | undefined,
+  packagingSize: number | null | undefined,
+  stockUnitSymbolText: string | null | undefined,
+  onHandPacks?: number | null,
+): string[] {
+  const plural = pluralStockUnit(stockUnitSymbolText)
+  if (!plural) return []
+
+  const hasPack =
+    !!packagingLabel && packagingSize != null && !Number.isNaN(packagingSize) && packagingSize > 0
+  if (!hasPack) {
+    // No pack is a complete, correct answer — a product sold loose. Saying so out loud stops a
+    // user wondering whether they have forgotten a field.
+    return [`Stock is counted in ${plural}.`]
+  }
+
+  const noun = /^[A-Z][a-z]/.test(packagingLabel)
+    ? packagingLabel.charAt(0).toLowerCase() + packagingLabel.slice(1)
+    : packagingLabel
+  const lines = [
+    `1 ${noun} = ${formatNumber(packagingSize)} ${plural}. Stock is counted in ${plural}.`,
+  ]
+  if (onHandPacks != null && !Number.isNaN(onHandPacks) && onHandPacks > 0) {
+    const total = onHandPacks * (packagingSize as number)
+    lines.push(
+      `${formatNumber(onHandPacks)} ${onHandPacks === 1 ? noun : `${noun}s`} on hand = ${formatNumber(total)} ${plural}.`,
+    )
+  }
+  return lines
 }
 
 /**

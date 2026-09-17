@@ -75,7 +75,7 @@ export function fieldLabels(fields: ImportFieldDescriptor[], keys: string[]): st
 }
 
 export const KIND_COPY: Record<ImportKind, { title: string; shortTitle: string }> = {
-  PRODUCT_CATALOG: { title: 'Add or update products', shortTitle: 'Products' },
+  PRODUCT_CATALOG: { title: 'Add products', shortTitle: 'Products' },
   STOCK_IN: { title: 'Record stock you received', shortTitle: 'Stock received' },
 }
 
@@ -110,9 +110,9 @@ export const copy = {
     start: 'Start',
     cards: {
       PRODUCT_CATALOG: {
-        title: 'Add or update products',
-        body: 'Build your catalog, or update prices and suppliers in bulk.',
-        footnote: 'Includes opening stock for brand-new products.',
+        title: 'Add products',
+        body: 'Put all your products on Procure Paddy at once — one row per product.',
+        footnote: 'Just the products. You record how many you have in the next step.',
       },
       STOCK_IN: {
         title: 'Record stock you received',
@@ -138,11 +138,25 @@ export const copy = {
     dropzoneHeading: 'Drop your file here, or browse',
     dropzoneLimits: `Up to ${formatCount(MAX_ROWS)} rows · ${formatMegabytes(MAX_FILE_BYTES)} · .xlsx or .csv`,
     dropzoneActive: 'Release to use this file',
-    templateLead: 'First time?',
-    templateLink: 'Download the template',
-    templateTail: '— it comes with your suppliers and units already filled into dropdowns.',
-    stockInTemplateLink: 'Download your stock sheet',
-    stockInTemplateTail: '— your products are already on it, so you only fill in the quantities.',
+    /*
+     * Two numbered steps, download then upload. The download used to be a small link under the
+     * dropzone ("First time? Download the template"), which put it AFTER the thing it has to
+     * come before — the people who needed it most were the ones who never scrolled to it. It is
+     * also the only way a new company gets a sheet at all now that the inventory page no longer
+     * carries a template button, so it has to be impossible to miss.
+     */
+    stepDownload: 'Step 1 — Get the sheet',
+    stepUpload: 'Step 2 — Upload it',
+    /*
+     * "Template", not "product sheet". The stock sheet beside it arrives filled with the
+     * company's own products; this one is blank apart from three example rows. Calling both a
+     * "sheet" made the product one sound like a list of what you already have.
+     */
+    templateLink: 'Download blank template',
+    templateBody: 'A blank spreadsheet with three example rows. Add one row per product: its name, what it comes in, and what is inside one.',
+    stockInTemplateLink: 'Download stock sheet',
+    stockInTemplateBody: 'Your products are already listed. Just type how many you received.',
+    alreadyHaveFile: 'Already filled one in? Skip to step 2.',
     modeQuestion: 'If a product is already in your catalog:',
     submit: 'Upload and check it',
     checking: 'Checking your file…',
@@ -433,6 +447,14 @@ export const copy = {
 
   result: {
     viewProducts: 'View products',
+    /*
+     * §16's handoff. The product sheet no longer asks how much you have, so the moment it
+     * finishes is the moment to ask — and the stock sheet arrives with these products already
+     * listed, so the next step is typing numbers rather than building another sheet.
+     */
+    nextStockTitle: 'Next: add how much you have',
+    nextStockBody: 'Your stock sheet comes with these products already listed — just type the quantities.',
+    nextStockAction: 'Record your stock',
     viewStock: 'View products',
     downloadReport: 'Download report',
     reportHint: 'A spreadsheet of every row and what happened to it.',
@@ -513,6 +535,13 @@ const BANNED = [
   'low stock threshold',
   'counted in for opening stock',
   'opening stock counted in',
+  /*
+   * `PACK_ENTRY_REDESIGN.md` §3 locks **Size** for `Product.size` and bans the words that make it
+   * sound like a unit. Only "unit size" is listed: "volume", "weight" and "capacity" are banned as
+   * NAMES for that field but are ordinary English elsewhere in this module, and a substring lint
+   * cannot tell the two uses apart. "Unit size" has no other legitimate use here.
+   */
+  'unit size',
 ] as const
 
 function walk(value: unknown, path: string, report: (where: string, text: string) => void): void {

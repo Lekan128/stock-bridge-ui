@@ -94,15 +94,6 @@ export function ProductListPage() {
     setPage(0)
   }
 
-  async function handleDownloadTemplate() {
-    try {
-      const blob = await productsApi.template()
-      downloadBlob(blob, 'product-import-template.xlsx')
-    } catch {
-      showToast('Could not download the template. Please try again.', 'error')
-    }
-  }
-
   async function handleExport() {
     try {
       const blob = await productsApi.export()
@@ -134,7 +125,6 @@ export function ProductListPage() {
         canManageProducts={canManageProducts}
         onAddProduct={() => setAddProductOpen(true)}
         onBulkUpload={() => navigate('/app/products/import')}
-        onDownloadTemplate={() => void handleDownloadTemplate()}
         onExport={() => void handleExport()}
         onSkuSettings={() => navigate('/app/products/sku-settings')}
       />

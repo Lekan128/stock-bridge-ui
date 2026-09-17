@@ -11,13 +11,13 @@ import type { VendorMarketplaceDetailsPayload } from '@/features/vendor/types'
  * about a field that was not on screen.
  */
 const packagingSizeRequiredMessage = `Required when ${UNIT_COPY.PACK} is set`
-const packagingUnitRequiredMessage = `Required when ${UNIT_COPY.UNITS_PER_PACK} is set`
+const packagingUnitRequiredMessage = `Required when ${UNIT_COPY.CONTAINS} is set`
 /**
  * Mirrors the server's `PackagingRequiresUnitOfMeasureException`, in plainer end-user language:
  * a "Bag of 50" with no measurement unit is not a real fact — 50 what? Attached to `unitOfMeasure`
  * (the field that's missing), same pattern as the pairing rule below.
  */
-const unitOfMeasureRequiredForPackagingMessage = `Required when ${UNIT_COPY.PACK} or ${UNIT_COPY.UNITS_PER_PACK} is set`
+const unitOfMeasureRequiredForPackagingMessage = `Required when ${UNIT_COPY.PACK} or ${UNIT_COPY.CONTAINS} is set`
 /** §1: `CompanyVendor` is a **Supplier** on every user-facing surface, errors included. */
 const supplierLower = UNIT_COPY.SUPPLIER.toLowerCase()
 

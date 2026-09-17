@@ -1,12 +1,11 @@
 import { useRef, useState } from 'react'
-import { Download, FileSpreadsheet, MoreVertical, Settings, Upload } from 'lucide-react'
+import { Download, MoreVertical, Settings, Upload } from 'lucide-react'
 import { useClickOutside } from '@/hooks/useClickOutside'
 
 export interface BulkActionsMenuProps {
-  /** Bulk upload, the import template and SKU settings need MANAGE_PRODUCTS; export only needs VIEW_PRODUCTS. */
+  /** Bulk upload and SKU settings need MANAGE_PRODUCTS; export only needs VIEW_PRODUCTS. */
   canManageProducts: boolean
   onBulkUpload: () => void
-  onDownloadTemplate: () => void
   onExport: () => void
   onSkuSettings: () => void
 }
@@ -14,7 +13,6 @@ export interface BulkActionsMenuProps {
 export function BulkActionsMenu({
   canManageProducts,
   onBulkUpload,
-  onDownloadTemplate,
   onExport,
   onSkuSettings,
 }: BulkActionsMenuProps) {
@@ -26,7 +24,6 @@ export function BulkActionsMenu({
     ...(canManageProducts
       ? [
           { label: 'Bulk upload', icon: Upload, onClick: onBulkUpload },
-          { label: 'Download template', icon: FileSpreadsheet, onClick: onDownloadTemplate },
           { label: 'SKU settings', icon: Settings, onClick: onSkuSettings },
         ]
       : []),
