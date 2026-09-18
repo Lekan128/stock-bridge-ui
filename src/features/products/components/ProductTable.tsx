@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
+import { expectedCopy } from '@/features/expected/copy'
 import { IncomingStockBadge } from '@/features/products/components/IncomingStockBadge'
 import { LowStockBadge } from '@/features/products/components/LowStockBadge'
 import { ProductImage } from '@/features/products/components/ProductImage'
@@ -265,6 +266,20 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
                   <span className="text-xs text-neutral-500">
                     {resolveUnitSymbol(product.unitOfMeasure, unitOfMeasureOptions)}
                   </span>
+                  {/* What is on an open expected delivery — task 3.1. Understated on purpose and
+                      never added to the figure beside it: this is a promise a supplier made on the
+                      phone, not stock anybody can pick today. Absent, not zero, when nothing is
+                      coming. */}
+                  {product.expectedQuantity != null && product.expectedQuantity > 0 && (
+                    <span className="text-xs text-neutral-500">
+                      <span aria-hidden="true">
+                        {expectedCopy.product.coming(formatNumber(product.expectedQuantity))}
+                      </span>
+                      <span className="sr-only">
+                        {expectedCopy.product.comingAria(formatNumber(product.expectedQuantity))}
+                      </span>
+                    </span>
+                  )}
                 </div>
                 {/* The same figure in the pack this product is bought and sold in — see
                     `packEquivalent`. Muted and one step smaller, so a column of ledger figures

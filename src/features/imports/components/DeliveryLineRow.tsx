@@ -14,6 +14,14 @@ export interface DeliveryLineRowProps {
   line: DeliveryLine
   /** Absent until something is typed on this line. */
   entry?: DeliveryEntry
+  /**
+   * What a screen reader hears on the quantity box. Defaults to "…— how many arrived", which is
+   * the right sentence for a delivery and the wrong one for
+   * `BULK_IMPORT_CX_PLAN.md` task 3.1's "say what you ordered" screen — same control, same
+   * arithmetic, different tense. The visible label is `comesIn` either way, so this is the only
+   * word that has to move.
+   */
+  quantityLabel?: string
   onChange: (line: DeliveryLine, patch: Partial<Omit<DeliveryEntry, 'line'>>) => void
 }
 
@@ -37,7 +45,7 @@ function inputTone(invalid: boolean): string {
  *
  * The inputs are 16px on a phone so iOS does not zoom the page when one is focused.
  */
-export function DeliveryLineRow({ line, entry, onChange }: DeliveryLineRowProps) {
+export function DeliveryLineRow({ line, entry, quantityLabel, onChange }: DeliveryLineRowProps) {
   const quantityId = useId()
   const priceId = useId()
   const priceRef = useRef<HTMLInputElement>(null)
@@ -67,7 +75,9 @@ export function DeliveryLineRow({ line, entry, onChange }: DeliveryLineRowProps)
       <div className="flex items-center justify-between gap-3">
         <label htmlFor={quantityId} className="min-w-0 flex-1 text-sm text-neutral-700">
           <span aria-hidden="true">{line.comesIn}</span>
-          <span className="sr-only">{copy.delivery.quantityLabel(line.productName, line.comesIn)}</span>
+          <span className="sr-only">
+            {quantityLabel ?? copy.delivery.quantityLabel(line.productName, line.comesIn)}
+          </span>
         </label>
         <input
           id={quantityId}

@@ -119,6 +119,21 @@ export interface Product {
    * list use it to decide whether "(default)" and a link to the Vendors tab earn their place.
    */
   hasMultiplePacks?: boolean
+  /**
+   * How much of this is on an OPEN expected delivery and has not arrived yet
+   * (`BULK_IMPORT_CX_PLAN.md` task 3.1), in this product's own stock unit — the same unit
+   * {@link quantityOnHand} is in, so the two can honestly sit beside each other. Orders written
+   * in packs are converted server-side; ten 50 kg bags arrive here as 500, never as 10.
+   *
+   * Deliberately NOT part of {@link incomingQuantity} and never added to it: that one is paid for
+   * through the marketplace and settled against a real ledger, this one is a promise a supplier
+   * made on the phone. Merging the two would put a guess into a number the marketplace treats as
+   * final.
+   *
+   * Absent — not zero — when nothing is coming, because the API omits null fields. Compare with
+   * `== null`, never `=== null`.
+   */
+  expectedQuantity?: number
 }
 
 /** Mirrors Spring Data's Page<T> JSON shape. */

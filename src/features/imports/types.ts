@@ -352,6 +352,16 @@ export interface DeliveryInput {
   deliveryDate?: string
   invoiceNo?: string
   vendorId?: string
+  /**
+   * The expected delivery this is the arrival of (`BULK_IMPORT_CX_PLAN.md` task 3.1), when the
+   * screen was opened from one.
+   *
+   * It is carried on the import rather than applied here, so the credit happens at commit against
+   * the rows that actually went in — a line corrected in review credits what was corrected, and
+   * undoing the import un-receives exactly what it received. Left out for an ordinary delivery,
+   * which is most of them.
+   */
+  expectedDeliveryId?: string
   lines: DeliveryLineInput[]
 }
 

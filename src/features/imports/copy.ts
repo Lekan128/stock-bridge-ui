@@ -640,11 +640,21 @@ function walk(value: unknown, path: string, report: (where: string, text: string
   }
 }
 
-export function assertCopyIsClean(): string[] {
+/**
+ * The same check, for a copy module that lives in another feature.
+ *
+ * Exported rather than copied because the banned list above is the point: a second hand-kept
+ * copy of it in `features/expected/copy.ts` would drift the first time a word is added here, and
+ * a lint that only covers half the sentences a user reads is not a lint.
+ */
+export function bannedWordProblems(value: unknown, label: string): string[] {
   const problems: string[] = []
-  walk(copy, 'copy', (where, text) => problems.push(`${where}: ${text}`))
-  walk(KIND_COPY, 'KIND_COPY', (where, text) => problems.push(`${where}: ${text}`))
+  walk(value, label, (where, text) => problems.push(`${where}: ${text}`))
   return problems
+}
+
+export function assertCopyIsClean(): string[] {
+  return [...bannedWordProblems(copy, 'copy'), ...bannedWordProblems(KIND_COPY, 'KIND_COPY')]
 }
 
 if (import.meta.env.DEV) {

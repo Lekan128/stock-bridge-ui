@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Download, MoreVertical, Settings, Tags, Truck, Upload } from 'lucide-react'
+import { CalendarClock, Download, MoreVertical, Settings, Tags, Truck, Upload } from 'lucide-react'
 import { useClickOutside } from '@/hooks/useClickOutside'
 
 export interface BulkActionsMenuProps {
@@ -9,6 +9,8 @@ export interface BulkActionsMenuProps {
   canRecordDelivery: boolean
   onBulkUpload: () => void
   onRecordDelivery: () => void
+  /** Opens the list of what has been ordered and not yet received (task 3.1). */
+  onExpectedDeliveries: () => void
   onExport: () => void
   onSkuSettings: () => void
   /** Opens the categories dialog. MANAGE_PRODUCTS, like the other catalog writes here. */
@@ -20,6 +22,7 @@ export function BulkActionsMenu({
   canRecordDelivery,
   onBulkUpload,
   onRecordDelivery,
+  onExpectedDeliveries,
   onExport,
   onSkuSettings,
   onManageCategories,
@@ -30,6 +33,10 @@ export function BulkActionsMenu({
 
   const items = [
     ...(canRecordDelivery ? [{ label: 'Record a delivery', icon: Truck, onClick: onRecordDelivery }] : []),
+    // Seeing what is coming is a question about the catalog, so it needs only what this page
+    // already needed to open (VIEW_PRODUCTS). Recording one is gated on the page it leads to,
+    // which is where the backend draws the same line.
+    { label: 'Expected deliveries', icon: CalendarClock, onClick: onExpectedDeliveries },
     ...(canManageProducts
       ? [
           { label: 'Bulk upload', icon: Upload, onClick: onBulkUpload },

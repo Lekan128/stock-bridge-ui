@@ -122,6 +122,19 @@ const RecordDeliveryPage = lazy(() =>
     default: m.RecordDeliveryPage,
   })),
 )
+// What has been ordered from a supplier off the platform and not received yet (task 3.1). Two
+// chunks, like the import screens: the list is read by anyone who can see products, while the
+// screen that writes one down is reached far less often and by fewer people.
+const ExpectedDeliveriesPage = lazy(() =>
+  import('@/features/expected/pages/ExpectedDeliveriesPage').then((m) => ({
+    default: m.ExpectedDeliveriesPage,
+  })),
+)
+const NewExpectedDeliveryPage = lazy(() =>
+  import('@/features/expected/pages/NewExpectedDeliveryPage').then((m) => ({
+    default: m.NewExpectedDeliveryPage,
+  })),
+)
 
 const OrderListPage = lazy(() =>
   import('@/pages/OrderListPage').then((m) => ({ default: m.OrderListPage })),
@@ -497,6 +510,29 @@ export function AppRoutes() {
             element={
               <RequirePermission permission={PERMISSIONS.MANAGE_INVENTORY}>
                 <RecordDeliveryPage />
+              </RequirePermission>
+            }
+          />
+          {/* Expected deliveries — static, so declared above products/:id like the routes either
+            side of it.
+
+            Reading is VIEW_PRODUCTS and writing is MANAGE_INVENTORY, mirroring the controller
+            exactly: "what have we got coming?" is a question about the catalog, while saying that
+            a hundred bags are on their way is the same authority as saying they arrived. The list
+            hides its own write affordances from a reader who lacks the second. */}
+          <Route
+            path="products/expected"
+            element={
+              <RequirePermission permission={PERMISSIONS.VIEW_PRODUCTS}>
+                <ExpectedDeliveriesPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="products/expected/new"
+            element={
+              <RequirePermission permission={PERMISSIONS.MANAGE_INVENTORY}>
+                <NewExpectedDeliveryPage />
               </RequirePermission>
             }
           />

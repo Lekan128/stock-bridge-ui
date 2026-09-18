@@ -175,6 +175,7 @@ export function ProductListPage() {
         onAddProduct={() => setAddProductOpen(true)}
         onBulkUpload={() => navigate('/app/products/import')}
         onRecordDelivery={() => navigate('/app/products/receive')}
+        onExpectedDeliveries={() => navigate('/app/products/expected')}
         onExport={() => void handleExport()}
         onSkuSettings={() => navigate('/app/products/sku-settings')}
         onManageCategories={() => setManageCategoriesOpen(true)}

@@ -1,4 +1,4 @@
-import { Download, Plus, Search, Settings, Tags, Truck, Upload } from 'lucide-react'
+import { CalendarClock, Download, Plus, Search, Settings, Tags, Truck, Upload } from 'lucide-react'
 import { Button, buttonClassName } from '@/components/Button'
 import type { CompanyCategory } from '@/features/products/categories/types'
 import { BulkActionsMenu } from '@/features/products/components/BulkActionsMenu'
@@ -26,6 +26,8 @@ export interface ProductsToolbarProps {
   onAddProduct: () => void
   onBulkUpload: () => void
   onRecordDelivery: () => void
+  /** Opens the list of what has been ordered and not yet received (task 3.1). */
+  onExpectedDeliveries: () => void
   onExport: () => void
   onSkuSettings: () => void
   onManageCategories: () => void
@@ -50,6 +52,7 @@ export function ProductsToolbar({
   onAddProduct,
   onBulkUpload,
   onRecordDelivery,
+  onExpectedDeliveries,
   onExport,
   onSkuSettings,
   onManageCategories,
@@ -130,10 +133,16 @@ export function ProductsToolbar({
         <div className="flex items-center gap-2">
           <div className="hidden items-center gap-2 md:flex">
             {canRecordDelivery && (
-              <button type="button" onClick={onRecordDelivery} className={buttonClassName('secondary')}>
-                <Truck className="h-4 w-4" />
-                Record a delivery
-              </button>
+              <>
+                <button type="button" onClick={onRecordDelivery} className={buttonClassName('secondary')}>
+                  <Truck className="h-4 w-4" />
+                  Record a delivery
+                </button>
+                <button type="button" onClick={onExpectedDeliveries} className={buttonClassName('secondary')}>
+                  <CalendarClock className="h-4 w-4" />
+                  Expected deliveries
+                </button>
+              </>
             )}
             {canManageProducts && (
               <>
@@ -173,6 +182,7 @@ export function ProductsToolbar({
             canRecordDelivery={canRecordDelivery}
             onBulkUpload={onBulkUpload}
             onRecordDelivery={onRecordDelivery}
+            onExpectedDeliveries={onExpectedDeliveries}
             onExport={onExport}
             onSkuSettings={onSkuSettings}
             onManageCategories={onManageCategories}
