@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { Download, Lock, Upload } from 'lucide-react'
+import { ClipboardPaste, Download, Lock, Upload } from 'lucide-react'
 import { PERMISSIONS, type Permission } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
 import { Button, buttonClassName } from '@/components/Button'
@@ -74,6 +74,10 @@ export function ImportUploadPage() {
   const [downloading, setDownloading] = useState(false)
   const [downloadingProducts, setDownloadingProducts] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** Task 3.2: the rows on someone's clipboard, offered beside the dropzone rather than elsewhere. */
+  const [pasting, setPasting] = useState(false)
+  const [pastedText, setPastedText] = useState('')
+  const [checkingPaste, setCheckingPaste] = useState(false)
 
   const isStockIn = kind === 'STOCK_IN'
 
@@ -174,6 +178,29 @@ export function ImportUploadPage() {
     } catch (err: unknown) {
       setError(isAppError(err) ? err.message : 'We could not read that file. Please try again.')
       setUploading(false)
+    }
+  }
+
+  /**
+   * The pasted block becomes the same session an uploaded file becomes, so this lands on the
+   * review screen exactly where an upload lands.
+   */
+  async function handlePaste() {
+    setCheckingPaste(true)
+    setError(null)
+    try {
+      const created = await importsApi.createFromPaste({
+        text: pastedText,
+        kind,
+        mode,
+        ...(isStockIn
+          ? { deliveryDate, invoiceNo: invoiceNo.trim() || undefined, vendorId: deliveryVendorId || undefined }
+          : {}),
+      })
+      navigate(`/app/products/import/${created.id}`, { replace: true })
+    } catch (err: unknown) {
+      setError(isAppError(err) ? err.message : copy.upload.pasteFailed)
+      setCheckingPaste(false)
     }
   }
 
@@ -367,32 +394,81 @@ export function ImportUploadPage() {
           <h2 id="import-step-upload" className="text-sm font-semibold text-neutral-900">
             {isStockIn ? copy.upload.stockInStepUpload : copy.upload.stepUpload}
           </h2>
-          <ImportDropzone
-            file={file}
-            disabled={uploading}
-            uploadPercent={uploading ? uploadPercent : null}
-            onSelect={(picked) => {
+          {!pasting && (
+            <ImportDropzone
+              file={file}
+              disabled={uploading}
+              uploadPercent={uploading ? uploadPercent : null}
+              onSelect={(picked) => {
+                setError(null)
+                setFile(picked)
+              }}
+              onReject={(message) => {
+                setFile(null)
+                setError(message)
+              }}
+              onClear={() => setFile(null)}
+            />
+          )}
+
+          {pasting && (
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="import-paste" className="text-sm font-medium text-neutral-700">
+                {copy.upload.pasteLabel}
+              </label>
+              <p id="import-paste-hint" className="text-xs text-neutral-500">
+                {copy.upload.pasteHint}
+              </p>
+              <textarea
+                id="import-paste"
+                rows={8}
+                value={pastedText}
+                disabled={checkingPaste}
+                aria-describedby="import-paste-hint"
+                onChange={(event) => {
+                  setError(null)
+                  setPastedText(event.target.value)
+                }}
+                placeholder={copy.upload.pastePlaceholder}
+                className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2 font-mono text-base text-neutral-900 placeholder:text-neutral-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none disabled:bg-neutral-50 sm:text-sm"
+              />
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
               setError(null)
-              setFile(picked)
+              setPasting((was) => !was)
             }}
-            onReject={(message) => {
-              setFile(null)
-              setError(message)
-            }}
-            onClear={() => setFile(null)}
-          />
+            className="self-start rounded-sm text-sm font-medium text-primary-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+          >
+            {pasting ? copy.upload.pasteHide : copy.upload.pasteToggle}
+          </button>
+
           {error && <ErrorState variant="inline" message={error} />}
         </section>
 
         <div className="flex justify-end">
-          <Button
-            disabled={!file || (isStockIn && deliveryDate === '')}
-            loading={uploading}
-            onClick={() => file && void handleUpload(file)}
-          >
-            <Upload className="h-4 w-4" aria-hidden="true" />
-            {uploading ? copy.upload.checking : copy.upload.submit}
-          </Button>
+          {pasting ? (
+            <Button
+              disabled={pastedText.trim() === '' || (isStockIn && deliveryDate === '')}
+              loading={checkingPaste}
+              onClick={() => void handlePaste()}
+            >
+              <ClipboardPaste className="h-4 w-4" aria-hidden="true" />
+              {checkingPaste ? copy.upload.pasteChecking : copy.upload.pasteSubmit}
+            </Button>
+          ) : (
+            <Button
+              disabled={!file || (isStockIn && deliveryDate === '')}
+              loading={uploading}
+              onClick={() => file && void handleUpload(file)}
+            >
+              <Upload className="h-4 w-4" aria-hidden="true" />
+              {uploading ? copy.upload.checking : copy.upload.submit}
+            </Button>
+          )}
         </div>
 
         <RecentImportsList kind={kind} />

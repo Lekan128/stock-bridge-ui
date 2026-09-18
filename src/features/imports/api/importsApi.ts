@@ -14,6 +14,7 @@ import type {
   ImportRowFilterStatus,
   ImportSession,
   ImportSessionSummary,
+  PasteInput,
   Page,
   DeliveryDetailsInput,
   StockInFilter,
@@ -60,6 +61,8 @@ interface ImportsBackend {
   list(params: { kind?: ImportKind; page?: number; size?: number }): Promise<Page<ImportSessionSummary>>
   deliveryLines(params: DeliveryLinesParams): Promise<DeliveryLine[]>
   createDelivery(body: DeliveryInput): Promise<ImportSession>
+  createFromPaste(body: PasteInput): Promise<ImportSession>
+  deliveryLinesByBarcode(barcode: string): Promise<DeliveryLine[]>
 }
 
 // ------------------------------------------------------------------ commit
@@ -264,6 +267,16 @@ const realBackend: ImportsBackend = {
   createDelivery(body) {
     return api.post<ImportSession>(`${BASE}/delivery`, body).then((r) => r.data)
   },
+
+  createFromPaste(body) {
+    return api.post<ImportSession>(`${BASE}/paste`, body).then((r) => r.data)
+  },
+
+  deliveryLinesByBarcode(barcode) {
+    return api
+      .get<DeliveryLine[]>(`${BASE}/delivery-lines/by-barcode/${encodeURIComponent(barcode)}`)
+      .then((r) => r.data)
+  },
 }
 
 const backend: ImportsBackend = realBackend
@@ -416,6 +429,23 @@ export const importsApi = {
    */
   createDelivery(body: DeliveryInput): Promise<ImportSession> {
     return backend.createDelivery(body)
+  },
+
+  /**
+   * POST /api/imports/paste — rows off WhatsApp, or out of a spreadsheet on the same laptop.
+   * Builds the same session an upload builds, so every screen after it is the one a file gets.
+   */
+  createFromPaste(body: PasteInput): Promise<ImportSession> {
+    return backend.createFromPaste(body)
+  },
+
+  /**
+   * GET /api/imports/delivery-lines/by-barcode/{code} — the scanned product's lines, in the shape
+   * the picker already uses. 404 when no product carries that barcode, which is what lets the
+   * screen say so without a second request.
+   */
+  deliveryLinesByBarcode(barcode: string): Promise<DeliveryLine[]> {
+    return backend.deliveryLinesByBarcode(barcode)
   },
 
   /**

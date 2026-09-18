@@ -14,6 +14,7 @@ import { outstandingEntries } from '@/features/expected/expected'
 import { useExpectedDelivery } from '@/features/expected/hooks/useExpectedDelivery'
 import { importsApi } from '@/features/imports/api/importsApi'
 import { DeliveryConfirmDialog } from '@/features/imports/components/DeliveryConfirmDialog'
+import { BarcodeScanField } from '@/features/imports/components/BarcodeScanField'
 import { DeliveryLineRow } from '@/features/imports/components/DeliveryLineRow'
 import { copy } from '@/features/imports/copy'
 import {
@@ -152,6 +153,29 @@ export function RecordDeliveryPage() {
     setEntries((prev) => {
       const current = prev[key] ?? { quantity: '', price: '', editingPrice: false }
       return { ...prev, [key]: { ...current, line, ...patch } }
+    })
+  }
+
+  /**
+   * A scanned product's lines, made visible and ready to count.
+   *
+   * The scan does not type a quantity - how many arrived is the one thing the scanner cannot know
+   * - so the line is seeded blank, which is enough to put it on screen under its product. The
+   * list is opened to the whole catalog first, because the scanned box may well be from a
+   * supplier other than the one filtering the list, and a row that was added but cannot be seen
+   * is worse than no row at all.
+   */
+  function handleScanned(scanned: DeliveryLine[]) {
+    if (scanned.length === 0) return
+    setShowAll(true)
+    setSearch('')
+    setEntries((prev) => {
+      const next = { ...prev }
+      for (const line of scanned) {
+        const key = lineKey(line)
+        next[key] = next[key] ?? { line, quantity: '', price: '', editingPrice: false }
+      }
+      return next
     })
   }
 
@@ -297,6 +321,9 @@ export function RecordDeliveryPage() {
           <h2 id="delivery-lines-heading" className="text-sm font-semibold text-neutral-900">
             {copy.delivery.linesHeading}
           </h2>
+
+          {/* Task 3.3: scan the box and its row appears, already in the list below. */}
+          <BarcodeScanField disabled={submitting} onFound={handleScanned} />
 
           <div className="relative">
             <Search

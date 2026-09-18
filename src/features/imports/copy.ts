@@ -121,6 +121,10 @@ export const copy = {
     invoiceHint: 'Optional',
     linesHeading: 'What arrived',
     search: 'Find a product',
+    scanLabel: 'Scan a barcode',
+    scanPlaceholder: 'Scan a barcode, or type it',
+    scanAdded: (product: string) => `Added ${product}. Type how many came.`,
+    scanFailed: 'We could not look that barcode up. Try again.',
     searchPlaceholder: 'Search by name or code',
     quantityLabel: (productName: string, comesIn: string) => `${productName}, ${comesIn} — how many arrived`,
     quantityInvalid: 'Type a number above 0.',
@@ -192,6 +196,19 @@ export const copy = {
      */
     stepDownload: 'Step 1 — Get the sheet',
     stepUpload: 'Step 2 — Upload it',
+    /**
+     * Task 3.2. Offered beside the dropzone rather than on a page of its own: a person who has
+     * the rows on their clipboard is already standing in front of the upload screen, and sending
+     * them somewhere else to use them would be the third step this feature exists to remove.
+     */
+    pasteToggle: 'Or paste the rows instead',
+    pasteHide: 'Use a file instead',
+    pasteLabel: 'Paste your rows here',
+    pasteHint: 'Straight off WhatsApp, or copied out of a spreadsheet. A heading row is welcome but not needed.',
+    pastePlaceholder: 'Rice (Mama Gold)\t10\tbags\nOnion\t5\tbaskets',
+    pasteSubmit: 'Check these rows',
+    pasteChecking: 'Checking…',
+    pasteFailed: 'We could not read those rows. Try pasting them again.',
     /*
      * "Template", not "product sheet". The stock sheet beside it arrives filled with the
      * company's own products; this one is blank apart from three example rows. Calling both a

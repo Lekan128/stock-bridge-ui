@@ -347,6 +347,22 @@ export interface DeliveryLineInput {
   price?: number
 }
 
+/**
+ * POST /api/imports/paste — rows pasted rather than uploaded (task 3.2).
+ *
+ * `text` goes up exactly as it was pasted. Tab, comma and semicolon separated all work, with or
+ * without a header row; a paste with no headings lands on the mapping step with its columns named
+ * "Column 1", "Column 2"… and every row intact.
+ */
+export interface PasteInput {
+  text: string
+  kind: ImportKind
+  mode?: ImportMode
+  deliveryDate?: string
+  invoiceNo?: string
+  vendorId?: string
+}
+
 /** POST /api/imports/delivery. Blank fields are left out. */
 export interface DeliveryInput {
   deliveryDate?: string
