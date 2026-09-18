@@ -1,9 +1,11 @@
 import { Link } from 'react-router-dom'
+import { expectedCopy } from '@/features/expected/copy'
 import { IncomingStockBadge } from '@/features/products/components/IncomingStockBadge'
 import { LowStockBadge } from '@/features/products/components/LowStockBadge'
 import { ProductImage } from '@/features/products/components/ProductImage'
 import { StatusBadge } from '@/features/products/components/StatusBadge'
 import type { Product } from '@/features/products/types'
+import { formatNumber } from '@/features/products/unitCopy'
 
 export interface ProductCardProps {
   product: Product
@@ -25,7 +27,10 @@ export function ProductCard({ product, incoming = 0 }: ProductCardProps) {
           <p className="truncate text-sm font-medium text-neutral-900">{product.name}</p>
           <StatusBadge active={product.active} />
         </div>
-        <p className="mt-0.5 truncate text-xs text-neutral-500">{product.sku}</p>
+        <p className="mt-0.5 truncate text-xs text-neutral-500">
+          {product.sku}
+          {product.categoryName != null && ` · ${product.categoryName}`}
+        </p>
         <div className="mt-1.5 flex flex-wrap items-center gap-2">
           {/* "usable" is spelled out rather than implied by the absence of a badge — this is the
               line someone reads before deciding whether they can fulfil an order today, and
@@ -33,6 +38,14 @@ export function ProductCard({ product, incoming = 0 }: ProductCardProps) {
           <span className={`text-sm font-medium ${product.quantityOnHand > 0 ? 'text-neutral-700' : 'text-neutral-400'}`}>
             {product.quantityOnHand} usable
           </span>
+          {/* On an open expected delivery (task 3.1) — a promise, not stock. Quiet, and never
+              summed into the figure beside it. */}
+          {product.expectedQuantity != null && product.expectedQuantity > 0 && (
+            <span className="text-xs text-neutral-500">
+              <span aria-hidden="true">{expectedCopy.product.coming(formatNumber(product.expectedQuantity))}</span>
+              <span className="sr-only">{expectedCopy.product.comingAria(formatNumber(product.expectedQuantity))}</span>
+            </span>
+          )}
           {product.isLowStock && <LowStockBadge />}
           <IncomingStockBadge quantity={incoming} />
         </div>

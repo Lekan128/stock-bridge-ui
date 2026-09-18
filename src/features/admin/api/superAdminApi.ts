@@ -36,6 +36,7 @@ import type {
   SuperAdminVendorSummary,
   UpdateClientPayload,
   UpdateEscrowHoldPayload,
+  UpdateVendorPayload,
   VendorApplication,
   VendorListParams,
   VendorWaitlistCounts,
@@ -276,6 +277,16 @@ export const superAdminApiClient = {
   /** 201. A business ops recruited offline, with no application behind it. */
   createVendor: (payload: CreateVendorPayload) =>
     superAdminApi.post<SuperAdminVendorDetail>('/api/superadmin/vendors', payload).then((r) => r.data),
+
+  /**
+   * A vendor's business metadata — phone, address, commission, bank details, CAC number.
+   *
+   * ⚠️ REPLACE semantics: the server writes every field as sent, so anything omitted is stored as
+   * NULL. Always send the complete current state, not a diff. Touches no credentials and cannot
+   * rename the Company ID — see `UpdateVendorPayload`.
+   */
+  updateVendor: (id: string, payload: UpdateVendorPayload) =>
+    superAdminApi.put<SuperAdminVendorDetail>(`/api/superadmin/vendors/${id}`, payload).then((r) => r.data),
 
   // ------------------------------------------------------------------ Settlement policy (M9)
   // The escrow hold: how long a vendor's confirmed money waits before it can be paid out.

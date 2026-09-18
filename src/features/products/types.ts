@@ -99,6 +99,13 @@ export interface Product {
    * set it from the Vendors tab's preferred toggle, not from this type.
    */
   preferredVendorName: string | null
+  /**
+   * The company's own category for this product (`/api/company-categories`), if it has one.
+   * Both are omitted from the JSON when the product is uncategorised (the API drops null fields),
+   * so compare with `== null`, never `=== null`.
+   */
+  categoryId?: string | null
+  categoryName?: string | null
   active: boolean
   isLowStock: boolean
   createdAt: string
@@ -112,6 +119,21 @@ export interface Product {
    * list use it to decide whether "(default)" and a link to the Vendors tab earn their place.
    */
   hasMultiplePacks?: boolean
+  /**
+   * How much of this is on an OPEN expected delivery and has not arrived yet
+   * (`BULK_IMPORT_CX_PLAN.md` task 3.1), in this product's own stock unit — the same unit
+   * {@link quantityOnHand} is in, so the two can honestly sit beside each other. Orders written
+   * in packs are converted server-side; ten 50 kg bags arrive here as 500, never as 10.
+   *
+   * Deliberately NOT part of {@link incomingQuantity} and never added to it: that one is paid for
+   * through the marketplace and settled against a real ledger, this one is a promise a supplier
+   * made on the phone. Merging the two would put a guess into a number the marketplace treats as
+   * final.
+   *
+   * Absent — not zero — when nothing is coming, because the API omits null fields. Compare with
+   * `== null`, never `=== null`.
+   */
+  expectedQuantity?: number
 }
 
 /** Mirrors Spring Data's Page<T> JSON shape. */
@@ -130,6 +152,8 @@ export type ProductStatusFilter = 'all' | 'active' | 'inactive'
 export interface ProductListParams {
   search?: string
   active?: boolean
+  /** Only products in this company category. */
+  categoryId?: string
   page?: number
   size?: number
   sort?: string
@@ -210,6 +234,11 @@ export interface ProductFormPayload {
    * `ProductVendor` rows, and this is only how the FIRST one gets created.
    */
   initialVendor?: InitialVendorPayload
+  /**
+   * A company category id. On create, omitted means uncategorised. On update, omitted means
+   * "leave it as it is" — removing a category takes {@link ProductUpdatePayload.clearCategory}.
+   */
+  categoryId?: string
 }
 
 export type UnitOfMeasureCategory = 'COUNT' | 'WEIGHT' | 'VOLUME' | 'LENGTH'
@@ -319,6 +348,8 @@ export interface UnitOfMeasureRequestPayload {
 export interface ProductUpdatePayload extends Partial<ProductFormPayload> {
   active?: boolean
   removeImage?: boolean
+  /** Removes the product's category. Needed because an absent `categoryId` leaves it unchanged. */
+  clearCategory?: boolean
   // No `clearCompanyVendor` (or `companyVendorId`) here anymore — there is no flat per-product
   // supplier field left to clear. An existing product's vendors are added, edited and unlinked
   // from the product detail page's Vendors tab (`ProductVendor` rows), not through this payload.
@@ -331,12 +362,38 @@ export type MovementType = 'IN' | 'OUT' | 'ADJUSTMENT'
 export interface StockMovement {
   id: string
   productId: string
+  /**
+   * The V28 report fields. Present on `GET /api/stock/movements`, which fetch-joins the product;
+   * absent on `GET /api/products/{id}/stock/history`, where the caller already knows which
+   * product it asked about. Optional rather than `| null` because the API omits null fields
+   * entirely (`default-property-inclusion: non_null`).
+   */
+  productName?: string
+  productSku?: string
+  unitOfMeasure?: string
   movementType: MovementType
   quantity: number
   unitPriceAtTime: number | null
   note: string | null
   createdByUserId: string | null
+  /**
+   * ⚠️ Two different questions, and they must not be used interchangeably. `occurredAt` is when
+   * the delivery or sale actually HAPPENED; `createdAt` is when the row was WRITTEN. They are
+   * equal for anything recorded as it happens, and differ for anything bulk-imported or
+   * backdated. Anything showing a user "when did this arrive" wants `occurredAt` — which is also
+   * what the report's date range filters on.
+   */
+  occurredAt?: string
   createdAt: string
+  /**
+   * `quantity × unitPriceAtTime`, computed server-side so the rows and the totals beside them are
+   * the same arithmetic.
+   *
+   * ⚠️ Absent — never zero — when the movement recorded no price (every ADJUSTMENT, a free
+   * sample, a delivery entered before anyone knew what it cost). Render an em dash, never ₦0.00:
+   * "we don't know what this was worth" is a different claim from "it was worth nothing".
+   */
+  lineValue?: number
   /**
    * Multi-vendor inventory extension (design spec §5.2) — set on `IN` rows only, once the
    * backend module lands. Deliberately optional/undefined-safe: today's `GET .../stock/history`

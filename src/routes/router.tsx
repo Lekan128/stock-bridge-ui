@@ -73,6 +73,16 @@ const LowStockProductsPage = lazy(() =>
     default: m.LowStockProductsPage,
   })),
 )
+const StockMovementsPage = lazy(() =>
+  import('@/pages/StockMovementsPage').then((m) => ({
+    default: m.StockMovementsPage,
+  })),
+)
+const FixProductDetailsPage = lazy(() =>
+  import('@/pages/FixProductDetailsPage').then((m) => ({
+    default: m.FixProductDetailsPage,
+  })),
+)
 const ProductSkuSettingsPage = lazy(() =>
   import('@/pages/ProductSkuSettingsPage').then((m) => ({
     default: m.ProductSkuSettingsPage,
@@ -104,6 +114,25 @@ const ImportConfirmPage = lazy(() =>
 const ImportResultPage = lazy(() =>
   import('@/features/imports/pages/ImportResultPage').then((m) => ({
     default: m.ImportResultPage,
+  })),
+)
+// The no-spreadsheet way into the same stock-in import (BULK_IMPORT_CX_PLAN.md task 2.1).
+const RecordDeliveryPage = lazy(() =>
+  import('@/features/imports/pages/RecordDeliveryPage').then((m) => ({
+    default: m.RecordDeliveryPage,
+  })),
+)
+// What has been ordered from a supplier off the platform and not received yet (task 3.1). Two
+// chunks, like the import screens: the list is read by anyone who can see products, while the
+// screen that writes one down is reached far less often and by fewer people.
+const ExpectedDeliveriesPage = lazy(() =>
+  import('@/features/expected/pages/ExpectedDeliveriesPage').then((m) => ({
+    default: m.ExpectedDeliveriesPage,
+  })),
+)
+const NewExpectedDeliveryPage = lazy(() =>
+  import('@/features/expected/pages/NewExpectedDeliveryPage').then((m) => ({
+    default: m.NewExpectedDeliveryPage,
   })),
 )
 
@@ -417,11 +446,36 @@ export function AppRoutes() {
               </RequirePermission>
             }
           />
+          {/* The one-time "fix product details" screen. Static segment, so it ranks above
+            products/:id. VIEW_PRODUCTS like the list that links here — the page itself hides its
+            save controls from anyone without MANAGE_PRODUCTS. */}
+          <Route
+            path="products/fix"
+            element={
+              <RequirePermission permission={PERMISSIONS.VIEW_PRODUCTS}>
+                <FixProductDetailsPage />
+              </RequirePermission>
+            }
+          />
           <Route
             path="products/low-stock"
             element={
               <RequirePermission permission={PERMISSIONS.VIEW_PRODUCTS}>
                 <LowStockProductsPage />
+              </RequirePermission>
+            }
+          />
+          {/* The stock in/out report. MANAGE_INVENTORY rather than VIEW_ANALYTICS, matching the
+            API: this is the raw ledger with costs and suppliers on every row — the same data the
+            per-product stock history shows, across all products at once — not an aggregate.
+
+            Sits at /app/stock-movements rather than under products/, because it is not about one
+            product and does not start from the catalog. */}
+          <Route
+            path="stock-movements"
+            element={
+              <RequirePermission permission={PERMISSIONS.MANAGE_INVENTORY}>
+                <StockMovementsPage />
               </RequirePermission>
             }
           />
@@ -449,6 +503,39 @@ export function AppRoutes() {
             MANAGE_PRODUCTS alone would bounce a storekeeper — who holds only MANAGE_INVENTORY —
             out of bulk stock-in, the one flow the feature exists to serve, with a UI-only
             refusal the network tab would never explain. */}
+          {/* "Record a delivery" — static, so declared above products/:id like the import routes.
+            MANAGE_INVENTORY alone, matching both endpoints it calls: it only ever records stock. */}
+          <Route
+            path="products/receive"
+            element={
+              <RequirePermission permission={PERMISSIONS.MANAGE_INVENTORY}>
+                <RecordDeliveryPage />
+              </RequirePermission>
+            }
+          />
+          {/* Expected deliveries — static, so declared above products/:id like the routes either
+            side of it.
+
+            Reading is VIEW_PRODUCTS and writing is MANAGE_INVENTORY, mirroring the controller
+            exactly: "what have we got coming?" is a question about the catalog, while saying that
+            a hundred bags are on their way is the same authority as saying they arrived. The list
+            hides its own write affordances from a reader who lacks the second. */}
+          <Route
+            path="products/expected"
+            element={
+              <RequirePermission permission={PERMISSIONS.VIEW_PRODUCTS}>
+                <ExpectedDeliveriesPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="products/expected/new"
+            element={
+              <RequirePermission permission={PERMISSIONS.MANAGE_INVENTORY}>
+                <NewExpectedDeliveryPage />
+              </RequirePermission>
+            }
+          />
           <Route
             path="products/import"
             element={

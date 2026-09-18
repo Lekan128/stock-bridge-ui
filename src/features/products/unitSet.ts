@@ -447,6 +447,100 @@ export function fromBaseQuantity(baseQuantity: number, option: UnitOption): numb
 }
 
 /**
+ * Reads a `contains` cell — `"50 kg"`, `"12 x 750 ml"`, `"kg"` — into a unit code and a pack size.
+ *
+ * The frontend half of `PackContents.java`, mirrored the same way `UnitOptions` is: the server
+ * remains the authority (it re-parses every value it is sent), and this copy exists so the form
+ * can echo "1 pack = 9,000 ml" while the user is still typing, instead of after a round trip.
+ *
+ * <h2>Why one field instead of a number and a dropdown</h2>
+ * `PACK_ENTRY_REDESIGN.md` §15. The stock unit was already inside the answer — somebody who
+ * writes "50 kg" has said the unit is kg — so asking for it separately asked the same question
+ * twice, in the most abstract words on the form. The multiplication is the reported case finally
+ * expressible: a pack of twelve 750 ml bottles is `12 x 750 ml`, and the system does the
+ * multiplying rather than the user.
+ *
+ * @param units the BASE-role options from `GET /api/products/units-of-measure`, used to resolve
+ *     the unit word. Resolution is label/symbol-based here and deliberately less forgiving than
+ *     the server's ~80-spelling alias table — a form has a dropdown's worth of hints on screen and
+ *     a server round trip to fall back on, so matching that table here would be duplication with
+ *     no reader.
+ * @returns null when the text is blank or unreadable. Both mean "say nothing yet", never a guess.
+ */
+export function parsePackContents(
+  raw: string | null | undefined,
+  units: { code: string; label: string; symbol?: string | null }[],
+): { unitCode: string; packSize: number | null } | null {
+  if (!raw || !raw.trim()) return null
+  const text = raw.trim()
+
+  const resolve = (word: string): string | null => {
+    const w = word.trim().toLowerCase().replace(/s$/, '')
+    const hit = units.find(
+      (u) =>
+        u.code.toLowerCase() === w ||
+        (u.symbol ?? '').toLowerCase() === w ||
+        u.label.toLowerCase() === w ||
+        u.label.toLowerCase().replace(/\s*\(.*\)\s*$/, '') === w,
+    )
+    return hit?.code ?? null
+  }
+
+  // A bare unit — "kg", "piece". No pack size, which is a complete answer: bought loose.
+  const bare = resolve(text)
+  if (bare) return { unitCode: bare, packSize: null }
+
+  const match = /^\s*(\d+(?:[.,]\d+)?)\s*(?:[x×·*]\s*(\d+(?:[.,]\d+)?)\s*)?(.+?)\s*$/.exec(text)
+  if (!match) return null
+  const unitCode = resolve(match[3])
+  if (!unitCode) return null
+
+  const first = Number(match[1].replace(',', '.'))
+  const second = match[2] == null ? null : Number(match[2].replace(',', '.'))
+  const size = second == null ? first : first * second
+  if (!Number.isFinite(size) || size <= 0) return null
+  return { unitCode, packSize: size }
+}
+
+/**
+ * A balance split into whole packs and a leftover — 180 kg against an 80 kg bag is
+ * `{ wholePacks: 2, remainder: 20 }`.
+ *
+ * The arithmetic half of `unitCopy.packRemainderPhrase`; read that function for why the mixed
+ * form is worth rendering at all and for the two rules on where it may appear. This half is here
+ * because it has a rounding scale, and this module owns every one of those.
+ *
+ * <h2>Why the remainder is subtracted, not taken with `%`</h2>
+ * `180 % 0.5` and friends drift on binary floats, and this figure is printed immediately beside
+ * an exact one — a remainder rendering as `19.999999999` would discredit the whole line. Whole
+ * packs come from a `floor`, which is exact for any value a balance can hold, and the remainder
+ * is what is left after removing them, rounded at scale 3 — the same scale
+ * {@link fromBaseQuantity} uses, and the widest any quantity column in the schema carries
+ * (`numeric(14,3)`), so nothing real is truncated.
+ *
+ * <h2>`floor`, never round</h2>
+ * The whole-pack count must never round up: 179 kg is one bag and 99 kg, not two bags. Rounding
+ * here would re-introduce exactly the "number that would then disagree with the shelf" that
+ * `StockBreakdownPanel` refused to print, and the mixed form's entire claim is that it does not.
+ *
+ * @returns null for a non-pack option (the stock unit's own "equivalent" is the figure itself),
+ *     a non-positive balance, or a pack with no usable factor.
+ */
+export function packRemainder(
+  baseQuantity: number | null | undefined,
+  option: UnitOption | null | undefined,
+): { wholePacks: number; remainder: number } | null {
+  if (option == null || option.isStockUnit) return null
+  if (baseQuantity == null || !Number.isFinite(baseQuantity) || baseQuantity <= 0) return null
+  const factor = option.factorToStockUnit
+  if (!Number.isFinite(factor) || factor <= 0) return null
+
+  const wholePacks = Math.floor(baseQuantity / factor)
+  const remainder = roundHalfUp(baseQuantity - wholePacks * factor, 3)
+  return { wholePacks, remainder }
+}
+
+/**
  * `UNIT_UX_CONTRACT.md` §3.2 — the symmetric half that did not exist: `resolveBasePrice =
  * enteredPrice / factorToStockUnit`, scale 6, HALF_UP.
  *
@@ -470,6 +564,40 @@ export function toBasePrice(enteredPrice: number, option: UnitOption): number {
 export function fromBasePrice(basePrice: number, option: UnitOption): number {
   if (!Number.isFinite(basePrice)) return 0
   return roundHalfUp(basePrice * option.factorToStockUnit, 6)
+}
+
+/**
+ * `PACK_ENTRY_REDESIGN.md` §7.1 — the frontend half of `UnitOptions.isCountedInWholeUnits`. A
+ * stock unit you count (pieces) cannot hold a fraction; one you measure (kg) can be rounded. A
+ * product with no stock unit is counted in plain units. An unknown code — the catalog has not
+ * loaded yet — answers `false`, leaving the server's identical check as the only gate.
+ */
+export function isCountedInWholeUnits(
+  stockUnitCode: string | null | undefined,
+  unitsOfMeasure: UnitOfMeasureOption[],
+): boolean {
+  if (!stockUnitCode) return true
+  return unitsOfMeasure.find((option) => option.code === stockUnitCode)?.category === 'COUNT'
+}
+
+/**
+ * `quantity` in stock units before the §3.1 rounding — `0.25` of a pack of ten is `2.5`. Rounded at
+ * scale 9 only to remove floating-point noise (`0.1 × 30` is `3.0000000000000004`), which is far
+ * below anything a person types.
+ */
+export function exactBaseQuantity(quantity: number, option: UnitOption): number {
+  if (!Number.isFinite(quantity)) return 0
+  return roundHalfUp(quantity * option.factorToStockUnit, 9)
+}
+
+/**
+ * §7.1's refusal, checked before the request: `false` when `quantity` of `option` is not a whole
+ * number of a counted stock unit. Zero and blank are never refused here, same as
+ * {@link convertsCleanly}.
+ */
+export function convertsToWholeCount(quantity: number, option: UnitOption, countedInWholeUnits: boolean): boolean {
+  if (!countedInWholeUnits || !Number.isFinite(quantity) || quantity <= 0) return true
+  return Number.isInteger(exactBaseQuantity(quantity, option))
 }
 
 /**

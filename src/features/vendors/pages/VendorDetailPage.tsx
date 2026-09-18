@@ -1,4 +1,4 @@
-import { ArrowLeft, MapPin, Mail, Package, Phone, ReceiptText } from 'lucide-react'
+import { ArrowLeft, FileText, Landmark, MapPin, Mail, Package, Phone, ReceiptText } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { buttonClassName } from '@/components/Button'
 import { ErrorState } from '@/components/ErrorState'
@@ -122,6 +122,42 @@ export function VendorDetailPage() {
               </div>
             </div>
           </dl>
+
+          {/* Rendered only when something is on file. An empty "Payment & registration" heading
+              with four em dashes under it is noise on the great majority of suppliers, which have
+              none — unlike Contact above, where a missing phone is itself worth showing. */}
+          {(vendor.bankName || vendor.bankAccountNumber || vendor.bankAccountName || vendor.cacNumber) && (
+            <div className="mt-4 border-t border-neutral-100 pt-3">
+              <h3 className="text-sm font-semibold text-neutral-900">Payment &amp; registration</h3>
+              <dl className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                {(vendor.bankName || vendor.bankAccountNumber || vendor.bankAccountName) && (
+                  <div className="flex items-start gap-2 sm:col-span-2">
+                    <Landmark className="mt-0.5 h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
+                    <div className="min-w-0">
+                      <dt className="text-neutral-500">Bank account</dt>
+                      <dd className="text-neutral-900">{vendor.bankName || '—'}</dd>
+                      {/* tabular-nums so a column of account numbers lines up digit for digit. */}
+                      {vendor.bankAccountNumber && (
+                        <dd className="text-neutral-900 tabular-nums">{vendor.bankAccountNumber}</dd>
+                      )}
+                      {vendor.bankAccountName && (
+                        <dd className="text-neutral-500">{vendor.bankAccountName}</dd>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {vendor.cacNumber && (
+                  <div className="flex items-start gap-2 sm:col-span-2">
+                    <FileText className="mt-0.5 h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
+                    <div>
+                      <dt className="text-neutral-500">CAC number</dt>
+                      <dd className="text-neutral-900">{vendor.cacNumber}</dd>
+                    </div>
+                  </div>
+                )}
+              </dl>
+            </div>
+          )}
 
           {vendor.notes && (
             <div className="mt-4 border-t border-neutral-100 pt-3">

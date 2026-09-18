@@ -1,4 +1,4 @@
-import { Plus, Store, UserRound } from 'lucide-react'
+import { Pencil, Plus, Store, UserRound } from 'lucide-react'
 import { useState } from 'react'
 import { Badge } from '@/components/Badge'
 import { Button } from '@/components/Button'
@@ -9,8 +9,9 @@ import { Skeleton } from '@/components/Skeleton'
 import { useToast } from '@/components/useToast'
 import { superAdminApiClient } from '@/features/admin/api/superAdminApi'
 import { AddVendorModal } from '@/features/admin/components/AddVendorModal'
+import { EditVendorModal } from '@/features/admin/components/EditVendorModal'
 import { useVendors } from '@/features/admin/hooks/useVendors'
-import type { CreateVendorPayload } from '@/features/admin/types'
+import type { CreateVendorPayload, UpdateVendorPayload } from '@/features/admin/types'
 import { formatDateTime } from '@/features/marketplace/formatters'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { isAppError } from '@/types/api'
@@ -52,6 +53,9 @@ export function AdminVendorsPage() {
   const [page, setPage] = useState(0)
   const [addOpen, setAddOpen] = useState(false)
   const [creating, setCreating] = useState(false)
+  /** The vendor being edited, or null. The modal loads its own detail from this id — see it. */
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
 
   const debouncedSearch = useDebouncedValue(search, 350)
 
@@ -75,6 +79,21 @@ export function AdminVendorsPage() {
       showToast(isAppError(err) ? err.message : 'We could not create that vendor.', 'error')
     } finally {
       setCreating(false)
+    }
+  }
+
+  async function handleUpdate(payload: UpdateVendorPayload) {
+    if (!editingId) return
+    setSaving(true)
+    try {
+      const vendor = await superAdminApiClient.updateVendor(editingId, payload)
+      showToast(`${vendor.name} updated.`, 'success')
+      setEditingId(null)
+      refetch()
+    } catch (err: unknown) {
+      showToast(isAppError(err) ? err.message : 'We could not save those changes.', 'error')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -178,14 +197,20 @@ export function AdminVendorsPage() {
                     </p>
                   </div>
 
-                  {/* The one-account rule, shown rather than assumed. */}
-                  <div className="flex shrink-0 items-center gap-1.5 text-xs text-neutral-500">
-                    <UserRound className="h-3.5 w-3.5" aria-hidden="true" />
-                    {vendor.userCount === 1 ? (
-                      <span>1 account</span>
-                    ) : (
-                      <span className="font-medium text-danger-600">{vendor.userCount} accounts</span>
-                    )}
+                  <div className="flex shrink-0 flex-col items-end gap-2">
+                    {/* The one-account rule, shown rather than assumed. */}
+                    <div className="flex items-center gap-1.5 text-xs text-neutral-500">
+                      <UserRound className="h-3.5 w-3.5" aria-hidden="true" />
+                      {vendor.userCount === 1 ? (
+                        <span>1 account</span>
+                      ) : (
+                        <span className="font-medium text-danger-600">{vendor.userCount} accounts</span>
+                      )}
+                    </div>
+                    <Button variant="secondary" onClick={() => setEditingId(vendor.id)}>
+                      <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                      Edit
+                    </Button>
                   </div>
                 </li>
               ))}
@@ -213,6 +238,13 @@ export function AdminVendorsPage() {
         submitting={creating}
         onCancel={() => setAddOpen(false)}
         onConfirm={(payload) => void handleCreate(payload)}
+      />
+
+      <EditVendorModal
+        vendorId={editingId}
+        submitting={saving}
+        onCancel={() => setEditingId(null)}
+        onConfirm={(payload) => void handleUpdate(payload)}
       />
     </div>
   )
