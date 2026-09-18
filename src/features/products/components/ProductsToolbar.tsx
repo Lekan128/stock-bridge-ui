@@ -1,4 +1,4 @@
-import { CalendarClock, Download, Plus, Search, Settings, Tags, Truck, Upload } from 'lucide-react'
+import { Plus, Search, Truck } from 'lucide-react'
 import { Button, buttonClassName } from '@/components/Button'
 import type { CompanyCategory } from '@/features/products/categories/types'
 import { BulkActionsMenu } from '@/features/products/components/BulkActionsMenu'
@@ -131,52 +131,23 @@ export function ProductsToolbar({
         )}
 
         <div className="flex items-center gap-2">
-          <div className="hidden items-center gap-2 md:flex">
-            {canRecordDelivery && (
-              <>
-                <button type="button" onClick={onRecordDelivery} className={buttonClassName('secondary')}>
-                  <Truck className="h-4 w-4" />
-                  Record a delivery
-                </button>
-                <button type="button" onClick={onExpectedDeliveries} className={buttonClassName('secondary')}>
-                  <CalendarClock className="h-4 w-4" />
-                  Expected deliveries
-                </button>
-              </>
-            )}
-            {canManageProducts && (
-              <>
-                <button
-                  type="button"
-                  onClick={onBulkUpload}
-                  className={buttonClassName('secondary')}
-                >
-                  <Upload className="h-4 w-4" />
-                  Bulk Upload
-                </button>
-                <button
-                  type="button"
-                  onClick={onManageCategories}
-                  className={buttonClassName('secondary')}
-                >
-                  <Tags className="h-4 w-4" />
-                  Categories
-                </button>
-                <button
-                  type="button"
-                  onClick={onSkuSettings}
-                  className={buttonClassName('secondary')}
-                >
-                  <Settings className="h-4 w-4" />
-                  SKU Settings
-                </button>
-              </>
-            )}
-            <button type="button" onClick={onExport} className={buttonClassName('secondary')}>
-              <Download className="h-4 w-4" />
-              Download my products
+          {/*
+            One primary action, one daily one, and a menu for the rest. Recording a delivery is
+            the thing a storekeeper does every morning; downloading a sheet, editing categories
+            and changing SKU settings are things anyone does a handful of times a year, and giving
+            those the same weight as "Add Product" made the toolbar a wall of identical buttons
+            that each wrapped onto two lines.
+          */}
+          {canRecordDelivery && (
+            <button
+              type="button"
+              onClick={onRecordDelivery}
+              className={`${buttonClassName('secondary')} hidden whitespace-nowrap md:inline-flex`}
+            >
+              <Truck className="h-4 w-4" />
+              Record a delivery
             </button>
-          </div>
+          )}
           <BulkActionsMenu
             canManageProducts={canManageProducts}
             canRecordDelivery={canRecordDelivery}

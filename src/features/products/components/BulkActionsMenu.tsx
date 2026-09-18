@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { CalendarClock, Download, MoreVertical, Settings, Tags, Truck, Upload } from 'lucide-react'
+import { CalendarClock, Download, MoreHorizontal, Settings, Tags, Truck, Upload } from 'lucide-react'
 import { useClickOutside } from '@/hooks/useClickOutside'
 
 export interface BulkActionsMenuProps {
@@ -48,16 +48,21 @@ export function BulkActionsMenu({
   ]
 
   return (
-    <div className="relative md:hidden" ref={ref}>
+    // At every width, not just on a phone. This used to be mobile-only, which forced the desktop
+    // toolbar to show every action as its own button - seven of them by the end of Phase 3, most
+    // wrapping onto two lines. The occasional actions live here now and the toolbar keeps the
+    // daily one.
+    <div className="relative" ref={ref}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label="Bulk actions"
-        className="inline-flex items-center justify-center rounded-md border border-neutral-200 bg-white p-2.5 text-neutral-600 hover:bg-neutral-50"
+        aria-label="More actions"
+        className="inline-flex items-center justify-center gap-1.5 rounded-md border border-neutral-200 bg-white p-2.5 text-neutral-600 hover:bg-neutral-50 md:px-3 md:py-2 md:text-sm md:font-medium md:text-neutral-700"
       >
-        <MoreVertical className="h-4 w-4" />
+        <MoreHorizontal className="h-4 w-4" />
+        <span className="hidden md:inline">More</span>
       </button>
       {open && (
         <div
