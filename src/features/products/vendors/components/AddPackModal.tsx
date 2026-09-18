@@ -145,7 +145,7 @@ export function AddPackModal({ productId, vendor, stockUnit, onClose, onSuccess 
           </div>
           {hasContainer && (
             <TextField
-              label={UNIT_COPY.UNITS_PER_PACK}
+              label={UNIT_COPY.CONTAINS}
               inputMode="decimal"
               hint={`How many ${stockUnit} one ${packagingLabel.toLowerCase()} holds`}
               error={errors.packagingSize?.message}

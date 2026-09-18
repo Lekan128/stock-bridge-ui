@@ -25,7 +25,7 @@ const CARDS: { kind: ImportKind; Icon: typeof Package; permission: Permission }[
  * our two pipelines they want before they can start, and this is what makes that true.
  *
  * A card the signed-in user cannot use is not shown. A storekeeper holds `MANAGE_INVENTORY` and
- * not `MANAGE_PRODUCTS`, so "Add or update products" was an offer the server would refuse the
+ * not `MANAGE_PRODUCTS`, so "Add products" was an offer the server would refuse the
  * moment they picked a file — a dead end dressed as a choice, and the worst kind, because it
  * only reveals itself after the work of finding the spreadsheet. The route guard stays a
  * disjunction because the two imports share one URL; this is the narrower, per-kind check the
@@ -55,22 +55,35 @@ export function ImportChooserPage() {
         {cards.map(({ kind, Icon }) => {
           const card = copy.chooser.cards[kind]
           return (
-            <Link
-              key={kind}
-              to={`/app/products/import/new?kind=${kind}`}
-              className="group flex flex-col rounded-lg border border-neutral-200 bg-white p-6 transition-colors hover:border-primary-300 hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
-            >
-              <span className="flex h-10 w-10 items-center justify-center rounded-md bg-primary-50 text-primary-600 group-hover:bg-white">
-                <Icon className="h-5 w-5" aria-hidden="true" />
-              </span>
-              <span className="mt-4 text-base font-semibold text-neutral-900">{card.title}</span>
-              <span className="mt-2 text-sm text-neutral-600">{card.body}</span>
-              <span className="mt-2 text-sm text-neutral-500">{card.footnote}</span>
-              <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-primary-700">
-                {copy.chooser.start}
-                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
-              </span>
-            </Link>
+            <div key={kind} className="flex flex-col gap-2">
+              <Link
+                to={`/app/products/import/new?kind=${kind}`}
+                className="group flex flex-1 flex-col rounded-lg border border-neutral-200 bg-white p-6 transition-colors hover:border-primary-300 hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
+              >
+                <span className="flex h-10 w-10 items-center justify-center rounded-md bg-primary-50 text-primary-600 group-hover:bg-white">
+                  <Icon className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <span className="mt-4 text-base font-semibold text-neutral-900">{card.title}</span>
+                <span className="mt-2 text-sm text-neutral-600">{card.body}</span>
+                <span className="mt-2 text-sm text-neutral-500">{card.footnote}</span>
+                <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-primary-700">
+                  {copy.chooser.start}
+                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                </span>
+              </Link>
+              {/* Beside the card, not inside it: a link inside a link is not valid HTML. */}
+              {kind === 'STOCK_IN' && (
+                <p className="px-1 text-sm text-neutral-600">
+                  {copy.chooser.quickEntry}{' '}
+                  <Link
+                    to="/app/products/receive"
+                    className="rounded-sm font-medium text-primary-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                  >
+                    {copy.chooser.quickEntryLink}
+                  </Link>
+                </p>
+              )}
+            </div>
           )
         })}
       </div>

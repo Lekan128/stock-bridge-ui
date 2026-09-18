@@ -7,6 +7,9 @@ import type {
 import type { UnitOption } from '@/features/products/types'
 import { packPhrase, stockUnitSymbol } from '@/features/products/unitCopy'
 
+/** Machine keys a sheet carries for the server's sake - never a column on screen, not even behind "Show every column". */
+export const HIDDEN_FIELD_KEYS: readonly string[] = ['ref']
+
 /** Columns that identify a row to a human, so they stay on screen whatever else is hidden. */
 const ANCHOR_KEYS = ['name', 'sku', 'product_name']
 

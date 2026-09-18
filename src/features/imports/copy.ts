@@ -1,4 +1,4 @@
-import type { ImportFieldDescriptor, ImportKind, ImportMode } from '@/features/imports/types'
+import type { ImportFieldDescriptor, ImportKind } from '@/features/imports/types'
 import { MAX_FILE_BYTES, MAX_ROWS, SESSION_TTL_HOURS } from '@/features/imports/constants'
 import { UNIT_COPY } from '@/features/products/unitCopy'
 
@@ -75,32 +75,10 @@ export function fieldLabels(fields: ImportFieldDescriptor[], keys: string[]): st
 }
 
 export const KIND_COPY: Record<ImportKind, { title: string; shortTitle: string }> = {
-  PRODUCT_CATALOG: { title: 'Add or update products', shortTitle: 'Products' },
+  PRODUCT_CATALOG: { title: 'Add products', shortTitle: 'Products' },
   STOCK_IN: { title: 'Record stock you received', shortTitle: 'Stock received' },
 }
 
-/**
- * Plain language for `ImportMode` — the enum spelling never reaches the screen. The question is
- * asked before upload because the answer changes what counts as an error during validation
- * (spec §9.2), so it is phrased as a condition, not as a setting.
- */
-export const MODE_OPTIONS: { value: ImportMode; label: string; hint: string }[] = [
-  {
-    value: 'CREATE_ONLY',
-    label: 'Skip it',
-    hint: 'Leave what you already have untouched. Only brand-new products are added.',
-  },
-  {
-    value: 'CREATE_OR_UPDATE',
-    label: 'Update it',
-    hint: 'Change the details that differ, and add anything new. Best for a supplier price list.',
-  },
-  {
-    value: 'UPDATE_ONLY',
-    label: 'Only update, never add',
-    hint: "Nothing new is created. A product you don't already have is flagged instead.",
-  },
-]
 
 export const copy = {
   chooser: {
@@ -110,9 +88,9 @@ export const copy = {
     start: 'Start',
     cards: {
       PRODUCT_CATALOG: {
-        title: 'Add or update products',
-        body: 'Build your catalog, or update prices and suppliers in bulk.',
-        footnote: 'Includes opening stock for brand-new products.',
+        title: 'Add products',
+        body: 'Put all your products on Procure Paddy at once — one row per product.',
+        footnote: 'Just the products. You record how many you have in the next step.',
       },
       STOCK_IN: {
         title: 'Record stock you received',
@@ -120,6 +98,77 @@ export const copy = {
         footnote: 'We pre-fill your products — you just add the quantities.',
       },
     },
+    /** Under the stock card: the no-spreadsheet route for a small delivery (task 2.1). */
+    quickEntry: 'Only a few items?',
+    quickEntryLink: 'Record them here',
+  },
+
+  /*
+   * "Record a delivery" (BULK_IMPORT_CX_PLAN.md task 2.1) — the same stock-in import, typed on a
+   * phone instead of filled into a sheet. Worded for the storekeeper at the gate: what arrived,
+   * from whom, for how much.
+   */
+  delivery: {
+    title: 'Record a delivery',
+    subtitle: 'Pick the supplier, then type how many of each arrived.',
+    useSheet: 'Lots of lines? Use a spreadsheet instead',
+    supplier: 'Supplier',
+    supplierAny: 'Any supplier',
+    date: 'Date it arrived',
+    dateFuture: "The date can't be in the future.",
+    dateMissing: 'Pick the date it arrived.',
+    invoiceNo: 'Invoice or waybill number',
+    invoiceHint: 'Optional',
+    linesHeading: 'What arrived',
+    search: 'Find a product',
+    scanLabel: 'Scan a barcode',
+    scanPlaceholder: 'Scan a barcode, or type it',
+    scanAdded: (product: string) => `Added ${product}. Type how many came.`,
+    scanFailed: 'We could not look that barcode up. Try again.',
+    searchPlaceholder: 'Search by name or code',
+    quantityLabel: (productName: string, comesIn: string) => `${productName}, ${comesIn} — how many arrived`,
+    quantityInvalid: 'Type a number above 0.',
+    priceLabel: (productName: string, comesIn: string) => `${productName}, ${comesIn} — price for one`,
+    pricePlaceholder: 'Price for one (optional)',
+    priceInvalid: 'Type a price of 0 or more, or leave it blank.',
+    /** "₦42,000 a bag · same as last time" — the amount and unit words arrive already formatted. */
+    priceSame: (amount: string, per: string) => `${amount} ${per} · same as last time`,
+    priceLast: (amount: string, per: string) => `Last time: ${amount} ${per}`,
+    priceChange: 'Change',
+    priceChangeLabel: (productName: string, comesIn: string) => `Change the price for ${productName}, ${comesIn}`,
+    somethingElse: '+ Something not on this list',
+    notInCatalog: 'Not on the list at all?',
+    notInCatalogLink: 'Add it on the products page first',
+    noProductsTitle: 'No products yet',
+    noProductsBody: 'Add your products first — then you can record what arrives.',
+    noProductsAction: 'Go to products',
+    supplierEmpty: (supplierName: string) => `${supplierName} has no products yet`,
+    supplierEmptyAction: 'Show all products',
+    noMatch: (query: string) => `Nothing matches “${query}”.`,
+    loadFailed: "We couldn't load your products.",
+    hiddenTyped: (count: number) =>
+      `${count} more ${count === 1 ? 'item you typed is' : 'items you typed are'} not shown in this list, and will be added too.`,
+    showAll: 'Show them',
+    submit: (count: number, total: string | null) =>
+      `Add ${count} ${count === 1 ? 'item' : 'items'}${total ? ` · ${total}` : ''}`,
+    submitEmpty: 'Type a quantity to add items',
+    totalPartial: 'Total excludes lines without a price',
+    /** Read out politely as the total changes; the visible button says the same. */
+    totalAnnounce: (count: number, total: string | null) =>
+      count === 0
+        ? 'No items yet'
+        : `${count} ${count === 1 ? 'item' : 'items'}${total ? `, ${total} in total` : ''}`,
+    saving: 'Checking…',
+    failed: "We couldn't record that delivery. Nothing was changed.",
+    previewFailed: "We saved your lines but couldn't check them. Have a look here.",
+    confirmTitle: 'Add this delivery?',
+    confirmReassure: 'No stock has been recorded yet.',
+    needsLook: (count: number) => `${count} ${count === 1 ? 'line needs' : 'lines need'} a look`,
+    reviewFirst: 'Review first',
+    notYet: 'Not yet',
+    committing: 'Adding…',
+    commitFailed: 'The delivery was not recorded. Nothing was changed.',
+    done: 'Delivery recorded',
   },
 
   upload: {
@@ -138,12 +187,66 @@ export const copy = {
     dropzoneHeading: 'Drop your file here, or browse',
     dropzoneLimits: `Up to ${formatCount(MAX_ROWS)} rows · ${formatMegabytes(MAX_FILE_BYTES)} · .xlsx or .csv`,
     dropzoneActive: 'Release to use this file',
-    templateLead: 'First time?',
-    templateLink: 'Download the template',
-    templateTail: '— it comes with your suppliers and units already filled into dropdowns.',
-    stockInTemplateLink: 'Download your stock sheet',
-    stockInTemplateTail: '— your products are already on it, so you only fill in the quantities.',
-    modeQuestion: 'If a product is already in your catalog:',
+    /*
+     * Two numbered steps, download then upload. The download used to be a small link under the
+     * dropzone ("First time? Download the template"), which put it AFTER the thing it has to
+     * come before — the people who needed it most were the ones who never scrolled to it. It is
+     * also the only way a new company gets a sheet at all now that the inventory page no longer
+     * carries a template button, so it has to be impossible to miss.
+     */
+    stepDownload: 'Step 1 — Get the sheet',
+    stepUpload: 'Step 2 — Upload it',
+    /**
+     * Task 3.2. Offered beside the dropzone rather than on a page of its own: a person who has
+     * the rows on their clipboard is already standing in front of the upload screen, and sending
+     * them somewhere else to use them would be the third step this feature exists to remove.
+     */
+    pasteToggle: 'Or paste the rows instead',
+    pasteHide: 'Use a file instead',
+    pasteLabel: 'Paste your rows here',
+    pasteHint: 'Straight off WhatsApp, or copied out of a spreadsheet. A heading row is welcome but not needed.',
+    pastePlaceholder: 'Rice (Mama Gold)\t10\tbags\nOnion\t5\tbaskets',
+    pasteSubmit: 'Check these rows',
+    pasteChecking: 'Checking…',
+    pasteFailed: 'We could not read those rows. Try pasting them again.',
+    /*
+     * "Template", not "product sheet". The stock sheet beside it arrives filled with the
+     * company's own products; this one is blank apart from three example rows. Calling both a
+     * "sheet" made the product one sound like a list of what you already have.
+     */
+    templateLink: 'Download blank template',
+    templateBody:
+      'One row per product: its name, what it comes in and what is inside one — and, if you like, how many you have now and what you paid. It opens with a short how-to and three examples to type over.',
+    stockInTemplateLink: 'Download stock sheet',
+    stockInTemplateBody:
+      'Your products are already listed, one row for each way you buy them. Just type how many arrived.',
+    alreadyHaveFile: 'Already filled one in? Skip to step 2.',
+    /* BULK_IMPORT_CX_PLAN.md task 2.3 — how an existing product is changed in bulk. */
+    editExistingPrompt: 'Changing products you already have?',
+    editExistingLink: 'Download my products',
+    editExistingRest: ', edit that sheet and upload it here. Rows you leave alone stay as they are.',
+    /* BULK_IMPORT_CX_PLAN.md task 1.5 — which products the sheet lists, and the delivery asked once. */
+    sheetScopeLabel: 'Which products should the sheet list?',
+    sheetScopeAll: 'All my products',
+    sheetScopeSupplier: "One supplier's products",
+    sheetScopeLowStock: 'Only products running low',
+    sheetScopeCategory: "One category's products",
+    sheetScopeSelected: (count: number) =>
+      `The ${count} product${count === 1 ? '' : 's'} you selected on the products page.`,
+    sheetSupplierLabel: 'Supplier',
+    sheetSupplierPlaceholder: 'Choose a supplier',
+    sheetCategoryLabel: 'Category',
+    sheetCategoryPlaceholder: 'Choose a category',
+    sheetCategoryNone: 'You have no categories yet. You can add them from the products page.',
+    stepDelivery: 'Step 2 — About this delivery',
+    deliveryBody: 'Asked once for the whole sheet. A row that says something different keeps its own.',
+    deliveryDate: 'Date it arrived',
+    invoiceNo: 'Invoice or waybill number',
+    invoiceHint: 'Optional — so you can find this delivery again.',
+    deliverySupplier: 'Supplier',
+    deliverySupplierAny: 'As written on each row',
+    deliverySupplierHint: 'Used for rows that leave the supplier blank.',
+    stockInStepUpload: 'Step 3 — Upload it',
     submit: 'Upload and check it',
     checking: 'Checking your file…',
     /** Drawn *and* written: a bar on its own tells nobody how much longer to wait. */
@@ -433,6 +536,14 @@ export const copy = {
 
   result: {
     viewProducts: 'View products',
+    /*
+     * §16's handoff. The product sheet no longer asks how much you have, so the moment it
+     * finishes is the moment to ask — and the stock sheet arrives with these products already
+     * listed, so the next step is typing numbers rather than building another sheet.
+     */
+    nextStockTitle: 'Next: add how much you have',
+    nextStockBody: 'Your stock sheet comes with these products already listed — just type the quantities.',
+    nextStockAction: 'Record your stock',
     viewStock: 'View products',
     downloadReport: 'Download report',
     reportHint: 'A spreadsheet of every row and what happened to it.',
@@ -513,6 +624,13 @@ const BANNED = [
   'low stock threshold',
   'counted in for opening stock',
   'opening stock counted in',
+  /*
+   * `PACK_ENTRY_REDESIGN.md` §3 locks **Size** for `Product.size` and bans the words that make it
+   * sound like a unit. Only "unit size" is listed: "volume", "weight" and "capacity" are banned as
+   * NAMES for that field but are ordinary English elsewhere in this module, and a substring lint
+   * cannot tell the two uses apart. "Unit size" has no other legitimate use here.
+   */
+  'unit size',
 ] as const
 
 function walk(value: unknown, path: string, report: (where: string, text: string) => void): void {
@@ -539,12 +657,21 @@ function walk(value: unknown, path: string, report: (where: string, text: string
   }
 }
 
-export function assertCopyIsClean(): string[] {
+/**
+ * The same check, for a copy module that lives in another feature.
+ *
+ * Exported rather than copied because the banned list above is the point: a second hand-kept
+ * copy of it in `features/expected/copy.ts` would drift the first time a word is added here, and
+ * a lint that only covers half the sentences a user reads is not a lint.
+ */
+export function bannedWordProblems(value: unknown, label: string): string[] {
   const problems: string[] = []
-  walk(copy, 'copy', (where, text) => problems.push(`${where}: ${text}`))
-  walk(MODE_OPTIONS, 'MODE_OPTIONS', (where, text) => problems.push(`${where}: ${text}`))
-  walk(KIND_COPY, 'KIND_COPY', (where, text) => problems.push(`${where}: ${text}`))
+  walk(value, label, (where, text) => problems.push(`${where}: ${text}`))
   return problems
+}
+
+export function assertCopyIsClean(): string[] {
+  return [...bannedWordProblems(copy, 'copy'), ...bannedWordProblems(KIND_COPY, 'KIND_COPY')]
 }
 
 if (import.meta.env.DEV) {
