@@ -10,6 +10,7 @@ import {
   rowFieldOptions,
   rowPackOption,
   rowStockUnitSymbol,
+  rowTitle,
 } from '@/features/imports/reviewColumns'
 import { quantityCalculationSentence } from '@/features/products/unitCopy'
 import type {
@@ -29,13 +30,6 @@ export interface RowIssueCardsProps {
   onConfirmPack: (row: ImportRow, packagingUnit: string, packagingSize: number) => void
   onBulkFix: (row: ImportRow, column: string, value: string, count: number) => void
   onToggleSkip: (row: ImportRow, skipped: boolean) => void
-}
-
-/** What identifies this row to the person who typed it — a name if there is one, else the code. */
-function rowTitle(row: ImportRow): string {
-  const candidate =
-    row.normalized.name ?? row.raw.name ?? row.normalized.product_name ?? row.raw.product_name ?? row.raw.sku
-  return candidate === null || candidate === undefined || candidate === '' ? '' : String(candidate)
 }
 
 /**

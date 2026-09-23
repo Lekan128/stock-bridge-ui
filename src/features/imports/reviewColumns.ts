@@ -361,6 +361,13 @@ export function hasStaleFieldKeys(fields: ImportFieldDescriptor[], rows: ImportR
 }
 
 /** What a cell shows when it holds nothing. An em dash, never an empty box. */
+/** What identifies this row to the person who typed it — a name if there is one, else the code. */
+export function rowTitle(row: ImportRow): string {
+  const candidate =
+    row.normalized.name ?? row.raw.name ?? row.normalized.product_name ?? row.raw.product_name ?? row.raw.sku
+  return candidate === null || candidate === undefined || candidate === '' ? '' : String(candidate)
+}
+
 export const EMPTY_CELL = '—'
 
 export function displayValue(value: unknown): string {
