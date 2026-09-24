@@ -6,8 +6,21 @@ import type { ResolvedIncoming } from '@/features/orders/incomingStock'
 import { LowStockBadge } from '@/features/products/components/LowStockBadge'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import type { Product } from '@/features/products/types'
-import { formatNumber, formatQuantity, formatQuantityEcho, unitNoun } from '@/features/products/unitCopy'
-import { fromBaseQuantity, productsOwnUnits, stockUnitLabel, unitOptionsForProduct } from '@/features/products/unitSet'
+import {
+  formatNumber,
+  formatQuantity,
+  formatQuantityEcho,
+  packRemainderPhrase,
+  unitNoun,
+} from '@/features/products/unitCopy'
+import {
+  defaultUnitOption,
+  fromBaseQuantity,
+  packRemainder,
+  productsOwnUnits,
+  stockUnitLabel,
+  unitOptionsForProduct,
+} from '@/features/products/unitSet'
 
 export interface StockBreakdownPanelProps {
   product: Product
@@ -60,8 +73,35 @@ export function StockBreakdownPanel({ product, incoming, actions }: StockBreakdo
    * divide evenly is left as the stock unit alone rather than rounded into a number that would
    * then disagree with the shelf.
    */
+  /**
+   * The headline reading, in the pack this product is actually bought and sold in —
+   * "2 bags + 20 kg" for 180 kg against an 80 kg bag.
+   *
+   * <h2>Why this exists beside the whole-pack list below</h2>
+   * That list prints a pack equivalent only when the balance divides evenly, on the reasoning
+   * that "19.6 bags" would disagree with the shelf. Right about rounding, but it means the most
+   * common balance — a few full bags and a part one — falls back to the stock unit alone, which
+   * is the reading the panel exists to improve on. A mixed radix rounds nothing, so it says
+   * exactly what is there and cannot disagree with anything.
+   *
+   * <h2>Only the DEFAULT pack</h2>
+   * Once a product has both an 80 kg and a 100 kg bag, one line per pack would read as a
+   * contradiction — "2 bags + 20 kg" beside "1 bag + 80 kg", both true, both saying "bags". One
+   * headline reading against the pack the product is configured with, and the whole-pack
+   * equivalents below keep their per-pack labels, which already carry the size.
+   */
+  const defaultPack = defaultUnitOption(productsOwnUnits(productUnits))
+  const onHandInPacks = packRemainderPhrase(
+    packRemainder(product.quantityOnHand, defaultPack),
+    defaultPack,
+    unitLabel,
+  )
+
   const packEquivalents = productsOwnUnits(productUnits)
     .filter((option) => option.isPack && option.factorToStockUnit > 0)
+    // The default pack is stated above in its mixed form; repeating it here as "= 2 bags" would
+    // print the same fact twice, and the two would disagree whenever there is a remainder.
+    .filter((option) => onHandInPacks == null || option.code !== defaultPack?.code)
     .map((option) => ({ code: option.code, inPacks: fromBaseQuantity(product.quantityOnHand, option), option }))
     .filter((line) => Number.isInteger(line.inPacks) && line.inPacks > 0)
     // `formatQuantityEcho` rather than a hand-built `= ${...}`: the same two characters now open
@@ -93,12 +133,18 @@ export function StockBreakdownPanel({ product, incoming, actions }: StockBreakdo
                 rewrite what is on the shelf — but nobody counts 1,600 kg of rice, they count 20
                 bags, and making them divide in their head is how a stock screen stops being read.
                 Odoo and NetSuite both hold stock in the base unit and let packagings ride on top;
-                this is that, shown rather than left to arithmetic. */}
-            {packEquivalents.length > 0 && (
+                this is that, shown rather than left to arithmetic.
+
+                The default pack leads, in mixed form, because it is the one reading that is
+                always available — the whole-pack equivalents beside it appear only when the
+                balance happens to divide evenly. The stock-unit figure stays the headline above
+                both: it is the auditable number, and these are the way it is spoken. */}
+            {(onHandInPacks || packEquivalents.length > 0) && (
               <p className="mt-1 text-sm text-neutral-600">
+                {onHandInPacks && <span className="font-medium text-neutral-700">= {onHandInPacks}</span>}
                 {packEquivalents.map((line, index) => (
                   <span key={line.code}>
-                    {index > 0 && <span className="text-neutral-300"> · </span>}
+                    {(onHandInPacks || index > 0) && <span className="text-neutral-300"> · </span>}
                     {line.text}
                   </span>
                 ))}

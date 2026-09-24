@@ -2,6 +2,9 @@ import type { AxiosProgressEvent } from 'axios'
 import { api } from '@/api/client'
 import type {
   CommitPreview,
+  DeliveryInput,
+  DeliveryLine,
+  DeliveryLinesParams,
   ImportCellValue,
   ImportKind,
   ImportLinkedPack,
@@ -11,7 +14,9 @@ import type {
   ImportRowFilterStatus,
   ImportSession,
   ImportSessionSummary,
+  PasteInput,
   Page,
+  DeliveryDetailsInput,
   StockInFilter,
   UndoBlockedResponse,
   ValueMappingRequest,
@@ -33,6 +38,7 @@ interface ImportsBackend {
     kind: ImportKind,
     mode: ImportMode,
     onProgress?: (pct: number) => void,
+    delivery?: DeliveryDetailsInput,
   ): Promise<ImportSession>
   get(id: string): Promise<ImportSession>
   rows(
@@ -53,6 +59,10 @@ interface ImportsBackend {
   linkedPacks(id: string): Promise<ImportLinkedPack[]>
   discard(id: string, removePackIds?: string[]): Promise<void>
   list(params: { kind?: ImportKind; page?: number; size?: number }): Promise<Page<ImportSessionSummary>>
+  deliveryLines(params: DeliveryLinesParams): Promise<DeliveryLine[]>
+  createDelivery(body: DeliveryInput): Promise<ImportSession>
+  createFromPaste(body: PasteInput): Promise<ImportSession>
+  deliveryLinesByBarcode(barcode: string): Promise<DeliveryLine[]>
 }
 
 // ------------------------------------------------------------------ commit
@@ -134,11 +144,14 @@ function asUndoBlocked(body: unknown): UndoBlockedResponse | null {
 // ------------------------------------------------------------- real client
 
 const realBackend: ImportsBackend = {
-  create(file, kind, mode, onProgress) {
+  create(file, kind, mode, onProgress, delivery) {
     const form = new FormData()
     form.append('file', file)
     form.append('kind', kind)
     form.append('mode', mode)
+    if (delivery?.deliveryDate) form.append('deliveryDate', delivery.deliveryDate)
+    if (delivery?.invoiceNo) form.append('invoiceNo', delivery.invoiceNo)
+    if (delivery?.vendorId) form.append('vendorId', delivery.vendorId)
     onProgress?.(0)
     // The Content-Type header is deliberately not set: the browser has to write it itself so it
     // carries the multipart boundary. Setting it by hand is how multipart uploads silently 400.
@@ -244,6 +257,26 @@ const realBackend: ImportsBackend = {
       })
       .then((r) => r.data)
   },
+
+  deliveryLines(params) {
+    return api
+      .get<DeliveryLine[]>(`${BASE}/delivery-lines`, { params: stockInTemplateQuery(params) })
+      .then((r) => r.data)
+  },
+
+  createDelivery(body) {
+    return api.post<ImportSession>(`${BASE}/delivery`, body).then((r) => r.data)
+  },
+
+  createFromPaste(body) {
+    return api.post<ImportSession>(`${BASE}/paste`, body).then((r) => r.data)
+  },
+
+  deliveryLinesByBarcode(barcode) {
+    return api
+      .get<DeliveryLine[]>(`${BASE}/delivery-lines/by-barcode/${encodeURIComponent(barcode)}`)
+      .then((r) => r.data)
+  },
 }
 
 const backend: ImportsBackend = realBackend
@@ -266,14 +299,23 @@ function absoluteUrl(path: string): string {
   return `${api.defaults.baseURL ?? ''}${path}`
 }
 
-function stockInTemplateQuery(params: {
+/** Which products a stock sheet lists. `vendorId` / `categoryId` only mean something with their filter. */
+interface StockInTemplateParams {
   productIds?: string[]
   filter?: StockInFilter
-}): Record<string, string> {
+  vendorId?: string
+  categoryId?: string
+}
+
+function stockInTemplateQuery(params: StockInTemplateParams): Record<string, string> {
   const query: Record<string, string> = {}
   // `productIds` wins over `filter` when present (contract §3), so it is never sent alongside.
   if (params.productIds?.length) query.productIds = params.productIds.join(',')
-  else if (params.filter) query.filter = params.filter
+  else if (params.filter) {
+    query.filter = params.filter
+    if (params.filter === 'BY_VENDOR' && params.vendorId) query.vendorId = params.vendorId
+    if (params.filter === 'BY_CATEGORY' && params.categoryId) query.categoryId = params.categoryId
+  }
   return query
 }
 
@@ -299,8 +341,9 @@ export const importsApi = {
     kind: ImportKind,
     mode: ImportMode,
     onProgress?: (pct: number) => void,
+    delivery?: DeliveryDetailsInput,
   ): Promise<ImportSession> {
-    return backend.create(file, kind, mode, onProgress)
+    return backend.create(file, kind, mode, onProgress, delivery)
   },
 
   /** GET /api/imports/{id} */
@@ -373,6 +416,39 @@ export const importsApi = {
   },
 
   /**
+   * GET /api/imports/delivery-lines?filter=&vendorId=&categoryId=&productIds= — the stock sheet's
+   * rows as data, for the "Record a delivery" screen.
+   */
+  deliveryLines(params: DeliveryLinesParams): Promise<DeliveryLine[]> {
+    return backend.deliveryLines(params)
+  },
+
+  /**
+   * POST /api/imports/delivery — a delivery typed into the app becomes an ordinary stock-in
+   * import, so `preview`, `commit` and `undo` work on it unchanged.
+   */
+  createDelivery(body: DeliveryInput): Promise<ImportSession> {
+    return backend.createDelivery(body)
+  },
+
+  /**
+   * POST /api/imports/paste — rows off WhatsApp, or out of a spreadsheet on the same laptop.
+   * Builds the same session an upload builds, so every screen after it is the one a file gets.
+   */
+  createFromPaste(body: PasteInput): Promise<ImportSession> {
+    return backend.createFromPaste(body)
+  },
+
+  /**
+   * GET /api/imports/delivery-lines/by-barcode/{code} — the scanned product's lines, in the shape
+   * the picker already uses. 404 when no product carries that barcode, which is what lets the
+   * screen say so without a second request.
+   */
+  deliveryLinesByBarcode(barcode: string): Promise<DeliveryLine[]> {
+    return backend.deliveryLinesByBarcode(barcode)
+  },
+
+  /**
    * GET /api/imports/{id}/report — the absolute URL, for reference only.
    *
    * NOT usable as an `<a href>`: the endpoint is authenticated and the token is in memory. Use
@@ -388,7 +464,7 @@ export const importsApi = {
   },
 
   /** GET /api/imports/templates/stock-in?productIds=&filter= — see the note on `reportUrl`. */
-  stockInTemplateUrl(params: { productIds?: string[]; filter?: StockInFilter }): string {
+  stockInTemplateUrl(params: StockInTemplateParams): string {
     const query = new URLSearchParams(stockInTemplateQuery(params)).toString()
     return absoluteUrl(`${BASE}/templates/stock-in${query ? `?${query}` : ''}`)
   },
@@ -404,7 +480,7 @@ export const importsApi = {
   },
 
   /** GET /api/imports/templates/stock-in, fetched with the bearer token and saved. */
-  downloadStockInTemplate(params: { productIds?: string[]; filter?: StockInFilter }): Promise<void> {
+  downloadStockInTemplate(params: StockInTemplateParams): Promise<void> {
     return download(`${BASE}/templates/stock-in`, 'stock-sheet.xlsx', stockInTemplateQuery(params))
   },
 

@@ -3,7 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover: the delivery screen's sticky bar pads itself with
+         env(safe-area-inset-bottom), which is 0 without it, so the button would sit
+         under a phone's home indicator. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Procure Paddy</title>
   </head>
   <body>

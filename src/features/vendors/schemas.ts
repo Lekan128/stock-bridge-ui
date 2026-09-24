@@ -48,6 +48,13 @@ export const vendorFormSchema = z.object({
       'Select a state from the list',
     ),
   notes: z.string().trim().max(1000, 'Must be 1000 characters or fewer'),
+  // All four optional, and length-only — deliberately no ten-digit NUBAN rule. A directory gets
+  // filled in progressively from whatever the supplier sent over, so a half-known account number
+  // has to be savable; rejecting it would just mean the rest of the entry never gets saved either.
+  bankName: z.string().trim().max(255, 'Must be 255 characters or fewer'),
+  bankAccountNumber: z.string().trim().max(50, 'Must be 50 characters or fewer'),
+  bankAccountName: z.string().trim().max(255, 'Must be 255 characters or fewer'),
+  cacNumber: z.string().trim().max(50, 'Must be 50 characters or fewer'),
 })
 
 export type VendorFormValues = z.infer<typeof vendorFormSchema>
@@ -62,6 +69,10 @@ export function vendorFormDefaults(vendor?: CompanyVendor): VendorFormValues {
     city: vendor?.city ?? '',
     state: vendor?.state ?? '',
     notes: vendor?.notes ?? '',
+    bankName: vendor?.bankName ?? '',
+    bankAccountNumber: vendor?.bankAccountNumber ?? '',
+    bankAccountName: vendor?.bankAccountName ?? '',
+    cacNumber: vendor?.cacNumber ?? '',
   }
 }
 
@@ -76,5 +87,9 @@ export function toVendorPayload(values: VendorFormValues): CompanyVendorPayload 
     city: values.city || undefined,
     state: values.state || undefined,
     notes: values.notes || undefined,
+    bankName: values.bankName || undefined,
+    bankAccountNumber: values.bankAccountNumber || undefined,
+    bankAccountName: values.bankAccountName || undefined,
+    cacNumber: values.cacNumber || undefined,
   }
 }

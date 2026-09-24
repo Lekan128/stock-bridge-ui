@@ -62,6 +62,12 @@ export function ProductDetailPage() {
   const [activeAction, setActiveAction] = useState<StockAction>(null)
   const [confirmDeactivate, setConfirmDeactivate] = useState(false)
   const [deactivating, setDeactivating] = useState(false)
+  /**
+   * No confirmation dialog on the way back in, unlike deactivation. Putting a product back into
+   * circulation is not destructive and is itself trivially undoable by the button that replaces
+   * this one, so a modal would only be a speed bump in front of a reversible act.
+   */
+  const [activating, setActivating] = useState(false)
 
   // A duplicate-nudge match ("pick a match" on product creation) links here with
   // ?action=stock-in to jump straight into Stock In instead of leaving the user to find the
@@ -121,6 +127,20 @@ export function ProductDetailPage() {
       showToast(isAppError(err) ? err.message : 'Could not deactivate the product.', 'error')
     } finally {
       setDeactivating(false)
+    }
+  }
+
+  async function handleActivate() {
+    if (!id) return
+    setActivating(true)
+    try {
+      await productsApi.activate(id)
+      setProduct((prev) => (prev ? { ...prev, active: true } : prev))
+      showToast('Product activated.', 'success')
+    } catch (err) {
+      showToast(isAppError(err) ? err.message : 'Could not activate the product.', 'error')
+    } finally {
+      setActivating(false)
     }
   }
 
@@ -186,9 +206,13 @@ export function ProductDetailPage() {
               <Pencil className="h-4 w-4" />
               Edit
             </Link>
-            {product.active && (
+            {product.active ? (
               <Button variant="danger" onClick={() => setConfirmDeactivate(true)}>
                 Deactivate
+              </Button>
+            ) : (
+              <Button onClick={() => void handleActivate()} loading={activating}>
+                Activate
               </Button>
             )}
           </div>

@@ -36,6 +36,10 @@ const FIELDS = new Set<keyof VendorFormValues>([
   'city',
   'state',
   'notes',
+  'bankName',
+  'bankAccountNumber',
+  'bankAccountName',
+  'cacNumber',
 ])
 
 /**
@@ -181,6 +185,58 @@ export function VendorFormModal({ vendor, onClose, onSaved }: VendorFormModalPro
             )}
           </div>
         </div>
+
+        {/* Payment & registration — visually fenced off from the contact block above because it is
+            a different kind of fact about the supplier, and because a user who has no banking
+            details to hand should be able to see at a glance that the whole group is skippable.
+            Every field here is optional; a supplier with none is an ordinary directory entry. */}
+        <fieldset className="rounded-md border border-neutral-200 p-4">
+          <legend className="px-1.5 text-sm font-medium text-neutral-700">
+            Payment &amp; registration <span className="font-normal text-neutral-400">(optional)</span>
+          </legend>
+
+          <div className="flex flex-col gap-4">
+            <p className="text-xs text-neutral-500">
+              Where you pay this supplier, and their CAC registration number. Only your company can see
+              this.
+            </p>
+
+            <TextField
+              label="Bank name"
+              placeholder="Optional"
+              error={errors.bankName?.message}
+              {...register('bankName')}
+            />
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <TextField
+                label="Account number"
+                // inputMode rather than type="number": a NUBAN is a 10-digit identifier, not a
+                // quantity, and type="number" would offer a spinner, strip a leading zero and let a
+                // scroll wheel silently change it.
+                inputMode="numeric"
+                placeholder="Optional"
+                error={errors.bankAccountNumber?.message}
+                {...register('bankAccountNumber')}
+              />
+              <TextField
+                label="Account name"
+                hint="The name on the account, if it differs from the supplier name."
+                placeholder="Optional"
+                error={errors.bankAccountName?.message}
+                {...register('bankAccountName')}
+              />
+            </div>
+
+            <TextField
+              label="CAC number"
+              hint="Corporate Affairs Commission registration number, e.g. RC 123456."
+              placeholder="Optional"
+              error={errors.cacNumber?.message}
+              {...register('cacNumber')}
+            />
+          </div>
+        </fieldset>
 
         <div>
           <label htmlFor="notes" className="mb-1.5 block text-sm font-medium text-neutral-700">

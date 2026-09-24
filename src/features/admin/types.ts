@@ -520,6 +520,21 @@ export interface SuperAdminVendorDetail {
   state: string | null
   logoUrl: string | null
   commissionRate: number | null
+  /**
+   * Where ProcurePaddy pays this seller out, and the registration number behind the business.
+   *
+   * ⚠️ Not the same as the bank details on a *company vendor* row. A buying company's directory
+   * entry for this same seller carries its own independent set — how that one buyer pays them
+   * off-platform. Neither is sourced from the other, and this one is never shown to a buyer.
+   *
+   * All four are null on a vendor approved off the waitlist: the public application form does not
+   * ask for them, so ops fills them in afterwards.
+   */
+  bankName: string | null
+  bankAccountNumber: string | null
+  bankAccountName: string | null
+  /** Corporate Affairs Commission registration number, as written ("RC 123456"). */
+  cacNumber: string | null
   /** The vendor's single user. Null only in a state that should not happen. */
   userId: string | null
   username: string | null
@@ -578,9 +593,41 @@ export interface CreateVendorPayload {
   city?: string
   state?: string
   commissionRate?: number
+  /** All optional — see `SuperAdminVendorDetail` for what these are and are not. */
+  bankName?: string
+  bankAccountNumber?: string
+  bankAccountName?: string
+  cacNumber?: string
   username: string
   password: string
   confirmPassword: string
+}
+
+/**
+ * Editing a vendor's business metadata — PUT /api/superadmin/vendors/{id}.
+ *
+ * ⚠️ REPLACE semantics, not patch: every field is written as sent, so a value left blank is
+ * stored as NULL rather than quietly kept. The form must therefore always render every field
+ * pre-filled with what is currently on file, or saving it will erase whatever it did not show.
+ *
+ * Deliberately carries no credentials and no `clientIdentifier`. Changing a username or password
+ * is a credential act on a customer's only login; renaming a company ID logs out every user of it.
+ * Both live elsewhere on purpose — see the server's `UpdateVendorRequest`.
+ */
+export interface UpdateVendorPayload {
+  name: string
+  email?: string
+  contactPhone: string
+  addressLine1?: string
+  addressLine2?: string
+  city?: string
+  state?: string
+  logoUrl?: string
+  commissionRate?: number
+  bankName?: string
+  bankAccountNumber?: string
+  bankAccountName?: string
+  cacNumber?: string
 }
 
 

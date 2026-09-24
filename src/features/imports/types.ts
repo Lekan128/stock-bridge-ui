@@ -285,6 +285,100 @@ export interface ImportSession {
   createdAt: string
   expiresAt: string
   committedAt: string | null
+  /**
+   * A stock-in's date, invoice number and supplier, asked once on the upload screen
+   * (`BULK_IMPORT_CX_PLAN.md` task 1.5). Absent when none were given — `== null`, never `=== null`.
+   */
+  delivery?: ImportDeliveryDetails | null
+}
+
+/** What the upload screen asked once for a whole delivery. Each value fills the rows that leave it blank. */
+export interface ImportDeliveryDetails {
+  /** ISO date, `YYYY-MM-DD`. Absent means today. */
+  date?: string | null
+  invoiceNo?: string | null
+  supplierName?: string | null
+}
+
+/** The upload screen's delivery fields as sent. Blank fields are left out. */
+export interface DeliveryDetailsInput {
+  deliveryDate?: string
+  invoiceNo?: string
+  vendorId?: string
+}
+
+// ------------------------------------------- "Record a delivery" (task 2.1/2.2)
+
+/**
+ * One line of the "Record a delivery" screen: one product, bought one way — the same row the
+ * stock sheet has. A product has one line per pack plus one for its own unit.
+ *
+ * Nullable fields are left off the wire when empty, so compare with `== null`.
+ */
+export interface DeliveryLine {
+  productId: string
+  productName: string
+  sku: string
+  /** Opaque — sent back unchanged as the line's `unit`. */
+  unit: string
+  /** The words for it: "Bag · 50 kg", "Loose · kg", "Piece". */
+  comesIn: string
+  pack: boolean
+  /** What was last paid for ONE of `unit` — per bag on a bag line. Absent when unknown. */
+  lastPrice?: number | null
+  /** The product's usual supplier. */
+  supplierName?: string | null
+}
+
+/** Which products the delivery list shows. `vendorId` / `categoryId` only mean something with their filter. */
+export interface DeliveryLinesParams {
+  filter?: StockInFilter
+  vendorId?: string
+  categoryId?: string
+  productIds?: string[]
+}
+
+export interface DeliveryLineInput {
+  productId: string
+  unit: string
+  /** Above zero; decimals allowed (2.5 bags). */
+  quantity: number
+  /** Price of ONE `unit`. Left out, the last price paid is used. */
+  price?: number
+}
+
+/**
+ * POST /api/imports/paste — rows pasted rather than uploaded (task 3.2).
+ *
+ * `text` goes up exactly as it was pasted. Tab, comma and semicolon separated all work, with or
+ * without a header row; a paste with no headings lands on the mapping step with its columns named
+ * "Column 1", "Column 2"… and every row intact.
+ */
+export interface PasteInput {
+  text: string
+  kind: ImportKind
+  mode?: ImportMode
+  deliveryDate?: string
+  invoiceNo?: string
+  vendorId?: string
+}
+
+/** POST /api/imports/delivery. Blank fields are left out. */
+export interface DeliveryInput {
+  deliveryDate?: string
+  invoiceNo?: string
+  vendorId?: string
+  /**
+   * The expected delivery this is the arrival of (`BULK_IMPORT_CX_PLAN.md` task 3.1), when the
+   * screen was opened from one.
+   *
+   * It is carried on the import rather than applied here, so the credit happens at commit against
+   * the rows that actually went in — a line corrected in review credits what was corrected, and
+   * undoing the import un-receives exactly what it received. Left out for an ordinary delivery,
+   * which is most of them.
+   */
+  expectedDeliveryId?: string
+  lines: DeliveryLineInput[]
 }
 
 /**
@@ -343,6 +437,12 @@ export interface ImportResult {
   undoBlockedReason: string | null
   reportUrl: string
   targetUrl: string
+  /**
+   * Which import this was — `PACK_ENTRY_REDESIGN.md` §16. Lets the result screen hand a finished
+   * product import straight on to recording stock. Optional so a result cached from before the
+   * field existed still renders; absent means "don't offer the handoff".
+   */
+  kind?: ImportKind
 }
 
 // -------------------------------------------------- §4 UndoBlockedResponse

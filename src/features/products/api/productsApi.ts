@@ -46,6 +46,14 @@ export const productsApi = {
 
   deactivate: (id: string) => api.delete<void>(`/api/products/${id}`).then((r) => r.data),
 
+  /**
+   * Undoes `deactivate`. A POST to a sub-path rather than a second verb on the same URL — an
+   * undelete has no HTTP method, and the alternative is re-submitting the entire multipart
+   * product form with `active: true` just to flip one boolean. Idempotent server-side, so a
+   * double click is harmless.
+   */
+  activate: (id: string) => api.post<void>(`/api/products/${id}/activate`).then((r) => r.data),
+
   template: () => api.get('/api/products/template', { responseType: 'blob' }).then((r) => r.data as Blob),
 
   export: () => api.get('/api/products/export', { responseType: 'blob' }).then((r) => r.data as Blob),

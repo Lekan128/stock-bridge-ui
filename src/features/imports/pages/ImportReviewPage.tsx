@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { ArrowRight, Clock, Columns3, TriangleAlert } from 'lucide-react'
 import { Button } from '@/components/Button'
@@ -9,7 +9,9 @@ import { Spinner } from '@/components/Spinner'
 import { useToast } from '@/components/useToast'
 import { importsApi } from '@/features/imports/api/importsApi'
 import { CleanFileSummary } from '@/features/imports/components/CleanFileSummary'
+import { CleanRowList } from '@/features/imports/components/CleanRowList'
 import { ColumnMappingPanel } from '@/features/imports/components/ColumnMappingPanel'
+import { DeliverySummary } from '@/features/imports/components/DeliverySummary'
 import { DiscardPacksDialog } from '@/features/imports/components/DiscardPacksDialog'
 import { ImportReviewSkeleton } from '@/features/imports/components/ImportSkeletons'
 import { ImportStepFrame } from '@/features/imports/components/ImportStepFrame'
@@ -22,7 +24,7 @@ import { copy } from '@/features/imports/copy'
 import { useImportRows, type RowFilter } from '@/features/imports/hooks/useImportRows'
 import { useImportSession } from '@/features/imports/hooks/useImportSession'
 import { useRowMutations } from '@/features/imports/hooks/useRowMutations'
-import { hasStaleFieldKeys, visibleFields } from '@/features/imports/reviewColumns'
+import { HIDDEN_FIELD_KEYS, hasStaleFieldKeys, visibleFields } from '@/features/imports/reviewColumns'
 import type { ImportLinkedPack } from '@/features/imports/types'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { Pagination } from '@/components/Pagination'
@@ -55,6 +57,8 @@ export function ImportReviewPage() {
   const [filterChosen, setFilterChosen] = useState(false)
   const [page, setPage] = useState(0)
   const [showAllColumns, setShowAllColumns] = useState(false)
+  const [showCleanRows, setShowCleanRows] = useState(false)
+  const cleanRowsId = useId()
   const [mappingSaving, setMappingSaving] = useState(false)
   const [mappingError, setMappingError] = useState<string | null>(null)
   const [discarding, setDiscarding] = useState(false)
@@ -212,12 +216,119 @@ export function ImportReviewPage() {
   const isClean =
     !session.needsMapping && session.errorCount === 0 && session.warningCount === 0 && unresolvedCount === 0
   const canContinue = session.errorCount === 0 && !session.needsMapping
-  const fields = showAllColumns ? session.fields : visibleFields(session.fields, rows)
+  // The stock sheet's Ref is how the server recognises a row; it means nothing on screen.
+  const displayableFields = session.fields.filter((field) => !HIDDEN_FIELD_KEYS.includes(field.key))
+  const fields = showAllColumns ? displayableFields : visibleFields(displayableFields, rows)
   // An upload that was already in review when `UNIT_UX_CONTRACT.md` §5.1/§5.2's column renames
   // deployed holds the old keys in its stored rows, so every cell below comes back empty. It
   // expires within two days and heals itself; what it must not do is heal itself silently, with
   // a live Continue button under a grid of em-dashes. See `hasStaleFieldKeys`.
   const stale = hasStaleFieldKeys(session.fields, rows)
+
+  // One rendering of the rows for both views: the issue list on a file with problems, and the
+  // opt-in "See all N rows" on a clean one. Sharing it means a reader double-checking a clean file
+  // can fix a typo in place — and if that edit turns up a problem, the same grid simply stays put
+  // under the counters instead of vanishing.
+  const rowsView = (
+    <>
+      {rowsError && <ErrorState variant="inline" message={rowsError} onRetry={refetchRows} />}
+
+      {rowsLoading && <ImportReviewSkeleton />}
+
+      {!rowsLoading && !rowsError && rows.length === 0 && (
+        <EmptyState
+          tone="positive"
+          title={filter === 'ISSUES' ? copy.review.noIssues : copy.review.noRows}
+          description={filter === 'ISSUES' ? copy.review.noIssuesBody : undefined}
+        />
+      )}
+
+      {!rowsLoading && !rowsError && rows.length > 0 && (
+        <>
+          {isMobile && isClean ? (
+            <CleanRowList fields={fields} rows={rows} />
+          ) : isMobile ? (
+            <RowIssueCards
+              fields={session.fields}
+              rows={rows}
+              isRowBusy={mutations.isRowBusy}
+              isValueBusy={mutations.isValueBusy}
+              onEdit={(row, column, value) => {
+                void mutations.editCell(row, column, value).then(refresh)
+              }}
+              onConfirmPack={(row, packagingUnit, packagingSize) => {
+                void mutations.confirmPack(row, packagingUnit, packagingSize).then(refresh)
+              }}
+              onBulkFix={(row, column, value, count) => {
+                void mutations
+                  .resolveValue(
+                    {
+                      column,
+                      from: String(row.raw[column] ?? ''),
+                      to: { kind: 'LITERAL', value },
+                    },
+                    count,
+                  )
+                  .then((ok) => ok && refetchRows())
+              }}
+              onToggleSkip={(row, skipped) => {
+                void mutations.toggleSkip(row, skipped).then(refresh)
+              }}
+            />
+          ) : (
+            <>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs text-neutral-500">
+                  {showAllColumns
+                    ? copy.review.columnsNote(session.fields.length, session.fields.length)
+                    : copy.review.columnsNote(fields.length, session.fields.length)}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowAllColumns((current) => !current)}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-neutral-200 bg-white px-2.5 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                >
+                  <Columns3 className="h-3.5 w-3.5" aria-hidden="true" />
+                  {showAllColumns ? copy.review.showFewerColumns : copy.review.showAllColumns}
+                </button>
+              </div>
+
+              <ReviewGrid
+                fields={fields}
+                allFields={session.fields}
+                rows={rows}
+                isRowBusy={mutations.isRowBusy}
+                isValueBusy={mutations.isValueBusy}
+                onEdit={(row, column, value) => {
+                  void mutations.editCell(row, column, value).then(refresh)
+                }}
+                onConfirmPack={(row, packagingUnit, packagingSize) => {
+                  void mutations.confirmPack(row, packagingUnit, packagingSize).then(refresh)
+                }}
+                onBulkFix={(row, column, value, count) => {
+                  void mutations
+                    .resolveValue(
+                      {
+                        column,
+                        from: String(row.raw[column] ?? ''),
+                        to: { kind: 'LITERAL', value },
+                      },
+                      count,
+                    )
+                    .then((ok) => ok && refetchRows())
+                }}
+                onToggleSkip={(row, skipped) => {
+                  void mutations.toggleSkip(row, skipped).then(refresh)
+                }}
+              />
+            </>
+          )}
+
+          <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+        </>
+      )}
+    </>
+  )
 
   return (
     <ImportStepFrame step={1} title={copy.review.title(session.originalFilename)}>
@@ -231,10 +342,25 @@ export function ImportReviewPage() {
           />
         )}
 
+        <DeliverySummary delivery={session.delivery} />
+
         {!session.needsMapping && (
           <>
             {isClean ? (
-              <CleanFileSummary session={session} />
+              <>
+                <CleanFileSummary
+                  session={session}
+                  expanded={showCleanRows}
+                  onToggle={() => setShowCleanRows((current) => !current)}
+                  controlsId={cleanRowsId}
+                />
+                {showCleanRows && (
+                  <section id={cleanRowsId} aria-label={copy.review.seeRows(session.validCount)} className="flex flex-col gap-3">
+                    {!isMobile && <p className="text-sm text-neutral-600">{copy.review.cleanRowsHint}</p>}
+                    {rowsView}
+                  </section>
+                )}
+              </>
             ) : (
               <>
                 <ReviewCounters
@@ -274,100 +400,7 @@ export function ImportReviewPage() {
                   </div>
                 )}
 
-                {rowsError && <ErrorState variant="inline" message={rowsError} onRetry={refetchRows} />}
-
-                {rowsLoading && <ImportReviewSkeleton />}
-
-                {!rowsLoading && !rowsError && rows.length === 0 && (
-                  <EmptyState
-                    tone="positive"
-                    title={filter === 'ISSUES' ? copy.review.noIssues : copy.review.noRows}
-                    description={filter === 'ISSUES' ? copy.review.noIssuesBody : undefined}
-                  />
-                )}
-
-                {!rowsLoading && !rowsError && rows.length > 0 && (
-                  <>
-                    {isMobile ? (
-                      <RowIssueCards
-                        fields={session.fields}
-                        rows={rows}
-                        isRowBusy={mutations.isRowBusy}
-                        isValueBusy={mutations.isValueBusy}
-                        onEdit={(row, column, value) => {
-                          void mutations.editCell(row, column, value).then(refresh)
-                        }}
-                        onConfirmPack={(row, packagingUnit, packagingSize) => {
-                          void mutations.confirmPack(row, packagingUnit, packagingSize).then(refresh)
-                        }}
-                        onBulkFix={(row, column, value, count) => {
-                          void mutations
-                            .resolveValue(
-                              {
-                                column,
-                                from: String(row.raw[column] ?? ''),
-                                to: { kind: 'LITERAL', value },
-                              },
-                              count,
-                            )
-                            .then((ok) => ok && refetchRows())
-                        }}
-                        onToggleSkip={(row, skipped) => {
-                          void mutations.toggleSkip(row, skipped).then(refresh)
-                        }}
-                      />
-                    ) : (
-                      <>
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="text-xs text-neutral-500">
-                            {showAllColumns
-                              ? copy.review.columnsNote(session.fields.length, session.fields.length)
-                              : copy.review.columnsNote(fields.length, session.fields.length)}
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => setShowAllColumns((current) => !current)}
-                            className="inline-flex items-center gap-1.5 rounded-md border border-neutral-200 bg-white px-2.5 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-                          >
-                            <Columns3 className="h-3.5 w-3.5" aria-hidden="true" />
-                            {showAllColumns ? copy.review.showFewerColumns : copy.review.showAllColumns}
-                          </button>
-                        </div>
-
-                        <ReviewGrid
-                          fields={fields}
-                          allFields={session.fields}
-                          rows={rows}
-                          isRowBusy={mutations.isRowBusy}
-                          isValueBusy={mutations.isValueBusy}
-                          onEdit={(row, column, value) => {
-                            void mutations.editCell(row, column, value).then(refresh)
-                          }}
-                          onConfirmPack={(row, packagingUnit, packagingSize) => {
-                            void mutations.confirmPack(row, packagingUnit, packagingSize).then(refresh)
-                          }}
-                          onBulkFix={(row, column, value, count) => {
-                            void mutations
-                              .resolveValue(
-                                {
-                                  column,
-                                  from: String(row.raw[column] ?? ''),
-                                  to: { kind: 'LITERAL', value },
-                                },
-                                count,
-                              )
-                              .then((ok) => ok && refetchRows())
-                          }}
-                          onToggleSkip={(row, skipped) => {
-                            void mutations.toggleSkip(row, skipped).then(refresh)
-                          }}
-                        />
-                      </>
-                    )}
-
-                    <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
-                  </>
-                )}
+                {rowsView}
               </>
             )}
 

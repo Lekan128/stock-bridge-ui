@@ -36,6 +36,21 @@ export function DashboardAnalytics() {
   const granularity = granularityForRange(range.from, range.to)
   const rangeLabel = formatDateRange(range.from, range.to)
   const canViewProducts = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.VIEW_PRODUCTS)
+  /**
+   * Gates the drill-through on the four movement cards. MANAGE_INVENTORY because that is what the
+   * report itself requires — linking somebody to a 403 is worse than not linking them.
+   *
+   * The link carries this card's own date range, so the rows a user lands on are the rows behind
+   * the number they just clicked. Both sides bracket `occurredAt` server-side, so the total on
+   * the card and the total on the report agree.
+   */
+  const canViewMovements = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_INVENTORY)
+  const movementsHref = (movementType?: 'IN' | 'OUT') => {
+    if (!canViewMovements) return undefined
+    const query = new URLSearchParams({ from: params.from, to: params.to })
+    if (movementType) query.set('movementType', movementType)
+    return `/app/stock-movements?${query.toString()}`
+  }
 
   const { data: summary, loading: summaryLoading, error: summaryError } = useAnalyticsSummary(params)
   const {
@@ -74,24 +89,28 @@ export function DashboardAnalytics() {
             value={formatCompactCurrency(summary.totalInValue)}
             subtitle={rangeLabel}
             icon={PackagePlus}
+            href={movementsHref('IN')}
           />
           <StatCard
             label="Stock Out Value"
             value={formatCompactCurrency(summary.totalOutValue)}
             subtitle={rangeLabel}
             icon={PackageMinus}
+            href={movementsHref('OUT')}
           />
           <StatCard
             label="Units Moved In"
             value={formatNumber(summary.totalUnitsIn)}
             subtitle={rangeLabel}
             icon={ArrowDownToLine}
+            href={movementsHref('IN')}
           />
           <StatCard
             label="Units Moved Out"
             value={formatNumber(summary.totalUnitsOut)}
             subtitle={rangeLabel}
             icon={ArrowUpFromLine}
+            href={movementsHref('OUT')}
           />
           <StatCard
             label="Active Products"

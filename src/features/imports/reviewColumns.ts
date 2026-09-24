@@ -7,6 +7,9 @@ import type {
 import type { UnitOption } from '@/features/products/types'
 import { packPhrase, stockUnitSymbol } from '@/features/products/unitCopy'
 
+/** Machine keys a sheet carries for the server's sake - never a column on screen, not even behind "Show every column". */
+export const HIDDEN_FIELD_KEYS: readonly string[] = ['ref']
+
 /** Columns that identify a row to a human, so they stay on screen whatever else is hidden. */
 const ANCHOR_KEYS = ['name', 'sku', 'product_name']
 
@@ -358,6 +361,13 @@ export function hasStaleFieldKeys(fields: ImportFieldDescriptor[], rows: ImportR
 }
 
 /** What a cell shows when it holds nothing. An em dash, never an empty box. */
+/** What identifies this row to the person who typed it — a name if there is one, else the code. */
+export function rowTitle(row: ImportRow): string {
+  const candidate =
+    row.normalized.name ?? row.raw.name ?? row.normalized.product_name ?? row.raw.product_name ?? row.raw.sku
+  return candidate === null || candidate === undefined || candidate === '' ? '' : String(candidate)
+}
+
 export const EMPTY_CELL = '—'
 
 export function displayValue(value: unknown): string {

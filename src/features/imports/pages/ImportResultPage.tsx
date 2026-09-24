@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { PERMISSIONS } from '@/auth/permissions'
+import { useAuth } from '@/auth/useAuth'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { CircleAlert, CircleCheck, Download, Undo2 } from 'lucide-react'
 import { Button, buttonClassName } from '@/components/Button'
@@ -26,6 +28,8 @@ import { isAppError } from '@/types/api'
  */
 export function ImportResultPage() {
   const { sessionId } = useParams<{ sessionId: string }>()
+  const { user } = useAuth()
+  const canRecordStock = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_INVENTORY)
   const location = useLocation()
   const { showToast } = useToast()
 
@@ -156,6 +160,25 @@ export function ImportResultPage() {
         </div>
 
         {blocked && <UndoBlockedPanel blocked={blocked} />}
+
+        {/* §16: products first, stock second. Only after a product import that actually created
+            something — `createdCount`, not `productsCreated`, which counts only a stock-in row's
+            inline product creation and is always 0 here — and only for someone who may record stock — a storekeeper-less owner and a
+            products-only role should not be offered a door the server would shut. */}
+        {!failed && result.kind === 'PRODUCT_CATALOG' && result.createdCount > 0 && canRecordStock && (
+          <div className="flex flex-col gap-3 rounded-lg border border-primary-200 bg-primary-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-primary-900">{copy.result.nextStockTitle}</p>
+              <p className="mt-1 text-sm text-primary-800">{copy.result.nextStockBody}</p>
+            </div>
+            <Link
+              to="/app/products/import/new?kind=STOCK_IN"
+              className={`${buttonClassName('primary')} shrink-0`}
+            >
+              {copy.result.nextStockAction}
+            </Link>
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-2">
           {!failed && (
