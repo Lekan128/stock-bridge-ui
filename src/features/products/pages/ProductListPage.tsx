@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Truck, X } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
 import { Button } from '@/components/Button'
@@ -12,7 +12,7 @@ import { NewProductSearchModal } from '@/features/products/components/NewProduct
 import { ProductCard } from '@/features/products/components/ProductCard'
 import { ProductListSkeleton } from '@/features/products/components/ProductListSkeleton'
 import { ProductTable, type ProductSort, type ProductSortField } from '@/features/products/components/ProductTable'
-import { ProductsToolbar } from '@/features/products/components/ProductsToolbar'
+import { ProductsToolbar, type StockLevelFilter } from '@/features/products/components/ProductsToolbar'
 import { productsApi } from '@/features/products/api/productsApi'
 import { DataIssuesBanner } from '@/features/products/quality/DataIssuesBanner'
 import { ManageCategoriesModal } from '@/features/products/categories/ManageCategoriesModal'
@@ -20,9 +20,13 @@ import type { CompanyCategory } from '@/features/products/categories/types'
 import { useCompanyCategories } from '@/features/products/categories/useCompanyCategories'
 import { useProductIncoming } from '@/features/products/hooks/useProductIncoming'
 import { useProducts } from '@/features/products/hooks/useProducts'
-import type { ProductStatusFilter } from '@/features/products/types'
+import type { ProductStatusFilter, StockStatusFilter } from '@/features/products/types'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { downloadBlob } from '@/utils/downloadBlob'
+
+function isStockStatusFilter(value: string | null): value is StockStatusFilter {
+  return value === 'OK' || value === 'LOW' || value === 'OUT'
+}
 
 const PAGE_SIZE = 20
 
@@ -42,6 +46,15 @@ export function ProductListPage() {
   const [statusFilter, setStatusFilter] = useState<ProductStatusFilter>('all')
   /** A company category id, or '' for all of them. */
   const [categoryFilter, setCategoryFilter] = useState('')
+  // Read once, on first render, from the dashboard's "Stock levels" cards
+  // (`?stockStatus=OK|LOW|OUT`) — the same deep-link shape `useLocation().state` already uses
+  // elsewhere on this page's sibling screens, just via the query string since this one needs to
+  // be a shareable/bookmarkable URL, not only a same-session navigation.
+  const [searchParams] = useSearchParams()
+  const [stockLevelFilter, setStockLevelFilter] = useState<StockLevelFilter>(() => {
+    const fromQuery = searchParams.get('stockStatus')
+    return isStockStatusFilter(fromQuery) ? fromQuery : 'all'
+  })
   const [manageCategoriesOpen, setManageCategoriesOpen] = useState(false)
   const [page, setPage] = useState(0)
   const [sort, setSort] = useState<ProductSort>({ field: 'name', direction: 'asc' })
@@ -57,6 +70,7 @@ export function ProductListPage() {
     search: debouncedSearch || undefined,
     active: statusFilter === 'all' ? undefined : statusFilter === 'active',
     categoryId: categoryFilter || undefined,
+    stockStatus: stockLevelFilter === 'all' ? undefined : stockLevelFilter,
     page,
     size: PAGE_SIZE,
     sort: `${sort.field},${sort.direction}`,
@@ -110,6 +124,11 @@ export function ProductListPage() {
     setPage(0)
   }
 
+  function handleStockLevelFilterChange(value: StockLevelFilter) {
+    setStockLevelFilter(value)
+    setPage(0)
+  }
+
   /** Whether any row on screen shows this category — and so says something stale after a change. */
   function isOnScreen(categoryId: string) {
     return (data?.content ?? []).some((product) => product.categoryId === categoryId)
@@ -146,7 +165,7 @@ export function ProductListPage() {
     }
   }
 
-  const isUnfiltered = !debouncedSearch && statusFilter === 'all' && !categoryFilter
+  const isUnfiltered = !debouncedSearch && statusFilter === 'all' && !categoryFilter && stockLevelFilter === 'all'
   const isTrulyEmpty = !loading && !error && isUnfiltered && (data?.content.length ?? 0) === 0 && page === 0
 
   return (
@@ -167,6 +186,8 @@ export function ProductListPage() {
         onSearchChange={handleSearchChange}
         statusFilter={statusFilter}
         onStatusFilterChange={handleStatusFilterChange}
+        stockLevelFilter={stockLevelFilter}
+        onStockLevelFilterChange={handleStockLevelFilterChange}
         categories={categoryList.categories}
         categoryFilter={categoryFilter}
         onCategoryFilterChange={handleCategoryFilterChange}

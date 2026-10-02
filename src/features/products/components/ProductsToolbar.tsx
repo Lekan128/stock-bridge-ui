@@ -2,13 +2,21 @@ import { Plus, Search, Truck } from 'lucide-react'
 import { Button, buttonClassName } from '@/components/Button'
 import type { CompanyCategory } from '@/features/products/categories/types'
 import { BulkActionsMenu } from '@/features/products/components/BulkActionsMenu'
-import type { ProductStatusFilter } from '@/features/products/types'
+import type { ProductStatusFilter, StockStatusFilter } from '@/features/products/types'
+
+/** The toolbar's own widening of `StockStatusFilter` with an "all stock levels" option — the chip
+ *  the two "Stock levels" dashboard links don't carry, and the one this filter resets to. */
+export type StockLevelFilter = 'all' | StockStatusFilter
 
 export interface ProductsToolbarProps {
   search: string
   onSearchChange: (value: string) => void
   statusFilter: ProductStatusFilter
   onStatusFilterChange: (value: ProductStatusFilter) => void
+  /** The dashboard's "Stock levels" cards (`UX_CONSISTENCY_DESIGN_PLAN.md`, Pattern B) deep-link
+   *  here instead of to a separate page, so the one Inventory table is the answer either way. */
+  stockLevelFilter: StockLevelFilter
+  onStockLevelFilterChange: (value: StockLevelFilter) => void
   /** The company's own categories. The filter is hidden while there are none to pick from. */
   categories: CompanyCategory[]
   /** A category id, or '' for all categories. */
@@ -39,11 +47,24 @@ const statusOptions: { value: ProductStatusFilter; label: string }[] = [
   { value: 'inactive', label: 'Inactive' },
 ]
 
+// "What do I have, and what's left" (`UX_CONSISTENCY_DESIGN_PLAN.md` Pattern B) is answered on
+// this one table via a filter chip, not a second page with its own grid. "Low stock" keeps its
+// own bookmarked route (`/app/products/low-stock`) rather than becoming `?stockStatus=LOW` here —
+// see `ProductListPage`'s handler — so an existing link to it keeps working unchanged.
+const stockLevelOptions: { value: StockLevelFilter; label: string }[] = [
+  { value: 'all', label: 'All stock' },
+  { value: 'OK', label: 'Well stocked' },
+  { value: 'LOW', label: 'Low stock' },
+  { value: 'OUT', label: 'Out of stock' },
+]
+
 export function ProductsToolbar({
   search,
   onSearchChange,
   statusFilter,
   onStatusFilterChange,
+  stockLevelFilter,
+  onStockLevelFilterChange,
   categories,
   categoryFilter,
   onCategoryFilterChange,
@@ -118,6 +139,25 @@ export function ProductsToolbar({
             </button>
           ))}
         </div>
+      </div>
+
+      {/* The stock-level chips — the Inventory page's own answer to "what do I have and what's
+          left", not a separate page. `UX_CONSISTENCY_DESIGN_PLAN.md` Pattern B. */}
+      <div className="flex flex-wrap items-center gap-1 rounded-md border border-neutral-200 bg-neutral-50 p-0.5 sm:self-start">
+        {stockLevelOptions.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => onStockLevelFilterChange(option.value)}
+            className={`rounded-sm px-3 py-1.5 text-sm font-medium transition-colors ${
+              stockLevelFilter === option.value
+                ? 'bg-white text-neutral-900 shadow-sm'
+                : 'text-neutral-500 hover:text-neutral-700'
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
       </div>
 
       <div className="flex items-center justify-between gap-2">

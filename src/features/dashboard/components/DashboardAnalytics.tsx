@@ -1,5 +1,13 @@
 import { useState } from 'react'
-import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, PackageCheck, PackageMinus, PackagePlus } from 'lucide-react'
+import {
+  AlertTriangle,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  PackageCheck,
+  PackageMinus,
+  PackagePlus,
+  PackageX,
+} from 'lucide-react'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
 import { ChartCard } from '@/components/analytics/ChartCard'
@@ -118,6 +126,17 @@ export function DashboardAnalytics() {
             subtitle="Currently active in catalog"
             icon={PackageCheck}
           />
+          {/* The census half of stock visibility (`UX_CONSISTENCY_DESIGN_PLAN.md`, Pattern B) —
+              "Low Stock" on its own was the only stock-level figure on this dashboard; a count
+              that is never shown next to anything never tells you whether it's good or bad. */}
+          <StatCard
+            label="Well Stocked"
+            value={formatNumber(summary.wellStockedProductCount)}
+            subtitle="Above their low-stock alert"
+            icon={PackageCheck}
+            variant="success"
+            href={canViewProducts ? '/app/products?stockStatus=OK' : undefined}
+          />
           <StatCard
             label="Low Stock"
             value={formatNumber(summary.lowStockProductCount)}
@@ -125,6 +144,14 @@ export function DashboardAnalytics() {
             icon={AlertTriangle}
             variant="warning"
             href={canViewProducts ? '/app/products/low-stock' : undefined}
+          />
+          <StatCard
+            label="Out of Stock"
+            value={formatNumber(summary.outOfStockProductCount)}
+            subtitle={summary.outOfStockProductCount > 0 ? 'Nothing left to sell' : 'Nothing has run out'}
+            icon={PackageX}
+            variant={summary.outOfStockProductCount > 0 ? 'danger' : 'default'}
+            href={canViewProducts ? '/app/products?stockStatus=OUT' : undefined}
           />
         </div>
       )}

@@ -149,11 +149,20 @@ export interface PageResponse<T> {
 
 export type ProductStatusFilter = 'all' | 'active' | 'inactive'
 
+/**
+ * The Inventory page's stock-level filter chips (`UX_CONSISTENCY_DESIGN_PLAN.md`, Pattern B) —
+ * mirrors the backend's `StockStatus` enum exactly. `OUT` wins over `LOW` server-side wherever a
+ * product has zero on hand and a threshold set, so these three partition the catalog with no
+ * product counted under more than one chip.
+ */
+export type StockStatusFilter = 'OK' | 'LOW' | 'OUT'
+
 export interface ProductListParams {
   search?: string
   active?: boolean
   /** Only products in this company category. */
   categoryId?: string
+  stockStatus?: StockStatusFilter
   page?: number
   size?: number
   sort?: string
