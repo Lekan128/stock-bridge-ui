@@ -1,6 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { vendorsApi } from '@/features/vendors/api/vendorsApi'
 import type { CompanyVendor } from '@/features/vendors/types'
+
+function byName(a: CompanyVendor, b: CompanyVendor): number {
+  return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+}
 
 /**
  * The company's active vendors, flattened for a `<select>` on the product form.
@@ -18,6 +22,10 @@ import type { CompanyVendor } from '@/features/vendors/types'
  * A failure is deliberately swallowed into an empty list rather than surfaced. This is one
  * optional field on somebody else's form: a vendor directory that will not load must not stop a
  * product being saved.
+ *
+ * `upsert` applies a supplier the caller just created (via `SupplierField`'s "+ Add new supplier")
+ * so it is selectable immediately, without waiting on a second fetch of the whole 200-row list —
+ * the same shape `useCompanyCategories` already gives the category picker.
  */
 export function useVendorOptions(enabled: boolean) {
   const [vendors, setVendors] = useState<CompanyVendor[]>([])
@@ -49,5 +57,9 @@ export function useVendorOptions(enabled: boolean) {
     }
   }, [enabled])
 
-  return { vendors, loading }
+  const upsert = useCallback((vendor: CompanyVendor) => {
+    setVendors((current) => [...current.filter((entry) => entry.id !== vendor.id), vendor].sort(byName))
+  }, [])
+
+  return { vendors, loading, upsert }
 }

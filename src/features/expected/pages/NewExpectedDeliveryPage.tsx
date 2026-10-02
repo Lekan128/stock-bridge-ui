@@ -24,11 +24,9 @@ import {
 } from '@/features/imports/delivery'
 import { useDeliveryLines } from '@/features/imports/hooks/useDeliveryLines'
 import type { DeliveryLine } from '@/features/imports/types'
+import { SupplierField } from '@/features/vendors/components/SupplierField'
 import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
 import { isAppError } from '@/types/api'
-
-const SELECT_CLASS =
-  'w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-base text-neutral-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none disabled:bg-neutral-50 sm:text-sm'
 
 const LIST_PATH = '/app/products/expected'
 
@@ -55,7 +53,8 @@ export function NewExpectedDeliveryPage() {
   const { showToast } = useToast()
   const permissions = user?.type === 'tenant' ? user.permissions : []
   const canSeeSuppliers = permissions.includes(PERMISSIONS.VIEW_VENDORS)
-  const { vendors } = useVendorOptions(canSeeSuppliers)
+  const canManageSuppliers = permissions.includes(PERMISSIONS.MANAGE_VENDORS)
+  const { vendors, upsert: addVendor } = useVendorOptions(canSeeSuppliers)
 
   const [vendorId, setVendorId] = useState('')
   /** "+ Something not on this list" — every product, while the supplier stays on the order. */
@@ -141,27 +140,21 @@ export function NewExpectedDeliveryPage() {
         <section className="grid gap-4 rounded-lg border border-neutral-200 bg-white p-4 sm:grid-cols-2">
           {canSeeSuppliers && (
             <div className="sm:col-span-2">
-              <label htmlFor="expected-supplier" className="mb-1.5 block text-sm font-medium text-neutral-700">
-                {expectedCopy.create.supplier}
-              </label>
-              <select
+              {/* `SupplierField` — "+ Add new supplier" opens a modal rather than navigating away,
+                  so a half-built delivery (date, reference, lines already ticked) survives the
+                  round trip. See `UX_CONSISTENCY_DESIGN_PLAN.md`, Pattern A. */}
+              <SupplierField
                 id="expected-supplier"
+                label={expectedCopy.create.supplier}
+                placeholderLabel={expectedCopy.create.supplierAny}
                 value={vendorId}
                 disabled={submitting}
-                aria-describedby="expected-supplier-hint"
-                onChange={(event) => handleSupplierChange(event.target.value)}
-                className={SELECT_CLASS}
-              >
-                <option value="">{expectedCopy.create.supplierAny}</option>
-                {vendors.map((vendor) => (
-                  <option key={vendor.id} value={vendor.id}>
-                    {vendor.name}
-                  </option>
-                ))}
-              </select>
-              <p id="expected-supplier-hint" className="mt-1.5 text-xs text-neutral-500">
-                {expectedCopy.create.supplierHint}
-              </p>
+                onChange={handleSupplierChange}
+                vendors={vendors}
+                canCreate={canManageSuppliers}
+                onCreated={addVendor}
+                hint={expectedCopy.create.supplierHint}
+              />
             </div>
           )}
           {/*

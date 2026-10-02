@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, ArrowLeft, Clock, Lock, Ruler, Tag, Truck, Zap } from 'lucide-react'
 import { useForm } from 'react-hook-form'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
 import { Button } from '@/components/Button'
@@ -56,6 +56,7 @@ import {
   unitOptionsForProduct,
 } from '@/features/products/unitSet'
 import { vendorCatalogueApi } from '@/features/vendor/api/vendorCatalogueApi'
+import { SupplierField } from '@/features/vendors/components/SupplierField'
 import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
 import { isAppError } from '@/types/api'
 
@@ -213,6 +214,9 @@ export function ProductFormPage() {
   // Gated on VIEW_VENDORS rather than fetched unconditionally: the picker is optional, and asking
   // for a list the caller is not allowed to read would be a 403 in everyone's network tab.
   const canViewVendors = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.VIEW_VENDORS)
+  // Gates "+ Add new supplier" within the picker below — separate from VIEW_VENDORS, same split
+  // `VendorListPage` makes for its own add/edit affordances.
+  const canManageVendors = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_VENDORS)
   /**
    * Whether this tenant has automatic SKU generation on (`product_sku_settings.enabled`).
    * Defaults to `false` while `useProductSkuSettings` is still loading — the same
@@ -225,7 +229,7 @@ export function ProductFormPage() {
   // See the SKU field's render below — the escape hatch for a locked, auto-generated SKU.
   const canOverrideSku = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.PRODUCT_SKU_OVERRIDE)
   const [skuUnlocked, setSkuUnlocked] = useState(false)
-  const { vendors: vendorOptions } = useVendorOptions(canViewVendors)
+  const { vendors: vendorOptions, upsert: addVendor } = useVendorOptions(canViewVendors)
   // The route already requires MANAGE_PRODUCTS; checked again here only so "+ New category" never
   // appears for someone the server would refuse, should the route guard ever loosen.
   const tenantPermissions = user?.type === 'tenant' ? user.permissions : []
@@ -1272,30 +1276,20 @@ export function ProductFormPage() {
               </div>
             </div>
 
-            <div>
-              <label htmlFor="initialVendorId" className="mb-1.5 block text-sm font-medium text-neutral-700">
-                {UNIT_COPY.SUPPLIER}
-              </label>
-              <select
-                id="initialVendorId"
-                className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
-                {...register('initialVendorId')}
-              >
-                <option value="">No {UNIT_COPY.SUPPLIER.toLowerCase()} yet</option>
-                {vendorOptions.map((vendor) => (
-                  <option key={vendor.id} value={vendor.id}>
-                    {vendor.name}
-                    {/* The kind is spelled out in the option text because a <select> cannot carry
-                        a badge, and "which of these is an actual ProcurePaddy seller" is the same
-                        question the directory list answers with one. */}
-                    {vendor.kind === 'VERIFIED' ? ' (ProcurePaddy seller)' : ''}
-                  </option>
-                ))}
-              </select>
-              {errors.initialVendorId?.message && (
-                <p className="mt-1.5 text-xs text-danger-600">{errors.initialVendorId.message}</p>
-              )}
-            </div>
+            {/* `SupplierField` (`UX_CONSISTENCY_DESIGN_PLAN.md`, Pattern A) — "+ Add new supplier"
+                opens `VendorFormModal` over this screen rather than navigating to /app/vendors, so
+                everything typed into the rest of this product form survives the round trip. */}
+            <SupplierField
+              id="initialVendorId"
+              label={UNIT_COPY.SUPPLIER}
+              placeholderLabel={`No ${UNIT_COPY.SUPPLIER.toLowerCase()} yet`}
+              value={watch('initialVendorId') ?? ''}
+              onChange={(vendorId) => setValue('initialVendorId', vendorId, { shouldDirty: true, shouldValidate: true })}
+              vendors={vendorOptions}
+              canCreate={canManageVendors}
+              onCreated={addVendor}
+              error={errors.initialVendorId?.message}
+            />
 
             {/* The two halves of the opening delivery, and they are deliberately counted in
                 DIFFERENT units — `UNIT_UX_CONTRACT.md` §9.1 and §9.2 pulling in opposite
@@ -1337,13 +1331,6 @@ export function ProductFormPage() {
                 {...register('initialVendorQuantity')}
               />
             </div>
-
-            <p className="text-xs text-neutral-500">
-              <Link to="/app/vendors" className="font-medium text-primary-600 hover:underline">
-                Manage your {UNIT_COPY.SUPPLIERS.toLowerCase()}
-              </Link>
-              .
-            </p>
           </div>
         )}
 
