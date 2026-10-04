@@ -2,6 +2,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider } from '@/auth/AuthContext'
 import { QueryProvider } from '@/data/QueryProvider'
 import { CatalogProvider } from '@/features/catalog/CatalogProvider'
+import { DraftsProvider } from '@/features/drafts/DraftsProvider'
 import { OutboxProvider } from '@/features/outbox/OutboxProvider'
 import { SuperAdminAuthProvider } from '@/auth/SuperAdminAuthContext'
 import { ToastProvider } from '@/components/ToastContext'
@@ -27,6 +28,8 @@ function App() {
           <CatalogProvider>
           {/* Stock recorded on this phone and not yet sent (A4). Survives the session ending. */}
           <OutboxProvider>
+          {/* Half-filled delivery and new-product forms (A5). Kept when the session ends, like the outbox. */}
+          <DraftsProvider>
           <SuperAdminAuthProvider>
             <LowStockAlertsProvider>
               <CartProvider>
@@ -44,6 +47,7 @@ function App() {
               </CartProvider>
             </LowStockAlertsProvider>
           </SuperAdminAuthProvider>
+          </DraftsProvider>
           </OutboxProvider>
           </CatalogProvider>
           </QueryProvider>

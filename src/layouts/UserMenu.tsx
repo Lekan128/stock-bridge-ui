@@ -5,6 +5,8 @@ import { useAuth } from '@/auth/useAuth'
 import { useClickOutside } from '@/hooks/useClickOutside'
 import { promptInstall, useServiceWorkerState } from '@/pwa/serviceWorker'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { deleteAllDrafts } from '@/features/drafts/draftStore'
+import { useDraftCount } from '@/features/drafts/useDraft'
 import { stopOutbox } from '@/features/outbox/outboxStore'
 import { useOutboxState } from '@/features/outbox/useOutbox'
 
@@ -22,6 +24,7 @@ export function UserMenu() {
   const [open, setOpen] = useState(false)
   const { canInstall } = useServiceWorkerState()
   const outbox = useOutboxState()
+  const draftCount = useDraftCount()
   const [confirmLogout, setConfirmLogout] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useClickOutside(ref, () => setOpen(false))
@@ -34,7 +37,8 @@ export function UserMenu() {
     setOpen(false)
     // Stock recorded on this phone and not yet sent would be lost with the session's data (A4).
     // Never silently: say so, and let the person choose to stay signed in until it has gone.
-    if (outbox.ops.length > 0 && !confirmLogout) {
+    // Unfinished forms (A5) go with the session too, so they are named in the same question.
+    if ((outbox.ops.length > 0 || draftCount > 0) && !confirmLogout) {
       setConfirmLogout(true)
       return
     }
@@ -43,7 +47,7 @@ export function UserMenu() {
 
   async function logoutNow() {
     setConfirmLogout(false)
-    await stopOutbox({ deleteData: true })
+    await Promise.all([stopOutbox({ deleteData: true }), deleteAllDrafts()])
     await logout()
     // Back to the public storefront rather than the login form. `/` works from either layout and
     // is a live page with a prominent "Log in" — a bare login screen would be a dead end for
@@ -110,12 +114,31 @@ export function UserMenu() {
       )}
       <ConfirmDialog
         open={confirmLogout}
-        title="Stock changes not sent yet"
-        message={`${outbox.ops.length} stock change${outbox.ops.length === 1 ? '' : 's'} recorded on this phone ${outbox.ops.length === 1 ? 'has' : 'have'} not been sent. If you log out now, ${outbox.ops.length === 1 ? 'it' : 'they'} will be deleted from this phone and never recorded. Stay signed in until ${outbox.ops.length === 1 ? 'it has' : 'they have'} gone, or log out and discard ${outbox.ops.length === 1 ? 'it' : 'them'}.`}
+        title={outbox.ops.length > 0 ? 'Stock changes not sent yet' : 'Unfinished forms on this phone'}
+        message={logoutWarning(outbox.ops.length, draftCount)}
         confirmLabel="Log out and discard"
         onConfirm={() => void logoutNow()}
         onCancel={() => setConfirmLogout(false)}
       />
     </div>
   )
+}
+
+/** What logging out now would throw away, in the person's terms. */
+function logoutWarning(unsent: number, drafts: number): string {
+  const parts: string[] = []
+  if (unsent > 0) {
+    parts.push(
+      `${unsent} stock change${unsent === 1 ? '' : 's'} recorded on this phone ${unsent === 1 ? 'has' : 'have'} not been sent. If you log out now, ${unsent === 1 ? 'it' : 'they'} will be deleted from this phone and never recorded. Stay signed in until ${unsent === 1 ? 'it has' : 'they have'} gone, or log out and discard ${unsent === 1 ? 'it' : 'them'}.`,
+    )
+  }
+  if (drafts > 0) {
+    const forms = `${drafts} unfinished form${drafts === 1 ? '' : 's'} (a delivery or a new product)`
+    parts.push(
+      unsent > 0
+        ? `${forms} will be deleted too.`
+        : `${forms} saved on this phone will be deleted if you log out now.`,
+    )
+  }
+  return parts.join(' ')
 }

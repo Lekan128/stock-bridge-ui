@@ -29,6 +29,9 @@ import {
 import { useDeliveryLines } from '@/features/imports/hooks/useDeliveryLines'
 import type { CommitPreview, DeliveryLine, ImportSession } from '@/features/imports/types'
 import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
+import { DraftNote } from '@/features/drafts/DraftNote'
+import { useDraft } from '@/features/drafts/useDraft'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
 import { useQueryClient } from '@tanstack/react-query'
 import { invalidateInventory } from '@/data/inventoryCache'
@@ -41,6 +44,15 @@ const SPREADSHEET_PATH = '/app/products/import/new?kind=STOCK_IN'
 /** Today in the user's own timezone, as the `YYYY-MM-DD` a date input holds. */
 function todayIso(): string {
   return new Date().toLocaleDateString('en-CA')
+}
+
+/** What Record a delivery keeps on the phone between visits (A5). */
+interface DeliveryDraft {
+  vendorId: string
+  showAll: boolean
+  deliveryDate: string
+  invoiceNo: string
+  entries: Record<string, DeliveryEntry>
 }
 
 /** An import the server has built from the typed lines, waiting on the confirm dialog. */
@@ -88,6 +100,14 @@ export function RecordDeliveryPage() {
   const [search, setSearch] = useState('')
   const [entries, setEntries] = useState<Record<string, DeliveryEntry>>({})
 
+  /**
+   * The typing, kept on the phone (A5) — keyed by the expected delivery being received, if any, so
+   * receiving two different orders never mixes their lines.
+   */
+  const draft = useDraft<DeliveryDraft>(`delivery:${expectedId ?? 'new'}`)
+  const [restoredDraft, setRestoredDraft] = useState(false)
+  const online = useOnlineStatus()
+
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [pending, setPending] = useState<PendingDelivery | null>(null)
@@ -124,11 +144,38 @@ export function RecordDeliveryPage() {
    */
   useEffect(() => {
     if (!expected) return
-    if (expected.vendorId != null) setVendorId(expected.vendorId)
-    if (expected.reference != null) setInvoiceNo(expected.reference)
+    // A draft restored for this order already holds what the person chose; the order only fills in
+    // what they haven't.
+    if (!restoredDraft) {
+      if (expected.vendorId != null) setVendorId(expected.vendorId)
+      if (expected.reference != null) setInvoiceNo(expected.reference)
+    }
     setShowAll(true)
     setEntries((prev) => ({ ...outstandingEntries(expected), ...prev }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expected])
+
+  // An earlier visit's draft: put it back, once, before anything is typed.
+  const { initial: initialDraft, save: saveDraftNow } = draft
+  useEffect(() => {
+    if (!initialDraft) return
+    const saved = initialDraft.value
+    setVendorId(saved.vendorId)
+    setShowAll(saved.showAll)
+    setDeliveryDate(saved.deliveryDate > todayIso() ? todayIso() : saved.deliveryDate)
+    setInvoiceNo(saved.invoiceNo)
+    setEntries((prev) => ({ ...prev, ...saved.entries }))
+    setRestoredDraft(true)
+  }, [initialDraft])
+
+  // Every change is kept, once there is anything worth keeping.
+  useEffect(() => {
+    if (initialDraft === undefined) return // not until the phone has been checked for a draft
+    const typedSomething =
+      invoiceNo.trim() !== '' || Object.values(entries).some((entry) => entry.quantity.trim() !== '' || entry.price.trim() !== '')
+    if (!typedSomething) return
+    saveDraftNow({ vendorId, showAll, deliveryDate, invoiceNo, entries })
+  }, [vendorId, showAll, deliveryDate, invoiceNo, entries, initialDraft, saveDraftNow])
 
   const groups = useMemo(
     () => groupByProduct((lines ?? []).filter((line) => matchesSearch(line, search))),
@@ -149,7 +196,9 @@ export function RecordDeliveryPage() {
   const count = totals.lines.length
   // With a line priced nowhere, the sum would understate the delivery, so the button leaves it out.
   const totalText = count > 0 && !totals.partial ? formatPrice(totals.total) : null
-  const canSubmit = count > 0 && !totals.invalid && !dateError && !submitting
+  // Turning the lines into an import needs the server to check them, so offline the delivery waits
+  // as a draft (A5) and the button says so.
+  const canSubmit = count > 0 && !totals.invalid && !dateError && !submitting && online
 
   function handleLineChange(line: DeliveryLine, patch: Partial<Omit<DeliveryEntry, 'line'>>) {
     const key = lineKey(line)
@@ -236,6 +285,7 @@ export function RecordDeliveryPage() {
     setCommitError(null)
     try {
       const result = await importsApi.commit(id)
+      await draft.finish()
       void invalidateInventory(queryClient)
       showToast(copy.delivery.done, 'success')
       navigate(`/app/products/import/${id}/result`, { replace: true, state: { result } })
@@ -274,6 +324,18 @@ export function RecordDeliveryPage() {
         {expectedId != null && (
           <ReceivingExpectedBanner expected={expected} loading={expectedLoading} error={expectedError} />
         )}
+
+        <DraftNote
+          savedAt={draft.savedAt}
+          restored={restoredDraft}
+          onDiscard={() => {
+            void draft.clear()
+            setRestoredDraft(false)
+            setEntries({})
+            setInvoiceNo('')
+            setDeliveryDate(todayIso())
+          }}
+        />
 
         <section className="grid gap-4 rounded-lg border border-neutral-200 bg-white p-4 sm:grid-cols-3">
           {canSeeSuppliers && (
@@ -461,8 +523,15 @@ export function RecordDeliveryPage() {
               ? copy.delivery.saving
               : count === 0
                 ? copy.delivery.submitEmpty
-                : copy.delivery.submit(count, totalText)}
+                : !online
+                  ? 'Submit when online'
+                  : copy.delivery.submit(count, totalText)}
           </Button>
+          {!online && count > 0 && (
+            <p className="text-center text-xs text-neutral-500">
+              You're offline. This delivery is saved on this phone; submit it once you're connected.
+            </p>
+          )}
           {count > 0 && totals.partial && (
             <p className="text-center text-xs text-neutral-500">{copy.delivery.totalPartial}</p>
           )}

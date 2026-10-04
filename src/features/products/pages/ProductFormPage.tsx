@@ -62,6 +62,9 @@ import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
 import { isAppError } from '@/types/api'
 import { useQueryClient } from '@tanstack/react-query'
 import { invalidateInventory, syncProductIntoCache } from '@/data/inventoryCache'
+import { DraftNote } from '@/features/drafts/DraftNote'
+import { useDraft } from '@/features/drafts/useDraft'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 
 const KNOWN_FIELDS = new Set<keyof ProductFormValues>([
   'name',
@@ -201,6 +204,13 @@ const IDENTITY_FIELDS: { field: keyof ProductFormValues & keyof Product; label: 
  * purchase; everywhere else, cost is something to look at (the detail page's Overview tab), not
  * something to edit here.
  */
+/** What the new-product form keeps on the phone between visits (A5). */
+interface ProductDraft {
+  values: ProductFormValues
+  containsText: string
+  skuUnlocked: boolean
+}
+
 export function ProductFormPage() {
   const { id } = useParams<{ id: string }>()
   const isEdit = !!id
@@ -274,6 +284,7 @@ export function ProductFormPage() {
     setError,
     setValue,
     watch,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<ProductFormValues>({
     // A fresh schema on every render, not a memoised one: react-hook-form reads `resolver` at
@@ -414,9 +425,72 @@ export function ProductFormPage() {
    * can disagree with the two it feeds.
    */
   const [containsText, setContainsText] = useState('')
+
+  /**
+   * A new product's typing, kept on the phone (A5). Create only: editing is online-only, and a
+   * draft of an edit could later overwrite another phone's changes. The photo is not kept — a file
+   * picked from the device cannot be stored with the draft — and the restore note says so.
+   */
+  const online = useOnlineStatus()
+  const draft = useDraft<ProductDraft>('product:new', !isEdit)
+  const [restoredDraft, setRestoredDraft] = useState(false)
+  /** A draft for a different product than the name just typed into search: offered, not applied. */
+  const [offeredDraft, setOfferedDraft] = useState<ProductDraft | null>(null)
+  const [formVersion, setFormVersion] = useState(0)
+  /** Only the person's own typing starts a draft — not the name carried over from search. */
+  const typedSomething = useRef(false)
+
+  function applyDraft(saved: ProductDraft) {
+    typedSomething.current = true
+    reset(saved.values)
+    setContainsText(saved.containsText)
+    setSkuUnlocked(saved.skuUnlocked)
+    setRestoredDraft(true)
+    setOfferedDraft(null)
+  }
+
+  const { initial: initialDraft, save: saveDraftNow } = draft
+  useEffect(() => {
+    if (!initialDraft) return
+    const nameFromSearch = (location.state?.name as string | undefined)?.trim()
+    if (nameFromSearch && nameFromSearch.toLowerCase() !== initialDraft.value.values.name.trim().toLowerCase()) {
+      setOfferedDraft(initialDraft.value)
+    } else {
+      applyDraft(initialDraft.value)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialDraft])
+
+  useEffect(() => {
+    const subscription = watch((_values, { type }) => {
+      if (type === 'change') typedSomething.current = true
+      setFormVersion((version) => version + 1)
+    })
+    return () => subscription.unsubscribe()
+  }, [watch])
+
+  useEffect(() => {
+    if (isEdit || initialDraft === undefined || offeredDraft || !typedSomething.current) return
+    const values = getValues()
+    if (!values.name?.trim() && !containsText.trim()) return
+    saveDraftNow({ values, containsText, skuUnlocked })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formVersion, containsText, skuUnlocked, initialDraft, offeredDraft])
+
+  function discardDraft() {
+    void draft.clear()
+    typedSomething.current = false
+    setRestoredDraft(false)
+    setOfferedDraft(null)
+    reset({ ...productFormDefaults(), name: location.state?.name ?? '' })
+    setContainsText('')
+    setSkuUnlocked(false)
+  }
+
   const [containsError, setContainsError] = useState<string | null>(null)
 
   const onContainsChange = (next: string) => {
+    typedSomething.current = true
     setContainsText(next)
     if (!next.trim()) {
       setContainsError(null)
@@ -725,6 +799,8 @@ export function ProductFormPage() {
       } else {
         showToast(isEdit ? 'Product updated.' : 'Product created.', 'success')
       }
+      // A draft that was only offered belongs to a different product: it stays for later.
+      if (!isEdit && !offeredDraft) await draft.finish()
       navigate(`/app/products/${saved.id}`)
     } catch (err) {
       setPendingValues(null)
@@ -856,6 +932,33 @@ export function ProductFormPage() {
       </div>
 
       {isVendor && <ReviewImpactNotice mode={isEdit ? 'edit' : 'create'} />}
+
+      {!isEdit && offeredDraft && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-700">
+          <span className="flex-1">
+            You have an unsent draft for <span className="font-medium">{offeredDraft.values.name || 'a product'}</span>.
+          </span>
+          <Button variant="secondary" type="button" onClick={() => applyDraft(offeredDraft)}>
+            Open the draft
+          </Button>
+          <button
+            type="button"
+            onClick={discardDraft}
+            className="rounded-sm px-1 font-medium text-neutral-700 underline underline-offset-2 hover:bg-neutral-100"
+          >
+            Discard it
+          </button>
+        </div>
+      )}
+
+      {!isEdit && !offeredDraft && (
+        <DraftNote
+          savedAt={draft.savedAt}
+          restored={restoredDraft}
+          onDiscard={discardDraft}
+          caveat="Add the photo again if it had one."
+        />
+      )}
 
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-5">
         {/* -------------------------------------------------------------- Product image */}
@@ -1388,13 +1491,30 @@ export function ProductFormPage() {
         <FormError message={formError} />
 
         <div className="flex justify-end gap-2">
-          <Button variant="secondary" type="button" onClick={() => navigate(-1)}>
+          <Button
+            variant="secondary"
+            type="button"
+            onClick={async () => {
+              // Cancel means "not this product": its draft goes too. The back arrow keeps it.
+              // Awaited: going back can leave the page entirely (the form was opened directly),
+              // and an unfinished delete would bring the draft back next time.
+              if (!isEdit) await draft.clear()
+              navigate(-1)
+            }}
+          >
             Cancel
           </Button>
-          <Button type="submit" loading={isSubmitting}>
-            {isEdit ? 'Save changes' : 'Create product'}
+          {/* Creating a product needs the server (its SKU, its duplicate checks), so offline the
+              draft waits and the button says so (A5). */}
+          <Button type="submit" loading={isSubmitting} disabled={!isEdit && !online}>
+            {isEdit ? 'Save changes' : online ? 'Create product' : 'Create when online'}
           </Button>
         </div>
+        {!isEdit && !online && (
+          <p className="text-right text-xs text-neutral-500">
+            You're offline. This product is saved on this phone; create it once you're connected.
+          </p>
+        )}
       </form>
 
       <ReviewImpactDialog
