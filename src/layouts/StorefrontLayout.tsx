@@ -1,6 +1,9 @@
+import { useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
 import { StorefrontFooter } from '@/layouts/StorefrontFooter'
 import { StorefrontHeader } from '@/layouts/StorefrontHeader'
+import { startServiceWorker } from '@/pwa/serviceWorker'
+import { UpdatePrompt } from '@/pwa/UpdatePrompt'
 
 /**
  * Chrome for the public ProcurePal storefront: catalog, product detail, cart, checkout and the
@@ -11,6 +14,12 @@ import { StorefrontHeader } from '@/layouts/StorefrontHeader'
  * a sticky header, and a footer at the bottom of the content rather than pinned to the viewport.
  */
 export function StorefrontLayout() {
+  // Never installs the workspace's offline shell for a shopper; only picks up one this browser
+  // already has from signing in, so its update prompt still reaches them here.
+  useEffect(() => {
+    startServiceWorker({ install: false })
+  }, [])
+
   return (
     <div className="flex min-h-screen flex-col bg-neutral-50">
       <StorefrontHeader />
@@ -20,6 +29,7 @@ export function StorefrontLayout() {
         <Outlet />
       </main>
       <StorefrontFooter />
+      <UpdatePrompt />
     </div>
   )
 }

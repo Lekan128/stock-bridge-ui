@@ -42,3 +42,30 @@
 # previewing against staging data.
 [context.deploy-preview.environment]
   VITE_API_BASE_URL = "https://staging-api.procurepaddy.com"
+
+# --------------------------------------------------------------------------- Offline app shell
+# The service worker and the files it decides with must never be served stale from an HTTP
+# cache, or a deploy can't reach installed phones: the browser would keep comparing against an
+# old sw.js and never see the new version. Netlify's default (max-age=0, must-revalidate) already
+# behaves this way; it is stated here so a future default change can't quietly break updates.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/manifest.webmanifest"
+  [headers.values]
+    Cache-Control = "no-cache"
+    Content-Type = "application/manifest+json"
+
+# Everything under /assets/ is content-hashed by Vite, so a given URL never changes meaning.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

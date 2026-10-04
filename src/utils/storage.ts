@@ -129,6 +129,32 @@ export const emailVerificationStorage = {
   },
 }
 
+/**
+ * When the iPhone "Add to Home Screen" hint may come back. A month: long enough not to nag, short
+ * enough that someone who said "later" is reminded once offline use starts to matter to them.
+ */
+const INSTALL_HINT_DISMISSED_KEY = 'procurepaddy.installHintDismissedUntil.v1'
+const INSTALL_HINT_DISMISS_MS = 30 * 24 * 60 * 60 * 1000
+
+export const installHintStorage = {
+  isDismissed: (): boolean => {
+    try {
+      const until = Number(localStorage.getItem(INSTALL_HINT_DISMISSED_KEY))
+      return Number.isFinite(until) && until > Date.now()
+    } catch {
+      return false
+    }
+  },
+
+  dismiss: (): void => {
+    try {
+      localStorage.setItem(INSTALL_HINT_DISMISSED_KEY, String(Date.now() + INSTALL_HINT_DISMISS_MS))
+    } catch {
+      // Private browsing / quota: the hint simply comes back next load.
+    }
+  },
+}
+
 /** A line in the anonymous cart. Only ids and quantities — never prices, which go stale. */
 export interface StoredCartLine {
   productId: string

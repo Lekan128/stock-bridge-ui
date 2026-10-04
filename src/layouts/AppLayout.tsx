@@ -1,12 +1,21 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import { EmailVerificationBanner } from '@/features/profile/components/EmailVerificationBanner'
 import { Sidebar } from '@/layouts/Sidebar'
 import { Topbar } from '@/layouts/Topbar'
+import { IosInstallHint } from '@/pwa/IosInstallHint'
+import { startServiceWorker } from '@/pwa/serviceWorker'
+import { UpdatePrompt } from '@/pwa/UpdatePrompt'
 
 export function AppLayout() {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+
+  // The workspace is where the offline shell is installed — see `pwa/serviceWorker.ts` for why
+  // the storefront never installs it.
+  useEffect(() => {
+    startServiceWorker({ install: true })
+  }, [])
 
   return (
     <div className="flex h-screen overflow-hidden bg-neutral-50">
@@ -25,6 +34,7 @@ export function AppLayout() {
           nothing. Its own shrink-0 keeps it from being squeezed by the scroll area beneath it.
         */}
         <EmailVerificationBanner />
+        <IosInstallHint />
         {/* data-scroll-container: this is the actual scroll region in this layout (the window
             itself never scrolls, since the root is h-screen overflow-hidden) - ScrollToTop
             targets it by that attribute on every navigation. */}
@@ -32,6 +42,7 @@ export function AppLayout() {
           <Outlet />
         </main>
       </div>
+      <UpdatePrompt />
     </div>
   )
 }

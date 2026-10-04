@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react'
-import { ChevronDown, LayoutDashboard, LogOut, UserRound } from 'lucide-react'
+import { ChevronDown, Download, LayoutDashboard, LogOut, UserRound } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { useClickOutside } from '@/hooks/useClickOutside'
+import { promptInstall, useServiceWorkerState } from '@/pwa/serviceWorker'
 
 function getInitials(username: string) {
   return username.slice(0, 2).toUpperCase()
@@ -16,6 +17,7 @@ export function UserMenu() {
   const { user, client, logout } = useAuth()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
+  const { canInstall } = useServiceWorkerState()
   const ref = useRef<HTMLDivElement>(null)
   useClickOutside(ref, () => setOpen(false))
 
@@ -67,6 +69,22 @@ export function UserMenu() {
             <UserRound className="h-4 w-4" />
             Profile
           </Link>
+          {/* Only where the browser can actually install (Android Chrome, desktop Chromium). iOS
+              has no install prompt; the workspace shows its own Add to Home Screen hint instead. */}
+          {canInstall && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false)
+                void promptInstall()
+              }}
+              className={itemClassName}
+            >
+              <Download className="h-4 w-4" />
+              Install Procure Paddy
+            </button>
+          )}
           <button type="button" role="menuitem" onClick={() => void handleLogout()} className={itemClassName}>
             <LogOut className="h-4 w-4" />
             Log out
