@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Truck, X } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
@@ -7,13 +7,21 @@ import { Button } from '@/components/Button'
 import { ErrorState } from '@/components/ErrorState'
 import { Pagination } from '@/components/Pagination'
 import { SavedDataNote } from '@/components/SavedDataNote'
+import { CatalogProductList } from '@/features/catalog/CatalogProductList'
+import { syncCatalog } from '@/features/catalog/catalogStore'
+import { useCatalogList, useCatalogState, type CatalogList } from '@/features/catalog/useCatalog'
 import { useToast } from '@/components/useToast'
 import { EmptyProductsState } from '@/features/products/components/EmptyProductsState'
 import { IncomingStockNotice } from '@/features/products/components/IncomingStockNotice'
 import { NewProductSearchModal } from '@/features/products/components/NewProductSearchModal'
 import { ProductCard } from '@/features/products/components/ProductCard'
 import { ProductListSkeleton } from '@/features/products/components/ProductListSkeleton'
-import { ProductTable, type ProductSort, type ProductSortField } from '@/features/products/components/ProductTable'
+import {
+  ProductTable,
+  type ProductSort,
+  type ProductSortField,
+  type ProductTableSelection,
+} from '@/features/products/components/ProductTable'
 import { ProductsToolbar, type StockLevelFilter } from '@/features/products/components/ProductsToolbar'
 import { productsApi } from '@/features/products/api/productsApi'
 import { DataIssuesBanner } from '@/features/products/quality/DataIssuesBanner'
@@ -22,8 +30,9 @@ import type { CompanyCategory } from '@/features/products/categories/types'
 import { useCompanyCategories } from '@/features/products/categories/useCompanyCategories'
 import { useProductIncoming } from '@/features/products/hooks/useProductIncoming'
 import { useProducts } from '@/features/products/hooks/useProducts'
-import type { ProductStatusFilter, StockStatusFilter } from '@/features/products/types'
+import type { Product, ProductStatusFilter, StockStatusFilter } from '@/features/products/types'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { downloadBlob } from '@/utils/downloadBlob'
 
 function isStockStatusFilter(value: string | null): value is StockStatusFilter {
@@ -31,6 +40,8 @@ function isStockStatusFilter(value: string | null): value is StockStatusFilter {
 }
 
 const PAGE_SIZE = 20
+
+const NO_PRODUCTS: Product[] = []
 
 const SORT_FIELDS: ProductSortField[] = ['name', 'sku', 'unitPrice', 'quantityOnHand', 'active']
 const DEFAULT_SORT: ProductSort = { field: 'name', direction: 'asc' }
@@ -127,19 +138,46 @@ export function ProductListPage() {
   // The route requires VIEW_PRODUCTS, which is all the category list needs.
   const categoryList = useCompanyCategories(true)
 
-  const { data, loading, error, refetch, showingSaved, updatedAt } = useProducts({
-    search: committedSearch || undefined,
-    active: statusFilter === 'all' ? undefined : statusFilter === 'active',
-    categoryId: categoryFilter || undefined,
-    stockStatus: stockLevelFilter === 'all' ? undefined : stockLevelFilter,
-    page,
-    size: PAGE_SIZE,
-    sort: `${sort.field},${sort.direction}`,
-  })
+  /**
+   * Where the list comes from. Once a complete copy of the catalogue is on the device (A3), every
+   * search, filter, sort and scroll is answered there — instantly, offline included, at any
+   * catalogue size. Until then (the first download, or a device too full to hold one) it is the
+   * server's paged list, exactly as before.
+   */
+  const catalog = useCatalogState()
+  const onDevice = catalog.phase === 'ready'
+  const online = useOnlineStatus()
+  const catalogList = useCatalogList(
+    { search: committedSearch, status: statusFilter, categoryId: categoryFilter, stockStatus: stockLevelFilter, sort },
+    onDevice,
+  )
+  const [renderedProducts, setRenderedProducts] = useState<Product[]>([])
+
+  const server = useProducts(
+    {
+      search: committedSearch || undefined,
+      active: statusFilter === 'all' ? undefined : statusFilter === 'active',
+      categoryId: categoryFilter || undefined,
+      stockStatus: stockLevelFilter === 'all' ? undefined : stockLevelFilter,
+      page,
+      size: PAGE_SIZE,
+      sort: `${sort.field},${sort.direction}`,
+    },
+    { enabled: !onDevice },
+  )
+  const { data, loading, error, refetch } = server
+  const showingSaved = onDevice ? (!online || catalog.behind) && catalog.syncedAt != null : server.showingSaved
+  const updatedAt = onDevice ? catalog.syncedAt : server.updatedAt
+  const retryRefresh = onDevice ? () => void syncCatalog() : refetch
 
   // Stock bought from ProcurePal and not yet received. Surfaced beside — never inside — the
   // quantity on hand, so "12 usable, 20 incoming" can never be misread as 32 usable.
-  const { incomingFor, totals: incomingTotals } = useProductIncoming(data?.content)
+  // On the device every row already carries its incoming figure, so nothing needs deriving from
+  // orders; an empty list says exactly that and asks the server for nothing.
+  const { incomingFor, totals: serverIncomingTotals } = useProductIncoming(onDevice ? NO_PRODUCTS : data?.content)
+  const incomingTotals = onDevice
+    ? { ...catalogList.incoming, awaitingReceiptUnits: 0, approximate: false }
+    : serverIncomingTotals
 
   function handleSortChange(field: ProductSortField) {
     const direction = sort.field === field && sort.direction === 'asc' ? 'desc' : 'asc'
@@ -165,7 +203,7 @@ export function ProductListPage() {
   }
 
   function toggleAllOnPage(selected: boolean) {
-    const idsOnPage = (data?.content ?? []).map((product) => product.id)
+    const idsOnPage = (onDevice ? renderedProducts : (data?.content ?? [])).map((product) => product.id)
     setSelectedIds((current) =>
       selected
         ? [...current.filter((id) => !idsOnPage.includes(id)), ...idsOnPage]
@@ -197,11 +235,14 @@ export function ProductListPage() {
    */
   function handleCategorySaved(category: CompanyCategory) {
     categoryList.upsert(category)
+    // A rename changes the name on every product in it; the feed carries that to the device copy.
+    void syncCatalog()
     if (isOnScreen(category.id)) refetch()
   }
 
   function handleCategoryDeleted(category: CompanyCategory) {
     categoryList.remove(category.id)
+    void syncCatalog()
     if (categoryFilter === category.id) handleCategoryFilterChange('')
     else if (isOnScreen(category.id)) refetch()
   }
@@ -251,7 +292,18 @@ export function ProductListPage() {
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl font-semibold text-neutral-900">Inventory</h1>
 
-      <SavedDataNote showing={showingSaved} updatedAt={updatedAt} subject="stock levels" onRetry={refetch} />
+      <SavedDataNote showing={showingSaved} updatedAt={updatedAt} subject="stock levels" onRetry={retryRefresh} />
+
+      {/* The first full download, on a catalogue big enough for it to take a moment. Smaller ones
+          finish before this could be read. */}
+      {catalog.phase === 'loading' && (catalog.total ?? 0) > 2000 && (
+        <p role="status" className="text-sm text-neutral-500">
+          Getting your stock list ready to work offline ·{' '}
+          <span className="tabular-nums">
+            {catalog.loaded.toLocaleString()} of {(catalog.total ?? 0).toLocaleString()}
+          </span>
+        </p>
+      )}
 
       <DataIssuesBanner />
 
@@ -269,6 +321,16 @@ export function ProductListPage() {
         onStatusFilterChange={handleStatusFilterChange}
         stockLevelFilter={stockLevelFilter}
         onStockLevelFilterChange={handleStockLevelFilterChange}
+        stockLevelCounts={
+          onDevice && catalogList.ready
+            ? {
+                all: catalogList.counts.all,
+                OK: catalogList.counts.OK,
+                LOW: catalogList.counts.LOW,
+                OUT: catalogList.counts.OUT,
+              }
+            : undefined
+        }
         categories={categoryList.categories}
         categoryFilter={categoryFilter}
         onCategoryFilterChange={handleCategoryFilterChange}
@@ -286,15 +348,37 @@ export function ProductListPage() {
       {/* The skeleton is for the FIRST load only. After that the rows on screen stay put while the
           next answer loads — dimmed, with a thin bar — instead of the whole table unmounting into
           a skeleton on every keystroke, chip and page turn. */}
-      {loading && !data && !error && <ProductListSkeleton />}
+      {onDevice && (
+        <OnDeviceList
+          list={catalogList}
+          sort={sort}
+          onSortChange={handleSortChange}
+          isDefaultView={isDefaultView}
+          statusFilter={statusFilter}
+          categoryFilter={categoryFilter}
+          committedSearch={committedSearch}
+          canManageProducts={canManageProducts}
+          onBulkUpload={() => navigate('/app/products/import')}
+          onShowAll={() => handleStatusFilterChange('all')}
+          selection={canImport ? { selectedIds, onToggle: toggleSelected, onToggleAll: toggleAllOnPage } : undefined}
+          selectionBar={
+            canImport && selectedIds.length > 0 ? (
+              <SelectionBar count={selectedIds.length} onStockIn={handleStockInSelected} onClear={() => setSelectedIds([])} />
+            ) : null
+          }
+          onRenderedChange={setRenderedProducts}
+        />
+      )}
 
-      {!loading && error && <ErrorState message={error} onRetry={refetch} />}
+      {!onDevice && loading && !data && !error && <ProductListSkeleton />}
 
-      {!loading && !error && isTrulyEmpty && (
+      {!onDevice && !loading && error && <ErrorState message={error} onRetry={refetch} />}
+
+      {!onDevice && !loading && !error && isTrulyEmpty && (
         <EmptyProductsState canManageProducts={canManageProducts} onBulkUpload={() => navigate('/app/products/import')} />
       )}
 
-      {!error && !isTrulyEmpty && data && (
+      {!onDevice && !error && !isTrulyEmpty && data && (
         <div
           aria-busy={loading || undefined}
           className={`relative flex flex-col gap-4 transition-opacity duration-150 ${loading ? 'opacity-60' : ''}`}
@@ -329,25 +413,7 @@ export function ProductListPage() {
               {/* The selection bar only exists on the desktop table — the mobile card list has
                   no checkboxes, matching how the import review screen drops its grid below `md`. */}
               {canImport && selectedIds.length > 0 && (
-                <div className="hidden items-center justify-between gap-3 rounded-lg border border-primary-200 bg-primary-50 px-4 py-2.5 md:flex">
-                  <p className="text-sm font-medium text-primary-900">
-                    {selectedIds.length} product{selectedIds.length === 1 ? '' : 's'} selected
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Button variant="secondary" onClick={handleStockInSelected}>
-                      <Truck className="h-4 w-4" aria-hidden="true" />
-                      Stock in selected
-                    </Button>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedIds([])}
-                      className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-sm font-medium text-primary-800 hover:bg-primary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-                    >
-                      <X className="h-3.5 w-3.5" aria-hidden="true" />
-                      Clear
-                    </button>
-                  </div>
-                </div>
+                <SelectionBar count={selectedIds.length} onStockIn={handleStockInSelected} onClear={() => setSelectedIds([])} />
               )}
               <div className="hidden overflow-hidden rounded-lg border border-neutral-200 bg-white md:block">
                 <ProductTable
@@ -380,6 +446,103 @@ export function ProductListPage() {
       />
 
       <NewProductSearchModal open={addProductOpen && canManageProducts} onClose={() => setAddProductOpen(false)} />
+    </div>
+  )
+}
+
+/** "3 products selected · Stock in selected · Clear" above the desktop table. */
+function SelectionBar({ count, onStockIn, onClear }: { count: number; onStockIn: () => void; onClear: () => void }) {
+  return (
+    <div className="hidden items-center justify-between gap-3 rounded-lg border border-primary-200 bg-primary-50 px-4 py-2.5 md:flex">
+      <p className="text-sm font-medium text-primary-900">
+        {count} product{count === 1 ? '' : 's'} selected
+      </p>
+      <div className="flex items-center gap-2">
+        <Button variant="secondary" onClick={onStockIn}>
+          <Truck className="h-4 w-4" aria-hidden="true" />
+          Stock in selected
+        </Button>
+        <button
+          type="button"
+          onClick={onClear}
+          className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-sm font-medium text-primary-800 hover:bg-primary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+        >
+          <X className="h-3.5 w-3.5" aria-hidden="true" />
+          Clear
+        </button>
+      </div>
+    </div>
+  )
+}
+
+interface OnDeviceListProps {
+  list: CatalogList
+  sort: ProductSort
+  onSortChange: (field: ProductSortField) => void
+  isDefaultView: boolean
+  statusFilter: ProductStatusFilter
+  categoryFilter: string
+  committedSearch: string
+  canManageProducts: boolean
+  onBulkUpload: () => void
+  onShowAll: () => void
+  selection?: ProductTableSelection
+  selectionBar: ReactNode
+  onRenderedChange: (products: Product[]) => void
+}
+
+/**
+ * The list when it is read from the on-device catalogue: the same empty states as the server
+ * list, decided from the catalogue's own counts instead of an extra request.
+ */
+function OnDeviceList({
+  list,
+  sort,
+  onSortChange,
+  isDefaultView,
+  statusFilter,
+  categoryFilter,
+  committedSearch,
+  canManageProducts,
+  onBulkUpload,
+  onShowAll,
+  selection,
+  selectionBar,
+  onRenderedChange,
+}: OnDeviceListProps) {
+  if (!list.ready) return <ProductListSkeleton />
+  if (list.catalogSize === 0) {
+    return <EmptyProductsState canManageProducts={canManageProducts} onBulkUpload={onBulkUpload} />
+  }
+  if (list.total === 0) {
+    const onlyInactiveExist = isDefaultView && statusFilter === 'active' && list.activeCount === 0
+    return (
+      <div className="flex flex-col items-center gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-10 text-center text-sm text-neutral-500">
+        <p>
+          {onlyInactiveExist
+            ? 'No active products. Every product in this catalog is deactivated.'
+            : categoryFilter && !committedSearch && statusFilter === 'all'
+              ? 'No products in this category yet. Choose a category on a product to add it here.'
+              : 'No products match your search.'}
+        </p>
+        {onlyInactiveExist && (
+          <Button variant="secondary" onClick={onShowAll}>
+            Show all products
+          </Button>
+        )}
+      </div>
+    )
+  }
+  return (
+    <div className="flex flex-col gap-4">
+      {selectionBar}
+      <CatalogProductList
+        list={list}
+        sort={sort}
+        onSortChange={onSortChange}
+        selection={selection}
+        onRenderedChange={onRenderedChange}
+      />
     </div>
   )
 }

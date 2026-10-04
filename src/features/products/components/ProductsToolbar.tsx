@@ -17,6 +17,11 @@ export interface ProductsToolbarProps {
    *  here instead of to a separate page, so the one Inventory table is the answer either way. */
   stockLevelFilter: StockLevelFilter
   onStockLevelFilterChange: (value: StockLevelFilter) => void
+  /**
+   * How many products each chip would show under the other filters. Only known when the list is
+   * read from the on-device catalogue (A3), which counts them as it filters; omitted otherwise.
+   */
+  stockLevelCounts?: Record<StockLevelFilter, number>
   /** The company's own categories. The filter is hidden while there are none to pick from. */
   categories: CompanyCategory[]
   /** A category id, or '' for all categories. */
@@ -65,6 +70,7 @@ export function ProductsToolbar({
   onStatusFilterChange,
   stockLevelFilter,
   onStockLevelFilterChange,
+  stockLevelCounts,
   categories,
   categoryFilter,
   onCategoryFilterChange,
@@ -160,6 +166,9 @@ export function ProductsToolbar({
             }`}
           >
             {option.label}
+            {stockLevelCounts && (
+              <span className="ml-1.5 tabular-nums text-neutral-400">{stockLevelCounts[option.value].toLocaleString()}</span>
+            )}
           </button>
         ))}
       </div>

@@ -1,6 +1,7 @@
 import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider } from '@/auth/AuthContext'
 import { QueryProvider } from '@/data/QueryProvider'
+import { CatalogProvider } from '@/features/catalog/CatalogProvider'
 import { SuperAdminAuthProvider } from '@/auth/SuperAdminAuthContext'
 import { ToastProvider } from '@/components/ToastContext'
 import { CartProvider } from '@/features/cart/context/CartContext'
@@ -21,6 +22,8 @@ function App() {
               wiped when they sign out. Above everything that reads inventory, including the
               low-stock alerts the topbar bell shows. */}
           <QueryProvider>
+          {/* The on-device catalogue (A3). Same lifetime as the cache above: the signed-in user's. */}
+          <CatalogProvider>
           <SuperAdminAuthProvider>
             <LowStockAlertsProvider>
               <CartProvider>
@@ -38,6 +41,7 @@ function App() {
               </CartProvider>
             </LowStockAlertsProvider>
           </SuperAdminAuthProvider>
+          </CatalogProvider>
           </QueryProvider>
         </AuthProvider>
       </ToastProvider>

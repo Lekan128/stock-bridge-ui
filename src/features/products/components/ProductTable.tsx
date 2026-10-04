@@ -38,6 +38,20 @@ export interface ProductTableSelection {
   onToggleAll: (selected: boolean) => void
 }
 
+/**
+ * Rendering a window of a much longer list (the on-device catalogue, A3). Rows outside the window
+ * are stood in for by two spacer rows, so the table keeps its real height and scroll position and
+ * keeps being a real `<table>` for screen readers. Each rendered row reports its own height through
+ * `measureRef`, because rows are not all one height (a pack line, an incoming badge).
+ */
+export interface ProductTableVirtualWindow {
+  paddingTop: number
+  paddingBottom: number
+  /** Position of each rendered product in the full list, in the same order as `products`. */
+  indices: number[]
+  measureRef: (element: HTMLTableRowElement | null) => void
+}
+
 export interface ProductTableProps {
   products: Product[]
   sort: ProductSort
@@ -45,6 +59,7 @@ export interface ProductTableProps {
   /** Incoming stock per product. Omit where there is none to show (e.g. a ProcurePal-side list). */
   incomingFor?: (product: Product) => { quantity: number }
   selection?: ProductTableSelection
+  virtual?: ProductTableVirtualWindow
 }
 
 // "On hand (usable)" rather than "Quantity on hand": once a second quantity exists on the row,
@@ -65,7 +80,7 @@ const UNIT_PRICE_COLUMN: { field: ProductSortField; label: string; align?: 'righ
   align: 'right',
 }
 
-export function ProductTable({ products, sort, onSortChange, incomingFor, selection }: ProductTableProps) {
+export function ProductTable({ products, sort, onSortChange, incomingFor, selection, virtual }: ProductTableProps) {
   const { isVendor } = useAuth()
   // Fetched for two things now: the packaging subtitle a company sees in place of the unit price
   // column, and — for EVERY tenant, vendor included — the stock unit stamped on the "On hand"
@@ -108,8 +123,8 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
                 onChange={(event) => selection.onToggleAll(event.target.checked)}
                 aria-label={
                   allOnPageSelected
-                    ? `Clear the ${products.length} products selected on this page`
-                    : `Select every product on this page (${products.length})`
+                    ? `Clear the ${products.length} products selected ${virtual ? 'here' : 'on this page'}`
+                    : `Select every product ${virtual ? 'shown' : 'on this page'} (${products.length})`
                 }
                 className="h-4 w-4 cursor-pointer rounded-sm border-neutral-300 accent-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
               />
@@ -144,7 +159,12 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
         </tr>
       </thead>
       <tbody>
-        {products.map((product) => {
+        {virtual && virtual.paddingTop > 0 && (
+          <tr aria-hidden="true">
+            <td colSpan={columns.length + (selection ? 1 : 0)} style={{ height: virtual.paddingTop, padding: 0, border: 0 }} />
+          </tr>
+        )}
+        {products.map((product, position) => {
           const incoming = incomingFor?.(product).quantity ?? 0
           const isSelected = selection?.selectedIds.includes(product.id) ?? false
           const packLine = packEquivalent(product, unitOfMeasureOptions)
@@ -155,6 +175,8 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
             // link, middle-click and "open in new tab" work. A bare `<tr onClick>` had none of that.
             <tr
               key={product.id}
+              ref={virtual?.measureRef}
+              data-index={virtual?.indices[position]}
               style={
                 product.isLowStock ? { boxShadow: 'inset 4px 0 0 0 var(--color-warning-500)' } : undefined
               }
@@ -273,6 +295,11 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
             </tr>
           )
         })}
+        {virtual && virtual.paddingBottom > 0 && (
+          <tr aria-hidden="true">
+            <td colSpan={columns.length + (selection ? 1 : 0)} style={{ height: virtual.paddingBottom, padding: 0, border: 0 }} />
+          </tr>
+        )}
       </tbody>
     </table>
   )

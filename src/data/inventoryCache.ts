@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/data/queryKeys'
+import { noteProductChanged, syncCatalog } from '@/features/catalog/catalogStore'
 import type { PageResponse, Product } from '@/features/products/types'
 
 /**
@@ -11,6 +12,7 @@ import type { PageResponse, Product } from '@/features/products/types'
  * cached quantity, the old one, until the refetch landed. With it the list is already right.
  */
 export function syncProductIntoCache(queryClient: QueryClient, product: Product): void {
+  noteProductChanged(product)
   queryClient.setQueryData<Product>(queryKeys.products.detail(product.id), product)
   queryClient.setQueriesData<PageResponse<Product>>({ queryKey: ['products', 'list'] }, (page) =>
     page == null
@@ -27,6 +29,7 @@ export function syncProductIntoCache(queryClient: QueryClient, product: Product)
  * created or edited): mark everything stock-related stale and refresh whatever is on screen now.
  */
 export function invalidateInventory(queryClient: QueryClient): Promise<void> {
+  void syncCatalog()
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: queryKeys.products.all }),
     queryClient.invalidateQueries({ queryKey: queryKeys.stockMovements.all }),
