@@ -1,10 +1,12 @@
 # Procure Paddy — Interaction Patterns
 
-Companion to `DESIGN.md`, which covers tokens (color, type, spacing). This file covers the layer
-above tokens: recurring interaction shapes, so the next screen that hits one of these problems
-starts from the rule instead of rediscovering it from a bug report. Written out of
-`UX_CONSISTENCY_DESIGN_PLAN.md` (project root), which has the full diagnosis and evidence behind
-each pattern below; this file is the reusable rule, kept short on purpose.
+Companion to `DESIGN.md`, which covers tokens and the foundation components (buttons, sheets,
+stock figures, stamps, states, toasts) and ends with the pre-merge checklist. This file covers the
+layer above them: recurring interaction shapes, so the next screen that hits one of these problems
+starts from the rule instead of rediscovering it from a bug report. Patterns A and B were written
+out of `UX_CONSISTENCY_DESIGN_PLAN.md` and Pattern C out of `INVENTORY_OFFLINE_AND_CHARACTER_PLAN.md`
+(both at the project root), which hold the full diagnosis and evidence; this file is the reusable
+rule, kept short on purpose.
 
 ---
 
@@ -85,3 +87,65 @@ legible.
 3. If the new filter's definition could double-count against an existing one, give the "well
    stocked" / "total" figure its own query — don't do the subtraction in two places that might
    drift apart.
+
+---
+
+## Pattern C — offline-honest UI
+
+**The rule.** The workspace works without a connection (`INVENTORY_OFFLINE_AND_CHARACTER_PLAN.md`,
+Track A), and many phones write to one company at once. So the screen must never let anyone
+believe something the server hasn't said. Five parts, and every inventory screen answers to all
+five:
+
+1. **Every write shows its stamp.** A stock change on screen says where it stands — RECORDED (on
+   this phone), SYNCED (on the server), CHECK (needs a decision) — so nobody records it twice
+   thinking the first didn't take.
+2. **Every number shows its freshness.** A figure served from the phone says when it was true
+   ("Offline · showing stock levels as of 10:42"). A figure with no timestamp is read as now.
+3. **Pending is never merged into actual.** What this phone has recorded and not sent sits
+   *beside* the confirmed figure ("+10 kg waiting"), never added into it — the same rule as usable
+   vs incoming stock. The confirmed figure is the one an auditor and another phone can trust.
+4. **Conflicts never vanish.** A write the server refuses once it arrives (oversold by then, the
+   product gone, a permission removed) waits as CHECK until a person decides. Nothing is discarded
+   automatically, and logging out with unsent work asks first.
+5. **An offline phone only appends.** Offline you may record stock in, stock out and a count —
+   events that add to the ledger and can't overwrite another phone's work. Anything that edits a
+   shared record (a product's details, prices, suppliers) waits for a connection and says so;
+   forms that create something keep a draft on the phone and submit once online.
+
+**Why it's a trap otherwise.** Each part closes a real way to lose stock: a duplicate delivery
+(no stamp), a sale against a figure from yesterday (no freshness), a phone that thinks it has 30
+bags because it added its own unsent 10 (merged pending), an oversell that disappears on sync
+(vanished conflict), a price edit from a stale screen erasing today's (editing offline).
+
+**Reference implementations:**
+
+| Part | Where |
+|---|---|
+| Stamps | `components/Stamp.tsx`; the sync centre's receipt lines (`SyncCentre.tsx`) and the "Saved on this phone" receipt (`QueuedReceipt.tsx`) |
+| Freshness | `SavedDataNote.tsx` above any list or product served from the device (A2); the sync pill and the sync centre's "up to date as of" for the on-phone catalogue (`useSyncStatus.ts`) |
+| Pending beside actual | `StockFigure`'s pending line; `PendingStockNote` on the product page; `usePendingStock` (outbox) |
+| Conflicts | The outbox's `needs_attention` state with Send N instead / Try again / Discard (`outboxStore.ts`, `SyncCentre.tsx`); the logout guard (`UserMenu.tsx`); counts reconciled server-side so a late count keeps later sales (decision D1, `StockManagementService.count`) |
+| Append-only offline | `submitStockWrite` queues only STOCK_IN / STOCK_OUT / COUNT; edit forms load with `requireFresh` and show the offline error instead of a stale copy; drafts for Record a delivery and New product (`features/drafts/`) |
+
+**The one exception, online only:** Undo (decision D8) voids a write the person made moments ago —
+within two minutes, while it is still the product's latest write — as if it had never been made.
+It needs the server, refuses with a reason otherwise, and every void is logged. A write still
+waiting on the phone is simply never sent.
+
+**Checklist for a new inventory screen or write:**
+1. Does a write it makes go through `submitStockWrite` (so it is stamped, queued offline, and sent
+   once with its Idempotency-Key)? If it edits a shared record instead, is it online-only, with
+   the form loaded `requireFresh`?
+2. Is every figure on it either live or labelled with when it was true?
+3. Does anything add a pending amount into a confirmed figure? It must sit beside it.
+4. Can anything the server refuses disappear without the person deciding?
+5. If a form creates something, does it keep a draft on the phone?
+
+**Known instances and gaps:**
+- ✅ Product page, Inventory list, sync centre, stock in / out / count, Record a delivery, New
+  product.
+- Gap (Track C2): movement history doesn't yet show pending writes as RECORDED rows.
+- Gap: writes are sent while the app is open; there is no Background Sync once it is closed.
+- Gap (A4): a late offline delivery absorbed by a later count still adjusts the supplier's own
+  tally.
