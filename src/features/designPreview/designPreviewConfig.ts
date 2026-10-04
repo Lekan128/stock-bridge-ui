@@ -36,20 +36,20 @@ const FALLBACK = 'ui-sans-serif, system-ui, -apple-system, sans-serif'
 
 export const FONTS: FontCandidate[] = [
   {
+    id: 'plex',
+    label: 'IBM Plex Sans',
+    family: `'IBM Plex Sans Variable', ${FALLBACK}`,
+    condensed: { family: `'IBM Plex Sans Variable', ${FALLBACK}`, stretch: '85%' },
+    href: null,
+    note: 'Chosen (D4) and self-hosted: one variable file with the condensed widths built in.',
+  },
+  {
     id: 'inter',
-    label: 'Inter (today)',
+    label: 'Inter (before)',
     family: `'Inter', ${FALLBACK}`,
     condensed: null,
     href: null,
-    note: 'The baseline. Impeccable lists it as the most overused UI face.',
-  },
-  {
-    id: 'plex',
-    label: 'IBM Plex Sans',
-    family: `'IBM Plex Sans', ${FALLBACK}`,
-    condensed: { family: `'IBM Plex Sans Condensed', ${FALLBACK}`, stretch: '100%' },
-    href: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@400;500;600&display=swap',
-    note: 'The plan’s pick: industrial, open counters, a separate condensed family for tables.',
+    note: 'What the workspace used before B2. Impeccable lists it as the most overused UI face.',
   },
   {
     id: 'instrument',
@@ -86,7 +86,7 @@ export const PALETTES: PaletteCandidate[] = [
   { id: 'full', label: '3 · Full shift', description: 'Warm neutrals, palm-oil action, and adire indigo for the brand.' },
 ]
 
-export const DEFAULT_PREVIEW: DesignPreview = { font: 'inter', palette: 'today', condensed: false }
+export const DEFAULT_PREVIEW: DesignPreview = { font: 'plex', palette: 'today', condensed: false }
 
 const STORAGE_KEY = 'pp.designPreview'
 
@@ -145,5 +145,5 @@ export function applyPreview(preview: DesignPreview): void {
 }
 
 export function isDefaultPreview(preview: DesignPreview): boolean {
-  return preview.font === 'inter' && preview.palette === 'today' && !preview.condensed
+  return preview.font === 'plex' && preview.palette === 'today' && !preview.condensed
 }

@@ -23,6 +23,14 @@ export function AppLayout() {
     startServiceWorker({ install: true })
   }, [])
 
+  // The workspace's own typeface (D4), on <html> so dialogs portaled to <body> share it.
+  useEffect(() => {
+    document.documentElement.dataset.surface = 'workspace'
+    return () => {
+      delete document.documentElement.dataset.surface
+    }
+  }, [])
+
   return (
     <div className="flex h-screen overflow-hidden bg-neutral-50">
       <Sidebar

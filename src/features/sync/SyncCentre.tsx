@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/Button'
 import { Modal } from '@/components/Modal'
+import { Stamp, type StampKind } from '@/components/Stamp'
 import { syncCatalog } from '@/features/catalog/catalogStore'
 import { useCatalogState } from '@/features/catalog/useCatalog'
 import { describeDraft } from '@/features/drafts/describeDraft'
@@ -101,10 +102,10 @@ export function SyncCentre({ open, onClose }: { open: boolean; onClose: () => vo
             </p>
             <ul className="flex flex-col divide-y divide-neutral-100 rounded-md border border-neutral-200">
               {ops.map((op) => (
-                <ReceiptLine key={op.id} op={op} stamp={op.status === 'needs_attention' ? 'needs' : 'waiting'} />
+                <ReceiptLine key={op.id} op={op} stamp={op.status === 'needs_attention' ? 'check' : 'recorded'} />
               ))}
               {recentlySent.map((op) => (
-                <ReceiptLine key={op.id} op={op} stamp="sent" sentAt={op.sentAt} />
+                <ReceiptLine key={op.id} op={op} stamp="synced" sentAt={op.sentAt} />
               ))}
             </ul>
           </section>
@@ -117,15 +118,11 @@ export function SyncCentre({ open, onClose }: { open: boolean; onClose: () => vo
   )
 }
 
-const STAMP: Record<'waiting' | 'needs' | 'sent', { text: string; className: string }> = {
-  waiting: { text: 'Waiting', className: 'border-primary-200 text-primary-700' },
-  needs: { text: 'Needs you', className: 'border-warning-300 text-warning-800' },
-  sent: { text: 'Sent', className: 'border-accent-300 text-accent-700' },
-}
+/** A SYNCED stamp lands (plan §2 motion) when the change went up moments ago, not on every open. */
+const JUST_NOW_MS = 4_000
 
 /** One change, the way a receipt prints it: what, how much, which product, when — and its stamp. */
-function ReceiptLine({ op, stamp, sentAt }: { op: OutboxOp; stamp: keyof typeof STAMP; sentAt?: number }) {
-  const { text, className } = STAMP[stamp]
+function ReceiptLine({ op, stamp, sentAt }: { op: OutboxOp; stamp: StampKind; sentAt?: number }) {
   return (
     <li className="flex flex-col gap-2 px-4 py-3">
       <div className="flex items-start justify-between gap-3">
@@ -139,13 +136,9 @@ function ReceiptLine({ op, stamp, sentAt }: { op: OutboxOp; stamp: keyof typeof 
             {sentAt != null && ` · sent ${at(sentAt)}`}
           </p>
         </div>
-        <span
-          className={`shrink-0 -rotate-2 rounded-sm border-2 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${className}`}
-        >
-          {text}
-        </span>
+        <Stamp kind={stamp} land={sentAt != null && Date.now() - sentAt < JUST_NOW_MS} />
       </div>
-      {stamp === 'needs' && op.problem && (
+      {stamp === 'check' && op.problem && (
         <div className="flex flex-col gap-2 rounded-md bg-warning-50 px-3 py-2">
           <p className="text-sm text-warning-900">{op.problem.message}</p>
           <div className="flex flex-wrap gap-2">

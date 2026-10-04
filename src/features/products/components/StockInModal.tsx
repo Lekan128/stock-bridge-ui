@@ -6,7 +6,7 @@ import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import { type StockInRequestPayload } from '@/features/products/api/stockApi'
 import { UnitToggle } from '@/features/products/components/UnitToggle'
@@ -56,7 +56,8 @@ export interface StockInModalProps {
   onClose: () => void
   onSuccess: (result: StockMutationResponse) => void
   /** Saved on this phone instead of sent (A4) — the server could not be reached. */
-  onQueued?: () => void
+  /** Saved on this phone instead of sent (A4); gets the waiting write's id, for Undo (B2). */
+  onQueued?: (opId: string) => void
 }
 
 type Step = 'form' | 'confirm' | 'receipt'
@@ -231,6 +232,7 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState<StockMutationResponse | null>(null)
   const [queued, setQueued] = useState(false)
+  const [queuedOpId, setQueuedOpId] = useState<string | null>(null)
 
   const activeProductVendors = productVendors.filter((v) => v.companyVendorActive)
   const preferredVendor = activeProductVendors.find((v) => v.isPreferred)
@@ -521,7 +523,10 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
         baseDelta: baseQuantity,
       })
       if (outcome.status === 'sent') setResult(outcome.response)
-      else setQueued(true)
+      else {
+        setQueued(true)
+        setQueuedOpId(outcome.op.id)
+      }
       setStep('receipt')
     } catch (err) {
       setSubmitError(isAppError(err) ? err.message : 'Something went wrong. Please try again.')
@@ -558,7 +563,7 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
   const supplierForDefault = confirmVendorName || null
 
   return (
-    <Modal
+    <Sheet
       open
       onClose={onClose}
       size="xl"
@@ -578,12 +583,12 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
             <Button variant="secondary" onClick={() => setStep('form')} disabled={submitting}>
               Edit
             </Button>
-            <Button onClick={() => void submit()} loading={submitting}>
+            <Button variant="action" onClick={() => void submit()} loading={submitting}>
               Confirm
             </Button>
           </>
         ) : (
-          <Button onClick={() => (result ? onSuccess(result) : onQueued?.())}>Done</Button>
+          <Button onClick={() => (result ? onSuccess(result) : queuedOpId && onQueued?.(queuedOpId))}>Done</Button>
         )
       }
     >
@@ -967,6 +972,6 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
           </dl>
         </div>
       )}
-    </Modal>
+    </Sheet>
   )
 }

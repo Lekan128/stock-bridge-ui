@@ -109,7 +109,7 @@ export function AddressListPage() {
               // The default is what checkout preselects, so it is marked structurally (a tinted
               // rail) as well as with a badge — a lone badge in a grid of six is easy to scan past.
               className={`overflow-hidden rounded-lg bg-white ${
-                address.isDefault ? 'border-l-4 border-l-primary-600' : ''
+                address.isDefault ? '' : ''
               }`}
             >
               <AddressCard

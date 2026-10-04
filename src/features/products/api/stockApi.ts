@@ -136,6 +136,16 @@ export const stockApi = {
       .post<StockMutationResponse>(`/api/products/${productId}/stock/count`, payload, idempotent(idempotencyKey))
       .then((r) => r.data),
 
+  /**
+   * Undo (B2, decision D8): void a write made moments ago, as if it had never been made. Only by
+   * the person who made it, within two minutes, while it is still the product's latest write — a
+   * 409 says why otherwise. The response's `product` is the restored figure; it has no `movement`.
+   */
+  voidWrite: (productId: string, movementId: string) =>
+    api
+      .post<StockMutationResponse>(`/api/products/${productId}/stock/movements/${movementId}/void`)
+      .then((r) => r.data),
+
   adjust: (productId: string, payload: StockAdjustmentPayload, idempotencyKey?: string) =>
     api
       .post<StockMutationResponse>(`/api/products/${productId}/stock/adjustment`, payload, idempotent(idempotencyKey))

@@ -69,21 +69,32 @@ function normalizeError(error: AxiosError): AppError {
  * `navigator.onLine === false` is reliable when it says offline; when it says online it only means
  * "some network interface is up", which is why the default is "couldn't reach", not "offline".
  */
+/** What a request that never got an answer says — and how `ErrorState` knows to stay calm (U8). */
+export const NETWORK_MESSAGES = {
+  offline: "You're offline. Check your connection and try again.",
+  timeout: 'The server took too long to answer. Check your connection and try again.',
+  unreachable: "Couldn't reach Procure Paddy. Check your connection and try again.",
+} as const
+
+export function isNetworkMessage(message: string | null | undefined): boolean {
+  return message != null && (Object.values(NETWORK_MESSAGES) as string[]).includes(message)
+}
+
 function networkError(error: AxiosError): AppError {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-    return { status: 0, kind: 'offline', message: "You're offline. Check your connection and try again." }
+    return { status: 0, kind: 'offline', message: NETWORK_MESSAGES.offline }
   }
   if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
     return {
       status: 0,
       kind: 'timeout',
-      message: 'The server took too long to answer. Check your connection and try again.',
+      message: NETWORK_MESSAGES.timeout,
     }
   }
   return {
     status: 0,
     kind: 'unreachable',
-    message: "Couldn't reach Procure Paddy. Check your connection and try again.",
+    message: NETWORK_MESSAGES.unreachable,
   }
 }
 

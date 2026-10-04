@@ -11,11 +11,11 @@ export interface SidebarProps {
   onCloseMobile: () => void
 }
 
+// The active item is a filled pill (B2) — the green left stripe it replaces was one of the
+// border accents Impeccable flags as template-generic (plan §1.3).
 const itemClassName = (isActive: boolean) =>
-  `group flex items-center gap-3 rounded-md border-l-2 px-3 py-2.5 text-sm font-medium transition-colors ${
-    isActive
-      ? 'border-accent-600 bg-neutral-50 text-neutral-900'
-      : 'border-transparent text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900'
+  `group flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
+    isActive ? 'bg-primary-50 text-primary-800' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'
   }`
 
 export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onCloseMobile }: SidebarProps) {

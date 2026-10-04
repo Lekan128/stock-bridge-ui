@@ -6,10 +6,14 @@
 
 /* ------------------------------------------------------------------ typefaces */
 
+/* Plex ships now (D4) and is the workspace default; Inter is here as "before". */
 html[data-pp-font='plex'] {
-  --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --pp-font-condensed: 'IBM Plex Sans Condensed', ui-sans-serif, system-ui, sans-serif;
-  --pp-stretch: 100%;
+  --pp-font-condensed: var(--font-workspace);
+  --pp-stretch: 85%;
+}
+
+html[data-pp-font='inter'] {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
 
 html[data-pp-font='instrument'] {
@@ -56,18 +60,8 @@ html[data-pp-palette='full'] {
   --pp-action: #c4471b;
   --pp-action-hover: #a93b14;
   --pp-action-bright: #d9531e;
-}
-
-html[data-pp-palette='warm-action'] [data-preview-action],
-html[data-pp-palette='full'] [data-preview-action] {
-  background-color: var(--pp-action);
-  border-color: var(--pp-action);
-  color: #fff;
-}
-
-html[data-pp-palette='warm-action'] [data-preview-action]:hover,
-html[data-pp-palette='full'] [data-preview-action]:hover {
-  background-color: var(--pp-action-hover);
+  --color-action: var(--pp-action);
+  --color-action-hover: var(--pp-action-hover);
 }
 
 /* Option 3: the brand moves from navy to adire indigo (~#2B2F77 at 600). */

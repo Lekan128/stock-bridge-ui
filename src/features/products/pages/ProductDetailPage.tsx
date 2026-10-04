@@ -7,10 +7,11 @@ import { Button, buttonClassName } from '@/components/Button'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { SavedDataNote } from '@/components/SavedDataNote'
 import { PendingStockNote } from '@/features/outbox/PendingStockNote'
+import { applyStockResult, discardOp, getOutboxState, isInFlight } from '@/features/outbox/outboxStore'
+import { stockApi } from '@/features/products/api/stockApi'
 import { useToast } from '@/components/useToast'
 import { productsApi } from '@/features/products/api/productsApi'
 import { IncomingStockBadge } from '@/features/products/components/IncomingStockBadge'
-import { LowStockBadge } from '@/features/products/components/LowStockBadge'
 import { ProductDetailSkeleton } from '@/features/products/components/ProductDetailSkeleton'
 import { ProductImage } from '@/features/products/components/ProductImage'
 import { StatusBadge } from '@/features/products/components/StatusBadge'
@@ -25,10 +26,19 @@ import { useProduct } from '@/features/products/hooks/useProduct'
 import { useProductIncoming } from '@/features/products/hooks/useProductIncoming'
 import { useStockHistory } from '@/features/products/hooks/useStockHistory'
 import type { StockMutationResponse } from '@/features/products/types'
-import { UNIT_COPY, formatPackCostEcho, formatPricePer, packPhrase, stockUnitSymbol } from '@/features/products/unitCopy'
+import {
+  UNIT_COPY,
+  formatNumber,
+  formatPackCostEcho,
+  formatPricePer,
+  packPhrase,
+  stockUnitSymbol,
+  stockUnitWord,
+} from '@/features/products/unitCopy'
 import { buildPackOption } from '@/features/products/unitSet'
 import { VendorsTab } from '@/features/products/vendors/components/VendorsTab'
 import { isAppError } from '@/types/api'
+import { OverflowMenu } from '@/components/OverflowMenu'
 
 type StockAction = 'in' | 'out' | 'adjustment' | null
 
@@ -124,20 +134,65 @@ export function ProductDetailPage() {
   function handleMutationSuccess(result: StockMutationResponse) {
     setProduct(result.product)
     const supersededCount = activeAction === 'adjustment' && result.movement == null
+    const what = activeAction === 'in' ? 'Stock in' : activeAction === 'out' ? 'Stock out' : 'Count'
     setActiveAction(null)
     setHistoryPage(0)
     refetchHistory()
     refetchLowStockAlerts()
+    if (supersededCount) {
+      showToast('A newer count was already recorded, so nothing changed.', 'info')
+      return
+    }
+    // Toast v2 (B2): the new figure, and Undo for the moments after (decision D8).
+    const movement = result.movement
     showToast(
-      supersededCount ? 'A newer count was already recorded, so nothing changed.' : 'Stock updated.',
-      supersededCount ? 'info' : 'success',
+      `${what} recorded · ${result.product.name} now ${figure(result.product.quantityOnHand)}`,
+      'success',
+      movement ? { action: { label: 'Undo', onAction: () => void undoWrite(movement.id) } } : undefined,
     )
   }
 
+  /** Undo a write that reached the server: voided as if never made, or refused with the reason. */
+  async function undoWrite(movementId: string) {
+    if (!product) return
+    try {
+      const restored = await stockApi.voidWrite(product.id, movementId)
+      applyStockResult(product.id, restored)
+      setProduct(restored.product)
+      setHistoryPage(0)
+      refetchHistory()
+      refetchLowStockAlerts()
+      showToast(`Undone · ${restored.product.name} is back to ${figure(restored.product.quantityOnHand)}`, 'info')
+    } catch (err) {
+      showToast(isAppError(err) ? err.message : "Couldn't undo that. Record a count to correct the figure.", 'error')
+    }
+  }
+
   /** Saved on this phone (A4): the pending note below the stock figure takes it from here. */
-  function handleQueued() {
+  function handleQueued(opId: string) {
     setActiveAction(null)
-    showToast("Saved on this phone. It will be sent when you're back online.", 'info')
+    showToast("Saved on this phone. It will be sent when you're back online.", 'info', {
+      action: { label: 'Undo', onAction: () => undoQueued(opId) },
+    })
+  }
+
+  /** Undo a write still waiting on this phone: it is simply never sent. */
+  function undoQueued(opId: string) {
+    if (isInFlight(opId)) {
+      showToast("It's being sent right now, so it can't be taken back. Record a count to correct the figure.", 'info')
+      return
+    }
+    if (!getOutboxState().ops.some((op) => op.id === opId)) {
+      showToast("It has already been sent, so it can't be taken back here. Record a count to correct the figure.", 'info')
+      return
+    }
+    void discardOp(opId)
+    showToast('Taken back. Nothing was sent.', 'info')
+  }
+
+  /** "1,020 kg", "96 pieces" — the product's figure in its own unit. */
+  function figure(quantity: number): string {
+    return `${formatNumber(quantity)} ${stockUnitWord(stockUnitText, quantity)}`
   }
 
   async function handleDeactivate() {
@@ -219,7 +274,6 @@ export function ProductDetailPage() {
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-semibold text-neutral-900">{product.name}</h1>
               <StatusBadge active={product.active} />
-              {product.isLowStock && <LowStockBadge />}
               <IncomingStockBadge quantity={incoming.quantity} />
             </div>
             <p className="mt-0.5 text-sm text-neutral-500">SKU: {product.sku}</p>
@@ -231,12 +285,15 @@ export function ProductDetailPage() {
               <Pencil className="h-4 w-4" />
               Edit
             </Link>
+            {/* Deactivate lives in "⋯", behind its confirmation (B2): the header stays calm, and a
+                red button never sits beside Stock in. */}
             {product.active ? (
-              <Button variant="danger" onClick={() => setConfirmDeactivate(true)}>
-                Deactivate
-              </Button>
+              <OverflowMenu
+                label={`More actions for ${product.name}`}
+                items={[{ label: 'Deactivate', tone: 'danger', onSelect: () => setConfirmDeactivate(true) }]}
+              />
             ) : (
-              <Button onClick={() => void handleActivate()} loading={activating}>
+              <Button variant="secondary" onClick={() => void handleActivate()} loading={activating}>
                 Activate
               </Button>
             )}
@@ -390,7 +447,7 @@ export function ProductDetailPage() {
           canStockIn || canStockOut || canManageInventory ? (
             <>
               {canStockIn && (
-                <Button variant="secondary" onClick={() => setActiveAction('in')} data-preview-action="">
+                <Button variant="action" onClick={() => setActiveAction('in')}>
                   Stock In
                 </Button>
               )}

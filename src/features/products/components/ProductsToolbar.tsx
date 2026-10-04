@@ -175,7 +175,7 @@ export function ProductsToolbar({
 
       <div className="flex items-center justify-between gap-2">
         {canManageProducts ? (
-          <Button type="button" onClick={onAddProduct} data-preview-action="">
+          <Button type="button" variant="action" onClick={onAddProduct}>
             <Plus className="h-4 w-4" />
             Add Product
           </Button>

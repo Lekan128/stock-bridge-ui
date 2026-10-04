@@ -6,14 +6,16 @@ import { formatCurrency, formatDateTime } from '@/features/products/formatters'
 import type { MovementType, PageResponse, StockMovement, UnitOfMeasureOption } from '@/features/products/types'
 import { formatEnteredAndBase, formatPricePerOption } from '@/features/products/unitCopy'
 import { buildPackOption } from '@/features/products/unitSet'
+import { StockFigure } from '@/features/products/components/StockFigure'
 
 const movementLabels: Record<MovementType, string> = { IN: 'Stock in', OUT: 'Stock out', ADJUSTMENT: 'Adjustment' }
 const movementVariants: Record<MovementType, BadgeVariant> = { IN: 'success', OUT: 'danger', ADJUSTMENT: 'neutral' }
 
-function formatQuantity(movement: StockMovement): string {
-  if (movement.movementType === 'OUT') return `-${movement.quantity}`
-  if (movement.movementType === 'IN') return `+${movement.quantity}`
-  return movement.quantity > 0 ? `+${movement.quantity}` : String(movement.quantity)
+/** The movement as a signed change in stock units: a stock-out is always a fall. */
+function signedQuantity(movement: StockMovement): number {
+  if (movement.movementType === 'OUT') return -Math.abs(movement.quantity)
+  if (movement.movementType === 'IN') return Math.abs(movement.quantity)
+  return movement.quantity
 }
 
 /**
@@ -109,15 +111,21 @@ export function StockHistoryTable({
                 <td className="border-b border-neutral-100 px-4 py-2.5">
                   <Badge variant={movementVariants[movement.movementType]}>{movementLabels[movement.movementType]}</Badge>
                 </td>
-                <td className="border-b border-neutral-100 px-4 py-2.5 text-right font-medium text-neutral-900">
-                  {formatQuantity(movement)}
+                <td className="border-b border-neutral-100 px-4 py-2.5 text-right">
+                  {/* The same figure as everywhere else (B2), as a change: "+400 kg", "−100 kg",
+                      with the pack it arrived in under it when it came in one. */}
+                  <StockFigure
+                    quantity={signedQuantity(movement)}
+                    unit={stockUnit}
+                    pack={enteredPackEcho(movement, stockUnit, unitOfMeasureOptions)}
+                    signed
+                    align="end"
+                  />
                   {movement.unitPriceAtTime != null && (
-                    <span className="ml-1 font-normal text-neutral-400">@ {formatCurrency(movement.unitPriceAtTime)}</span>
+                    <span className="mt-0.5 block text-xs tabular-nums text-neutral-500">
+                      @ {formatCurrency(movement.unitPriceAtTime)}
+                    </span>
                   )}
-                  {(() => {
-                    const echo = enteredPackEcho(movement, stockUnit, unitOfMeasureOptions)
-                    return echo && <span className="mt-0.5 block text-xs font-normal text-neutral-500">{echo}</span>
-                  })()}
                 </td>
                 <td className="max-w-xs truncate border-b border-neutral-100 px-4 py-2.5 text-neutral-600">
                   {movement.note || '—'}

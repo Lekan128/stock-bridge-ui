@@ -519,11 +519,11 @@ export function RecordDeliveryPage() {
             {copy.delivery.totalAnnounce(count, totalText)}
           </p>
           <Button
+            variant="action"
             className="w-full"
             disabled={!canSubmit}
             loading={submitting}
             onClick={() => void handleSubmit()}
-            data-preview-action=""
           >
             {submitting
               ? copy.delivery.saving

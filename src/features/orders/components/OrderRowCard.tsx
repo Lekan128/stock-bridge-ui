@@ -21,7 +21,7 @@ export function OrderRowCard({ order, onRetryPayment, retrying }: OrderRowCardPr
       to={`/app/orders/${order.id}`}
       className={`block rounded-lg border p-4 shadow-sm transition-colors ${
         awaitingReceipt
-          ? 'border-warning-200 border-l-4 border-l-warning-500 bg-warning-50 hover:bg-warning-100'
+          ? 'border-warning-200 bg-warning-50 hover:bg-warning-100'
           : 'border-neutral-200 bg-white hover:bg-neutral-50'
       }`}
     >

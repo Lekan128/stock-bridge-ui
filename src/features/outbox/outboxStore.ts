@@ -193,8 +193,8 @@ function problemFrom(error: unknown): OutboxProblem {
   return { kind: 'refused', message: isAppError(error) ? error.message : 'The server could not record this.' }
 }
 
-/** The product's figures everywhere — detail, list, device catalogue — after a write lands. */
-function applyResult(productId: string, response: StockMutationResponse): void {
+/** The product's figures everywhere — detail, list, device catalogue — after a write lands (or is undone). */
+export function applyStockResult(productId: string, response: StockMutationResponse): void {
   if (response.product) syncProductIntoCache(queryClient, response.product)
   void queryClient.invalidateQueries({ queryKey: ['products', 'history', productId] })
   void queryClient.invalidateQueries({ queryKey: queryKeys.products.lowStock })
@@ -232,7 +232,7 @@ export async function submitStockWrite(input: NewOp): Promise<SubmitOutcome<Stoc
   if (!waitingBehind) {
     try {
       const response = await send(op, { late: false })
-      applyResult(op.productId, response)
+      applyStockResult(op.productId, response)
       return { status: 'sent', response }
     } catch (error) {
       if (!isTransient(error) || mustBeOnline) throw error
@@ -248,10 +248,23 @@ export async function submitStockWrite(input: NewOp): Promise<SubmitOutcome<Stoc
 
 let processing = false
 let processAgain = false
+/**
+ * "Send now" holds for the whole round, not just its first pass: a product's next write only
+ * becomes sendable once the one before it lands, and is still inside its own back-off then.
+ */
+let forceRound = false
+/** The write on its way right now, if any — too late to take back (Undo, B2). */
+let inFlightId: string | null = null
+
+/** Whether this write is being sent at this moment, so taking it back can no longer stop it. */
+export function isInFlight(id: string): boolean {
+  return inFlightId === id
+}
 
 /** Sends whatever can be sent now. Single-flight; a call while running runs again after. */
 export async function processOutbox({ force = false }: { force?: boolean } = {}): Promise<void> {
   if (!db) return
+  if (force) forceRound = true
   if (state.ops.length === 0) {
     if (!processing) finishRound()
     return
@@ -267,8 +280,9 @@ export async function processOutbox({ force = false }: { force?: boolean } = {})
     for (const op of state.ops) if (!heads.has(op.productId)) heads.set(op.productId, op)
     for (const op of heads.values()) {
       if (op.status !== 'pending') continue
-      if (!force && op.nextAttemptAt > Date.now()) continue
+      if (!forceRound && op.nextAttemptAt > Date.now()) continue
       setState({ sending: true })
+      inFlightId = op.id
       try {
         const response = await send(op, { late: true })
         await remove(op.id)
@@ -276,7 +290,7 @@ export async function processOutbox({ force = false }: { force?: boolean } = {})
           sentThisRound: state.sentThisRound + 1,
           recentlySent: [{ ...op, sentAt: Date.now() }, ...state.recentlySent].slice(0, RECENT_LIMIT),
         })
-        applyResult(op.productId, response)
+        applyStockResult(op.productId, response)
         processAgain = true // the product's next write, if any, can go now
       } catch (error) {
         if (isTransient(error)) {
@@ -285,6 +299,8 @@ export async function processOutbox({ force = false }: { force?: boolean } = {})
         } else {
           await save({ ...op, status: 'needs_attention', problem: problemFrom(error) })
         }
+      } finally {
+        inFlightId = null
       }
     }
   } finally {
@@ -300,6 +316,7 @@ export async function processOutbox({ force = false }: { force?: boolean } = {})
 
 /** The round is over: nothing more can go until the next trigger. */
 function finishRound(): void {
+  forceRound = false
   if (!state.sending && state.sentThisRound === 0) return
   setState({
     sending: false,

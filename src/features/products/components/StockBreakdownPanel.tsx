@@ -3,7 +3,8 @@ import { ArrowRight, PackageCheck, Truck } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { OrderStatusBadge } from '@/components/OrderStatusBadge'
 import type { ResolvedIncoming } from '@/features/orders/incomingStock'
-import { LowStockBadge } from '@/features/products/components/LowStockBadge'
+import { StockBar } from '@/features/products/components/StockBar'
+import { StockFigure } from '@/features/products/components/StockFigure'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import type { Product } from '@/features/products/types'
 import {
@@ -11,6 +12,7 @@ import {
   formatQuantity,
   formatQuantityEcho,
   packRemainderPhrase,
+  stockUnitWord,
   unitNoun,
 } from '@/features/products/unitCopy'
 import {
@@ -18,6 +20,7 @@ import {
   fromBaseQuantity,
   packRemainder,
   productsOwnUnits,
+  resolveUnitSymbol,
   stockUnitLabel,
   unitOptionsForProduct,
 } from '@/features/products/unitSet'
@@ -64,6 +67,8 @@ export function StockBreakdownPanel({ product, incoming, actions }: StockBreakdo
   // single-entry set), which is at least honest about being unitless.
   const productUnits = unitOptionsForProduct(product, unitOfMeasureOptions)
   const unitLabel = stockUnitLabel(productUnits)
+  // The symbol the unit list gives the stock unit ("kg", "Piece"), for the hero figure and bar.
+  const unitSymbol = resolveUnitSymbol(product.unitOfMeasure, unitOfMeasureOptions)
 
   /**
    * "1,600 kg" also stated as "= 20 bags", once per pack this product is configured with.
@@ -115,40 +120,38 @@ export function StockBreakdownPanel({ product, incoming, actions }: StockBreakdo
         <div className="grid flex-1 grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <p className="text-sm text-neutral-500">On hand — usable now</p>
-            <div className="mt-1 flex flex-wrap items-baseline gap-x-1.5 gap-y-2">
-              <span
-                className={`text-3xl font-semibold ${product.quantityOnHand > 0 ? 'text-neutral-900' : 'text-neutral-400'}`}
-              >
-                {formatNumber(product.quantityOnHand)}
-              </span>
-              <span className="text-base font-medium text-neutral-500">{unitLabel}</span>
-              {product.isLowStock && (
-                <span className="self-center">
-                  <LowStockBadge />
-                </span>
-              )}
+            {/* The hero figure (plan §2: "the number is the hero"), the same component as every
+                list row, at its largest (B2). The stock-unit figure stays the headline: it is the
+                auditable number. Under it, the packs it is bought and sold in — the default pack in
+                mixed form ("2 bags + 20 kg"), then any pack it divides into evenly — because nobody
+                counts 1,600 kg of rice, they count 20 bags. */}
+            <div className="mt-2">
+              <StockFigure
+                quantity={product.quantityOnHand}
+                unit={unitSymbol}
+                size="lg"
+                pack={
+                  onHandInPacks || packEquivalents.length > 0
+                    ? [onHandInPacks && `= ${onHandInPacks}`, ...packEquivalents.map((line) => line.text)]
+                        .filter(Boolean)
+                        .join(' · ')
+                    : null
+                }
+              />
             </div>
-            {/* The same figure in the packs this product is actually bought and sold in.
-                Storage stays in the stock unit — a pack size that changes must never silently
-                rewrite what is on the shelf — but nobody counts 1,600 kg of rice, they count 20
-                bags, and making them divide in their head is how a stock screen stops being read.
-                Odoo and NetSuite both hold stock in the base unit and let packagings ride on top;
-                this is that, shown rather than left to arithmetic.
-
-                The default pack leads, in mixed form, because it is the one reading that is
-                always available — the whole-pack equivalents beside it appear only when the
-                balance happens to divide evenly. The stock-unit figure stays the headline above
-                both: it is the auditable number, and these are the way it is spoken. */}
-            {(onHandInPacks || packEquivalents.length > 0) && (
-              <p className="mt-1 text-sm text-neutral-600">
-                {onHandInPacks && <span className="font-medium text-neutral-700">= {onHandInPacks}</span>}
-                {packEquivalents.map((line, index) => (
-                  <span key={line.code}>
-                    {(onHandInPacks || index > 0) && <span className="text-neutral-300"> · </span>}
-                    {line.text}
-                  </span>
-                ))}
-              </p>
+            {product.lowStockThreshold != null && product.lowStockThreshold > 0 && (
+              <div className="mt-3 flex flex-col gap-1">
+                <StockBar
+                  quantity={product.quantityOnHand}
+                  threshold={product.lowStockThreshold}
+                  low={product.isLowStock}
+                  unit={unitSymbol}
+                  size="hero"
+                />
+                <p className="text-xs tabular-nums text-neutral-500" aria-hidden="true">
+                  Alert at {formatNumber(product.lowStockThreshold)} {stockUnitWord(unitSymbol, product.lowStockThreshold)}
+                </p>
+              </div>
             )}
             <p className="mt-1 text-xs text-neutral-500">Available to pick, sell or use today.</p>
           </div>

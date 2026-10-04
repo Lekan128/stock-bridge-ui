@@ -4,7 +4,7 @@ import { AlertTriangle, ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import { stockApi, type ProductLot, type StockOutResponse } from '@/features/products/api/stockApi'
 import { UnitToggle } from '@/features/products/components/UnitToggle'
@@ -39,7 +39,8 @@ export interface StockOutModalProps {
   onClose: () => void
   onSuccess: (result: StockOutResponse) => void
   /** Saved on this phone instead of sent (A4) — the server could not be reached. */
-  onQueued?: () => void
+  /** Saved on this phone instead of sent (A4); gets the waiting write's id, for Undo (B2). */
+  onQueued?: (opId: string) => void
 }
 
 interface AllocationRow {
@@ -139,6 +140,7 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
   const [oversellInfo, setOversellInfo] = useState<{ available: number; requested: number } | null>(null)
   const [result, setResult] = useState<StockOutResponse | null>(null)
   const [queued, setQueued] = useState(false)
+  const [queuedOpId, setQueuedOpId] = useState<string | null>(null)
   const online = useOnlineStatus()
   const [allocationRows, setAllocationRows] = useState<AllocationRow[]>([])
   const [openLots, setOpenLots] = useState<ProductLot[]>([])
@@ -348,7 +350,10 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
         baseDelta: -baseQuantity,
       })
       if (outcome.status === 'sent') setResult(outcome.response as StockOutResponse)
-      else setQueued(true)
+      else {
+        setQueued(true)
+        setQueuedOpId(outcome.op.id)
+      }
       setStep('receipt')
     } catch (err) {
       if (isAppError(err) && err.availableQuantity != null && err.requestedQuantity != null) {
@@ -375,7 +380,7 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
     formatEnteredAndBase(quantityNumber, selectedOption, baseQuantity, stockUnitText)
 
   return (
-    <Modal
+    <Sheet
       open
       onClose={onClose}
       size={choosingLots ? 'xl' : 'md'}
@@ -386,12 +391,12 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
             <Button variant="secondary" onClick={onClose}>
               Cancel
             </Button>
-            <Button onClick={handleSubmit(() => void submit())} loading={submitting} disabled={roundsToZero}>
+            <Button variant="action" onClick={handleSubmit(() => void submit())} loading={submitting} disabled={roundsToZero}>
               Confirm
             </Button>
           </>
         ) : (
-          <Button onClick={() => (result ? onSuccess(result) : onQueued?.())}>Done</Button>
+          <Button onClick={() => (result ? onSuccess(result) : queuedOpId && onQueued?.(queuedOpId))}>Done</Button>
         )
       }
     >
@@ -662,6 +667,6 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
           )}
         </div>
       )}
-    </Modal>
+    </Sheet>
   )
 }

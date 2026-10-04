@@ -3,9 +3,9 @@ import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { expectedCopy } from '@/features/expected/copy'
-import { PendingStockBadge } from '@/features/outbox/PendingStockBadge'
 import { IncomingStockBadge } from '@/features/products/components/IncomingStockBadge'
-import { LowStockBadge } from '@/features/products/components/LowStockBadge'
+import { StockBar } from '@/features/products/components/StockBar'
+import { StockFigure } from '@/features/products/components/StockFigure'
 import { ProductImage } from '@/features/products/components/ProductImage'
 import { StatusBadge } from '@/features/products/components/StatusBadge'
 import { formatCurrency, formatUnitOfMeasure } from '@/features/products/formatters'
@@ -112,7 +112,9 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
   }, [selectedOnPage, allOnPageSelected])
 
   return (
-    <table className="w-full border-separate border-spacing-0 text-sm">
+    // `font-narrow`: Plex's condensed width for this dense table (plan §2), so long product names
+    // and their figures fit on one row more often.
+    <table className="w-full border-separate border-spacing-0 font-narrow text-sm">
       <thead>
         <tr>
           {selection && (
@@ -178,9 +180,6 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
               key={product.id}
               ref={virtual?.measureRef}
               data-index={virtual?.indices[position]}
-              style={
-                product.isLowStock ? { boxShadow: 'inset 4px 0 0 0 var(--color-warning-500)' } : undefined
-              }
               // A ticked row is tinted, so the selection is legible from the shape of the table
               // rather than only from a 16px box in the first column — DESIGN.md's stated use
               // for primary-100/50.
@@ -247,26 +246,19 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
                 </td>
               )}
               <td className="border-b border-neutral-100 px-4 py-2.5 text-right">
-                <div className="flex flex-wrap items-center justify-end gap-x-1.5 gap-y-1">
-                  {product.isLowStock && <LowStockBadge />}
-                  {/* Zero usable stock is greyed rather than bolded even when a delivery is en
-                      route — the number you can act on today is still nought. */}
-                  <span className={product.quantityOnHand > 0 ? 'font-medium text-neutral-900' : 'font-medium text-neutral-400'}>
-                    {formatNumber(product.quantityOnHand)}
-                  </span>
-                  {/* The unit, per `UNIT_UX_CONTRACT.md` §7.2 — this column was a bare number,
-                      which on a catalog mixing kilograms, litres and pieces is not a comparable
-                      figure at all. Set in the muted secondary weight so a column of numbers still
-                      scans vertically as numbers: the eye reads down the digits and picks up the
-                      unit only where it matters. The header deliberately does NOT carry it (plan
-                      §6.7) — one table can hold several units at once, so it belongs on the row. */}
-                  <span className="text-xs text-neutral-500">
-                    {resolveUnitSymbol(product.unitOfMeasure, unitOfMeasureOptions)}
-                  </span>
+                <div className="flex flex-col items-end gap-1">
+                  {/* The figure, its unit and pack, and anything waiting on this phone — one
+                      component everywhere (B2). Zero is greyed, never bolded. */}
+                  <StockFigure
+                    quantity={product.quantityOnHand}
+                    unit={resolveUnitSymbol(product.unitOfMeasure, unitOfMeasureOptions)}
+                    pack={packLine}
+                    productId={product.id}
+                    align="end"
+                  />
                   {/* What is on an open expected delivery — task 3.1. Understated on purpose and
-                      never added to the figure beside it: this is a promise a supplier made on the
-                      phone, not stock anybody can pick today. Absent, not zero, when nothing is
-                      coming. */}
+                      never added to the figure: a promise a supplier made, not stock anybody can
+                      pick today. Absent, not zero, when nothing is coming. */}
                   {product.expectedQuantity != null && product.expectedQuantity > 0 && (
                     <span className="text-xs text-neutral-500">
                       <span aria-hidden="true">
@@ -277,22 +269,16 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
                       </span>
                     </span>
                   )}
+                  {/* On hand against the alert level: replaces the row stripe and the badge (B2). */}
+                  <StockBar
+                    quantity={product.quantityOnHand}
+                    threshold={product.lowStockThreshold}
+                    low={product.isLowStock}
+                    unit={resolveUnitSymbol(product.unitOfMeasure, unitOfMeasureOptions)}
+                  />
+                  {/* On its own line, never summed into the figure above. */}
+                  {incoming > 0 && <IncomingStockBadge quantity={incoming} />}
                 </div>
-                {/* The same figure in the pack this product is bought and sold in — see
-                    `packEquivalent`. Muted and one step smaller, so a column of ledger figures
-                    still scans vertically as ledger figures and this reads as a restatement of
-                    the number above rather than as a second number. */}
-                {packLine && <div className="text-xs text-neutral-500">{packLine}</div>}
-                {/* Recorded on this phone and not yet sent (A4): beside the figure, never in it. */}
-                <div className="flex justify-end">
-                  <PendingStockBadge productId={product.id} />
-                </div>
-                {/* On its own line, never summed into the figure above. */}
-                {incoming > 0 && (
-                  <div className="mt-1 flex justify-end">
-                    <IncomingStockBadge quantity={incoming} />
-                  </div>
-                )}
               </td>
               <td className="border-b border-neutral-100 px-4 py-2.5">
                 <StatusBadge active={product.active} />

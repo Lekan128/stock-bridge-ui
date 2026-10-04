@@ -44,7 +44,6 @@ export function OrderTable({ orders, onRetryPayment, retryingOrderId }: OrderTab
             <tr
               key={order.id}
               onClick={() => navigate(`/app/orders/${order.id}`)}
-              style={awaitingReceipt ? { boxShadow: 'inset 4px 0 0 0 var(--color-warning-500)' } : undefined}
               className={`cursor-pointer ${awaitingReceipt ? 'bg-warning-50 hover:bg-warning-100' : 'hover:bg-neutral-50'}`}
             >
               <td className="border-b border-neutral-100 px-4 py-3">

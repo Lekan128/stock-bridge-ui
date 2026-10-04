@@ -180,7 +180,7 @@ export function VendorListPage() {
                 // a lone badge is easy to scan past, and "did we actually buy from this one" is the
                 // question the whole distinction exists to answer.
                 className={`flex flex-col rounded-lg border border-neutral-200 bg-white ${
-                  vendor.kind === 'VERIFIED' ? 'border-l-4 border-l-primary-600' : ''
+                  ''
                 }`}
               >
                 <div className="flex items-start justify-between gap-3 p-4">

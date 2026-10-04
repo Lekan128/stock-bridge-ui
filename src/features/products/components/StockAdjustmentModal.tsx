@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import { QueuedReceipt } from '@/features/outbox/QueuedReceipt'
 import { submitStockWrite } from '@/features/outbox/outboxStore'
@@ -21,7 +21,8 @@ export interface StockAdjustmentModalProps {
   onClose: () => void
   onSuccess: (result: StockMutationResponse) => void
   /** Saved on this phone instead of sent — the server could not be reached. */
-  onQueued?: () => void
+  /** Saved on this phone instead of sent (A4); gets the waiting write's id, for Undo (B2). */
+  onQueued?: (opId: string) => void
 }
 
 /**
@@ -43,6 +44,7 @@ export function StockAdjustmentModal({
 }: StockAdjustmentModalProps) {
   const [formError, setFormError] = useState<string | null>(null)
   const [queuedSentence, setQueuedSentence] = useState<string | null>(null)
+  const [queuedOpId, setQueuedOpId] = useState<string | null>(null)
 
   const {
     register,
@@ -70,7 +72,10 @@ export function StockAdjustmentModal({
         payload: { countedQuantity, note: values.note || undefined },
       })
       if (outcome.status === 'sent') onSuccess(outcome.response)
-      else setQueuedSentence(`A count of ${formatQuantity(countedQuantity, stockUnit)} for ${productName}.`)
+      else {
+        setQueuedSentence(`A count of ${formatQuantity(countedQuantity, stockUnit)} for ${productName}.`)
+        setQueuedOpId(outcome.op.id)
+      }
     } catch (err) {
       setFormError(isAppError(err) ? err.message : 'Something went wrong. Please try again.')
     }
@@ -78,14 +83,20 @@ export function StockAdjustmentModal({
 
   if (queuedSentence) {
     return (
-      <Modal open onClose={onQueued ?? onClose} title="Saved on this phone" size="sm" footer={<Button onClick={onQueued ?? onClose}>Done</Button>}>
+      <Sheet
+        open
+        onClose={() => (queuedOpId && onQueued ? onQueued(queuedOpId) : onClose())}
+        title="Saved on this phone"
+        size="sm"
+        footer={<Button onClick={() => (queuedOpId && onQueued ? onQueued(queuedOpId) : onClose())}>Done</Button>}
+      >
         <QueuedReceipt sentence={queuedSentence} />
-      </Modal>
+      </Sheet>
     )
   }
 
   return (
-    <Modal
+    <Sheet
       open
       onClose={onClose}
       title="Count stock"
@@ -95,7 +106,7 @@ export function StockAdjustmentModal({
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
+          <Button variant="action" onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
             Record count
           </Button>
         </>
@@ -134,6 +145,6 @@ export function StockAdjustmentModal({
         </div>
         <FormError message={formError} />
       </form>
-    </Modal>
+    </Sheet>
   )
 }

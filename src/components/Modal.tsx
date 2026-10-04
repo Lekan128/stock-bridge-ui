@@ -1,6 +1,7 @@
-import { useEffect, type ReactNode } from 'react'
+import { useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
+import { useDialogBehaviour } from '@/components/useDialogBehaviour'
 
 export interface ModalProps {
   open: boolean
@@ -23,19 +24,9 @@ const sizes = {
 }
 
 export function Modal({ open, onClose, title, children, footer, size = 'md' }: ModalProps) {
-  useEffect(() => {
-    if (!open) return
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown)
-      document.body.style.overflow = ''
-    }
-  }, [open, onClose])
+  const dialogRef = useRef<HTMLDivElement>(null)
+  // Focus trap, initial and returned focus, inert background, Escape (B2).
+  useDialogBehaviour(dialogRef, open, onClose)
 
   if (!open) return null
 
@@ -61,10 +52,12 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }: M
     >
       <div className="fixed inset-0 bg-neutral-900/40" aria-hidden="true" onClick={onClose} />
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`animate-fade-slide-up relative flex max-h-full w-full flex-col rounded-lg bg-white shadow-lg ${sizes[size]}`}
+        tabIndex={-1}
+        className={`animate-fade-slide-up relative flex max-h-full w-full flex-col rounded-lg bg-white shadow-lg focus:outline-none ${sizes[size]}`}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-neutral-200 px-5 py-4">
           <h2 className="text-base font-semibold text-neutral-900">{title}</h2>

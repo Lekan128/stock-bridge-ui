@@ -4,10 +4,8 @@ import { Logo } from '@/components/Logo'
 import { ADMIN_NAV_ITEMS } from '@/layouts/adminNavConfig'
 
 const sidebarLinkClassName = (isActive: boolean) =>
-  `flex items-center gap-3 rounded-md border-l-2 px-3 py-2.5 text-sm font-medium transition-colors ${
-    isActive
-      ? 'border-accent-600 bg-neutral-50 text-neutral-900'
-      : 'border-transparent text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900'
+  `flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
+    isActive ? 'bg-primary-50 text-primary-800' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'
   }`
 
 const tabLinkClassName = (isActive: boolean) =>

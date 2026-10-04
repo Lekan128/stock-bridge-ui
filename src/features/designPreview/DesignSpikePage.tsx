@@ -86,7 +86,7 @@ export function DesignSpikePage() {
             incoming={NO_INCOMING}
             actions={
               <>
-                <Button variant="secondary" data-preview-action="">
+                <Button variant="action">
                   Stock In
                 </Button>
                 <Button variant="secondary">Stock Out</Button>
