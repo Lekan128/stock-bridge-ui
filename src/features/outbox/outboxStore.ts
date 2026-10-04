@@ -32,6 +32,16 @@ export interface OutboxState {
   ops: OutboxOp[]
   /** True while a write is on its way. */
   sending: boolean
+  /** Writes sent so far in the current round of sending, for "Sending 2 of 5" (A6). */
+  sentThisRound: number
+  /** When the last round that sent anything finished, for a brief "All caught up". */
+  lastSentAt: number | null
+  /**
+   * Writes that waited on this phone and have since been sent, newest first — the sync centre's
+   * "Sent" receipts. This session only and capped: a reassurance, not a history (that's the
+   * product's own movement list).
+   */
+  recentlySent: SentOp[]
   /** The outbox for the signed-in user is open. */
   ready: boolean
 }
@@ -49,7 +59,11 @@ class OutboxDatabase extends Dexie {
   }
 }
 
-let state: OutboxState = { ops: [], sending: false, ready: false }
+export type SentOp = OutboxOp & { sentAt: number }
+const RECENT_LIMIT = 10
+
+const CLOSED: OutboxState = { ops: [], sending: false, sentThisRound: 0, lastSentAt: null, recentlySent: [], ready: false }
+let state: OutboxState = CLOSED
 const listeners = new Set<() => void>()
 
 function setState(patch: Partial<OutboxState>): void {
@@ -103,7 +117,7 @@ export async function stopOutbox({ deleteData }: { deleteData: boolean }): Promi
   stopTriggers = null
   db?.close()
   db = null
-  setState({ ops: [], sending: false, ready: false })
+  setState(CLOSED)
   if (deleteData && name) {
     try {
       await Dexie.delete(name)
@@ -237,13 +251,16 @@ let processAgain = false
 
 /** Sends whatever can be sent now. Single-flight; a call while running runs again after. */
 export async function processOutbox({ force = false }: { force?: boolean } = {}): Promise<void> {
-  if (!db || state.ops.length === 0) return
+  if (!db) return
+  if (state.ops.length === 0) {
+    if (!processing) finishRound()
+    return
+  }
   if (processing) {
     processAgain = true
     return
   }
   processing = true
-  setState({ sending: true })
   try {
     // The first waiting write per product; anything behind it waits its turn.
     const heads = new Map<string, OutboxOp>()
@@ -251,9 +268,14 @@ export async function processOutbox({ force = false }: { force?: boolean } = {})
     for (const op of heads.values()) {
       if (op.status !== 'pending') continue
       if (!force && op.nextAttemptAt > Date.now()) continue
+      setState({ sending: true })
       try {
         const response = await send(op, { late: true })
         await remove(op.id)
+        setState({
+          sentThisRound: state.sentThisRound + 1,
+          recentlySent: [{ ...op, sentAt: Date.now() }, ...state.recentlySent].slice(0, RECENT_LIMIT),
+        })
         applyResult(op.productId, response)
         processAgain = true // the product's next write, if any, can go now
       } catch (error) {
@@ -267,12 +289,23 @@ export async function processOutbox({ force = false }: { force?: boolean } = {})
     }
   } finally {
     processing = false
-    setState({ sending: false })
     if (processAgain) {
       processAgain = false
-      void processOutbox()
+      void processOutbox() // still the same round: `sending` and the tally carry over
+    } else {
+      finishRound()
     }
   }
+}
+
+/** The round is over: nothing more can go until the next trigger. */
+function finishRound(): void {
+  if (!state.sending && state.sentThisRound === 0) return
+  setState({
+    sending: false,
+    sentThisRound: 0,
+    ...(state.sentThisRound > 0 ? { lastSentAt: Date.now() } : {}),
+  })
 }
 
 // ---------------------------------------------------------------------------- resolving

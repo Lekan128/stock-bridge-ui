@@ -1,10 +1,9 @@
-import { Menu, WifiOff } from 'lucide-react'
+import { Menu } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { findNavItemForPath } from '@/layouts/navConfig'
 import { NotificationBell } from '@/layouts/NotificationBell'
 import { UserMenu } from '@/layouts/UserMenu'
-import { useOnlineStatus } from '@/hooks/useOnlineStatus'
-import { OutboxIndicator } from '@/features/outbox/OutboxIndicator'
+import { SyncPill } from '@/features/sync/SyncPill'
 
 export interface TopbarProps {
   onOpenMobileSidebar: () => void
@@ -12,7 +11,6 @@ export interface TopbarProps {
 
 export function Topbar({ onOpenMobileSidebar }: TopbarProps) {
   const location = useLocation()
-  const online = useOnlineStatus()
   // Routes without a nav entry (profile, order detail, the marketplace admin sub-pages) fall back
   // to the product name rather than showing a stale title from a prefix match.
   const pageTitle = findNavItemForPath(location.pathname)?.label ?? 'Procure Paddy'
@@ -36,17 +34,8 @@ export function Topbar({ onOpenMobileSidebar }: TopbarProps) {
         <p className="truncate text-base font-semibold text-neutral-900 md:hidden">{pageTitle}</p>
       </div>
       <div className="flex items-center gap-2">
-        {!online && (
-          <span
-            role="status"
-            className="inline-flex items-center gap-1.5 rounded-sm border border-warning-200 bg-warning-50 px-2 py-1 text-xs font-medium text-warning-800"
-            title="No connection. What's on screen stays here; saving needs a connection."
-          >
-            <WifiOff className="h-3.5 w-3.5" aria-hidden="true" />
-            Offline
-          </span>
-        )}
-        <OutboxIndicator />
+        {/* Offline, waiting to send, sending, needs you, all caught up: one pill (A6). */}
+        <SyncPill />
         <NotificationBell />
         <UserMenu />
       </div>

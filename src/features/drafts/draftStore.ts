@@ -85,6 +85,16 @@ export async function loadDraft<T>(key: string): Promise<StoredDraft<T> | null> 
   }
 }
 
+/** Every draft on the phone, newest first — for the sync centre's "Unfinished forms" (A6). */
+export async function listDrafts(): Promise<StoredDraft[]> {
+  if (!db) return []
+  try {
+    return (await db.drafts.toArray()).sort((a, b) => b.savedAt - a.savedAt)
+  } catch {
+    return []
+  }
+}
+
 export async function saveDraft<T>(key: string, value: T): Promise<number> {
   const savedAt = Date.now()
   if (!db) return savedAt
