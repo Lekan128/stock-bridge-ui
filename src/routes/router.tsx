@@ -38,6 +38,11 @@ import { VerifyEmailPage } from '@/pages/VerifyEmailPage'
  * `lazy()` wants a default export and this codebase exports components by name throughout, hence
  * the `.then(m => ({ default: m.X }))` unwrapping rather than changing every page's export style.
  */
+// B1 spike page, only in dev and VITE_DESIGN_PREVIEW builds (see designPreviewConfig.ts).
+const DesignSpikePage =
+  import.meta.env.DEV || import.meta.env.VITE_DESIGN_PREVIEW === 'true'
+    ? lazy(() => import('@/features/designPreview/DesignSpikePage').then((m) => ({ default: m.DesignSpikePage })))
+    : null
 const CheckoutPage = lazy(() =>
   import('@/pages/CheckoutPage').then((m) => ({ default: m.CheckoutPage })),
 )
@@ -438,6 +443,7 @@ export function AppRoutes() {
               </RequirePermission>
             }
           />
+          {DesignSpikePage && <Route path="design-spike" element={<DesignSpikePage />} />}
           <Route
             path="products/new"
             element={

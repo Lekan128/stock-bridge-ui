@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import { EmailVerificationBanner } from '@/features/profile/components/EmailVerificationBanner'
 import { Sidebar } from '@/layouts/Sidebar'
@@ -6,6 +6,12 @@ import { Topbar } from '@/layouts/Topbar'
 import { IosInstallHint } from '@/pwa/IosInstallHint'
 import { startServiceWorker } from '@/pwa/serviceWorker'
 import { UpdatePrompt } from '@/pwa/UpdatePrompt'
+
+// B1 spike only: absent from a normal production build (see designPreviewConfig.ts).
+const DesignPreviewChip =
+  import.meta.env.DEV || import.meta.env.VITE_DESIGN_PREVIEW === 'true'
+    ? lazy(() => import('@/features/designPreview/DesignPreviewChip').then((m) => ({ default: m.DesignPreviewChip })))
+    : null
 
 export function AppLayout() {
   const [collapsed, setCollapsed] = useState(false)
@@ -43,6 +49,11 @@ export function AppLayout() {
         </main>
       </div>
       <UpdatePrompt />
+      {DesignPreviewChip && (
+        <Suspense fallback={null}>
+          <DesignPreviewChip />
+        </Suspense>
+      )}
     </div>
   )
 }

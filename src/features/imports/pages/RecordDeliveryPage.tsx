@@ -518,7 +518,13 @@ export function RecordDeliveryPage() {
           <p className="sr-only" aria-live="polite" aria-atomic="true">
             {copy.delivery.totalAnnounce(count, totalText)}
           </p>
-          <Button className="w-full" disabled={!canSubmit} loading={submitting} onClick={() => void handleSubmit()}>
+          <Button
+            className="w-full"
+            disabled={!canSubmit}
+            loading={submitting}
+            onClick={() => void handleSubmit()}
+            data-preview-action=""
+          >
             {submitting
               ? copy.delivery.saving
               : count === 0

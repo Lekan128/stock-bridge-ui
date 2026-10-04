@@ -390,7 +390,7 @@ export function ProductDetailPage() {
           canStockIn || canStockOut || canManageInventory ? (
             <>
               {canStockIn && (
-                <Button variant="secondary" onClick={() => setActiveAction('in')}>
+                <Button variant="secondary" onClick={() => setActiveAction('in')} data-preview-action="">
                   Stock In
                 </Button>
               )}

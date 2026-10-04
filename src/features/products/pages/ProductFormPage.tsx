@@ -1506,7 +1506,7 @@ export function ProductFormPage() {
           </Button>
           {/* Creating a product needs the server (its SKU, its duplicate checks), so offline the
               draft waits and the button says so (A5). */}
-          <Button type="submit" loading={isSubmitting} disabled={!isEdit && !online}>
+          <Button type="submit" loading={isSubmitting} disabled={!isEdit && !online} data-preview-action="">
             {isEdit ? 'Save changes' : online ? 'Create product' : 'Create when online'}
           </Button>
         </div>
