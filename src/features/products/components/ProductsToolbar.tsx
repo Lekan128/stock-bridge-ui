@@ -128,6 +128,7 @@ export function ProductsToolbar({
             <button
               key={option.value}
               type="button"
+              aria-pressed={statusFilter === option.value}
               onClick={() => onStatusFilterChange(option.value)}
               className={`rounded-sm px-3 py-1.5 text-sm font-medium transition-colors ${
                 statusFilter === option.value
@@ -148,6 +149,9 @@ export function ProductsToolbar({
           <button
             key={option.value}
             type="button"
+            // Which chip is on was conveyed by a white background alone; screen readers heard
+            // four identical buttons.
+            aria-pressed={stockLevelFilter === option.value}
             onClick={() => onStockLevelFilterChange(option.value)}
             className={`rounded-sm px-3 py-1.5 text-sm font-medium transition-colors ${
               stockLevelFilter === option.value

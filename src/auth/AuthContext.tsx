@@ -1,6 +1,7 @@
 import { createContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { authApi } from '@/api/authApi'
-import { setAccessToken, setAuthFailureHandler } from '@/api/client'
+import { refreshSession, setAccessToken, setAuthFailureHandler } from '@/api/client'
+import { isTransientRefreshFailure } from '@/api/createApiClient'
 import type { ClientSignupRequest, ClientType, TenantLoginRequest, TenantUser } from '@/types/auth'
 import { decodeJwtPayload, type TenantAccessTokenClaims } from '@/utils/jwt'
 import { authStorage } from '@/utils/storage'
@@ -61,6 +62,9 @@ export interface AuthContextValue {
 
 export const AuthContext = createContext<AuthContextValue | null>(null)
 
+/** How often a session restored without the server re-tries its refresh while the page is visible. */
+const SESSION_RETRY_MS = 30_000
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthTenantUser | null>(null)
   const [client, setClient] = useState<AuthClient | null>(null)
@@ -71,54 +75,121 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setClient(null)
   }
 
-  // Runs once on app load: if a refresh token survived from a previous visit, exchange it
-  // for a fresh access token. /refresh only returns tokens (no user object), so tenant
-  // display info is reconstructed from the JWT claims; clientName isn't in the token at all,
-  // so it falls back to the last-known client identifier until the next full login.
+  /** Sets the session in React state and remembers it, so the app can open without the server. */
+  function applySession(nextUser: AuthTenantUser, nextClient: AuthClient) {
+    setUser(nextUser)
+    setClient(nextClient)
+    const { type: _type, ...storedUser } = nextUser
+    authStorage.setSessionProfile({ user: storedUser, client: nextClient })
+  }
+
+  /**
+   * /refresh only returns tokens (no user object), so the session is rebuilt from the JWT claims.
+   * The company's display name isn't in the token, so it comes from the last session this device
+   * saw for the same company, then from the last-known identifier.
+   */
+  function sessionFromAccessToken(accessToken: string): { user: AuthTenantUser; client: AuthClient } {
+    const claims = decodeJwtPayload<TenantAccessTokenClaims>(accessToken)
+    const remembered = authStorage.getSessionProfile()?.client
+    const sameCompany = remembered != null && remembered.id != null && remembered.id === claims?.clientId
+    return {
+      user: {
+        type: 'tenant',
+        id: claims?.sub ?? '',
+        username: claims?.username ?? '',
+        role: claims?.role ?? '',
+        permissions: claims?.permissions ?? [],
+      },
+      client: {
+        id: claims?.clientId,
+        identifier: (sameCompany ? remembered.identifier : null) ?? authStorage.getLastClientIdentifier() ?? '',
+        name: sameCompany ? remembered.name : undefined,
+        platformOwner: claims?.platformOwner === true,
+        // An absent claim degrades to COMPANY: a buyer refused a vendor screen is an
+        // inconvenience, a vendor shown a buyer screen the server would refuse is a bug.
+        clientType: claims?.clientType === 'VENDOR' ? 'VENDOR' : 'COMPANY',
+      },
+    }
+  }
+
+  // Runs once on app load: if a refresh token survived from a previous visit, exchange it for a
+  // fresh access token.
+  //
+  // Only a REFUSED refresh ends the session. One that got no answer — no signal, a dead spot, the
+  // API waking from a cold start — used to land in the same catch and log the user out, so opening
+  // the app at the gate with one bar of signal threw away a working login and sent the storekeeper
+  // back to the login screen to re-type their Company ID. Now the remembered session is restored,
+  // the workspace opens, and the refresh is retried quietly until the network answers.
   useEffect(() => {
     setAuthFailureHandler(clearSessionState)
+    let stopRetrying: (() => void) | null = null
+
+    async function resume(): Promise<'resumed' | 'transient' | 'refused'> {
+      try {
+        const accessToken = await refreshSession()
+        const session = sessionFromAccessToken(accessToken)
+        applySession(session.user, session.client)
+        return 'resumed'
+      } catch (err) {
+        if (isTransientRefreshFailure(err)) return 'transient'
+        setAccessToken(null)
+        authStorage.clearSession()
+        clearSessionState()
+        return 'refused'
+      }
+    }
+
+    /** Retries on every sign the network may be back, plus a slow timer for "online but unreachable". */
+    function retryUntilAnswered() {
+      let attempting = false
+      async function attempt() {
+        if (attempting || document.visibilityState === 'hidden') return
+        attempting = true
+        const outcome = await resume()
+        attempting = false
+        if (outcome !== 'transient') stopRetrying?.()
+      }
+      const onVisible = () => {
+        if (document.visibilityState === 'visible') void attempt()
+      }
+      window.addEventListener('online', attempt)
+      document.addEventListener('visibilitychange', onVisible)
+      const timer = window.setInterval(() => void attempt(), SESSION_RETRY_MS)
+      stopRetrying = () => {
+        window.removeEventListener('online', attempt)
+        document.removeEventListener('visibilitychange', onVisible)
+        window.clearInterval(timer)
+        stopRetrying = null
+      }
+    }
 
     async function bootstrap() {
-      const refreshToken = authStorage.getRefreshToken()
-
-      if (!refreshToken) {
+      if (!authStorage.getRefreshToken()) {
         setIsBootstrapping(false)
         return
       }
 
-      try {
-        const tokens = await authApi.tenantRefresh(refreshToken)
-        setAccessToken(tokens.accessToken)
-        authStorage.setRefreshToken(tokens.refreshToken)
-        const claims = decodeJwtPayload<TenantAccessTokenClaims>(tokens.accessToken)
-        setUser({
-          type: 'tenant',
-          id: claims?.sub ?? '',
-          username: claims?.username ?? '',
-          role: claims?.role ?? '',
-          permissions: claims?.permissions ?? [],
-        })
-        const lastIdentifier = authStorage.getLastClientIdentifier()
-        setClient({
-          id: claims?.clientId,
-          identifier: lastIdentifier ?? '',
-          platformOwner: claims?.platformOwner === true,
-          // An absent claim degrades to COMPANY: a buyer refused a vendor screen is an
-          // inconvenience, a vendor shown a buyer screen the server would refuse is a bug.
-          clientType: claims?.clientType === 'VENDOR' ? 'VENDOR' : 'COMPANY',
-        })
-      } catch {
-        setAccessToken(null)
-        authStorage.clearSession()
-        clearSessionState()
-      } finally {
-        setIsBootstrapping(false)
+      const outcome = await resume()
+      if (outcome === 'transient') {
+        // No profile means a device that last signed in before profiles were remembered: there
+        // is nothing to draw the workspace with, so this load shows the login screen — but the
+        // refresh token is kept, and the retry below still restores the session once it can.
+        const remembered = authStorage.getSessionProfile()
+        if (remembered) {
+          setUser({ type: 'tenant', ...remembered.user })
+          setClient(remembered.client)
+        }
+        retryUntilAnswered()
       }
+      setIsBootstrapping(false)
     }
 
     void bootstrap()
 
-    return () => setAuthFailureHandler(null)
+    return () => {
+      stopRetrying?.()
+      setAuthFailureHandler(null)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -138,19 +209,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   function applyTenantSession(accessToken: string, refreshToken: string, tenantUser: TenantUser) {
     setAccessToken(accessToken)
     authStorage.setRefreshToken(refreshToken)
-    setUser({
-      type: 'tenant',
-      id: tenantUser.id,
-      username: tenantUser.username,
-      role: tenantUser.role,
-      permissions: tenantUser.permissions,
-    })
-    setClient({
-      identifier: tenantUser.clientIdentifier,
-      name: tenantUser.clientName,
-      platformOwner: tenantUser.platformOwner === true,
-      clientType: tenantUser.clientType === 'VENDOR' ? 'VENDOR' : 'COMPANY',
-    })
+    applySession(
+      {
+        type: 'tenant',
+        id: tenantUser.id,
+        username: tenantUser.username,
+        role: tenantUser.role,
+        permissions: tenantUser.permissions,
+      },
+      {
+        // The login response has no company id; the token does, and it is what
+        // `sessionFromAccessToken` matches on to carry the company name across a reload.
+        id: decodeJwtPayload<TenantAccessTokenClaims>(accessToken)?.clientId,
+        identifier: tenantUser.clientIdentifier,
+        name: tenantUser.clientName,
+        platformOwner: tenantUser.platformOwner === true,
+        clientType: tenantUser.clientType === 'VENDOR' ? 'VENDOR' : 'COMPANY',
+      },
+    )
   }
 
   async function logout() {

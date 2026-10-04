@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Truck, X } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
 import { Button } from '@/components/Button'
+import { ErrorState } from '@/components/ErrorState'
 import { Pagination } from '@/components/Pagination'
 import { useToast } from '@/components/useToast'
 import { EmptyProductsState } from '@/features/products/components/EmptyProductsState'
@@ -30,6 +31,49 @@ function isStockStatusFilter(value: string | null): value is StockStatusFilter {
 
 const PAGE_SIZE = 20
 
+const SORT_FIELDS: ProductSortField[] = ['name', 'sku', 'unitPrice', 'quantityOnHand', 'active']
+const DEFAULT_SORT: ProductSort = { field: 'name', direction: 'asc' }
+
+/**
+ * The list's search, filters, sort and page, read from the URL.
+ *
+ * They used to be component state, so opening a product and coming back — the single most common
+ * round trip on this screen — dropped the search, every filter and the page you were on. In the
+ * URL they survive Back, a reload, and being pasted to a colleague. Defaults are left OUT of the
+ * URL, so the plain list is still just `/app/products`.
+ *
+ * `status` defaults to ACTIVE, not all. The dashboard's "Well stocked / Low / Out of stock" counts
+ * are active-only (`ProductRepository.count*ByClientId`), and the list they link into used to
+ * include deactivated products — so a card reading "Out of stock: 3" could open onto five rows.
+ * Deactivated products are one tap away under the status filter.
+ */
+interface ListState {
+  search: string
+  statusFilter: ProductStatusFilter
+  categoryFilter: string
+  stockLevelFilter: StockLevelFilter
+  sort: ProductSort
+  page: number
+}
+
+function readListState(params: URLSearchParams): ListState {
+  const status = params.get('status')
+  const stockStatus = params.get('stockStatus')
+  const [sortField, sortDirection] = (params.get('sort') ?? '').split(',')
+  const page = Number(params.get('page'))
+  return {
+    search: params.get('q') ?? '',
+    statusFilter: status === 'all' || status === 'inactive' ? status : 'active',
+    categoryFilter: params.get('category') ?? '',
+    stockLevelFilter: isStockStatusFilter(stockStatus) ? stockStatus : 'all',
+    sort: SORT_FIELDS.includes(sortField as ProductSortField)
+      ? { field: sortField as ProductSortField, direction: sortDirection === 'desc' ? 'desc' : 'asc' }
+      : DEFAULT_SORT,
+    // 1-based in the URL, because people read it; 0-based everywhere else.
+    page: Number.isInteger(page) && page > 1 ? page - 1 : 0,
+  }
+}
+
 export function ProductListPage() {
   const { user } = useAuth()
   const { showToast } = useToast()
@@ -42,32 +86,48 @@ export function ProductListPage() {
    * still sees the affordance that leads to bulk stock-in.
    */
   const canImport = canManageProducts || permissions.includes(PERMISSIONS.MANAGE_INVENTORY)
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<ProductStatusFilter>('all')
-  /** A company category id, or '' for all of them. */
-  const [categoryFilter, setCategoryFilter] = useState('')
-  // Read once, on first render, from the dashboard's "Stock levels" cards
-  // (`?stockStatus=OK|LOW|OUT`) — the same deep-link shape `useLocation().state` already uses
-  // elsewhere on this page's sibling screens, just via the query string since this one needs to
-  // be a shareable/bookmarkable URL, not only a same-session navigation.
-  const [searchParams] = useSearchParams()
-  const [stockLevelFilter, setStockLevelFilter] = useState<StockLevelFilter>(() => {
-    const fromQuery = searchParams.get('stockStatus')
-    return isStockStatusFilter(fromQuery) ? fromQuery : 'all'
-  })
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { search: committedSearch, statusFilter, categoryFilter, stockLevelFilter, sort, page } =
+    readListState(searchParams)
+  // What is in the box right now; the URL only takes it once typing pauses.
+  const [search, setSearch] = useState(committedSearch)
   const [manageCategoriesOpen, setManageCategoriesOpen] = useState(false)
-  const [page, setPage] = useState(0)
-  const [sort, setSort] = useState<ProductSort>({ field: 'name', direction: 'asc' })
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [addProductOpen, setAddProductOpen] = useState(false)
 
   const debouncedSearch = useDebouncedValue(search, 350)
 
+  /**
+   * Every change to the list's state goes through here. `replace`, so filtering and paging don't
+   * pile up history entries — Back should leave the list, not undo the last chip. Anything that
+   * changes WHICH rows match also goes back to page 1, since the old page may no longer exist.
+   */
+  function updateListState(patch: Record<string, string | null>, { resetPage = true } = {}) {
+    setSearchParams(
+      (previous) => {
+        const next = new URLSearchParams(previous)
+        for (const [key, value] of Object.entries(patch)) {
+          if (value == null || value === '') next.delete(key)
+          else next.set(key, value)
+        }
+        if (resetPage) next.delete('page')
+        return next
+      },
+      { replace: true },
+    )
+  }
+
+  useEffect(() => {
+    if (debouncedSearch !== committedSearch) updateListState({ q: debouncedSearch })
+    // Only a settled keystroke should write; the URL changing for any other reason must not.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch])
+
   // The route requires VIEW_PRODUCTS, which is all the category list needs.
   const categoryList = useCompanyCategories(true)
 
   const { data, loading, error, refetch } = useProducts({
-    search: debouncedSearch || undefined,
+    search: committedSearch || undefined,
     active: statusFilter === 'all' ? undefined : statusFilter === 'active',
     categoryId: categoryFilter || undefined,
     stockStatus: stockLevelFilter === 'all' ? undefined : stockLevelFilter,
@@ -81,15 +141,13 @@ export function ProductListPage() {
   const { incomingFor, totals: incomingTotals } = useProductIncoming(data?.content)
 
   function handleSortChange(field: ProductSortField) {
-    setSort((prev) =>
-      prev.field === field ? { field, direction: prev.direction === 'asc' ? 'desc' : 'asc' } : { field, direction: 'asc' },
-    )
-    setPage(0)
+    const direction = sort.field === field && sort.direction === 'asc' ? 'desc' : 'asc'
+    const isDefault = field === DEFAULT_SORT.field && direction === DEFAULT_SORT.direction
+    updateListState({ sort: isDefault ? null : `${field},${direction}` })
   }
 
-  function handleSearchChange(value: string) {
-    setSearch(value)
-    setPage(0)
+  function handlePageChange(nextPage: number) {
+    updateListState({ page: nextPage > 0 ? String(nextPage + 1) : null }, { resetPage: false })
   }
 
   /**
@@ -115,18 +173,15 @@ export function ProductListPage() {
   }
 
   function handleStatusFilterChange(value: ProductStatusFilter) {
-    setStatusFilter(value)
-    setPage(0)
+    updateListState({ status: value === 'active' ? null : value })
   }
 
   function handleCategoryFilterChange(categoryId: string) {
-    setCategoryFilter(categoryId)
-    setPage(0)
+    updateListState({ category: categoryId })
   }
 
   function handleStockLevelFilterChange(value: StockLevelFilter) {
-    setStockLevelFilter(value)
-    setPage(0)
+    updateListState({ stockStatus: value === 'all' ? null : value })
   }
 
   /** Whether any row on screen shows this category — and so says something stale after a change. */
@@ -165,8 +220,31 @@ export function ProductListPage() {
     }
   }
 
-  const isUnfiltered = !debouncedSearch && statusFilter === 'all' && !categoryFilter && stockLevelFilter === 'all'
-  const isTrulyEmpty = !loading && !error && isUnfiltered && (data?.content.length ?? 0) === 0 && page === 0
+  // "Nothing here yet" (the onboarding empty state) vs "nothing matches". With ACTIVE as the
+  // default filter, an empty answer to the plain list is ambiguous — a brand-new catalog, or one
+  // whose every product is deactivated — so that one case asks the server once more, unfiltered.
+  const isDefaultView = !committedSearch && !categoryFilter && stockLevelFilter === 'all'
+  const noResults = !loading && !error && data != null && data.totalElements === 0
+  const activeViewIsEmpty = noResults && isDefaultView && statusFilter === 'active'
+  const [catalogHasInactive, setCatalogHasInactive] = useState<boolean | null>(null)
+  useEffect(() => {
+    if (!activeViewIsEmpty) return
+    let cancelled = false
+    productsApi
+      .list({ page: 0, size: 1 })
+      .then((response) => {
+        if (!cancelled) setCatalogHasInactive(response.totalElements > 0)
+      })
+      .catch(() => {
+        if (!cancelled) setCatalogHasInactive(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [activeViewIsEmpty])
+  const isTrulyEmpty =
+    noResults && isDefaultView && (statusFilter === 'all' || (activeViewIsEmpty && catalogHasInactive === false))
+  const onlyInactiveExist = activeViewIsEmpty && catalogHasInactive === true
 
   return (
     <div className="flex flex-col gap-4">
@@ -183,7 +261,7 @@ export function ProductListPage() {
 
       <ProductsToolbar
         search={search}
-        onSearchChange={handleSearchChange}
+        onSearchChange={setSearch}
         statusFilter={statusFilter}
         onStatusFilterChange={handleStatusFilterChange}
         stockLevelFilter={stockLevelFilter}
@@ -202,24 +280,42 @@ export function ProductListPage() {
         onManageCategories={() => setManageCategoriesOpen(true)}
       />
 
-      {loading && <ProductListSkeleton />}
+      {/* The skeleton is for the FIRST load only. After that the rows on screen stay put while the
+          next answer loads — dimmed, with a thin bar — instead of the whole table unmounting into
+          a skeleton on every keystroke, chip and page turn. */}
+      {loading && !data && !error && <ProductListSkeleton />}
 
-      {!loading && error && (
-        <div className="rounded-md border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700">{error}</div>
-      )}
+      {!loading && error && <ErrorState message={error} onRetry={refetch} />}
 
       {!loading && !error && isTrulyEmpty && (
         <EmptyProductsState canManageProducts={canManageProducts} onBulkUpload={() => navigate('/app/products/import')} />
       )}
 
-      {!loading && !error && !isTrulyEmpty && data && (
-        <>
+      {!error && !isTrulyEmpty && data && (
+        <div
+          aria-busy={loading || undefined}
+          className={`relative flex flex-col gap-4 transition-opacity duration-150 ${loading ? 'opacity-60' : ''}`}
+        >
+          {loading && (
+            <div className="absolute inset-x-0 -top-2 h-0.5 overflow-hidden rounded-full bg-primary-100" aria-hidden="true">
+              <div className="h-full w-1/3 animate-pulse rounded-full bg-primary-500" />
+            </div>
+          )}
           {data.content.length === 0 ? (
-            <p className="rounded-lg border border-neutral-200 bg-white px-4 py-10 text-center text-sm text-neutral-500">
-              {categoryFilter && !debouncedSearch && statusFilter === 'all'
-                ? 'No products in this category yet. Choose a category on a product to add it here.'
-                : 'No products match your search.'}
-            </p>
+            <div className="flex flex-col items-center gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-10 text-center text-sm text-neutral-500">
+              <p>
+                {onlyInactiveExist
+                  ? 'No active products. Every product in this catalog is deactivated.'
+                  : categoryFilter && !committedSearch && statusFilter === 'all'
+                    ? 'No products in this category yet. Choose a category on a product to add it here.'
+                    : 'No products match your search.'}
+              </p>
+              {onlyInactiveExist && (
+                <Button variant="secondary" onClick={() => handleStatusFilterChange('all')}>
+                  Show all products
+                </Button>
+              )}
+            </div>
           ) : (
             <>
               <div className="flex flex-col gap-2 md:hidden">
@@ -265,8 +361,8 @@ export function ProductListPage() {
               </div>
             </>
           )}
-          <Pagination page={data.number} totalPages={data.totalPages} onPageChange={setPage} />
-        </>
+          <Pagination page={data.number} totalPages={data.totalPages} onPageChange={handlePageChange} />
+        </div>
       )}
 
       <ManageCategoriesModal

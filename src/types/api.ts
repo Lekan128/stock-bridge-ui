@@ -10,9 +10,22 @@ export interface AppRowError {
   message: string
 }
 
+/**
+ * What kind of failure this was, so a screen can word it — and react to it — differently.
+ *
+ * `offline` / `unreachable` / `timeout` all mean the request got no answer (`status` 0): the
+ * device knows it has no network, the network is up but the server could not be reached (a dead
+ * spot, a server waking from a cold start), or the answer took too long. None of them says
+ * anything about the session or the data, which is the distinction that matters most — a network
+ * failure must never be treated as "your login is invalid" or "this record does not exist".
+ */
+export type AppErrorKind = 'offline' | 'unreachable' | 'timeout' | 'server' | 'client'
+
 export interface AppError {
   status: number
   message: string
+  /** Absent only on errors built by hand outside the API client. */
+  kind?: AppErrorKind
   errors?: AppFieldError[]
   rowErrors?: AppRowError[]
   /**
@@ -42,4 +55,9 @@ export function isAppError(error: unknown): error is AppError {
     'message' in error &&
     typeof (error as AppError).message === 'string'
   )
+}
+
+/** The request got no answer at all — offline, server unreachable, or timed out. */
+export function isNetworkError(error: unknown): boolean {
+  return isAppError(error) && error.status === 0
 }

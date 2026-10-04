@@ -5,6 +5,43 @@ const SUPERADMIN_REFRESH_TOKEN_KEY = 'sb.superadmin.refreshToken'
 // a stale anonymous cart is worth nothing and reading a mismatched shape would throw.
 const CART_KEY = 'procurepal.cart.v1'
 
+/**
+ * Who was signed in on this device, as last confirmed by the server — enough to draw the
+ * workspace (name, role, permissions, what kind of company) while the server can't be reached.
+ *
+ * Without it, a session could only be rebuilt by a successful `/refresh`, so opening the app in a
+ * dead spot (or while the API was waking from a cold start) had nothing to show and fell back to
+ * logging the user out. It holds no credential: the access token stays in memory only, and
+ * nothing here lets anyone call the API. Permissions in it only decide what to RENDER; the server
+ * re-checks every request. Versioned in the key, like the cart, so a shape change is ignored
+ * rather than migrated.
+ */
+const SESSION_PROFILE_KEY = 'sb.sessionProfile.v1'
+
+export interface StoredSessionProfile {
+  user: { id: string; username: string; role: string; permissions: string[] }
+  client: { id?: string; identifier: string; name?: string; platformOwner: boolean; clientType: 'COMPANY' | 'VENDOR' }
+}
+
+function readSessionProfile(): StoredSessionProfile | null {
+  try {
+    const raw = localStorage.getItem(SESSION_PROFILE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as StoredSessionProfile | null
+    if (
+      !parsed ||
+      typeof parsed.user?.id !== 'string' ||
+      !Array.isArray(parsed.user.permissions) ||
+      typeof parsed.client?.identifier !== 'string'
+    ) {
+      return null
+    }
+    return parsed
+  } catch {
+    return null
+  }
+}
+
 // The access token is intentionally never persisted here — it lives only in memory
 // (see AuthContext) so a stolen localStorage dump can't be replayed as a live session.
 //
@@ -20,8 +57,18 @@ export const authStorage = {
   setLastClientIdentifier: (identifier: string): void =>
     localStorage.setItem(LAST_CLIENT_IDENTIFIER_KEY, identifier),
 
+  getSessionProfile: readSessionProfile,
+  setSessionProfile: (profile: StoredSessionProfile): void => {
+    try {
+      localStorage.setItem(SESSION_PROFILE_KEY, JSON.stringify(profile))
+    } catch {
+      // Quota / private browsing: the only cost is not being able to open offline next time.
+    }
+  },
+
   clearSession: (): void => {
     localStorage.removeItem(REFRESH_TOKEN_KEY)
+    localStorage.removeItem(SESSION_PROFILE_KEY)
   },
 }
 

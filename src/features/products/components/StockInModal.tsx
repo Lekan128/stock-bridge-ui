@@ -47,6 +47,7 @@ import {
 } from '@/features/products/unitSet'
 import type { ProductVendor } from '@/features/products/vendors/types'
 import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
+import { useIdempotencyKey } from '@/hooks/useIdempotencyKey'
 import { isAppError } from '@/types/api'
 
 export interface StockInModalProps {
@@ -224,6 +225,8 @@ export function StockInModal({ product, onClose, onSuccess }: StockInModalProps)
    */
   const [unitCode, setUnitCode] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  /** Same key while the same entry is retried — see `useIdempotencyKey`. */
+  const idempotencyKeyFor = useIdempotencyKey()
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState<StockMutationResponse | null>(null)
 
@@ -505,7 +508,7 @@ export function StockInModal({ product, onClose, onSuccess }: StockInModalProps)
       note: values.note || undefined,
     }
     try {
-      const res = await stockApi.stockIn(product.id, payload)
+      const res = await stockApi.stockIn(product.id, payload, idempotencyKeyFor(payload))
       setResult(res)
       setStep('receipt')
     } catch (err) {

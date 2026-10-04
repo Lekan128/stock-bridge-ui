@@ -2,6 +2,7 @@ import { createContext, useCallback, useEffect, useState, type ReactNode } from 
 import { useAuth } from '@/auth/useAuth'
 import { productsApi } from '@/features/products/api/productsApi'
 import type { Product } from '@/features/products/types'
+import { canPollNow, onPollingResumable } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
 
 // Polling MVP: re-fetches on an interval plus on-demand via refetch() after stock
@@ -38,6 +39,9 @@ export function LowStockAlertsProvider({ children }: { children: ReactNode }) {
     let cancelled = false
 
     function load() {
+      // Skipped while offline or hidden rather than left to fail: the list on screen stays as it
+      // was, and `onPollingResumable` below catches up the moment it is worth asking again.
+      if (!canPollNow()) return
       setLoading(true)
       productsApi
         .lowStock()
@@ -60,10 +64,12 @@ export function LowStockAlertsProvider({ children }: { children: ReactNode }) {
 
     load()
     const intervalId = setInterval(load, POLL_INTERVAL_MS)
+    const stopResumeListener = onPollingResumable(load)
 
     return () => {
       cancelled = true
       clearInterval(intervalId)
+      stopResumeListener()
     }
   }, [isAuthenticated, reloadToken])
 

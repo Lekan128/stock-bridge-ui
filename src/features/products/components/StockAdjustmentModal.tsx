@@ -8,6 +8,7 @@ import { TextField } from '@/components/TextField'
 import { stockApi } from '@/features/products/api/stockApi'
 import { stockAdjustmentSchema, type StockAdjustmentFormValues } from '@/features/products/schemas'
 import type { StockMutationResponse } from '@/features/products/types'
+import { useIdempotencyKey } from '@/hooks/useIdempotencyKey'
 import { isAppError } from '@/types/api'
 
 export interface StockAdjustmentModalProps {
@@ -19,6 +20,7 @@ export interface StockAdjustmentModalProps {
 
 export function StockAdjustmentModal({ productId, currentQuantity, onClose, onSuccess }: StockAdjustmentModalProps) {
   const [formError, setFormError] = useState<string | null>(null)
+  const idempotencyKeyFor = useIdempotencyKey()
 
   const {
     register,
@@ -32,7 +34,8 @@ export function StockAdjustmentModal({ productId, currentQuantity, onClose, onSu
   async function onSubmit(values: StockAdjustmentFormValues) {
     setFormError(null)
     try {
-      const result = await stockApi.adjust(productId, { newQuantity: Number(values.newQuantity), note: values.note })
+      const payload = { newQuantity: Number(values.newQuantity), note: values.note }
+      const result = await stockApi.adjust(productId, payload, idempotencyKeyFor(payload))
       onSuccess(result)
     } catch (err) {
       setFormError(isAppError(err) ? err.message : 'Something went wrong. Please try again.')

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { expectedCopy } from '@/features/expected/copy'
 import { IncomingStockBadge } from '@/features/products/components/IncomingStockBadge'
@@ -10,8 +10,9 @@ import { StatusBadge } from '@/features/products/components/StatusBadge'
 import { formatCurrency, formatUnitOfMeasure } from '@/features/products/formatters'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import type { Product } from '@/features/products/types'
-import { formatNumber, formatQuantityEcho, unitNoun } from '@/features/products/unitCopy'
-import { buildPackOption, fromBaseQuantity, resolveUnitSymbol } from '@/features/products/unitSet'
+import { packEquivalent } from '@/features/products/packEquivalent'
+import { formatNumber } from '@/features/products/unitCopy'
+import { resolveUnitSymbol } from '@/features/products/unitSet'
 
 export type ProductSortField = 'name' | 'sku' | 'unitPrice' | 'quantityOnHand' | 'active'
 export type SortDirection = 'asc' | 'desc'
@@ -65,7 +66,6 @@ const UNIT_PRICE_COLUMN: { field: ProductSortField; label: string; align?: 'righ
 }
 
 export function ProductTable({ products, sort, onSortChange, incomingFor, selection }: ProductTableProps) {
-  const navigate = useNavigate()
   const { isVendor } = useAuth()
   // Fetched for two things now: the packaging subtitle a company sees in place of the unit price
   // column, and — for EVERY tenant, vendor included — the stock unit stamped on the "On hand"
@@ -81,38 +81,6 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
   // serves both.
   function unitOfMeasureLabel(code: string | undefined): string | undefined {
     return unitOfMeasureOptions.find((option) => option.code === code)?.label
-  }
-
-  /**
-   * "= 20 bags" under an on-hand figure of 1,000 kg — the same treatment
-   * {@link StockBreakdownPanel} gives the detail page's headline, and the same rule.
-   *
-   * Storage stays in the stock unit: a pack size that changes must never silently rewrite what is
-   * on the shelf, which is why Odoo and NetSuite both hold stock in the base unit and let
-   * packagings ride on top. But nobody counts 1,600 kg of rice, they count 32 bags, and a list a
-   * user has to do arithmetic against is a list they stop reading.
-   *
-   * <h3>Only whole packs, and that is not a rounding convenience</h3>
-   * 19.6 bags is not a sentence anyone wants, and a part-pack is exactly the case where the stock
-   * unit is the honest answer — so a figure that does not divide evenly is left as the stock unit
-   * alone. This also keeps the second line rare rather than universal, which is what earns it the
-   * row height: on a catalog of loose goods the column looks exactly as it did.
-   *
-   * Built from the product's own pack rather than from a full unit set (`unitOptionsForProduct`)
-   * because that is all this line can ever show and the set's step-4 base units (g, t) would add a
-   * scan of the whole unit list per row for options this cell never renders.
-   */
-  function packEquivalent(product: Product): string | null {
-    if (product.quantityOnHand <= 0) return null
-    const option = buildPackOption(
-      product,
-      resolveUnitSymbol(product.unitOfMeasure, unitOfMeasureOptions),
-      unitOfMeasureOptions,
-    )
-    if (option == null) return null
-    const inPacks = fromBaseQuantity(product.quantityOnHand, option)
-    if (!Number.isInteger(inPacks) || inPacks <= 0) return null
-    return formatQuantityEcho(inPacks, unitNoun(option))
   }
 
   const selectedOnPage = products.filter((product) => selection?.selectedIds.includes(product.id)).length
@@ -179,12 +147,14 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
         {products.map((product) => {
           const incoming = incomingFor?.(product).quantity ?? 0
           const isSelected = selection?.selectedIds.includes(product.id) ?? false
-          const packLine = packEquivalent(product)
+          const packLine = packEquivalent(product, unitOfMeasureOptions)
 
           return (
+            // `relative` anchors the name link's stretched hit area (below) to this row, so the
+            // whole row still opens the product — but as a real link: focusable, announced as a
+            // link, middle-click and "open in new tab" work. A bare `<tr onClick>` had none of that.
             <tr
               key={product.id}
-              onClick={() => navigate(`/app/products/${product.id}`)}
               style={
                 product.isLowStock ? { boxShadow: 'inset 4px 0 0 0 var(--color-warning-500)' } : undefined
               }
@@ -192,16 +162,15 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
               // rather than only from a 16px box in the first column — DESIGN.md's stated use
               // for primary-100/50.
               className={
-                isSelected ? 'cursor-pointer bg-primary-50 hover:bg-primary-100' : 'cursor-pointer hover:bg-neutral-50'
+                isSelected
+                  ? 'relative bg-primary-50 focus-within:bg-primary-100 hover:bg-primary-100'
+                  : 'relative focus-within:bg-neutral-50 hover:bg-neutral-50'
               }
             >
               {selection && (
-                // The row navigates on click, so the tick must not: stopPropagation on the cell
-                // covers the label padding as well as the box itself.
-                <td
-                  className="border-b border-neutral-100 px-4 py-2.5"
-                  onClick={(event) => event.stopPropagation()}
-                >
+                // Lifted above the row-wide link, so ticking the box — or missing it slightly and
+                // hitting the cell's padding — selects rather than navigates.
+                <td className="relative z-10 border-b border-neutral-100 px-4 py-2.5">
                   <input
                     type="checkbox"
                     checked={isSelected}
@@ -215,7 +184,12 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
                 <div className="flex items-center gap-2.5">
                   <ProductImage src={product.imageUrl} alt={product.name} className="h-8 w-8 shrink-0 rounded-md" />
                   <div className="min-w-0">
-                    <span className="font-medium text-neutral-900">{product.name}</span>
+                    <Link
+                      to={`/app/products/${product.id}`}
+                      className="font-medium text-neutral-900 outline-none before:absolute before:inset-0 before:content-[''] focus-visible:underline"
+                    >
+                      {product.name}
+                    </Link>
                     {/* The company's own category, on its own line so it reads as a label rather
                         than as part of the pack description below it. Absent (not null) when the
                         product has none — hence `!= null`. */}

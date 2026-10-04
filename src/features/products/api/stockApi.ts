@@ -101,15 +101,30 @@ export interface StockOutResponse extends StockMutationResponse {
   breakdown?: LabelledStockOutBreakdownLine[]
 }
 
+function idempotent(idempotencyKey: string | undefined) {
+  return idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : undefined
+}
+
 export const stockApi = {
-  stockIn: (productId: string, payload: StockInRequestPayload) =>
-    api.post<StockMutationResponse>(`/api/products/${productId}/stock/stock-in`, payload).then((r) => r.data),
+  /**
+   * The three writes take an optional `idempotencyKey` (see `useIdempotencyKey`). With one, the
+   * API records the write at most once however many times it is sent — the retry after a lost
+   * response is answered with the stored result instead of a second ledger row.
+   */
+  stockIn: (productId: string, payload: StockInRequestPayload, idempotencyKey?: string) =>
+    api
+      .post<StockMutationResponse>(`/api/products/${productId}/stock/stock-in`, payload, idempotent(idempotencyKey))
+      .then((r) => r.data),
 
-  stockOut: (productId: string, payload: StockOutPayload) =>
-    api.post<StockOutResponse>(`/api/products/${productId}/stock/stock-out`, payload).then((r) => r.data),
+  stockOut: (productId: string, payload: StockOutPayload, idempotencyKey?: string) =>
+    api
+      .post<StockOutResponse>(`/api/products/${productId}/stock/stock-out`, payload, idempotent(idempotencyKey))
+      .then((r) => r.data),
 
-  adjust: (productId: string, payload: StockAdjustmentPayload) =>
-    api.post<StockMutationResponse>(`/api/products/${productId}/stock/adjustment`, payload).then((r) => r.data),
+  adjust: (productId: string, payload: StockAdjustmentPayload, idempotencyKey?: string) =>
+    api
+      .post<StockMutationResponse>(`/api/products/${productId}/stock/adjustment`, payload, idempotent(idempotencyKey))
+      .then((r) => r.data),
 
   history: (productId: string, page: number, size = 10) =>
     api

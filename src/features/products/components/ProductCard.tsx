@@ -4,8 +4,11 @@ import { IncomingStockBadge } from '@/features/products/components/IncomingStock
 import { LowStockBadge } from '@/features/products/components/LowStockBadge'
 import { ProductImage } from '@/features/products/components/ProductImage'
 import { StatusBadge } from '@/features/products/components/StatusBadge'
+import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
+import { packEquivalent } from '@/features/products/packEquivalent'
 import type { Product } from '@/features/products/types'
 import { formatNumber } from '@/features/products/unitCopy'
+import { resolveUnitSymbol } from '@/features/products/unitSet'
 
 export interface ProductCardProps {
   product: Product
@@ -14,6 +17,10 @@ export interface ProductCardProps {
 }
 
 export function ProductCard({ product, incoming = 0 }: ProductCardProps) {
+  // Module-cached list (see the hook), so a page of cards shares one fetch.
+  const { options: unitOfMeasureOptions } = useUnitOfMeasureOptions()
+  const packLine = packEquivalent(product, unitOfMeasureOptions)
+
   return (
     <Link
       to={`/app/products/${product.id}`}
@@ -31,13 +38,19 @@ export function ProductCard({ product, incoming = 0 }: ProductCardProps) {
           {product.sku}
           {product.categoryName != null && ` · ${product.categoryName}`}
         </p>
-        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
           {/* "usable" is spelled out rather than implied by the absence of a badge — this is the
               line someone reads before deciding whether they can fulfil an order today, and
-              "12 on hand · +20 incoming" must never be misread as 32. */}
-          <span className={`text-sm font-medium ${product.quantityOnHand > 0 ? 'text-neutral-700' : 'text-neutral-400'}`}>
-            {product.quantityOnHand} usable
+              "12 on hand · +20 incoming" must never be misread as 32.
+
+              Figure, unit and pack line match the desktop table's on-hand cell
+              (`UNIT_UX_CONTRACT.md` §7.2): this used to print the bare number — "1000 usable" — on
+              the very screen a storekeeper reads standing in the store, where a catalog mixing kg,
+              litres and pieces makes a unitless figure meaningless. */}
+          <span className={`text-sm font-medium tabular-nums ${product.quantityOnHand > 0 ? 'text-neutral-700' : 'text-neutral-400'}`}>
+            {formatNumber(product.quantityOnHand)} {resolveUnitSymbol(product.unitOfMeasure, unitOfMeasureOptions)} usable
           </span>
+          {packLine && <span className="text-xs text-neutral-500">{packLine}</span>}
           {/* On an open expected delivery (task 3.1) — a promise, not stock. Quiet, and never
               summed into the figure beside it. */}
           {product.expectedQuantity != null && product.expectedQuantity > 0 && (

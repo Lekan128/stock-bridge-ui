@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ArrowLeft, Pencil } from 'lucide-react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { PERMISSIONS } from '@/auth/permissions'
 import { Button, buttonClassName } from '@/components/Button'
@@ -44,6 +44,7 @@ function parseDetailTab(value: string | null): ProductDetailTab {
 export function ProductDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   const { user } = useAuth()
   const { showToast } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -93,6 +94,18 @@ export function ProductDetailPage() {
   // separately from MANAGE_INVENTORY (which still gates Adjust below). See StockController.
   const canStockIn = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.STOCK_IN)
   const canStockOut = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.STOCK_OUT)
+
+  /**
+   * Back to wherever the user came from — usually the Inventory list WITH its search, filters
+   * and page, which now live in that page's URL. Navigating to a fresh `/app/products` instead
+   * threw all of that away on the most common round trip on the screen. A product opened directly
+   * (a pasted link, a new tab) has nothing to go back to inside the app, so it falls back to the
+   * list; react-router marks that first entry with the key "default".
+   */
+  function goBack() {
+    if (location.key !== 'default') navigate(-1)
+    else navigate('/app/products')
+  }
 
   function setTab(next: ProductDetailTab) {
     setSearchParams(
@@ -184,8 +197,8 @@ export function ProductDetailPage() {
         <div className="flex items-start gap-3">
           <button
             type="button"
-            onClick={() => navigate('/app/products')}
-            aria-label="Back to inventory"
+            onClick={goBack}
+            aria-label="Back"
             className="mt-0.5 rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100"
           >
             <ArrowLeft className="h-5 w-5" />

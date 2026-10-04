@@ -29,6 +29,7 @@ import {
   toBaseQuantity,
   unitOptionsForProduct,
 } from '@/features/products/unitSet'
+import { useIdempotencyKey } from '@/hooks/useIdempotencyKey'
 import { isAppError } from '@/types/api'
 
 export interface StockOutModalProps {
@@ -127,6 +128,8 @@ export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProp
   const [step, setStep] = useState<'form' | 'receipt'>('form')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  /** Same key while the same entry is retried — see `useIdempotencyKey`. */
+  const idempotencyKeyFor = useIdempotencyKey()
   // Split out from `submitError` purely so the render can give a 409 oversell its own structured
   // banner (actual-vs-requested, per §7.5) instead of the generic one-line FormError every other
   // failure gets — the two numbers are the whole point of that error and deserve to be legible,
@@ -330,7 +333,7 @@ export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProp
         allocations: builtAllocations,
         note: getValues('note') || undefined,
       }
-      const res = await stockApi.stockOut(product.id, payload)
+      const res = await stockApi.stockOut(product.id, payload, idempotencyKeyFor(payload))
       setResult(res)
       setStep('receipt')
     } catch (err) {
