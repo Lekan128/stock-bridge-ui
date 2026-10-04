@@ -1,5 +1,6 @@
 import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider } from '@/auth/AuthContext'
+import { QueryProvider } from '@/data/QueryProvider'
 import { SuperAdminAuthProvider } from '@/auth/SuperAdminAuthContext'
 import { ToastProvider } from '@/components/ToastContext'
 import { CartProvider } from '@/features/cart/context/CartContext'
@@ -16,6 +17,10 @@ function App() {
     <BrowserRouter>
       <ToastProvider>
         <AuthProvider>
+          {/* Inside AuthProvider: the cache's on-device copy belongs to the signed-in user and is
+              wiped when they sign out. Above everything that reads inventory, including the
+              low-stock alerts the topbar bell shows. */}
+          <QueryProvider>
           <SuperAdminAuthProvider>
             <LowStockAlertsProvider>
               <CartProvider>
@@ -33,6 +38,7 @@ function App() {
               </CartProvider>
             </LowStockAlertsProvider>
           </SuperAdminAuthProvider>
+          </QueryProvider>
         </AuthProvider>
       </ToastProvider>
     </BrowserRouter>

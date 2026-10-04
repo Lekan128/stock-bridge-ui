@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback } from 'react'
+import { queryKeys } from '@/data/queryKeys'
+import { useApiQuery } from '@/data/useApiQuery'
 import type { PageResponse, StockMovement } from '@/features/products/types'
 import { stockMovementsApi } from '@/features/stock/api/stockMovementsApi'
 import type { StockMovementReportParams, StockMovementSummary } from '@/features/stock/types'
-import { isAppError } from '@/types/api'
 
 /**
  * The rows and the totals of the stock in/out report, fetched together.
@@ -15,73 +16,38 @@ import { isAppError } from '@/types/api'
  * whole range on every "next" would be wasted work and a visibly flickering total.
  */
 export function useStockMovementReport(params: StockMovementReportParams) {
-  const [page, setPage] = useState<PageResponse<StockMovement> | null>(null)
-  const [summary, setSummary] = useState<StockMovementSummary | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [reloadToken, setReloadToken] = useState(0)
-
-  // Paging keys are peeled off so `filters` is exactly what the summary is computed over — the
-  // totals do not change as the user pages. Named with underscores because they exist only to be
-  // excluded here.
   const { page: _page, size: _size, sort: _sort, ...filters } = params
-  const paramsKey = JSON.stringify(params)
-  const filtersKey = JSON.stringify(filters)
 
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    setError(null)
+  const rows = useApiQuery<PageResponse<StockMovement>>({
+    queryKey: queryKeys.stockMovements.list(params),
+    queryFn: () => stockMovementsApi.list(params),
+    fallbackError: 'We could not load stock movements.',
+    keepPrevious: true,
+  })
+  // The totals answer the filters, not the page, so paging through the rows never refetches them.
+  const totals = useApiQuery<StockMovementSummary>({
+    queryKey: queryKeys.stockMovements.summary(filters),
+    queryFn: () => stockMovementsApi.summary(filters),
+    fallbackError: 'We could not load the totals.',
+    keepPrevious: true,
+  })
 
-    stockMovementsApi
-      .list(params)
-      .then((response) => {
-        if (!cancelled) setPage(response)
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(isAppError(err) ? err.message : 'We could not load stock movements.')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
-    // paramsKey is a stable stand-in for params (a fresh object each render).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paramsKey, reloadToken])
-
-  useEffect(() => {
-    let cancelled = false
-    // Deliberately not cleared to null first: the totals are unchanged by a filter edit until the
-    // new ones arrive, and blanking them makes the header jump on every keystroke of a filter.
-    // A failed summary is left silent rather than surfaced — the rows are the report, and an
-    // error banner over a table that loaded fine would misdescribe what went wrong.
-    stockMovementsApi
-      .summary(filters)
-      .then((response) => {
-        if (!cancelled) setSummary(response)
-      })
-      .catch(() => {
-        if (!cancelled) setSummary(null)
-      })
-
-    return () => {
-      cancelled = true
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtersKey, reloadToken])
-
-  const refetch = useCallback(() => setReloadToken((token) => token + 1), [])
+  const { refetch: refetchRows } = rows
+  const { refetch: refetchTotals } = totals
+  const refetch = useCallback(() => {
+    refetchRows()
+    refetchTotals()
+  }, [refetchRows, refetchTotals])
 
   return {
-    movements: page?.content ?? [],
-    totalPages: page?.totalPages ?? 0,
-    totalElements: page?.totalElements ?? 0,
-    summary,
-    loading,
-    error,
+    movements: rows.data?.content ?? [],
+    totalPages: rows.data?.totalPages ?? 0,
+    totalElements: rows.data?.totalElements ?? 0,
+    // A failed summary was always shown as "no totals" rather than as an error.
+    summary: totals.error != null ? null : (totals.data ?? null),
+    // The report page uses this for its first-load skeleton and to dim rows mid-refresh.
+    loading: rows.loading || rows.fetching,
+    error: rows.error,
     refetch,
   }
 }

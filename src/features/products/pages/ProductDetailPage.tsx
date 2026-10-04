@@ -5,6 +5,7 @@ import { useAuth } from '@/auth/useAuth'
 import { PERMISSIONS } from '@/auth/permissions'
 import { Button, buttonClassName } from '@/components/Button'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { SavedDataNote } from '@/components/SavedDataNote'
 import { useToast } from '@/components/useToast'
 import { productsApi } from '@/features/products/api/productsApi'
 import { IncomingStockBadge } from '@/features/products/components/IncomingStockBadge'
@@ -49,7 +50,7 @@ export function ProductDetailPage() {
   const { showToast } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = parseDetailTab(searchParams.get('tab'))
-  const { product, setProduct, loading, error } = useProduct(id)
+  const { product, setProduct, loading, error, showingSaved, updatedAt, refetch: refetchProduct } = useProduct(id)
   const { options: unitOfMeasureOptions } = useUnitOfMeasureOptions()
   const { refetch: refetchLowStockAlerts } = useLowStockAlerts()
   // A single-element array so the hook's "does the API send incomingQuantity?" check works the
@@ -231,6 +232,8 @@ export function ProductDetailPage() {
           </div>
         )}
       </div>
+
+      <SavedDataNote showing={showingSaved} updatedAt={updatedAt} subject="this product" onRetry={refetchProduct} />
 
       <div role="tablist" aria-label="Product detail" className="flex gap-1 border-b border-neutral-200">
         {DETAIL_TABS.map((option) => {

@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback } from 'react'
+import { queryKeys } from '@/data/queryKeys'
+import { useApiQuery } from '@/data/useApiQuery'
 import { companyCategoriesApi } from '@/features/products/categories/api'
 import type { CompanyCategory } from '@/features/products/categories/types'
-import { isAppError } from '@/types/api'
+
+const NO_CATEGORIES: CompanyCategory[] = []
 
 function byName(a: CompanyCategory, b: CompanyCategory): number {
   return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
@@ -22,50 +25,36 @@ function byName(a: CompanyCategory, b: CompanyCategory): number {
  * matter — they are the server's, and only it knows how many products a change touched.
  */
 export function useCompanyCategories(enabled: boolean) {
-  const [categories, setCategories] = useState<CompanyCategory[]>([])
-  const [loading, setLoading] = useState(enabled)
-  const [error, setError] = useState<string | null>(null)
-  const [reloadToken, setReloadToken] = useState(0)
+  const result = useApiQuery<CompanyCategory[]>({
+    queryKey: queryKeys.categories,
+    queryFn: () => companyCategoriesApi.list(),
+    fallbackError: 'We could not load your categories.',
+    enabled,
+  })
+  const { setData, refetch } = result
 
-  useEffect(() => {
-    if (!enabled) {
-      setCategories([])
-      setLoading(false)
-      setError(null)
-      return
-    }
-    let cancelled = false
-    setLoading(true)
-    setError(null)
+  // Applied to the shared cache entry, so a category created in the product form's inline picker
+  // shows up in the Inventory filter too without a refetch.
+  const upsert = useCallback(
+    (category: CompanyCategory) => {
+      setData((current) => [...(current ?? []).filter((entry) => entry.id !== category.id), category].sort(byName))
+    },
+    [setData],
+  )
 
-    companyCategoriesApi
-      .list()
-      .then((response) => {
-        if (!cancelled) setCategories(response)
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(isAppError(err) ? err.message : 'We could not load your categories.')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
+  const remove = useCallback(
+    (id: string) => {
+      setData((current) => (current ?? []).filter((entry) => entry.id !== id))
+    },
+    [setData],
+  )
 
-    return () => {
-      cancelled = true
-    }
-  }, [enabled, reloadToken])
-
-  const upsert = useCallback((category: CompanyCategory) => {
-    setCategories((current) =>
-      [...current.filter((entry) => entry.id !== category.id), category].sort(byName),
-    )
-  }, [])
-
-  const remove = useCallback((id: string) => {
-    setCategories((current) => current.filter((entry) => entry.id !== id))
-  }, [])
-
-  const reload = useCallback(() => setReloadToken((token) => token + 1), [])
-
-  return { categories, loading, error, reload, upsert, remove }
+  return {
+    categories: enabled ? (result.data ?? NO_CATEGORIES) : NO_CATEGORIES,
+    loading: result.loading,
+    error: result.error,
+    reload: refetch,
+    upsert,
+    remove,
+  }
 }

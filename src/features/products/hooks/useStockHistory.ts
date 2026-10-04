@@ -1,36 +1,21 @@
-import { useEffect, useState } from 'react'
+import { queryKeys } from '@/data/queryKeys'
+import { useApiQuery } from '@/data/useApiQuery'
 import { stockApi } from '@/features/products/api/stockApi'
 import type { PageResponse, StockMovement } from '@/features/products/types'
-import { isAppError } from '@/types/api'
 
-export function useStockHistory(productId: string | undefined, page: number) {
-  const [data, setData] = useState<PageResponse<StockMovement> | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [reloadToken, setReloadToken] = useState(0)
+export function useStockHistory(
+  productId: string | undefined,
+  page: number,
+  { requireFresh = false }: { requireFresh?: boolean } = {},
+) {
+  const result = useApiQuery<PageResponse<StockMovement>>({
+    queryKey: queryKeys.products.history(productId, page),
+    queryFn: () => stockApi.history(productId as string, page),
+    fallbackError: 'Something went wrong. Please try again.',
+    enabled: productId != null,
+    keepPrevious: true,
+    requireFresh,
+  })
 
-  useEffect(() => {
-    if (!productId) return
-    let cancelled = false
-    setLoading(true)
-    setError(null)
-
-    stockApi
-      .history(productId, page)
-      .then((response) => {
-        if (!cancelled) setData(response)
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(isAppError(err) ? err.message : 'Something went wrong. Please try again.')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [productId, page, reloadToken])
-
-  return { data, loading, error, refetch: () => setReloadToken((t) => t + 1) }
+  return { data: result.data ?? null, loading: result.loading, error: result.error, refetch: result.refetch }
 }

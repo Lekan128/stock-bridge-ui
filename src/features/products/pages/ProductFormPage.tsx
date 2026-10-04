@@ -14,6 +14,7 @@ import { CategoryField } from '@/features/products/categories/CategoryField'
 import type { CompanyCategory } from '@/features/products/categories/types'
 import { useCompanyCategories } from '@/features/products/categories/useCompanyCategories'
 import { ImageUploadField } from '@/features/products/components/ImageUploadField'
+import { ErrorState } from '@/components/ErrorState'
 import { ProductFormSkeleton } from '@/features/products/components/ProductFormSkeleton'
 import { RequestUnitOfMeasureModal } from '@/features/products/components/RequestUnitOfMeasureModal'
 import { ReviewImpactDialog } from '@/features/products/components/ReviewImpactDialog'
@@ -59,6 +60,8 @@ import { vendorCatalogueApi } from '@/features/vendor/api/vendorCatalogueApi'
 import { SupplierField } from '@/features/vendors/components/SupplierField'
 import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
 import { isAppError } from '@/types/api'
+import { useQueryClient } from '@tanstack/react-query'
+import { invalidateInventory, syncProductIntoCache } from '@/data/inventoryCache'
 
 const KNOWN_FIELDS = new Set<keyof ProductFormValues>([
   'name',
@@ -210,7 +213,12 @@ export function ProductFormPage() {
   const location = useLocation() as { state?: { name?: string } }
   const { showToast } = useToast()
   const { user, isVendor } = useAuth()
-  const { product, loading: loadingProduct } = useProduct(id)
+  // Fresh from the server, never a cached copy: this fills the form, and saving a cached copy
+  // could write another phone's newer edits back to old values. Offline it shows the error.
+  const { product, loading: loadingProduct, error: productError, refetch: refetchProduct } = useProduct(id, {
+    requireFresh: true,
+  })
+  const queryClient = useQueryClient()
   // Gated on VIEW_VENDORS rather than fetched unconditionally: the picker is optional, and asking
   // for a list the caller is not allowed to read would be a 403 in everyone's network tab.
   const canViewVendors = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.VIEW_VENDORS)
@@ -529,7 +537,7 @@ export function ProductFormPage() {
    * server's own rule and produces an attributed error. Degrade toward the user's freedom, not
    * away from it.
    */
-  const { data: stockHistory } = useStockHistory(isEdit ? id : undefined, 0)
+  const { data: stockHistory } = useStockHistory(isEdit ? id : undefined, 0, { requireFresh: true })
   const stockUnitLocked = isEdit && (stockHistory?.totalElements ?? 0) > 0
 
   function handleImageFileSelect(selected: File | null) {
@@ -698,6 +706,10 @@ export function ProductFormPage() {
       const detailsWarning = isVendor && brandChanged(values) ? await saveBrand(saved.id, values) : null
 
       setPendingValues(null)
+      // The saved product replaces any cached copy, and everything stock-related is refreshed: a
+      // new product with opening stock changes the list, the low-stock count and the dashboard.
+      syncProductIntoCache(queryClient, saved)
+      void invalidateInventory(queryClient)
 
       if (detailsWarning) {
         showToast(`Product saved, ${detailsWarning}`, 'error')
@@ -800,6 +812,20 @@ export function ProductFormPage() {
 
   if (isEdit && loadingProduct) {
     return <ProductFormSkeleton />
+  }
+
+  // An edit form with no product behind it must never render: every field would be blank, and
+  // saving it would write those blanks over the real product. This used to happen whenever the
+  // load failed (a dropped connection, a deleted product); it is also what offline looks like
+  // now that this form only ever fills from fresh data.
+  if (isEdit && !product) {
+    return (
+      <ErrorState
+        title="Couldn't open this product for editing"
+        message={productError ?? 'This product could not be loaded.'}
+        onRetry={refetchProduct}
+      />
+    )
   }
 
   const categoryField = canViewCategories ? (

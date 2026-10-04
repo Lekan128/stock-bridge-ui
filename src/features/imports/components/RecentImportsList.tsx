@@ -14,6 +14,8 @@ import { formatWhen, summariseOutcome } from '@/features/imports/formatters'
 import { useRecentImports } from '@/features/imports/hooks/useRecentImports'
 import type { ImportKind, ImportSessionSummary, UndoBlockedResponse } from '@/features/imports/types'
 import { isAppError } from '@/types/api'
+import { useQueryClient } from '@tanstack/react-query'
+import { invalidateInventory } from '@/data/inventoryCache'
 
 export interface RecentImportsListProps {
   kind?: ImportKind
@@ -42,6 +44,7 @@ function destinationFor(entry: ImportSessionSummary): { to: string; label: strin
 }
 
 export function RecentImportsList({ kind, bare = false }: RecentImportsListProps) {
+  const queryClient = useQueryClient()
   const { items, loading, error, refetch } = useRecentImports(kind)
   const { showToast } = useToast()
   const [pendingUndo, setPendingUndo] = useState<ImportSessionSummary | null>(null)
@@ -53,6 +56,7 @@ export function RecentImportsList({ kind, bare = false }: RecentImportsListProps
     setUndoing(true)
     try {
       await importsApi.undo(pendingUndo.id)
+      void invalidateInventory(queryClient)
       showToast(copy.result.undoneToast, 'success')
       setBlocked(null)
       setPendingUndo(null)

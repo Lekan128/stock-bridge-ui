@@ -6,6 +6,7 @@ import { useAuth } from '@/auth/useAuth'
 import { Button } from '@/components/Button'
 import { ErrorState } from '@/components/ErrorState'
 import { Pagination } from '@/components/Pagination'
+import { SavedDataNote } from '@/components/SavedDataNote'
 import { useToast } from '@/components/useToast'
 import { EmptyProductsState } from '@/features/products/components/EmptyProductsState'
 import { IncomingStockNotice } from '@/features/products/components/IncomingStockNotice'
@@ -126,7 +127,7 @@ export function ProductListPage() {
   // The route requires VIEW_PRODUCTS, which is all the category list needs.
   const categoryList = useCompanyCategories(true)
 
-  const { data, loading, error, refetch } = useProducts({
+  const { data, loading, error, refetch, showingSaved, updatedAt } = useProducts({
     search: committedSearch || undefined,
     active: statusFilter === 'all' ? undefined : statusFilter === 'active',
     categoryId: categoryFilter || undefined,
@@ -249,6 +250,8 @@ export function ProductListPage() {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl font-semibold text-neutral-900">Inventory</h1>
+
+      <SavedDataNote showing={showingSaved} updatedAt={updatedAt} subject="stock levels" onRetry={refetch} />
 
       <DataIssuesBanner />
 

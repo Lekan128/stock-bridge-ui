@@ -1,6 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback } from 'react'
+import { queryKeys } from '@/data/queryKeys'
+import { useApiQuery } from '@/data/useApiQuery'
 import { vendorsApi } from '@/features/vendors/api/vendorsApi'
 import type { CompanyVendor } from '@/features/vendors/types'
+
+const NO_VENDORS: CompanyVendor[] = []
 
 function byName(a: CompanyVendor, b: CompanyVendor): number {
   return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
@@ -28,38 +32,22 @@ function byName(a: CompanyVendor, b: CompanyVendor): number {
  * the same shape `useCompanyCategories` already gives the category picker.
  */
 export function useVendorOptions(enabled: boolean) {
-  const [vendors, setVendors] = useState<CompanyVendor[]>([])
-  const [loading, setLoading] = useState(enabled)
+  const result = useApiQuery<CompanyVendor[]>({
+    queryKey: queryKeys.vendors.options,
+    queryFn: () => vendorsApi.list({ page: 0, size: 200 }).then((response) => response.content),
+    fallbackError: 'Could not load your suppliers.',
+    enabled,
+  })
+  const { setData } = result
 
-  useEffect(() => {
-    if (!enabled) {
-      setVendors([])
-      setLoading(false)
-      return
-    }
-    let cancelled = false
-    setLoading(true)
+  const upsert = useCallback(
+    (vendor: CompanyVendor) => {
+      setData((current) => [...(current ?? []).filter((entry) => entry.id !== vendor.id), vendor].sort(byName))
+    },
+    [setData],
+  )
 
-    vendorsApi
-      .list({ page: 0, size: 200 })
-      .then((response) => {
-        if (!cancelled) setVendors(response.content)
-      })
-      .catch(() => {
-        if (!cancelled) setVendors([])
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [enabled])
-
-  const upsert = useCallback((vendor: CompanyVendor) => {
-    setVendors((current) => [...current.filter((entry) => entry.id !== vendor.id), vendor].sort(byName))
-  }, [])
-
-  return { vendors, loading, upsert }
+  // A failed load still reads as "no suppliers" here, as before: the pickers that use this offer
+  // "+ Add new supplier" either way.
+  return { vendors: enabled ? (result.data ?? NO_VENDORS) : NO_VENDORS, loading: result.loading, upsert }
 }

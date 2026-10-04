@@ -30,6 +30,8 @@ import { useDeliveryLines } from '@/features/imports/hooks/useDeliveryLines'
 import type { CommitPreview, DeliveryLine, ImportSession } from '@/features/imports/types'
 import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
 import { isAppError } from '@/types/api'
+import { useQueryClient } from '@tanstack/react-query'
+import { invalidateInventory } from '@/data/inventoryCache'
 
 const SELECT_CLASS =
   'w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-base text-neutral-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none disabled:bg-neutral-50 sm:text-sm'
@@ -68,6 +70,7 @@ interface PendingDelivery {
  * with no such parameter none of it happens at all.
  */
 export function RecordDeliveryPage() {
+  const queryClient = useQueryClient()
   const { user } = useAuth()
   const navigate = useNavigate()
   const { showToast } = useToast()
@@ -233,6 +236,7 @@ export function RecordDeliveryPage() {
     setCommitError(null)
     try {
       const result = await importsApi.commit(id)
+      void invalidateInventory(queryClient)
       showToast(copy.delivery.done, 'success')
       navigate(`/app/products/import/${id}/result`, { replace: true, state: { result } })
     } catch (err: unknown) {
