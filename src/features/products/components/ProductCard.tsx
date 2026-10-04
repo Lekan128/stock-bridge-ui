@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { expectedCopy } from '@/features/expected/copy'
+import { PendingStockBadge } from '@/features/outbox/PendingStockBadge'
 import { IncomingStockBadge } from '@/features/products/components/IncomingStockBadge'
 import { LowStockBadge } from '@/features/products/components/LowStockBadge'
 import { ProductImage } from '@/features/products/components/ProductImage'
@@ -61,6 +62,7 @@ export function ProductCard({ product, incoming = 0 }: ProductCardProps) {
           )}
           {product.isLowStock && <LowStockBadge />}
           <IncomingStockBadge quantity={incoming} />
+          <PendingStockBadge productId={product.id} />
         </div>
       </div>
     </Link>

@@ -6,6 +6,7 @@ import { PERMISSIONS } from '@/auth/permissions'
 import { Button, buttonClassName } from '@/components/Button'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { SavedDataNote } from '@/components/SavedDataNote'
+import { PendingStockNote } from '@/features/outbox/PendingStockNote'
 import { useToast } from '@/components/useToast'
 import { productsApi } from '@/features/products/api/productsApi'
 import { IncomingStockBadge } from '@/features/products/components/IncomingStockBadge'
@@ -122,11 +123,21 @@ export function ProductDetailPage() {
 
   function handleMutationSuccess(result: StockMutationResponse) {
     setProduct(result.product)
+    const supersededCount = activeAction === 'adjustment' && result.movement == null
     setActiveAction(null)
     setHistoryPage(0)
     refetchHistory()
     refetchLowStockAlerts()
-    showToast('Stock updated.', 'success')
+    showToast(
+      supersededCount ? 'A newer count was already recorded, so nothing changed.' : 'Stock updated.',
+      supersededCount ? 'info' : 'success',
+    )
+  }
+
+  /** Saved on this phone (A4): the pending note below the stock figure takes it from here. */
+  function handleQueued() {
+    setActiveAction(null)
+    showToast("Saved on this phone. It will be sent when you're back online.", 'info')
   }
 
   async function handleDeactivate() {
@@ -370,6 +381,8 @@ export function ProductDetailPage() {
         </div>
       </div>
 
+      <PendingStockNote productId={product.id} stockUnit={stockUnitText} />
+
       <StockBreakdownPanel
         product={product}
         incoming={incoming}
@@ -388,7 +401,7 @@ export function ProductDetailPage() {
               )}
               {canManageInventory && (
                 <Button variant="secondary" onClick={() => setActiveAction('adjustment')}>
-                  Adjust
+                  Count
                 </Button>
               )}
             </>
@@ -423,17 +436,30 @@ export function ProductDetailPage() {
       )}
 
       {activeAction === 'in' && (
-        <StockInModal product={product} onClose={() => setActiveAction(null)} onSuccess={handleMutationSuccess} />
+        <StockInModal
+          product={product}
+          onClose={() => setActiveAction(null)}
+          onSuccess={handleMutationSuccess}
+          onQueued={handleQueued}
+        />
       )}
       {activeAction === 'out' && (
-        <StockOutModal product={product} onClose={() => setActiveAction(null)} onSuccess={handleMutationSuccess} />
+        <StockOutModal
+          product={product}
+          onClose={() => setActiveAction(null)}
+          onSuccess={handleMutationSuccess}
+          onQueued={handleQueued}
+        />
       )}
       {activeAction === 'adjustment' && (
         <StockAdjustmentModal
           productId={product.id}
+          productName={product.name}
           currentQuantity={product.quantityOnHand}
+          stockUnit={stockUnitText}
           onClose={() => setActiveAction(null)}
           onSuccess={handleMutationSuccess}
+          onQueued={handleQueued}
         />
       )}
 

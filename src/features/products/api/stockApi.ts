@@ -107,7 +107,7 @@ function idempotent(idempotencyKey: string | undefined) {
 
 export const stockApi = {
   /**
-   * The three writes take an optional `idempotencyKey` (see `useIdempotencyKey`). With one, the
+   * The writes take an optional `idempotencyKey` — the outbox (A4) sends each write's own id. With one, the
    * API records the write at most once however many times it is sent — the retry after a lost
    * response is answered with the stored result instead of a second ledger row.
    */
@@ -119,6 +119,21 @@ export const stockApi = {
   stockOut: (productId: string, payload: StockOutPayload, idempotencyKey?: string) =>
     api
       .post<StockOutResponse>(`/api/products/${productId}/stock/stock-out`, payload, idempotent(idempotencyKey))
+      .then((r) => r.data),
+
+  /**
+   * A stock count (A4): what is on the shelf, and when it was counted. Replaces adjust's "set it
+   * to N": a count arriving late from an offline phone is carried forward by sales recorded after
+   * it instead of erasing them. A response with no `movement` means a newer count had already been
+   * recorded, and nothing changed.
+   */
+  count: (
+    productId: string,
+    payload: { countedQuantity: number; countedAt?: string; note?: string },
+    idempotencyKey?: string,
+  ) =>
+    api
+      .post<StockMutationResponse>(`/api/products/${productId}/stock/count`, payload, idempotent(idempotencyKey))
       .then((r) => r.data),
 
   adjust: (productId: string, payload: StockAdjustmentPayload, idempotencyKey?: string) =>

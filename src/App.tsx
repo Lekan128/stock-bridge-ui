@@ -2,6 +2,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider } from '@/auth/AuthContext'
 import { QueryProvider } from '@/data/QueryProvider'
 import { CatalogProvider } from '@/features/catalog/CatalogProvider'
+import { OutboxProvider } from '@/features/outbox/OutboxProvider'
 import { SuperAdminAuthProvider } from '@/auth/SuperAdminAuthContext'
 import { ToastProvider } from '@/components/ToastContext'
 import { CartProvider } from '@/features/cart/context/CartContext'
@@ -24,6 +25,8 @@ function App() {
           <QueryProvider>
           {/* The on-device catalogue (A3). Same lifetime as the cache above: the signed-in user's. */}
           <CatalogProvider>
+          {/* Stock recorded on this phone and not yet sent (A4). Survives the session ending. */}
+          <OutboxProvider>
           <SuperAdminAuthProvider>
             <LowStockAlertsProvider>
               <CartProvider>
@@ -41,6 +44,7 @@ function App() {
               </CartProvider>
             </LowStockAlertsProvider>
           </SuperAdminAuthProvider>
+          </OutboxProvider>
           </CatalogProvider>
           </QueryProvider>
         </AuthProvider>

@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { expectedCopy } from '@/features/expected/copy'
+import { PendingStockBadge } from '@/features/outbox/PendingStockBadge'
 import { IncomingStockBadge } from '@/features/products/components/IncomingStockBadge'
 import { LowStockBadge } from '@/features/products/components/LowStockBadge'
 import { ProductImage } from '@/features/products/components/ProductImage'
@@ -282,6 +283,10 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
                     still scans vertically as ledger figures and this reads as a restatement of
                     the number above rather than as a second number. */}
                 {packLine && <div className="text-xs text-neutral-500">{packLine}</div>}
+                {/* Recorded on this phone and not yet sent (A4): beside the figure, never in it. */}
+                <div className="flex justify-end">
+                  <PendingStockBadge productId={product.id} />
+                </div>
                 {/* On its own line, never summed into the figure above. */}
                 {incoming > 0 && (
                   <div className="mt-1 flex justify-end">

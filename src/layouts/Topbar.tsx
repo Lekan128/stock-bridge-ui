@@ -4,6 +4,7 @@ import { findNavItemForPath } from '@/layouts/navConfig'
 import { NotificationBell } from '@/layouts/NotificationBell'
 import { UserMenu } from '@/layouts/UserMenu'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
+import { OutboxIndicator } from '@/features/outbox/OutboxIndicator'
 
 export interface TopbarProps {
   onOpenMobileSidebar: () => void
@@ -45,6 +46,7 @@ export function Topbar({ onOpenMobileSidebar }: TopbarProps) {
             Offline
           </span>
         )}
+        <OutboxIndicator />
         <NotificationBell />
         <UserMenu />
       </div>

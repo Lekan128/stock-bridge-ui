@@ -8,7 +8,7 @@ import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
 import { Modal } from '@/components/Modal'
 import { TextField } from '@/components/TextField'
-import { stockApi, type StockInRequestPayload } from '@/features/products/api/stockApi'
+import { type StockInRequestPayload } from '@/features/products/api/stockApi'
 import { UnitToggle } from '@/features/products/components/UnitToggle'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import { useProductVendors } from '@/features/products/hooks/useProductVendors'
@@ -47,13 +47,16 @@ import {
 } from '@/features/products/unitSet'
 import type { ProductVendor } from '@/features/products/vendors/types'
 import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
-import { useIdempotencyKey } from '@/hooks/useIdempotencyKey'
+import { QueuedReceipt } from '@/features/outbox/QueuedReceipt'
+import { submitStockWrite } from '@/features/outbox/outboxStore'
 import { isAppError } from '@/types/api'
 
 export interface StockInModalProps {
   product: Product
   onClose: () => void
   onSuccess: (result: StockMutationResponse) => void
+  /** Saved on this phone instead of sent (A4) — the server could not be reached. */
+  onQueued?: () => void
 }
 
 type Step = 'form' | 'confirm' | 'receipt'
@@ -197,7 +200,7 @@ function withDeliveryPack(options: UnitOption[], deliveryPack: UnitOption | null
  * states purchase price **per purchase unit** and converts to base for costing, which is exactly
  * what the price field and its live per-stock-unit line do here.
  */
-export function StockInModal({ product, onClose, onSuccess }: StockInModalProps) {
+export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInModalProps) {
   const { user } = useAuth()
   const canViewVendors = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.VIEW_VENDORS)
   const { vendors: directoryVendors } = useVendorOptions(canViewVendors)
@@ -225,10 +228,9 @@ export function StockInModal({ product, onClose, onSuccess }: StockInModalProps)
    */
   const [unitCode, setUnitCode] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
-  /** Same key while the same entry is retried — see `useIdempotencyKey`. */
-  const idempotencyKeyFor = useIdempotencyKey()
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState<StockMutationResponse | null>(null)
+  const [queued, setQueued] = useState(false)
 
   const activeProductVendors = productVendors.filter((v) => v.companyVendorActive)
   const preferredVendor = activeProductVendors.find((v) => v.isPreferred)
@@ -508,8 +510,18 @@ export function StockInModal({ product, onClose, onSuccess }: StockInModalProps)
       note: values.note || undefined,
     }
     try {
-      const res = await stockApi.stockIn(product.id, payload, idempotencyKeyFor(payload))
-      setResult(res)
+      // Through the outbox (A4): sent now when the server can be reached, otherwise kept on this
+      // phone and sent later. A refusal that comes back now is still shown here, as before.
+      const outcome = await submitStockWrite({
+        kind: 'STOCK_IN',
+        productId: product.id,
+        productName: product.name,
+        summary: quantityBothWays,
+        payload,
+        baseDelta: baseQuantity,
+      })
+      if (outcome.status === 'sent') setResult(outcome.response)
+      else setQueued(true)
       setStep('receipt')
     } catch (err) {
       setSubmitError(isAppError(err) ? err.message : 'Something went wrong. Please try again.')
@@ -550,7 +562,7 @@ export function StockInModal({ product, onClose, onSuccess }: StockInModalProps)
       open
       onClose={onClose}
       size="xl"
-      title={step === 'form' ? 'Stock in' : step === 'confirm' ? 'Confirm stock in' : 'Stock in recorded'}
+      title={step === 'form' ? 'Stock in' : step === 'confirm' ? 'Confirm stock in' : queued ? 'Saved on this phone' : 'Stock in recorded'}
       footer={
         step === 'form' ? (
           <>
@@ -571,7 +583,7 @@ export function StockInModal({ product, onClose, onSuccess }: StockInModalProps)
             </Button>
           </>
         ) : (
-          <Button onClick={() => result && onSuccess(result)}>Done</Button>
+          <Button onClick={() => (result ? onSuccess(result) : onQueued?.())}>Done</Button>
         )
       }
     >
@@ -913,6 +925,12 @@ export function StockInModal({ product, onClose, onSuccess }: StockInModalProps)
           </div>
           <FormError message={submitError} />
         </div>
+      )}
+
+      {step === 'receipt' && queued && (
+        <QueuedReceipt
+          sentence={`${quantityBothWays} of ${product.name}${confirmVendorName ? ` from ${confirmVendorName}` : ''}, to be added.`}
+        />
       )}
 
       {step === 'receipt' && result && (

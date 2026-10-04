@@ -29,13 +29,17 @@ import {
   toBaseQuantity,
   unitOptionsForProduct,
 } from '@/features/products/unitSet'
-import { useIdempotencyKey } from '@/hooks/useIdempotencyKey'
+import { QueuedReceipt } from '@/features/outbox/QueuedReceipt'
+import { submitStockWrite } from '@/features/outbox/outboxStore'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
 
 export interface StockOutModalProps {
   product: Product
   onClose: () => void
   onSuccess: (result: StockOutResponse) => void
+  /** Saved on this phone instead of sent (A4) — the server could not be reached. */
+  onQueued?: () => void
 }
 
 interface AllocationRow {
@@ -116,7 +120,7 @@ function newRowKey(): string {
  * with the same FIFO suggestion"</em>, and because an empty row on a screen whose whole problem
  * was guessing is a strange thing to hand someone.
  */
-export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProps) {
+export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOutModalProps) {
   const { options: unitOfMeasureOptions } = useUnitOfMeasureOptions()
 
   const [choosingLots, setChoosingLots] = useState(false)
@@ -128,14 +132,14 @@ export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProp
   const [step, setStep] = useState<'form' | 'receipt'>('form')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
-  /** Same key while the same entry is retried — see `useIdempotencyKey`. */
-  const idempotencyKeyFor = useIdempotencyKey()
   // Split out from `submitError` purely so the render can give a 409 oversell its own structured
   // banner (actual-vs-requested, per §7.5) instead of the generic one-line FormError every other
   // failure gets — the two numbers are the whole point of that error and deserve to be legible,
   // not buried in a sentence.
   const [oversellInfo, setOversellInfo] = useState<{ available: number; requested: number } | null>(null)
   const [result, setResult] = useState<StockOutResponse | null>(null)
+  const [queued, setQueued] = useState(false)
+  const online = useOnlineStatus()
   const [allocationRows, setAllocationRows] = useState<AllocationRow[]>([])
   const [openLots, setOpenLots] = useState<ProductLot[]>([])
   const [loadingLots, setLoadingLots] = useState(false)
@@ -333,8 +337,18 @@ export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProp
         allocations: builtAllocations,
         note: getValues('note') || undefined,
       }
-      const res = await stockApi.stockOut(product.id, payload, idempotencyKeyFor(payload))
-      setResult(res)
+      // Through the outbox (A4) — see StockInModal. Choosing deliveries needs the server's current
+      // lots, so a sale with chosen deliveries is never queued; the outbox refuses it offline.
+      const outcome = await submitStockWrite({
+        kind: 'STOCK_OUT',
+        productId: product.id,
+        productName: product.name,
+        summary: quantityBothWays,
+        payload,
+        baseDelta: -baseQuantity,
+      })
+      if (outcome.status === 'sent') setResult(outcome.response as StockOutResponse)
+      else setQueued(true)
       setStep('receipt')
     } catch (err) {
       if (isAppError(err) && err.availableQuantity != null && err.requestedQuantity != null) {
@@ -365,7 +379,7 @@ export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProp
       open
       onClose={onClose}
       size={choosingLots ? 'xl' : 'md'}
-      title={step === 'form' ? 'Stock out' : 'Stock out recorded'}
+      title={step === 'form' ? 'Stock out' : queued ? 'Saved on this phone' : 'Stock out recorded'}
       footer={
         step === 'form' ? (
           <>
@@ -377,7 +391,7 @@ export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProp
             </Button>
           </>
         ) : (
-          <Button onClick={() => result && onSuccess(result)}>Done</Button>
+          <Button onClick={() => (result ? onSuccess(result) : onQueued?.())}>Done</Button>
         )
       }
     >
@@ -433,6 +447,9 @@ export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProp
             )}
           </div>
 
+          {/* Choosing deliveries needs the server's current lots, so offline (A4) it is not
+              offered: the sale is saved on this phone and the oldest deliveries are used. */}
+          {online ? (
           <div>
             <button
               type="button"
@@ -445,8 +462,14 @@ export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProp
               Choose which deliveries this comes from
             </button>
           </div>
+          ) : (
+            <p className="text-xs text-neutral-500">
+              You're offline: the oldest deliveries will be used. Choosing which deliveries this comes from needs a
+              connection.
+            </p>
+          )}
 
-          {choosingLots && (
+          {choosingLots && online && (
             <div id="stock-out-lots" className="flex flex-col gap-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span id="stock-out-lots-heading" className="text-sm font-medium text-neutral-700">
@@ -602,6 +625,8 @@ export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProp
           )}
         </form>
       )}
+
+      {step === 'receipt' && queued && <QueuedReceipt sentence={`${quantityBothWays} of ${product.name}, to be taken out.`} />}
 
       {step === 'receipt' && result && (
         <div className="flex flex-col gap-4">

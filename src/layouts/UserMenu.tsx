@@ -4,6 +4,9 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { useClickOutside } from '@/hooks/useClickOutside'
 import { promptInstall, useServiceWorkerState } from '@/pwa/serviceWorker'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { stopOutbox } from '@/features/outbox/outboxStore'
+import { useOutboxState } from '@/features/outbox/useOutbox'
 
 function getInitials(username: string) {
   return username.slice(0, 2).toUpperCase()
@@ -18,6 +21,8 @@ export function UserMenu() {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const { canInstall } = useServiceWorkerState()
+  const outbox = useOutboxState()
+  const [confirmLogout, setConfirmLogout] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useClickOutside(ref, () => setOpen(false))
 
@@ -27,6 +32,18 @@ export function UserMenu() {
 
   async function handleLogout() {
     setOpen(false)
+    // Stock recorded on this phone and not yet sent would be lost with the session's data (A4).
+    // Never silently: say so, and let the person choose to stay signed in until it has gone.
+    if (outbox.ops.length > 0 && !confirmLogout) {
+      setConfirmLogout(true)
+      return
+    }
+    await logoutNow()
+  }
+
+  async function logoutNow() {
+    setConfirmLogout(false)
+    await stopOutbox({ deleteData: true })
     await logout()
     // Back to the public storefront rather than the login form. `/` works from either layout and
     // is a live page with a prominent "Log in" — a bare login screen would be a dead end for
@@ -91,6 +108,14 @@ export function UserMenu() {
           </button>
         </div>
       )}
+      <ConfirmDialog
+        open={confirmLogout}
+        title="Stock changes not sent yet"
+        message={`${outbox.ops.length} stock change${outbox.ops.length === 1 ? '' : 's'} recorded on this phone ${outbox.ops.length === 1 ? 'has' : 'have'} not been sent. If you log out now, ${outbox.ops.length === 1 ? 'it' : 'they'} will be deleted from this phone and never recorded. Stay signed in until ${outbox.ops.length === 1 ? 'it has' : 'they have'} gone, or log out and discard ${outbox.ops.length === 1 ? 'it' : 'them'}.`}
+        confirmLabel="Log out and discard"
+        onConfirm={() => void logoutNow()}
+        onCancel={() => setConfirmLogout(false)}
+      />
     </div>
   )
 }
