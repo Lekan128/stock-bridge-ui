@@ -50,6 +50,8 @@ export default defineConfig({
           // Vietnamese). Only the Latin subsets are worth holding offline; the browser fetches
           // any other subset on demand, exactly as it does today.
           'assets/inter-latin-*.woff2',
+          // The workspace face (D4): one variable file, Latin only, kept for offline use.
+          'assets/ibm-plex-sans-latin-standard-normal-*.woff2',
         ],
         // Every in-app navigation, including a cold start with no network, gets the app shell.
         navigateFallback: '/index.html',
