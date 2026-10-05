@@ -11,7 +11,7 @@ import { useSyncStatus } from '@/features/sync/useSyncStatus'
  * "All caught up". When there is nothing to say it shrinks to a quiet cloud icon, still a button,
  * so the sync centre is always one tap away.
  */
-export function SyncPill() {
+export function SyncPill({ large = false }: { /** A 44 px target, for quick mode's gloved thumbs. */ large?: boolean } = {}) {
   const status = useSyncStatus()
   const { ready } = useOutboxState()
   const [open, setOpen] = useState(false)
@@ -27,9 +27,9 @@ export function SyncPill() {
         onClick={() => setOpen(true)}
         aria-label={quiet ? 'All caught up. Open sync details' : `${status.label}. Open sync details`}
         title={quiet ? 'All caught up' : undefined}
-        className={`inline-flex items-center gap-1.5 rounded-sm border text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${
+        className={`inline-flex items-center justify-center gap-1.5 rounded-sm border text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${
           quiet ? 'p-1.5' : 'px-2 py-1'
-        } ${TONE_CLASS[status.tone]}`}
+        } ${large ? 'min-h-11 min-w-11' : ''} ${TONE_CLASS[status.tone]}`}
       >
         <SyncIcon status={status} className={quiet ? 'h-5 w-5' : 'h-3.5 w-3.5'} />
         {!quiet && (

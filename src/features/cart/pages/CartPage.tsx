@@ -172,7 +172,7 @@ export function CartPage() {
                     ) : group.platformOwner ? (
                       <BadgeCheck className="h-5 w-5 shrink-0 text-primary-600" aria-hidden="true" />
                     ) : (
-                      <Store className="h-5 w-5 shrink-0 text-neutral-400" aria-hidden="true" />
+                      <Store className="h-5 w-5 shrink-0 text-neutral-500" aria-hidden="true" />
                     )}
                     <p className="truncate text-sm font-semibold text-neutral-900">
                       <span className="font-normal text-neutral-500">Sold by </span>
@@ -182,7 +182,7 @@ export function CartPage() {
                   {/* Goods only. The delivery fee for this group is the server's call — it depends
                       on the free-delivery threshold — and appears on the checkout summary. */}
                   <p className="text-sm text-neutral-600">
-                    <span className="text-neutral-400">Items </span>
+                    <span className="text-neutral-500">Items </span>
                     <span className="font-medium text-neutral-900">{formatNaira(group.subtotal)}</span>
                   </p>
                 </header>

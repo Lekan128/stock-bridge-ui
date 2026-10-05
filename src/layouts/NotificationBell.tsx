@@ -107,7 +107,7 @@ export function NotificationBell() {
             </div>
 
             {loading && !hasLoadedOnce && (
-              <div className="flex items-center justify-center py-6 text-neutral-400">
+              <div className="flex items-center justify-center py-6 text-neutral-500">
                 <Spinner size={18} />
               </div>
             )}

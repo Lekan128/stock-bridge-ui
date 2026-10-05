@@ -73,7 +73,7 @@ carry no colour at all (plan §2, "calm by default").
 | neutral-100 | `#EEF0F3` | StockBar track, hover background |
 | neutral-200 | `#E2E5EA` | default border |
 | neutral-300 | `#CBD0D8` | healthy StockBar fill, disabled border |
-| neutral-400 | `#9AA2AF` | placeholder text, a figure of nought |
+| neutral-400 | `#9AA2AF` | placeholder and disabled text, decoration only (2.6:1) |
 | neutral-500 | `#6B7280` | secondary/muted text, units after a figure |
 | neutral-600 | `#4B5563` | body text (secondary emphasis) |
 | neutral-700 | `#374151` | body text |
@@ -82,6 +82,12 @@ carry no colour at all (plan §2, "calm by default").
 
 `neutral-500` on `neutral-50` is 4.55:1 — it clears AA, narrowly. Don't go lighter for anything
 someone has to read.
+
+`neutral-500` is the quietest text and the quietest meaningful icon. `neutral-400` is 2.6:1 on
+white: it fails text (4.5:1) and fails an icon that means something (3:1), so it is only ever a
+placeholder, a disabled state or decoration. The Phase H audit found it on ~160 pieces of text —
+"(optional)", counts, receipt numbers, a figure of nought — and moved them all to `neutral-500`;
+`e2e/suites/a11y.e2e.mjs` runs axe on the key screens to keep it that way.
 
 ### Warning — amber (low stock, needs a decision)
 

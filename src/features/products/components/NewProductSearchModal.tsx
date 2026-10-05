@@ -96,7 +96,7 @@ export function NewProductSearchModal({ open, onClose }: NewProductSearchModalPr
             Product name
           </label>
           <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
             {/* Opened by an explicit click, never on page load, so autofocus here doesn't steal
                 focus from anything the user didn't just ask to open. */}
             <input
@@ -166,7 +166,7 @@ export function NewProductSearchModal({ open, onClose }: NewProductSearchModalPr
         {trimmedQuery.length > 0 && !loading && (
           <div className="flex items-center gap-3" aria-hidden="true">
             <div className="h-px flex-1 bg-neutral-200" />
-            <span className="text-xs text-neutral-400">or</span>
+            <span className="text-xs text-neutral-500">or</span>
             <div className="h-px flex-1 bg-neutral-200" />
           </div>
         )}

@@ -99,21 +99,21 @@ export function VendorDetailPage() {
           <h2 className="text-sm font-semibold text-neutral-900">Contact</h2>
           <dl className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
             <div className="flex items-start gap-2">
-              <Phone className="mt-0.5 h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
+              <Phone className="mt-0.5 h-4 w-4 shrink-0 text-neutral-500" aria-hidden="true" />
               <div>
                 <dt className="text-neutral-500">Phone</dt>
                 <dd className="text-neutral-900">{phone || '—'}</dd>
               </div>
             </div>
             <div className="flex items-start gap-2">
-              <Mail className="mt-0.5 h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
+              <Mail className="mt-0.5 h-4 w-4 shrink-0 text-neutral-500" aria-hidden="true" />
               <div className="min-w-0">
                 <dt className="text-neutral-500">Email</dt>
                 <dd className="truncate text-neutral-900">{email || '—'}</dd>
               </div>
             </div>
             <div className="flex items-start gap-2 sm:col-span-2">
-              <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
+              <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-neutral-500" aria-hidden="true" />
               <div>
                 <dt className="text-neutral-500">Address</dt>
                 <dd className="text-neutral-900">
@@ -132,7 +132,7 @@ export function VendorDetailPage() {
               <dl className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 {(vendor.bankName || vendor.bankAccountNumber || vendor.bankAccountName) && (
                   <div className="flex items-start gap-2 sm:col-span-2">
-                    <Landmark className="mt-0.5 h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
+                    <Landmark className="mt-0.5 h-4 w-4 shrink-0 text-neutral-500" aria-hidden="true" />
                     <div className="min-w-0">
                       <dt className="text-neutral-500">Bank account</dt>
                       <dd className="text-neutral-900">{vendor.bankName || '—'}</dd>
@@ -148,7 +148,7 @@ export function VendorDetailPage() {
                 )}
                 {vendor.cacNumber && (
                   <div className="flex items-start gap-2 sm:col-span-2">
-                    <FileText className="mt-0.5 h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
+                    <FileText className="mt-0.5 h-4 w-4 shrink-0 text-neutral-500" aria-hidden="true" />
                     <div>
                       <dt className="text-neutral-500">CAC number</dt>
                       <dd className="text-neutral-900">{vendor.cacNumber}</dd>
@@ -265,7 +265,7 @@ function ProductRow({ product }: { product: VendorProductPrice }) {
         {/* An em dash, never ₦0.00. "We last paid nothing" is a different and false claim — see
             VendorProductPrice for the two ordinary ways the price is genuinely absent. */}
         {product.lastPurchaseUnitPrice === undefined ? (
-          <span className="text-neutral-400" title="Never bought from this supplier through ProcurePaddy">
+          <span className="text-neutral-500" title="Never bought from this supplier through ProcurePaddy">
             —
           </span>
         ) : (
@@ -291,7 +291,7 @@ function ProductRow({ product }: { product: VendorProductPrice }) {
             )}
           </>
         ) : (
-          <span className="text-neutral-400">—</span>
+          <span className="text-neutral-500">—</span>
         )}
       </td>
     </tr>

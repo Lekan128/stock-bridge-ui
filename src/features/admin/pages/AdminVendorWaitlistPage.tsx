@@ -244,7 +244,7 @@ export function AdminVendorWaitlistPage() {
                         </p>
                       )}
 
-                      <p className="mt-2 text-xs text-neutral-400">
+                      <p className="mt-2 text-xs text-neutral-500">
                         Applied {formatDateTime(application.createdAt)}
                         {application.reviewedAt && ` · reviewed ${formatDateTime(application.reviewedAt)}`}
                       </p>

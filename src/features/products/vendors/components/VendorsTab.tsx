@@ -275,7 +275,7 @@ export function VendorsTab({ product, canManage }: VendorsTabProps) {
                         aria-expanded={expanded}
                         aria-controls={`vendor-packs-${vendor.id}`}
                         aria-label={expanded ? 'Hide packs' : 'Show packs'}
-                        className="rounded-md p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                        className="rounded-md p-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                       >
                         <ChevronRight
                           className={`h-4 w-4 transition-transform ${expanded ? 'rotate-90' : ''}`}
@@ -313,7 +313,7 @@ export function VendorsTab({ product, canManage }: VendorsTabProps) {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-neutral-700">
-                      {defaultPack?.vendorSku || <span className="text-neutral-400">—</span>}
+                      {defaultPack?.vendorSku || <span className="text-neutral-500">—</span>}
                     </td>
                     {/* Last cost — the stored per-stock-unit price on top, the pack price a
                         buyer would recognise echoed under it. Two lines, both visible, neither on
@@ -321,7 +321,7 @@ export function VendorsTab({ product, canManage }: VendorsTabProps) {
                         somewhere a decision cannot be made. */}
                     <td className="px-4 py-3">
                       {headlinePrice == null ? (
-                        <span className="text-neutral-400">{formatCurrency(null)}</span>
+                        <span className="text-neutral-500">{formatCurrency(null)}</span>
                       ) : (
                         <>
                           <span className="font-medium text-neutral-900">
@@ -372,7 +372,7 @@ export function VendorsTab({ product, canManage }: VendorsTabProps) {
                       ) : vendor.isPreferred ? (
                         <Badge variant="info">{UNIT_COPY.PREFERRED}</Badge>
                       ) : (
-                        <span className="text-neutral-400">—</span>
+                        <span className="text-neutral-500">—</span>
                       )}
                     </td>
                   </tr>
@@ -426,7 +426,7 @@ export function VendorsTab({ product, canManage }: VendorsTabProps) {
                                       className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-neutral-100"
                                     >
                                       <ChevronRight
-                                        className={`h-3.5 w-3.5 shrink-0 text-neutral-400 transition-transform ${packExpanded ? 'rotate-90' : ''}`}
+                                        className={`h-3.5 w-3.5 shrink-0 text-neutral-500 transition-transform ${packExpanded ? 'rotate-90' : ''}`}
                                         aria-hidden="true"
                                       />
                                       <span className="flex-1">
@@ -468,7 +468,7 @@ export function VendorsTab({ product, canManage }: VendorsTabProps) {
                                             }
                                           }}
                                           aria-label={`Remove ${pack.label}`}
-                                          className="rounded-md p-1 text-neutral-400 hover:bg-danger-50 hover:text-danger-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-500"
+                                          className="rounded-md p-1 text-neutral-500 hover:bg-danger-50 hover:text-danger-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-500"
                                         >
                                           <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                                         </span>
@@ -531,7 +531,7 @@ export function VendorsTab({ product, canManage }: VendorsTabProps) {
                                                           type="button"
                                                           onClick={() => setDeletingTier({ vendor, pack, tier })}
                                                           aria-label={`Remove the price break starting at ${formatQuantity(tier.minQuantity, stockUnit)}`}
-                                                          className="rounded-md p-1 text-neutral-400 hover:bg-danger-50 hover:text-danger-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-500"
+                                                          className="rounded-md p-1 text-neutral-500 hover:bg-danger-50 hover:text-danger-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-500"
                                                         >
                                                           <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                                                         </button>

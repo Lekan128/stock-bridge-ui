@@ -393,7 +393,7 @@ export function RecordDeliveryPage() {
 
           <div className="relative">
             <Search
-              className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-neutral-400"
+              className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-neutral-500"
               aria-hidden="true"
             />
             <label htmlFor="delivery-search" className="sr-only">
@@ -410,7 +410,7 @@ export function RecordDeliveryPage() {
           </div>
 
           {loading && (
-            <div className="flex flex-col gap-3" aria-busy="true" aria-label={copy.common.loading}>
+            <div role="status" className="flex flex-col gap-3" aria-busy="true" aria-label={copy.common.loading}>
               {[0, 1, 2].map((index) => (
                 <Skeleton key={index} className="h-24 w-full" />
               ))}

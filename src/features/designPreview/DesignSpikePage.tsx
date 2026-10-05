@@ -169,7 +169,7 @@ function Controls() {
             </label>
           ))}
         </div>
-        <label className={`mt-1 flex items-center gap-2 text-sm ${font.condensed ? 'text-neutral-700' : 'text-neutral-400'}`}>
+        <label className={`mt-1 flex items-center gap-2 text-sm ${font.condensed ? 'text-neutral-700' : 'text-neutral-500'}`}>
           <input
             type="checkbox"
             disabled={!font.condensed}

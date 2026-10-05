@@ -117,7 +117,7 @@ export function DeliveryStep({
                 <p className="text-sm font-semibold text-neutral-900">{newAddress.label}</p>
                 <p className="mt-1 text-sm text-neutral-700">{newAddress.contactName}</p>
                 <p className="mt-1 flex items-start gap-1.5 text-sm text-neutral-600">
-                  <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-neutral-400" aria-hidden="true" />
+                  <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-neutral-500" aria-hidden="true" />
                   {summarise(newAddress)}
                 </p>
                 <p className="mt-1 text-sm text-neutral-600">{newAddress.contactPhone}</p>

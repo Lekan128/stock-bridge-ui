@@ -69,7 +69,7 @@ export function UserMenu() {
           {getInitials(user.username)}
         </span>
         <span className="hidden text-sm font-medium text-neutral-700 sm:block">{user.username}</span>
-        <ChevronDown className="hidden h-4 w-4 text-neutral-400 sm:block" />
+        <ChevronDown className="hidden h-4 w-4 text-neutral-500 sm:block" />
       </button>
       {open && (
         <div role="menu" className="absolute right-0 z-50 mt-2 w-56 rounded-lg border border-neutral-200 bg-white py-1 shadow-lg">

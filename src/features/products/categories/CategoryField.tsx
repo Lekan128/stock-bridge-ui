@@ -133,7 +133,7 @@ export function CategoryField({
   return (
     <div>
       <label htmlFor="categoryId" className="mb-1.5 block text-sm font-medium text-neutral-700">
-        Category <span className="font-normal text-neutral-400">(optional)</span>
+        Category <span className="font-normal text-neutral-500">(optional)</span>
       </label>
       <select
         id="categoryId"

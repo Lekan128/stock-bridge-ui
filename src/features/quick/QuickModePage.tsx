@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { Delete, Search, X } from 'lucide-react'
+import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { PERMISSIONS } from '@/auth/permissions'
 import { Stamp, type StampKind } from '@/components/Stamp'
+import { useDialogBehaviour } from '@/components/useDialogBehaviour'
 import { useCatalogList, useCatalogState } from '@/features/catalog/useCatalog'
 import { discardOp, getOutboxState, isInFlight, submitStockWrite } from '@/features/outbox/outboxStore'
 import { useOutboxState } from '@/features/outbox/useOutbox'
@@ -91,6 +93,21 @@ export function QuickModePage() {
   const [flash, setFlash] = useState<{ kind: StampKind; text: string } | null>(null)
   const [session, setSession] = useState<SessionEntry[]>([])
   const searchRef = useRef<HTMLInputElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  // A full screen over the workspace, so it behaves as a dialog does (Phase H accessibility): the
+  // workspace behind is inert - out of the tab order and unread - and Tab stays in here. Escape
+  // steps back: a typed search is cleared first (the browser does that), then the chosen product,
+  // then quick mode itself. A scanner never sends Escape, so a scan is never interrupted by it.
+  useDialogBehaviour(rootRef, true, () => {
+    const active = document.activeElement
+    if (active instanceof HTMLInputElement && active.id === 'quick-search' && active.value !== '') return
+    if (product) {
+      setProduct(null)
+      return
+    }
+    navigate('/app/products')
+  })
 
   function chooseMode(next: Mode) {
     setParams({ mode: next }, { replace: true })
@@ -107,10 +124,16 @@ export function QuickModePage() {
     }, STAMP_MS)
   }
 
-  return (
+  return createPortal(
     // Over the workspace's own chrome — and over toasts (z-40), which would otherwise cover the
     // Record button; dialogs (the sync centre, z-50) still open above it.
-    <div className="fixed inset-0 z-[45] flex flex-col bg-white text-neutral-900">
+    <div
+      ref={rootRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="quick-mode-title"
+      className="fixed inset-0 z-[45] flex flex-col bg-white text-neutral-900"
+    >
       <header className="flex items-center justify-between gap-3 border-b border-neutral-200 px-4 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-3">
         <button
           type="button"
@@ -120,8 +143,10 @@ export function QuickModePage() {
           <X className="h-5 w-5" aria-hidden="true" />
           Exit
         </button>
-        <h1 className="text-base font-semibold">Quick mode</h1>
-        <SyncPill />
+        <h1 id="quick-mode-title" className="text-base font-semibold">
+          Quick mode
+        </h1>
+        <SyncPill large />
       </header>
 
       <div className="mx-auto flex w-full max-w-md min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
@@ -155,7 +180,8 @@ export function QuickModePage() {
 
         <SessionList entries={session} onUndone={(key) => setSession((all) => all.map((e) => (e.key === key ? { ...e, undone: true } : e)))} />
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -227,7 +253,7 @@ function FindStep({ inputRef, onPick }: { inputRef: RefObject<HTMLInputElement |
   return (
     <div className="flex flex-col gap-3">
       <div className="relative">
-        <Search className="pointer-events-none absolute top-1/2 left-4 h-5 w-5 -translate-y-1/2 text-neutral-400" aria-hidden="true" />
+        <Search className="pointer-events-none absolute top-1/2 left-4 h-5 w-5 -translate-y-1/2 text-neutral-500" aria-hidden="true" />
         <label htmlFor="quick-search" className="sr-only">
           Scan, or type a name or code
         </label>

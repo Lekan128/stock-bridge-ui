@@ -46,6 +46,9 @@ function isStockStatusFilter(value: string | null): value is StockStatusFilter {
 }
 
 const PAGE_SIZE = 20
+/** How long typing pauses before a search runs: against the server, and on the phone's copy. */
+const SERVER_SEARCH_PAUSE_MS = 350
+const DEVICE_SEARCH_PAUSE_MS = 100
 
 const NO_PRODUCTS: Product[] = []
 
@@ -118,7 +121,19 @@ export function ProductListPage() {
   const [selecting, setSelecting] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
 
-  const debouncedSearch = useDebouncedValue(search, 350)
+  /**
+   * Where the list comes from. Once a complete copy of the catalogue is on the device (A3), every
+   * search, filter, sort and scroll is answered there — instantly, offline included, at any
+   * catalogue size. Until then (the first download, or a device too full to hold one) it is the
+   * server's paged list, exactly as before.
+   */
+  const catalog = useCatalogState()
+  const onDevice = catalog.phase === 'ready'
+
+  // The pause before a search runs is there to spare the server a request per keystroke. Answered
+  // on the phone (~30 ms at 100,000 products on a throttled CPU, Phase H) there is nothing to
+  // spare, so it only has to be long enough to let a scanner's burst of keys land as one search.
+  const debouncedSearch = useDebouncedValue(search, onDevice ? DEVICE_SEARCH_PAUSE_MS : SERVER_SEARCH_PAUSE_MS)
 
   /**
    * Every change to the list's state goes through here. `replace`, so filtering and paging don't
@@ -149,14 +164,6 @@ export function ProductListPage() {
   // The route requires VIEW_PRODUCTS, which is all the category list needs.
   const categoryList = useCompanyCategories(true)
 
-  /**
-   * Where the list comes from. Once a complete copy of the catalogue is on the device (A3), every
-   * search, filter, sort and scroll is answered there — instantly, offline included, at any
-   * catalogue size. Until then (the first download, or a device too full to hold one) it is the
-   * server's paged list, exactly as before.
-   */
-  const catalog = useCatalogState()
-  const onDevice = catalog.phase === 'ready'
   const online = useOnlineStatus()
   const catalogList = useCatalogList(
     { search: committedSearch, status: statusFilter, categoryId: categoryFilter, stockStatus: stockLevelFilter, sort },

@@ -2,6 +2,10 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { preloadRoute } from '@/routes/router'
+
+// The page being opened, fetched alongside the session check rather than after it.
+preloadRoute(window.location.pathname)
 
 // B1 type-and-colour spike: dev and VITE_DESIGN_PREVIEW builds only, so production drops it.
 if (import.meta.env.DEV || import.meta.env.VITE_DESIGN_PREVIEW === 'true') {

@@ -87,7 +87,7 @@ export function SellerStorefrontPage() {
           />
         ) : (
           <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-neutral-100">
-            <Store className="h-7 w-7 text-neutral-400" aria-hidden="true" />
+            <Store className="h-7 w-7 text-neutral-500" aria-hidden="true" />
           </div>
         )}
 

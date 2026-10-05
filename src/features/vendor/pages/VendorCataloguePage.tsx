@@ -138,7 +138,7 @@ export function VendorCataloguePage() {
           }}
         >
           <Search
-            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400"
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500"
             aria-hidden="true"
           />
           <input
@@ -221,7 +221,7 @@ export function VendorCataloguePage() {
                       "available" is the number the storefront actually advertises. */}
                   <p className="mt-1 text-xs text-neutral-500">
                     {product.availableToSell} available to sell
-                    <span className="text-neutral-400">
+                    <span className="text-neutral-500">
                       {' '}
                       · {product.quantityOnHand} on hand · {product.committedQuantity} committed
                     </span>

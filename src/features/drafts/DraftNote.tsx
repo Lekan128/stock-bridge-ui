@@ -29,7 +29,7 @@ export function DraftNote({ savedAt, restored, onDiscard, caveat }: DraftNotePro
       role="status"
       className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-600"
     >
-      <FileClock className="h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
+      <FileClock className="h-4 w-4 shrink-0 text-neutral-500" aria-hidden="true" />
       <span className="flex-1">
         {restored ? 'Picked up your draft from ' : 'Draft saved on this phone at '}
         <span className="tabular-nums font-medium text-neutral-800">{at(savedAt)}</span>.

@@ -140,24 +140,33 @@ function LegendTotal({
   units: string
   href?: string
 }) {
-  const body = (
+  const figures = (
     <>
+      <span className="text-xl font-semibold text-neutral-900">{value}</span>
+      <span className="text-sm text-neutral-500">{units}</span>
+    </>
+  )
+  // The link sits inside the <dd>: a <dl> may only hold <div>-wrapped <dt>/<dd> pairs, so a link
+  // around the pair hid it from assistive tech as a list (Phase H accessibility audit).
+  return (
+    <div>
       <dt className="flex items-center gap-1.5 text-xs font-medium text-neutral-500">
         {/* The chart's own series colours (chartTokens): in navy, out green. */}
         <span className={`h-2.5 w-2.5 rounded-sm ${swatch}`} aria-hidden="true" />
         {label}
       </dt>
-      <dd className="mt-0.5 flex items-baseline gap-2 tabular-nums">
-        <span className="text-xl font-semibold text-neutral-900">{value}</span>
-        <span className="text-sm text-neutral-500">{units}</span>
+      <dd className="mt-0.5">
+        {href ? (
+          <Link
+            to={href}
+            className="flex items-baseline gap-2 rounded-sm tabular-nums hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+          >
+            {figures}
+          </Link>
+        ) : (
+          <span className="flex items-baseline gap-2 tabular-nums">{figures}</span>
+        )}
       </dd>
-    </>
-  )
-  return href ? (
-    <Link to={href} className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
-      <div>{body}</div>
-    </Link>
-  ) : (
-    <div>{body}</div>
+    </div>
   )
 }

@@ -96,7 +96,7 @@ export function StorefrontFooter() {
                     href={`tel:${settings.supportPhone}`}
                     className="flex items-center gap-2 text-neutral-600 hover:text-primary-600 hover:underline"
                   >
-                    <Phone className="h-4 w-4 text-neutral-400" aria-hidden="true" />
+                    <Phone className="h-4 w-4 text-neutral-500" aria-hidden="true" />
                     {settings.supportPhone}
                   </a>
                 </li>
@@ -107,7 +107,7 @@ export function StorefrontFooter() {
                     href={`mailto:${settings.supportEmail}`}
                     className="flex items-center gap-2 text-neutral-600 hover:text-primary-600 hover:underline"
                   >
-                    <Mail className="h-4 w-4 text-neutral-400" aria-hidden="true" />
+                    <Mail className="h-4 w-4 text-neutral-500" aria-hidden="true" />
                     {settings.supportEmail}
                   </a>
                 </li>

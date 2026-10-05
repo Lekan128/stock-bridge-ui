@@ -79,7 +79,7 @@ export function RequestUnitOfMeasureModal({ onClose, onSuccess }: RequestUnitOfM
         />
         <div>
           <label htmlFor="unit-request-note" className="mb-1.5 block text-sm font-medium text-neutral-700">
-            Note <span className="font-normal text-neutral-400">(optional)</span>
+            Note <span className="font-normal text-neutral-500">(optional)</span>
           </label>
           <textarea
             id="unit-request-note"

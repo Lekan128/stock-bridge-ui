@@ -194,7 +194,7 @@ export function VendorApplicationPage() {
 
         <fieldset className="flex flex-col gap-4">
           <legend className="mb-1.5 text-sm font-medium text-neutral-700">
-            Business address <span className="font-normal text-neutral-400">(optional)</span>
+            Business address <span className="font-normal text-neutral-500">(optional)</span>
           </legend>
           <TextField
             label="Address line 1"
@@ -226,7 +226,7 @@ export function VendorApplicationPage() {
 
         <div>
           <label htmlFor="notes" className="mb-1.5 block text-sm font-medium text-neutral-700">
-            What do you sell? <span className="font-normal text-neutral-400">(optional)</span>
+            What do you sell? <span className="font-normal text-neutral-500">(optional)</span>
           </label>
           <textarea
             id="notes"

@@ -81,7 +81,7 @@ export function ProductGridCard({ product }: ProductGridCardProps) {
 
       <div className="flex flex-1 flex-col p-3 sm:p-4">
         {product.brand && (
-          <p className="truncate text-xs font-medium uppercase tracking-wide text-neutral-400">{product.brand}</p>
+          <p className="truncate text-xs font-medium uppercase tracking-wide text-neutral-500">{product.brand}</p>
         )}
         <h3 className="mt-0.5 text-sm font-semibold leading-snug text-neutral-900">
           <Link

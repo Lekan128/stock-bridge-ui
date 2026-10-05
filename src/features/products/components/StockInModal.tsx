@@ -694,7 +694,7 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
               <label htmlFor="stock-in-supplier" className="mb-1.5 block text-sm font-medium text-neutral-700">
                 {UNIT_COPY.SUPPLIER}
                 {supplierOverride && (
-                  <span className="font-normal text-neutral-400">
+                  <span className="font-normal text-neutral-500">
                     {' '}
                     (any {UNIT_COPY.SUPPLIER.toLowerCase()} in your directory, not just this product&apos;s)
                   </span>

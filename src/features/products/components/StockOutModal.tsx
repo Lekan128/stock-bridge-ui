@@ -506,7 +506,7 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
               {loadingLots ? (
                 <p className="text-sm text-neutral-500">Loading deliveries…</p>
               ) : allocationRows.length === 0 ? (
-                <p className="text-sm text-neutral-400">
+                <p className="text-sm text-neutral-500">
                   {openLots.length === 0 && !lotsError
                     ? 'No open deliveries on file — the server will work out where this comes from.'
                     : 'No lines yet — the oldest deliveries will be used first.'}
@@ -579,7 +579,7 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
                               type="button"
                               onClick={() => removeAllocationRow(row.key)}
                               aria-label={`Remove delivery ${index + 1}`}
-                              className="rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-danger-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                              className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-danger-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                             >
                               <Trash2 className="h-4 w-4" aria-hidden="true" />
                             </button>

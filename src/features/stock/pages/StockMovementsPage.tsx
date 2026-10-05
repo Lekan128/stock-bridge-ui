@@ -282,7 +282,7 @@ export function StockMovementsPage() {
                       <td className="px-4 py-3">
                         <span className="font-medium text-neutral-900">{movement.productName ?? '—'}</span>
                         {movement.productSku && (
-                          <span className="mt-0.5 block font-mono text-xs text-neutral-400">
+                          <span className="mt-0.5 block font-mono text-xs text-neutral-500">
                             {movement.productSku}
                           </span>
                         )}
@@ -293,7 +293,7 @@ export function StockMovementsPage() {
                       <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-neutral-900">
                         {formatNumber(movement.quantity)}
                         {movement.unitOfMeasure && (
-                          <span className="ml-1 text-xs text-neutral-400">{movement.unitOfMeasure}</span>
+                          <span className="ml-1 text-xs text-neutral-500">{movement.unitOfMeasure}</span>
                         )}
                       </td>
                       {/* Em dash, never ₦0.00 — "no price recorded" is not "it was free". */}

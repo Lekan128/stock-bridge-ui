@@ -101,7 +101,7 @@ export function ImageUploadField({ file, existingImageUrl, removed, onFileSelect
           dragOver ? 'border-primary-400 bg-primary-50' : 'border-neutral-300 bg-neutral-50 hover:bg-neutral-100'
         }`}
       >
-        <ImageUp className="h-6 w-6 text-neutral-400" />
+        <ImageUp className="h-6 w-6 text-neutral-500" />
         <span className="px-3">Drag & drop or tap to select an image</span>
         <input
           ref={inputRef}

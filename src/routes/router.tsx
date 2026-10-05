@@ -13,6 +13,7 @@ import { AdminLayout } from '@/layouts/AdminLayout'
 import { AppLayout } from '@/layouts/AppLayout'
 import { StorefrontLayout } from '@/layouts/StorefrontLayout'
 import { ScrollToTop } from '@/routes/ScrollToTop'
+import { lazyPage } from '@/routes/lazyPage'
 
 // Eager: the public storefront and auth. These are the first paint for an anonymous visitor
 // arriving at `/`, so they must not wait on a second network round trip.
@@ -43,9 +44,7 @@ const DesignSpikePage =
   import.meta.env.DEV || import.meta.env.VITE_DESIGN_PREVIEW === 'true'
     ? lazy(() => import('@/features/designPreview/DesignSpikePage').then((m) => ({ default: m.DesignSpikePage })))
     : null
-const QuickModePage = lazy(() =>
-  import('@/features/quick/QuickModePage').then((m) => ({ default: m.QuickModePage })),
-)
+const QuickModePage = lazyPage(() => import('@/features/quick/QuickModePage').then((m) => m.QuickModePage), <BootstrappingScreen />)
 const CheckoutPage = lazy(() =>
   import('@/pages/CheckoutPage').then((m) => ({ default: m.CheckoutPage })),
 )
@@ -60,16 +59,12 @@ const OrderConfirmationPage = lazy(() =>
   })),
 )
 
-const DashboardPage = lazy(() =>
-  import('@/pages/DashboardPage').then((m) => ({ default: m.DashboardPage })),
-)
-const ProductsPage = lazy(() =>
-  import('@/pages/ProductsPage').then((m) => ({ default: m.ProductsPage })),
-)
-const ProductDetailPage = lazy(() =>
-  import('@/pages/ProductDetailPage').then((m) => ({
-    default: m.ProductDetailPage,
-  })),
+// The pages a phone opens the app onto, fetched at boot - see lazyPage and preloadRoute below.
+const DashboardPage = lazyPage(() => import('@/pages/DashboardPage').then((m) => m.DashboardPage), <BootstrappingScreen />)
+const ProductsPage = lazyPage(() => import('@/pages/ProductsPage').then((m) => m.ProductsPage), <BootstrappingScreen />)
+const ProductDetailPage = lazyPage(
+  () => import('@/pages/ProductDetailPage').then((m) => m.ProductDetailPage),
+  <BootstrappingScreen />,
 )
 const ProductFormPage = lazy(() =>
   import('@/pages/ProductFormPage').then((m) => ({
@@ -310,6 +305,27 @@ const VendorStatementPage = lazy(() =>
 function LegacyProductRedirect({ suffix = '' }: { suffix?: string }) {
   const { id } = useParams<{ id: string }>()
   return <Navigate to={`/app/products/${id}${suffix}`} replace />
+}
+
+/** Where a phone opens the app, and the page each lands on. */
+const ENTRY_PAGES: [RegExp, { preload: () => Promise<void> }][] = [
+  [/^\/app\/?$/, DashboardPage],
+  [/^\/app\/products\/?$/, ProductsPage],
+  [/^\/app\/products\/[0-9a-f-]{36}\/?$/, ProductDetailPage],
+  [/^\/app\/quick\/?$/, QuickModePage],
+]
+
+/**
+ * Called once at boot, before the first render: fetches the page this load is opening onto in
+ * parallel with the session check, so the route renders it without suspending (see lazyPage).
+ * Every other path loads as it always did.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function preloadRoute(pathname: string): void {
+  const page = ENTRY_PAGES.find(([path]) => path.test(pathname))?.[1]
+  page?.preload().catch(() => {
+    // Offline with nothing cached: the route's own lazy load shows the real error.
+  })
 }
 
 /**

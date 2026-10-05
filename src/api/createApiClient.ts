@@ -182,14 +182,23 @@ export function createApiClient({ refreshPath, loginRedirectPath, getRefreshToke
     authFailureHandler = handler
   }
 
-  instance.interceptors.request.use((config) => {
-    if (!config.public && accessToken) {
+  let refreshPromise: Promise<string> | null = null
+
+  instance.interceptors.request.use(async (config) => {
+    if (config.public) return config
+    // The workspace opens from the remembered session while its token is still being fetched
+    // (AuthProvider), so a screen's first requests can start before there is one. They wait for
+    // it rather than going out bare, being refused, and asking for another.
+    if (!accessToken && refreshPromise) {
+      await refreshPromise.catch(() => {
+        // No token after all: the request goes without one, and its 401 is handled below.
+      })
+    }
+    if (accessToken) {
       config.headers.set('Authorization', `Bearer ${accessToken}`)
     }
     return config
   })
-
-  let refreshPromise: Promise<string> | null = null
 
   /**
    * Single-flight token refresh, shared by the 401 interceptor below and by the auth provider

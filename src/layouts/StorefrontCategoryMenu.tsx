@@ -40,7 +40,7 @@ export function StorefrontCategoryMenu({ className = '' }: { className?: string 
       >
         <LayoutGrid className="h-4 w-4" aria-hidden="true" />
         Categories
-        <ChevronDown className={`h-3.5 w-3.5 text-neutral-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`h-3.5 w-3.5 text-neutral-500 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
@@ -69,7 +69,7 @@ export function StorefrontCategoryMenu({ className = '' }: { className?: string 
                 >
                   <span className="truncate">{category.name}</span>
                   {category.productCount !== undefined && (
-                    <span className="shrink-0 text-xs text-neutral-400">{category.productCount}</span>
+                    <span className="shrink-0 text-xs text-neutral-500">{category.productCount}</span>
                   )}
                 </Link>
                 {children.map((child) => (

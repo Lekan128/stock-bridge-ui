@@ -36,8 +36,8 @@ class CacheDatabase extends Dexie {
 const SNAPSHOT_KEY = 'query-cache'
 
 /**
- * How long a burst of cache changes (a screen's worth of queries landing) is batched before one
- * write. Short on purpose: browsers abort IndexedDB writes started while a page is being torn
+ * How long a burst of cache changes that bring no new answer (queries starting to fetch, statuses
+ * flipping) is batched before one write; new answers are written at once. Short on purpose: browsers abort IndexedDB writes started while a page is being torn
  * down, so a write still waiting when the app is closed outright is lost. `flush()` on hiding the
  * page covers a phone switching apps, where the page stays alive long enough to finish.
  */
@@ -49,8 +49,8 @@ const WRITE_DELAY_MS = 300
  * Written here rather than taken from `@tanstack/query-async-storage-persister`, whose throttle
  * also swallows a save forced on the way out: a phone user who opened the stock list and switched
  * away inside that second lost it, because the "save now" from the page-hide handler was itself
- * deferred past the unload. Here the latest snapshot is held in memory, written once a burst
- * settles, and written immediately by `flush()`.
+ * deferred past the unload. Here the latest snapshot is held in memory and written as soon as it
+ * holds a new answer, otherwise once a burst settles, and immediately by `flush()`.
  *
  * `close()` exists for logout. After it, every write is dropped and the connection is shut, so a
  * write still pending can't reopen — and so recreate — the database a moment after it is deleted.
@@ -77,9 +77,23 @@ export function createQueryPersister(databaseName: string) {
     }
   }
 
+  /** The newest answer from the server that has been written (a query's `dataUpdatedAt`). */
+  let savedAnswerAt = 0
+
   const persister: Persister = {
+    // A new answer from the server is written at once; everything else (a query starting to
+    // fetch, a status flipping) waits for the batch. Batching answers too (until Phase H) left a
+    // screen's data unsaved for its first 300 ms, and a tab lost inside that window - the phone
+    // killing it, a reload - came back offline with nothing: `flush()` on the way out does not
+    // survive a reload.
     persistClient: async (client) => {
       pending = client
+      const answerAt = client.clientState.queries.reduce((newest, query) => Math.max(newest, query.state.dataUpdatedAt), 0)
+      if (answerAt > savedAnswerAt) {
+        savedAnswerAt = answerAt
+        void flush()
+        return
+      }
       timer ??= setTimeout(() => void flush(), WRITE_DELAY_MS)
     },
     restoreClient: async () => {
@@ -114,12 +128,17 @@ export async function deleteCacheDatabase(databaseName: string): Promise<void> {
 }
 
 /**
- * Which queries are worth keeping on the device. Only successful answers, and not one-off
- * searches: a typed search term is a key nobody asks for twice, and keeping every one of them
+ * Which queries are worth keeping on the device: any that hold an answer, and not one-off
+ * searches — a typed search term is a key nobody asks for twice, and keeping every one of them
  * would fill the store with near-duplicate pages of the catalog.
+ *
+ * "Holds an answer", not "succeeded last time" (found by the Phase H chaos suite): offline, a
+ * screen's refetch fails and its query turns to `error` while keeping the data it had. Persisting
+ * only `success` then dropped that saved copy at the next save, so a phone that stayed offline —
+ * the tab closed and reopened — opened the product it had just been working on as "You're offline".
  */
 export function shouldPersistQuery(query: Query): boolean {
-  if (query.state.status !== 'success') return false
+  if (query.state.data === undefined) return false
   if (query.meta?.persist === false) return false
   return true
 }

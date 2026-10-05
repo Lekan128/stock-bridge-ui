@@ -129,10 +129,10 @@ export function PaymentStep({
                     aria-hidden="true"
                   />
                   <div className="min-w-0">
-                    <p className={`text-sm font-semibold ${disabled ? 'text-neutral-400' : 'text-neutral-900'}`}>
+                    <p className={`text-sm font-semibold ${disabled ? 'text-neutral-500' : 'text-neutral-900'}`}>
                       {option.title}
                     </p>
-                    <p className={`mt-0.5 text-sm ${disabled ? 'text-neutral-400' : 'text-neutral-600'}`}>
+                    <p className={`mt-0.5 text-sm ${disabled ? 'text-neutral-500' : 'text-neutral-600'}`}>
                       {option.body}
                     </p>
                   </div>

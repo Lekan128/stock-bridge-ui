@@ -70,25 +70,25 @@ export function StorefrontMobileDrawer({ open, onClose }: StorefrontMobileDrawer
 
         <nav className="flex-1 overflow-y-auto px-2 py-3">
           <Link to="/" onClick={onClose} className={linkClass}>
-            <Store className="h-4 w-4 text-neutral-400" />
+            <Store className="h-4 w-4 text-neutral-500" />
             All products
           </Link>
 
           {isAuthenticated && (
             <>
               <Link to="/app" onClick={onClose} className={linkClass}>
-                <LayoutDashboard className="h-4 w-4 text-neutral-400" />
+                <LayoutDashboard className="h-4 w-4 text-neutral-500" />
                 My workspace
               </Link>
               {permissions.includes(PERMISSIONS.VIEW_ORDERS) && (
                 <Link to="/app/orders" onClick={onClose} className={linkClass}>
-                  <ReceiptText className="h-4 w-4 text-neutral-400" />
+                  <ReceiptText className="h-4 w-4 text-neutral-500" />
                   My orders
                 </Link>
               )}
               {permissions.includes(PERMISSIONS.MANAGE_DELIVERY_ADDRESSES) && (
                 <Link to="/app/addresses" onClick={onClose} className={linkClass}>
-                  <MapPin className="h-4 w-4 text-neutral-400" />
+                  <MapPin className="h-4 w-4 text-neutral-500" />
                   Delivery addresses
                 </Link>
               )}
@@ -97,7 +97,7 @@ export function StorefrontMobileDrawer({ open, onClose }: StorefrontMobileDrawer
 
           {visibleCategories.length > 0 && (
             <>
-              <p className="mt-4 flex items-center gap-2 px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-neutral-400">
+              <p className="mt-4 flex items-center gap-2 px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
                 <LayoutGrid className="h-3.5 w-3.5" />
                 Categories
               </p>

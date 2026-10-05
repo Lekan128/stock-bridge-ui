@@ -52,7 +52,7 @@ export function SellerBadge({ seller, size = 'sm', linked = true, className = ''
       ) : seller.platformOwner ? (
         <BadgeCheck className={`${logo} shrink-0 text-primary-600`} aria-hidden="true" />
       ) : (
-        <Store className={`${logo} shrink-0 text-neutral-400`} aria-hidden="true" />
+        <Store className={`${logo} shrink-0 text-neutral-500`} aria-hidden="true" />
       )}
       <span className="truncate">{seller.name}</span>
     </>

@@ -208,7 +208,7 @@ export function VendorStatementPage() {
           {data.escrow.maturingTranches.length > 0 && (
             <section className="rounded-lg border border-neutral-200 bg-white p-5">
               <div className="flex items-start gap-3">
-                <Lock size={16} className="mt-0.5 shrink-0 text-neutral-400" aria-hidden />
+                <Lock size={16} className="mt-0.5 shrink-0 text-neutral-500" aria-hidden />
                 <div className="flex-1">
                   <h2 className="text-base font-semibold text-neutral-900">
                     Money clearing right now
@@ -364,7 +364,7 @@ export function VendorStatementPage() {
             </section>
           )}
 
-          <p className="text-xs text-neutral-400">
+          <p className="text-xs text-neutral-500">
             Generated {dateTimeFormatter.format(new Date(data.generatedAt))} · {data.sellerName} · {data.currency}
           </p>
         </div>
@@ -450,7 +450,7 @@ function StatementRow({ line }: { line: VendorStatementLine }) {
       <td className="px-5 py-3">
         <span className="font-medium text-neutral-900">{LINE_LABELS[line.type]}</span>
         {line.productName && <p className="text-xs text-neutral-500">{line.productName}</p>}
-        {line.memo && <p className="text-xs text-neutral-400">{line.memo}</p>}
+        {line.memo && <p className="text-xs text-neutral-500">{line.memo}</p>}
       </td>
       <td className="whitespace-nowrap px-5 py-3 text-neutral-600">{line.orderNumber ?? '—'}</td>
       {/* The check-it-yourself column. Only commission lines have working to show; everything

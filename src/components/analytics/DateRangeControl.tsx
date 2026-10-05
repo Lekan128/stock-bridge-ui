@@ -56,9 +56,9 @@ export function DateRangeControl({ value, onChange }: DateRangeControlProps) {
         aria-expanded={open}
         className="inline-flex items-center gap-2 rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
       >
-        <Calendar className="h-4 w-4 text-neutral-400" />
+        <Calendar className="h-4 w-4 text-neutral-500" />
         {triggerLabel}
-        <ChevronDown className="h-4 w-4 text-neutral-400" />
+        <ChevronDown className="h-4 w-4 text-neutral-500" />
       </button>
 
       {open && (

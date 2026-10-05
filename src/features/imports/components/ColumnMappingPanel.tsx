@@ -47,7 +47,7 @@ export function ColumnMappingPanel({ session, saving, error, onSave }: ColumnMap
   return (
     <section aria-label={copy.mapping.title} className="rounded-lg border border-neutral-200 bg-white p-4">
       <h2 className="flex items-center gap-2 text-base font-semibold text-neutral-900">
-        <Columns3 className="h-4 w-4 text-neutral-400" aria-hidden="true" />
+        <Columns3 className="h-4 w-4 text-neutral-500" aria-hidden="true" />
         {copy.mapping.title}
       </h2>
       <p className="mt-1 text-sm text-neutral-600">{copy.mapping.body}</p>

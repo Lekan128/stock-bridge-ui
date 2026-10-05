@@ -37,7 +37,7 @@ export function ProductPriceTag({
         {showCompare && (
           <>
             {' · '}
-            <s className="text-neutral-400">{formatNaira(compareAtPrice)}</s>
+            <s className="text-neutral-500">{formatNaira(compareAtPrice)}</s>
           </>
         )}
       </span>

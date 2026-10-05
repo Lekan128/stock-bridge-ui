@@ -35,7 +35,7 @@ export function OrderCustomerPanel({ order }: { order: AdminOrder }) {
         {customer ? (
           <div className="mt-3 flex flex-col gap-2 text-sm">
             <p className="flex items-start gap-2 font-medium text-neutral-900">
-              <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
+              <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-neutral-500" aria-hidden="true" />
               <span>
                 {customer.name}
                 <span className="ml-1 font-normal text-neutral-500">({customer.slug})</span>
@@ -43,7 +43,7 @@ export function OrderCustomerPanel({ order }: { order: AdminOrder }) {
             </p>
             {customer.phone && (
               <p className="flex items-center gap-2 text-neutral-600">
-                <Phone className="h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
+                <Phone className="h-4 w-4 shrink-0 text-neutral-500" aria-hidden="true" />
                 <a href={`tel:${customer.phone}`} className="rounded hover:text-primary-700 hover:underline">
                   {customer.phone}
                 </a>
@@ -51,7 +51,7 @@ export function OrderCustomerPanel({ order }: { order: AdminOrder }) {
             )}
             {customer.email && (
               <p className="flex items-center gap-2 text-neutral-600">
-                <Mail className="h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
+                <Mail className="h-4 w-4 shrink-0 text-neutral-500" aria-hidden="true" />
                 <a href={`mailto:${customer.email}`} className="truncate rounded hover:text-primary-700 hover:underline">
                   {customer.email}
                 </a>
@@ -93,7 +93,7 @@ export function OrderCustomerPanel({ order }: { order: AdminOrder }) {
             )}
             {hasAddress && (
               <p className="flex items-start gap-2">
-                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
+                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-neutral-500" aria-hidden="true" />
                 <span>
                   {addressLines.map((line) => (
                     <span key={line} className="block">
@@ -107,7 +107,7 @@ export function OrderCustomerPanel({ order }: { order: AdminOrder }) {
             {delivery?.landmark && <p className="text-neutral-500">Landmark: {delivery.landmark}</p>}
             {delivery?.notes && (
               <p className="flex items-start gap-2 rounded-md bg-neutral-50 px-3 py-2 text-neutral-700">
-                <StickyNote className="mt-0.5 h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
+                <StickyNote className="mt-0.5 h-4 w-4 shrink-0 text-neutral-500" aria-hidden="true" />
                 <span>{delivery.notes}</span>
               </p>
             )}

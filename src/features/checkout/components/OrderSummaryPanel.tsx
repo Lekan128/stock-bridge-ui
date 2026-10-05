@@ -124,7 +124,7 @@ export function OrderSummaryPanel({ quote, items, loading, refreshing }: OrderSu
           <div className="flex items-center justify-between">
             <dt className="text-neutral-600">
               Subtotal
-              <span className="text-neutral-400"> ({quote.itemCount} units)</span>
+              <span className="text-neutral-500"> ({quote.itemCount} units)</span>
             </dt>
             <dd className="font-medium text-neutral-900">{formatNaira(quote.subtotal)}</dd>
           </div>
@@ -142,7 +142,7 @@ export function OrderSummaryPanel({ quote, items, loading, refreshing }: OrderSu
               {formatNaira(quote.total)}
             </dd>
           </div>
-          {refreshing && <p className="text-xs text-neutral-400">Recalculating for the selected address…</p>}
+          {refreshing && <p className="text-xs text-neutral-500">Recalculating for the selected address…</p>}
         </dl>
       ) : null}
 

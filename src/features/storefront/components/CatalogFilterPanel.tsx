@@ -50,7 +50,7 @@ export function CatalogFilterPanel({
       <section>
         <h3 className="text-sm font-semibold text-neutral-900">Category</h3>
         {categoriesLoading ? (
-          <p className="mt-2 text-sm text-neutral-400">Loading categories…</p>
+          <p className="mt-2 text-sm text-neutral-500">Loading categories…</p>
         ) : parents.length === 0 ? (
           <p className="mt-2 text-sm text-neutral-500">No categories published yet.</p>
         ) : (
@@ -85,7 +85,7 @@ export function CatalogFilterPanel({
                   >
                     <span className="truncate">{category.name}</span>
                     {category.productCount !== undefined && (
-                      <span className="shrink-0 text-xs text-neutral-400">{category.productCount}</span>
+                      <span className="shrink-0 text-xs text-neutral-500">{category.productCount}</span>
                     )}
                   </button>
                   {children.map((child) => (
@@ -102,7 +102,7 @@ export function CatalogFilterPanel({
                     >
                       <span className="truncate">{child.name}</span>
                       {child.productCount !== undefined && (
-                        <span className="shrink-0 text-xs text-neutral-400">{child.productCount}</span>
+                        <span className="shrink-0 text-xs text-neutral-500">{child.productCount}</span>
                       )}
                     </button>
                   ))}
@@ -138,7 +138,7 @@ export function CatalogFilterPanel({
                 className="w-full rounded-md border border-neutral-200 px-2.5 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100"
               />
             </div>
-            <span aria-hidden="true" className="text-sm text-neutral-400">
+            <span aria-hidden="true" className="text-sm text-neutral-500">
               –
             </span>
             <div className="min-w-0 flex-1">

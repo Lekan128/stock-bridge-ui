@@ -51,7 +51,7 @@ export function StepIndicator({
                     ? 'border-accent-600 bg-accent-600 text-white'
                     : isCurrent
                       ? 'border-primary-600 bg-primary-600 text-white'
-                      : 'border-neutral-300 bg-white text-neutral-400'
+                      : 'border-neutral-300 bg-white text-neutral-500'
                 }`}
               >
                 {isComplete ? <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden="true" /> : index + 1}
@@ -63,7 +63,7 @@ export function StepIndicator({
                   step 2 is. */}
               <span
                 className={`sr-only text-sm font-medium sm:not-sr-only sm:inline ${
-                  isCurrent ? 'text-primary-700' : isComplete ? 'text-neutral-700' : 'text-neutral-400'
+                  isCurrent ? 'text-primary-700' : isComplete ? 'text-neutral-700' : 'text-neutral-500'
                 }`}
               >
                 {step.label}

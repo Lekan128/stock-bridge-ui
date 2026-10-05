@@ -132,7 +132,7 @@ export function StorefrontProductDetailPage() {
 
         <div className="min-w-0">
           {product.brand && (
-            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400">{product.brand}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{product.brand}</p>
           )}
           <h1 className="mt-1 text-xl font-bold leading-tight text-neutral-900 sm:text-2xl">{product.name}</h1>
 
@@ -149,7 +149,7 @@ export function StorefrontProductDetailPage() {
               <Badge variant="danger">Out of stock</Badge>
             )}
             {product.categoryName && <Badge variant="neutral">{product.categoryName}</Badge>}
-            <span className="text-xs text-neutral-400">SKU {product.sku}</span>
+            <span className="text-xs text-neutral-500">SKU {product.sku}</span>
           </div>
 
           <ProductPriceTag

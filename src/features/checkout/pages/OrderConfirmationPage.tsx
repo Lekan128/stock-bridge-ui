@@ -232,7 +232,7 @@ export function OrderConfirmationPage() {
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-neutral-900">
                     {entry.seller?.name ?? 'Unknown seller'}
-                    {entry.current && <span className="ml-2 text-xs font-normal text-neutral-400">(this page)</span>}
+                    {entry.current && <span className="ml-2 text-xs font-normal text-neutral-500">(this page)</span>}
                   </p>
                   <p className="font-mono text-xs text-neutral-500">{entry.orderNumber}</p>
                 </div>
@@ -312,7 +312,7 @@ export function OrderConfirmationPage() {
           <p className="mt-2 text-sm font-medium text-neutral-900">{delivery.label ?? 'Delivery address'}</p>
           <p className="mt-0.5 text-sm text-neutral-700">{delivery.contactName}</p>
           <p className="mt-0.5 flex items-start gap-1.5 text-sm text-neutral-600">
-            <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-neutral-400" aria-hidden="true" />
+            <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-neutral-500" aria-hidden="true" />
             <span>
               {addressLines}
               {delivery.landmark ? ` (near ${delivery.landmark})` : ''}
@@ -320,7 +320,7 @@ export function OrderConfirmationPage() {
           </p>
           {delivery.contactPhone && (
             <p className="mt-0.5 flex items-center gap-1.5 text-sm text-neutral-600">
-              <Phone className="h-3.5 w-3.5 shrink-0 text-neutral-400" aria-hidden="true" />
+              <Phone className="h-3.5 w-3.5 shrink-0 text-neutral-500" aria-hidden="true" />
               {delivery.contactPhone}
             </p>
           )}

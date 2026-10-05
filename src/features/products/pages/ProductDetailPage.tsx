@@ -355,7 +355,7 @@ export function ProductDetailPage() {
                 {product.preferredVendorName ? (
                   <span className="font-medium text-neutral-900">{product.preferredVendorName}</span>
                 ) : (
-                  <span className="text-neutral-400">—</span>
+                  <span className="text-neutral-500">—</span>
                 )}
                 <Link to={{ search: '?tab=vendors' }} className="ml-2 text-xs font-medium text-primary-600 hover:underline">
                   View {UNIT_COPY.SUPPLIERS.toLowerCase()}

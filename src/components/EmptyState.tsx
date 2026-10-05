@@ -28,7 +28,7 @@ export function EmptyState({ icon: Icon, title, description, action, tone = 'neu
     <div className={`flex flex-col items-start gap-2 rounded-lg border border-neutral-200 bg-white px-5 py-8 text-left sm:px-8 ${className}`}>
       <h2 className="flex items-center gap-2 text-base font-semibold text-neutral-900">
         {Icon && (
-          <Icon className={`h-5 w-5 shrink-0 ${tone === 'positive' ? 'text-accent-600' : 'text-neutral-400'}`} aria-hidden="true" />
+          <Icon className={`h-5 w-5 shrink-0 ${tone === 'positive' ? 'text-accent-600' : 'text-neutral-500'}`} aria-hidden="true" />
         )}
         {title}
       </h2>

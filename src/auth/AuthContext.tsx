@@ -169,18 +169,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return
       }
 
-      const outcome = await resume()
-      if (outcome === 'transient') {
-        // No profile means a device that last signed in before profiles were remembered: there
-        // is nothing to draw the workspace with, so this load shows the login screen — but the
-        // refresh token is kept, and the retry below still restores the session once it can.
-        const remembered = authStorage.getSessionProfile()
-        if (remembered) {
-          setUser({ type: 'tenant', ...remembered.user })
-          setClient(remembered.client)
-        }
-        retryUntilAnswered()
+      // Started before anything renders, so the workspace's first requests find it in flight and
+      // wait for its token (createApiClient) instead of each drawing a 401.
+      const resuming = resume()
+
+      // A phone that remembers its session opens straight onto it, from the device, while the
+      // server is asked (Phase H, time to first row). Waiting for that answer first cost every
+      // warm open a full round trip on a blank screen: ~150 ms on Wi-Fi, a second or more at the
+      // edge of 3G. If the server then refuses the session, resume() clears it and the login
+      // screen takes over, as before; nothing is shown that this phone did not already hold.
+      //
+      // No profile means a device that last signed in before profiles were remembered: there is
+      // nothing to draw the workspace with, so that load still waits — and, if the server can't be
+      // reached, shows the login screen while the retry below restores the session once it can.
+      const remembered = authStorage.getSessionProfile()
+      if (remembered) {
+        setUser((current) => current ?? { type: 'tenant', ...remembered.user })
+        setClient((current) => current ?? remembered.client)
+        setIsBootstrapping(false)
       }
+
+      const outcome = await resuming
+      if (outcome === 'transient') retryUntilAnswered()
       setIsBootstrapping(false)
     }
 

@@ -1027,7 +1027,7 @@ export function ProductFormPage() {
             </div>
             <input type="hidden" {...register('sku')} />
             <div className="flex items-center gap-2 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2">
-              <Lock className="h-3.5 w-3.5 shrink-0 text-neutral-400" aria-hidden="true" />
+              <Lock className="h-3.5 w-3.5 shrink-0 text-neutral-500" aria-hidden="true" />
               {/* Edit mode shows the product's real, already-saved sku (registered above via
                   reset()); create mode shows the client-rendered preview — see
                   `previewSkuDisplay` — which updates as the name field changes with no server
@@ -1157,7 +1157,7 @@ export function ProductFormPage() {
                       label so §1's vocabulary lock still holds and the field is still findable by
                       the name used everywhere else; the question rides underneath it. */}
                   {UNIT_COPY.STOCK_UNIT}{' '}
-                  {!stockUnitLocked && <span className="font-normal text-neutral-400">(optional)</span>}
+                  {!stockUnitLocked && <span className="font-normal text-neutral-500">(optional)</span>}
                 </label>
                 <button
                   type="button"
@@ -1176,7 +1176,7 @@ export function ProductFormPage() {
                       that cannot change. The hidden input keeps react-hook-form's value intact. */}
                   <input type="hidden" {...register('unitOfMeasure')} />
                   <div className="flex flex-wrap items-center gap-2 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2">
-                    <Lock className="h-3.5 w-3.5 shrink-0 text-neutral-400" aria-hidden="true" />
+                    <Lock className="h-3.5 w-3.5 shrink-0 text-neutral-500" aria-hidden="true" />
                     <span className="text-sm font-medium text-neutral-700">
                       {baseOptions.find((option) => option.code === watchedStockUnitCode)?.label ||
                         watchedStockUnitCode ||
@@ -1230,7 +1230,7 @@ export function ProductFormPage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="packagingUnit" className="mb-1.5 block text-sm font-medium text-neutral-700">
-                  {UNIT_COPY.PACK} <span className="font-normal text-neutral-400">(optional)</span>
+                  {UNIT_COPY.PACK} <span className="font-normal text-neutral-500">(optional)</span>
                 </label>
                 <select
                   id="packagingUnit"
@@ -1396,7 +1396,7 @@ export function ProductFormPage() {
               <div>
                 <h2 className="text-sm font-semibold text-neutral-900">
                   First {UNIT_COPY.SUPPLIER.toLowerCase()}{' '}
-                  <span className="font-normal text-neutral-400">(optional)</span>
+                  <span className="font-normal text-neutral-500">(optional)</span>
                 </h2>
                 <p className="text-xs text-neutral-500">
                   Who you're buying this from, what it cost, and how much arrived — this becomes the product's

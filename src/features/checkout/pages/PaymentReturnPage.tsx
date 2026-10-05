@@ -154,7 +154,7 @@ export function PaymentReturnPage() {
     return (
       <div className="mx-auto max-w-2xl px-4 py-16 sm:px-6 lg:px-8">
         <div className="rounded-lg border border-neutral-200 bg-white p-6 text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-neutral-100 text-neutral-400">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-neutral-100 text-neutral-500">
             <HelpCircle className="h-6 w-6" aria-hidden="true" />
           </div>
           <h1 className="mt-4 text-lg font-semibold text-neutral-900">No payment to confirm</h1>

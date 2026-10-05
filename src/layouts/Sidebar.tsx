@@ -59,7 +59,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onCloseMobile
           {showLabels && (
             <>
               <span className="truncate">{item.label}</span>
-              <ExternalLink className="ml-auto h-3.5 w-3.5 shrink-0 text-neutral-400" aria-hidden="true" />
+              <ExternalLink className="ml-auto h-3.5 w-3.5 shrink-0 text-neutral-500" aria-hidden="true" />
             </>
           )}
         </Link>
@@ -86,7 +86,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onCloseMobile
       <div key={group.label ?? `group-${index}`} className={index > 0 ? 'mt-4' : ''}>
         {group.label &&
           (showLabels ? (
-            <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-neutral-400">{group.label}</p>
+            <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">{group.label}</p>
           ) : (
             // Collapsed rail: a divider stands in for the heading so the grouping survives.
             <div className="mx-3 mb-2 border-t border-neutral-200" aria-hidden="true" />
@@ -101,7 +101,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onCloseMobile
     return (
       <div className="mt-auto border-t border-neutral-200 px-4 py-3">
         {showLabels ? (
-          <p className="truncate text-xs font-medium text-neutral-400" title={tenantLabel}>
+          <p className="truncate text-xs font-medium text-neutral-500" title={tenantLabel}>
             {tenantLabel}
           </p>
         ) : (
@@ -126,7 +126,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onCloseMobile
           <button
             type="button"
             onClick={onToggleCollapse}
-            className="rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600"
+            className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-600"
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
             {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}

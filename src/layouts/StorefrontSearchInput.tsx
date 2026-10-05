@@ -47,7 +47,7 @@ export function StorefrontSearchInput({ onSubmitted, autoFocus = false, classNam
       <label htmlFor="storefront-search" className="sr-only">
         Search the ProcurePal catalog
       </label>
-      <Search className="pointer-events-none absolute left-3 h-4 w-4 text-neutral-400" aria-hidden="true" />
+      <Search className="pointer-events-none absolute left-3 h-4 w-4 text-neutral-500" aria-hidden="true" />
       <input
         id="storefront-search"
         type="search"
@@ -65,7 +65,7 @@ export function StorefrontSearchInput({ onSubmitted, autoFocus = false, classNam
             submit('')
           }}
           aria-label="Clear search"
-          className="absolute right-[4.75rem] rounded p-1 text-neutral-400 hover:text-neutral-600"
+          className="absolute right-[4.75rem] rounded p-1 text-neutral-500 hover:text-neutral-600"
         >
           <X className="h-3.5 w-3.5" />
         </button>

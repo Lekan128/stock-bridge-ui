@@ -116,7 +116,7 @@ export function RecentImportsList({ kind, bare = false }: RecentImportsListProps
             <li key={entry.id} className="flex flex-col gap-2 px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
                 <div className="flex min-w-0 items-center gap-3">
-                  <FileSpreadsheet className="h-5 w-5 shrink-0 text-neutral-400" aria-hidden="true" />
+                  <FileSpreadsheet className="h-5 w-5 shrink-0 text-neutral-500" aria-hidden="true" />
                   <div className="min-w-0">
                     <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-neutral-900">
                       <span className="truncate">{entry.originalFilename}</span>

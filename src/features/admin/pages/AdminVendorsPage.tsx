@@ -192,7 +192,7 @@ export function AdminVendorsPage() {
                       <span>{vendor.productCount} products</span>
                     </div>
 
-                    <p className="mt-2 text-xs text-neutral-400">
+                    <p className="mt-2 text-xs text-neutral-500">
                       Created {formatDateTime(vendor.createdAt)}
                     </p>
                   </div>

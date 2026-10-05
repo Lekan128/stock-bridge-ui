@@ -123,7 +123,7 @@ export function VendorListPage() {
           }}
         >
           <Search
-            className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-neutral-400"
+            className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-neutral-500"
             aria-hidden="true"
           />
           <input
@@ -197,13 +197,13 @@ export function VendorListPage() {
                     <div className="mt-2 flex flex-col gap-1 text-sm text-neutral-600">
                       {vendor.contactPhone && (
                         <span className="inline-flex items-center gap-1.5">
-                          <Phone className="h-3.5 w-3.5 text-neutral-400" aria-hidden="true" />
+                          <Phone className="h-3.5 w-3.5 text-neutral-500" aria-hidden="true" />
                           {vendor.contactPhone}
                         </span>
                       )}
                       {vendor.email && (
                         <span className="inline-flex items-center gap-1.5 truncate">
-                          <Mail className="h-3.5 w-3.5 shrink-0 text-neutral-400" aria-hidden="true" />
+                          <Mail className="h-3.5 w-3.5 shrink-0 text-neutral-500" aria-hidden="true" />
                           <span className="truncate">{vendor.email}</span>
                         </span>
                       )}
@@ -225,7 +225,7 @@ export function VendorListPage() {
                           type="button"
                           onClick={() => setFormTarget(vendor)}
                           aria-label={`Edit ${vendor.name}`}
-                          className="rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none"
+                          className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none"
                         >
                           <Pencil className="h-4 w-4" />
                         </button>
@@ -236,7 +236,7 @@ export function VendorListPage() {
                         type="button"
                         onClick={() => setDeleteTarget(vendor)}
                         aria-label={`Remove ${vendor.name}`}
-                        className="rounded-md p-1.5 text-neutral-400 hover:bg-danger-50 hover:text-danger-600 focus-visible:ring-2 focus-visible:ring-danger-500 focus-visible:outline-none"
+                        className="rounded-md p-1.5 text-neutral-500 hover:bg-danger-50 hover:text-danger-600 focus-visible:ring-2 focus-visible:ring-danger-500 focus-visible:outline-none"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>

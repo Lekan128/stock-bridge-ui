@@ -62,7 +62,7 @@ export function StockFigure({
   return (
     <div className={`flex flex-col ${align === 'end' ? 'items-end text-right' : 'items-start'} ${size === 'lg' ? 'gap-1.5' : 'gap-0.5'}`}>
       <p className="flex flex-wrap items-baseline gap-x-1 tabular-nums" data-stock-figure>
-        <span className={`${NUMBER_CLASS[size]} ${empty ? 'text-neutral-400' : 'text-neutral-900'}`}>
+        <span className={`${NUMBER_CLASS[size]} ${empty ? 'text-neutral-500' : 'text-neutral-900'}`}>
           {sign}
           {formatNumber(shown)}
         </span>

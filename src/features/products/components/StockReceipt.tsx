@@ -42,7 +42,7 @@ export function StockReceipt({ state, kind, id, lines, children }: StockReceiptP
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs font-semibold tracking-wider text-neutral-500 uppercase">{kind}</p>
-              {number && <p className="mt-0.5 text-xs tabular-nums text-neutral-400">No. {number}</p>}
+              {number && <p className="mt-0.5 text-xs tabular-nums text-neutral-500">No. {number}</p>}
             </div>
             {/* Keyed by state, so the change from RECORDED to SYNCED lands as a fresh stamp. */}
             <Stamp key={state} kind={state === 'synced' ? 'synced' : 'recorded'} land />

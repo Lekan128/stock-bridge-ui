@@ -91,7 +91,7 @@ export function StorefrontHeader() {
                     className="hidden max-w-[12rem] items-center gap-1.5 rounded-md px-2.5 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100 lg:flex"
                   >
                     <span className="truncate">{companyLabel}</span>
-                    <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-neutral-400" aria-hidden="true" />
+                    <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-neutral-500" aria-hidden="true" />
                   </Link>
                   <UserMenu />
                 </div>

@@ -85,7 +85,7 @@ export const InventoryBar = forwardRef<HTMLInputElement, InventoryBarProps>(func
     <div className="flex flex-col gap-2 md:flex-row md:items-center">
       <div className="flex min-w-0 items-center gap-2 md:flex-1 md:max-w-sm">
         <div className="relative min-w-0 flex-1">
-          <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-neutral-400" aria-hidden="true" />
+          <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-neutral-500" aria-hidden="true" />
           <label htmlFor="product-search" className="sr-only">
             Search products
           </label>
@@ -101,7 +101,7 @@ export const InventoryBar = forwardRef<HTMLInputElement, InventoryBarProps>(func
           />
           <kbd
             aria-hidden="true"
-            className="pointer-events-none absolute top-1/2 right-2.5 hidden -translate-y-1/2 rounded-sm border border-neutral-200 px-1.5 text-[11px] text-neutral-400 md:block"
+            className="pointer-events-none absolute top-1/2 right-2.5 hidden -translate-y-1/2 rounded-sm border border-neutral-200 px-1.5 text-[11px] text-neutral-500 md:block"
           >
             /
           </kbd>
@@ -124,7 +124,7 @@ export const InventoryBar = forwardRef<HTMLInputElement, InventoryBarProps>(func
             >
               {chip.label}
               {stockLevelCounts && (
-                <span className="ml-1.5 tabular-nums text-neutral-400">{stockLevelCounts[chip.value].toLocaleString()}</span>
+                <span className="ml-1.5 tabular-nums text-neutral-500">{stockLevelCounts[chip.value].toLocaleString()}</span>
               )}
             </button>
           ))}
