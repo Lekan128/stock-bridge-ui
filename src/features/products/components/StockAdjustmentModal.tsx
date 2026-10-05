@@ -20,7 +20,6 @@ export interface StockAdjustmentModalProps {
   stockUnit: string
   onClose: () => void
   onSuccess: (result: StockMutationResponse) => void
-  /** Saved on this phone instead of sent — the server could not be reached. */
   /** Saved on this phone instead of sent (A4); gets the waiting write's id, for Undo (B2). */
   onQueued?: (opId: string) => void
 }

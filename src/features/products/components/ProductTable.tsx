@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
+import { useEffect, useRef, type ReactNode } from 'react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Minus, Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { expectedCopy } from '@/features/expected/copy'
@@ -61,6 +61,14 @@ export interface ProductTableProps {
   incomingFor?: (product: Product) => { quantity: number }
   selection?: ProductTableSelection
   virtual?: ProductTableVirtualWindow
+  /** Quick stock in / out on each row, without leaving the list (C1, finding U2). */
+  quickActions?: ProductQuickActions
+}
+
+export interface ProductQuickActions {
+  canStockIn: boolean
+  canStockOut: boolean
+  onAction: (kind: 'in' | 'out', product: Product) => void
 }
 
 // "On hand (usable)" rather than "Quantity on hand": once a second quantity exists on the row,
@@ -81,7 +89,8 @@ const UNIT_PRICE_COLUMN: { field: ProductSortField; label: string; align?: 'righ
   align: 'right',
 }
 
-export function ProductTable({ products, sort, onSortChange, incomingFor, selection, virtual }: ProductTableProps) {
+export function ProductTable({ products, sort, onSortChange, incomingFor, selection, virtual, quickActions }: ProductTableProps) {
+  const hasQuickActions = quickActions != null && (quickActions.canStockIn || quickActions.canStockOut)
   const { isVendor } = useAuth()
   // Fetched for two things now: the packaging subtitle a company sees in place of the unit price
   // column, and — for EVERY tenant, vendor included — the stock unit stamped on the "On hand"
@@ -95,6 +104,8 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
 
   // Both `unitOfMeasure` and `packagingUnit` codes live in the same fetched list — one lookup
   // serves both.
+  const columnCount = columns.length + (selection ? 1 : 0) + (hasQuickActions ? 1 : 0)
+
   function unitOfMeasureLabel(code: string | undefined): string | undefined {
     return unitOfMeasureOptions.find((option) => option.code === code)?.label
   }
@@ -159,12 +170,17 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
               </button>
             </th>
           ))}
+          {hasQuickActions && (
+            <th scope="col" className="w-24 border-b border-neutral-200 bg-neutral-50 px-2 py-2.5">
+              <span className="sr-only">Quick stock in and out</span>
+            </th>
+          )}
         </tr>
       </thead>
       <tbody>
         {virtual && virtual.paddingTop > 0 && (
           <tr aria-hidden="true">
-            <td colSpan={columns.length + (selection ? 1 : 0)} style={{ height: virtual.paddingTop, padding: 0, border: 0 }} />
+            <td colSpan={columnCount} style={{ height: virtual.paddingTop, padding: 0, border: 0 }} />
           </tr>
         )}
         {products.map((product, position) => {
@@ -183,10 +199,11 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
               // A ticked row is tinted, so the selection is legible from the shape of the table
               // rather than only from a 16px box in the first column — DESIGN.md's stated use
               // for primary-100/50.
+              data-product-row={product.id}
               className={
                 isSelected
-                  ? 'relative bg-primary-50 focus-within:bg-primary-100 hover:bg-primary-100'
-                  : 'relative focus-within:bg-neutral-50 hover:bg-neutral-50'
+                  ? 'group relative bg-primary-50 focus-within:bg-primary-100 hover:bg-primary-100'
+                  : 'group relative focus-within:bg-neutral-50 hover:bg-neutral-50'
               }
             >
               {selection && (
@@ -208,34 +225,26 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
                   <div className="min-w-0">
                     <Link
                       to={`/app/products/${product.id}`}
+                      data-row-link
                       className="font-medium text-neutral-900 outline-none before:absolute before:inset-0 before:content-[''] focus-visible:underline"
                     >
                       {product.name}
                     </Link>
-                    {/* The company's own category, on its own line so it reads as a label rather
-                        than as part of the pack description below it. Absent (not null) when the
-                        product has none — hence `!= null`. */}
-                    {product.categoryName != null && (
-                      <p className="truncate text-xs font-medium text-neutral-600">{product.categoryName}</p>
-                    )}
-                    {/* A company has no unit price column to look at, so the packaging fact that
-                        would normally sit beside a price ("Bag of 50 kg") is surfaced here
-                        instead — never shown to a vendor, who already has the unit price column
-                        and would find this redundant clutter under every name. */}
-                    {!isVendor &&
-                      (product.unitOfMeasure || product.packagingUnit || product.packagingSize != null) && (
-                        <p className="truncate text-xs text-neutral-500">
-                          {formatUnitOfMeasure(
-                            unitOfMeasureLabel(product.unitOfMeasure),
-                            unitOfMeasureLabel(product.packagingUnit),
-                            product.packagingSize,
-                          )}
-                          {/* Terse on purpose — this subtitle already carries the pack name, so
-                              the list only needs to flag that it is not the only one, not restate
-                              detail the product page already owns. */}
-                          {product.hasMultiplePacks && ' (default)'}
-                        </p>
-                      )}
+                    {/* Category and pack on one quiet line (C1): "Grains · Bag of 50 kg". The pack is
+                        never shown to a vendor, who has the unit price column instead. "(default)"
+                        flags that it is not the product's only pack, without restating the others. */}
+                    {(() => {
+                      const pack =
+                        !isVendor && (product.unitOfMeasure || product.packagingUnit || product.packagingSize != null)
+                          ? `${formatUnitOfMeasure(
+                              unitOfMeasureLabel(product.unitOfMeasure),
+                              unitOfMeasureLabel(product.packagingUnit),
+                              product.packagingSize,
+                            )}${product.hasMultiplePacks ? ' (default)' : ''}`
+                          : null
+                      const line = [product.categoryName, pack].filter(Boolean).join(' · ')
+                      return line ? <p className="truncate text-xs text-neutral-500">{line}</p> : null
+                    })()}
                   </div>
                 </div>
               </td>
@@ -281,17 +290,55 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
                 </div>
               </td>
               <td className="border-b border-neutral-100 px-4 py-2.5">
-                <StatusBadge active={product.active} />
+                {/* Calm by default: "Inactive" is the exception worth a badge; active is the norm. */}
+                {product.active ? (
+                  <span className="text-xs text-neutral-500">Active</span>
+                ) : (
+                  <StatusBadge active={false} />
+                )}
               </td>
+              {hasQuickActions && (
+                // Shown on hover or keyboard focus — and always on a device that can't hover (a
+                // tablet gets this table too) — always in the tab order, and lifted above the
+                // row-wide link so a click records stock instead of opening the product.
+                <td className="relative z-10 border-b border-neutral-100 px-2 py-2.5">
+                  <div className="flex justify-end gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100">
+                    {quickActions.canStockIn && (
+                      <QuickButton label={`Stock in ${product.name}`} onClick={() => quickActions.onAction('in', product)}>
+                        <Plus className="h-4 w-4" aria-hidden="true" />
+                      </QuickButton>
+                    )}
+                    {quickActions.canStockOut && (
+                      <QuickButton label={`Stock out ${product.name}`} onClick={() => quickActions.onAction('out', product)}>
+                        <Minus className="h-4 w-4" aria-hidden="true" />
+                      </QuickButton>
+                    )}
+                  </div>
+                </td>
+              )}
             </tr>
           )
         })}
         {virtual && virtual.paddingBottom > 0 && (
           <tr aria-hidden="true">
-            <td colSpan={columns.length + (selection ? 1 : 0)} style={{ height: virtual.paddingBottom, padding: 0, border: 0 }} />
+            <td colSpan={columnCount} style={{ height: virtual.paddingBottom, padding: 0, border: 0 }} />
           </tr>
         )}
       </tbody>
     </table>
+  )
+}
+
+function QuickButton({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-neutral-200 bg-white text-neutral-700 hover:border-neutral-300 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+    >
+      {children}
+    </button>
   )
 }

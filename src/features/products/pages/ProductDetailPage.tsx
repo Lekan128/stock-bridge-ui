@@ -7,40 +7,32 @@ import { Button, buttonClassName } from '@/components/Button'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { SavedDataNote } from '@/components/SavedDataNote'
 import { PendingStockNote } from '@/features/outbox/PendingStockNote'
-import { applyStockResult, discardOp, getOutboxState, isInFlight } from '@/features/outbox/outboxStore'
-import { stockApi } from '@/features/products/api/stockApi'
 import { useToast } from '@/components/useToast'
 import { productsApi } from '@/features/products/api/productsApi'
 import { IncomingStockBadge } from '@/features/products/components/IncomingStockBadge'
 import { ProductDetailSkeleton } from '@/features/products/components/ProductDetailSkeleton'
 import { ProductImage } from '@/features/products/components/ProductImage'
 import { StatusBadge } from '@/features/products/components/StatusBadge'
-import { StockAdjustmentModal } from '@/features/products/components/StockAdjustmentModal'
 import { StockBreakdownPanel } from '@/features/products/components/StockBreakdownPanel'
 import { StockHistoryTable } from '@/features/products/components/StockHistoryTable'
-import { StockInModal } from '@/features/products/components/StockInModal'
-import { StockOutModal } from '@/features/products/components/StockOutModal'
 import { useLowStockAlerts } from '@/features/products/hooks/useLowStockAlerts'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import { useProduct } from '@/features/products/hooks/useProduct'
 import { useProductIncoming } from '@/features/products/hooks/useProductIncoming'
+import { useStockActions } from '@/features/products/hooks/useStockActions'
 import { useStockHistory } from '@/features/products/hooks/useStockHistory'
-import type { StockMutationResponse } from '@/features/products/types'
 import {
   UNIT_COPY,
-  formatNumber,
   formatPackCostEcho,
   formatPricePer,
   packPhrase,
   stockUnitSymbol,
-  stockUnitWord,
 } from '@/features/products/unitCopy'
 import { buildPackOption } from '@/features/products/unitSet'
 import { VendorsTab } from '@/features/products/vendors/components/VendorsTab'
 import { isAppError } from '@/types/api'
 import { OverflowMenu } from '@/components/OverflowMenu'
 
-type StockAction = 'in' | 'out' | 'adjustment' | null
 
 type ProductDetailTab = 'overview' | 'vendors'
 
@@ -72,7 +64,15 @@ export function ProductDetailPage() {
     id,
     historyPage,
   )
-  const [activeAction, setActiveAction] = useState<StockAction>(null)
+  // Stock in / out / count, and the toast with Undo after — shared with the Inventory list (C1).
+  const stockActions = useStockActions({
+    onChanged: (changed) => {
+      setProduct(changed)
+      setHistoryPage(0)
+      refetchHistory()
+      refetchLowStockAlerts()
+    },
+  })
   const [confirmDeactivate, setConfirmDeactivate] = useState(false)
   const [deactivating, setDeactivating] = useState(false)
   /**
@@ -87,8 +87,8 @@ export function ProductDetailPage() {
   // button themselves. Consumed once, then stripped from the URL so it doesn't reopen on a
   // back-navigation or refresh.
   useEffect(() => {
-    if (searchParams.get('action') !== 'stock-in') return
-    setActiveAction('in')
+    if (searchParams.get('action') !== 'stock-in' || !product) return
+    stockActions.open('in', product)
     setSearchParams(
       (previous) => {
         const params = new URLSearchParams(previous)
@@ -98,7 +98,7 @@ export function ProductDetailPage() {
       { replace: true },
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams])
+  }, [searchParams, product?.id])
 
   const canManageInventory = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_INVENTORY)
   const canManageProducts = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_PRODUCTS)
@@ -129,70 +129,6 @@ export function ProductDetailPage() {
       },
       { replace: true },
     )
-  }
-
-  function handleMutationSuccess(result: StockMutationResponse) {
-    setProduct(result.product)
-    const supersededCount = activeAction === 'adjustment' && result.movement == null
-    const what = activeAction === 'in' ? 'Stock in' : activeAction === 'out' ? 'Stock out' : 'Count'
-    setActiveAction(null)
-    setHistoryPage(0)
-    refetchHistory()
-    refetchLowStockAlerts()
-    if (supersededCount) {
-      showToast('A newer count was already recorded, so nothing changed.', 'info')
-      return
-    }
-    // Toast v2 (B2): the new figure, and Undo for the moments after (decision D8).
-    const movement = result.movement
-    showToast(
-      `${what} recorded · ${result.product.name} now ${figure(result.product.quantityOnHand)}`,
-      'success',
-      movement ? { action: { label: 'Undo', onAction: () => void undoWrite(movement.id) } } : undefined,
-    )
-  }
-
-  /** Undo a write that reached the server: voided as if never made, or refused with the reason. */
-  async function undoWrite(movementId: string) {
-    if (!product) return
-    try {
-      const restored = await stockApi.voidWrite(product.id, movementId)
-      applyStockResult(product.id, restored)
-      setProduct(restored.product)
-      setHistoryPage(0)
-      refetchHistory()
-      refetchLowStockAlerts()
-      showToast(`Undone · ${restored.product.name} is back to ${figure(restored.product.quantityOnHand)}`, 'info')
-    } catch (err) {
-      showToast(isAppError(err) ? err.message : "Couldn't undo that. Record a count to correct the figure.", 'error')
-    }
-  }
-
-  /** Saved on this phone (A4): the pending note below the stock figure takes it from here. */
-  function handleQueued(opId: string) {
-    setActiveAction(null)
-    showToast("Saved on this phone. It will be sent when you're back online.", 'info', {
-      action: { label: 'Undo', onAction: () => undoQueued(opId) },
-    })
-  }
-
-  /** Undo a write still waiting on this phone: it is simply never sent. */
-  function undoQueued(opId: string) {
-    if (isInFlight(opId)) {
-      showToast("It's being sent right now, so it can't be taken back. Record a count to correct the figure.", 'info')
-      return
-    }
-    if (!getOutboxState().ops.some((op) => op.id === opId)) {
-      showToast("It has already been sent, so it can't be taken back here. Record a count to correct the figure.", 'info')
-      return
-    }
-    void discardOp(opId)
-    showToast('Taken back. Nothing was sent.', 'info')
-  }
-
-  /** "1,020 kg", "96 pieces" — the product's figure in its own unit. */
-  function figure(quantity: number): string {
-    return `${formatNumber(quantity)} ${stockUnitWord(stockUnitText, quantity)}`
   }
 
   async function handleDeactivate() {
@@ -447,17 +383,17 @@ export function ProductDetailPage() {
           canStockIn || canStockOut || canManageInventory ? (
             <>
               {canStockIn && (
-                <Button variant="action" onClick={() => setActiveAction('in')}>
+                <Button variant="action" onClick={() => stockActions.open('in', product)}>
                   Stock In
                 </Button>
               )}
               {canStockOut && (
-                <Button variant="secondary" onClick={() => setActiveAction('out')}>
+                <Button variant="secondary" onClick={() => stockActions.open('out', product)}>
                   Stock Out
                 </Button>
               )}
               {canManageInventory && (
-                <Button variant="secondary" onClick={() => setActiveAction('adjustment')}>
+                <Button variant="secondary" onClick={() => stockActions.open('count', product)}>
                   Count
                 </Button>
               )}
@@ -492,33 +428,7 @@ export function ProductDetailPage() {
         </div>
       )}
 
-      {activeAction === 'in' && (
-        <StockInModal
-          product={product}
-          onClose={() => setActiveAction(null)}
-          onSuccess={handleMutationSuccess}
-          onQueued={handleQueued}
-        />
-      )}
-      {activeAction === 'out' && (
-        <StockOutModal
-          product={product}
-          onClose={() => setActiveAction(null)}
-          onSuccess={handleMutationSuccess}
-          onQueued={handleQueued}
-        />
-      )}
-      {activeAction === 'adjustment' && (
-        <StockAdjustmentModal
-          productId={product.id}
-          productName={product.name}
-          currentQuantity={product.quantityOnHand}
-          stockUnit={stockUnitText}
-          onClose={() => setActiveAction(null)}
-          onSuccess={handleMutationSuccess}
-          onQueued={handleQueued}
-        />
-      )}
+      {stockActions.sheet}
 
       <ConfirmDialog
         open={confirmDeactivate}

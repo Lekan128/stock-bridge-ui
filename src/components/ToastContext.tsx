@@ -40,6 +40,8 @@ const variantClasses: Record<ToastVariant, string> = {
  * ("Undo"); one that does stays longer, pauses while hovered or focused, and can be closed.
  *
  * Portaled to <body>, beside any open dialog rather than inside the page that a dialog makes inert.
+ * On a phone they sit above a screen's bottom action bar, which publishes its height as
+ * `--bottom-bar-height` (`InventoryActionBar`).
  */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
@@ -57,7 +59,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       {createPortal(
         <div
-          className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex flex-col items-stretch gap-2 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:right-auto sm:items-start sm:px-6 sm:pb-6"
+          className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex flex-col items-stretch gap-2 px-4 pb-[calc(1rem+env(safe-area-inset-bottom)+var(--bottom-bar-height,0px))] sm:right-auto sm:items-start sm:px-6 md:pb-6"
           aria-live="polite"
         >
           {toasts.map((toast) => (

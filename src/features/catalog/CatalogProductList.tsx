@@ -4,6 +4,7 @@ import type { CatalogList } from '@/features/catalog/useCatalog'
 import { ProductCard } from '@/features/products/components/ProductCard'
 import {
   ProductTable,
+  type ProductQuickActions,
   type ProductSort,
   type ProductSortField,
   type ProductTableSelection,
@@ -18,6 +19,17 @@ export interface CatalogProductListProps {
   selection?: ProductTableSelection
   /** The rows currently rendered — what "select every product shown" ticks. */
   onRenderedChange?: (products: Product[]) => void
+  /** Quick stock in / out on each row and card (C1). */
+  quickActions?: ProductQuickActions
+  /** Selection on a phone's cards: long press to start, tap to tick (C1). */
+  cardSelection?: CardSelection
+}
+
+export interface CardSelection {
+  active: boolean
+  selectedIds: string[]
+  onToggle: (id: string) => void
+  onStart: (id: string) => void
 }
 
 /** Starting guesses; every rendered row is then measured. */
@@ -30,7 +42,15 @@ const CARD_ESTIMATE_PX = 104
  * scroll as smoothly as 20. Scrolls with the workspace's own scroll area rather than a box inside
  * it, so the page behaves exactly as it did.
  */
-export function CatalogProductList({ list, sort, onSortChange, selection, onRenderedChange }: CatalogProductListProps) {
+export function CatalogProductList({
+  list,
+  sort,
+  onSortChange,
+  selection,
+  onRenderedChange,
+  quickActions,
+  cardSelection,
+}: CatalogProductListProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)')
   const containerRef = useRef<HTMLDivElement>(null)
   const [scrollElement] = useState<HTMLElement | null>(() =>
@@ -93,6 +113,7 @@ export function CatalogProductList({ list, sort, onSortChange, selection, onRend
             onSortChange={onSortChange}
             incomingFor={(product) => ({ quantity: product.incomingQuantity ?? 0 })}
             selection={selection}
+            quickActions={quickActions}
             virtual={{
               paddingTop,
               paddingBottom,
@@ -106,7 +127,19 @@ export function CatalogProductList({ list, sort, onSortChange, selection, onRend
           {paddingTop > 0 && <div style={{ height: paddingTop }} aria-hidden="true" />}
           {shown.map(({ item, product }) => (
             <div key={product.id} ref={virtualizer.measureElement} data-index={item.index} className="pb-2">
-              <ProductCard product={product} incoming={product.incomingQuantity ?? 0} />
+              <ProductCard
+                product={product}
+                incoming={product.incomingQuantity ?? 0}
+                quickActions={quickActions}
+                selection={
+                  cardSelection && {
+                    active: cardSelection.active,
+                    selected: cardSelection.selectedIds.includes(product.id),
+                    onToggle: () => cardSelection.onToggle(product.id),
+                    onLongPress: () => cardSelection.onStart(product.id),
+                  }
+                }
+              />
             </div>
           ))}
           {paddingBottom > 0 && <div style={{ height: paddingBottom }} aria-hidden="true" />}

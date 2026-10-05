@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Truck, X } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
@@ -18,11 +18,17 @@ import { ProductCard } from '@/features/products/components/ProductCard'
 import { ProductListSkeleton } from '@/features/products/components/ProductListSkeleton'
 import {
   ProductTable,
+  type ProductQuickActions,
   type ProductSort,
   type ProductSortField,
   type ProductTableSelection,
 } from '@/features/products/components/ProductTable'
-import { ProductsToolbar, type StockLevelFilter } from '@/features/products/components/ProductsToolbar'
+import { AttentionLine, type AttentionItem } from '@/features/products/components/AttentionLine'
+import { InventoryActionBar } from '@/features/products/components/InventoryActionBar'
+import { InventoryBar, type InventoryBarProps, type StockLevelFilter } from '@/features/products/components/InventoryBar'
+import { useStockActions } from '@/features/products/hooks/useStockActions'
+import type { CardSelection } from '@/features/catalog/CatalogProductList'
+import { useDataIssuesNotice } from '@/features/products/quality/useDataIssuesNotice'
 import { productsApi } from '@/features/products/api/productsApi'
 import { DataIssuesBanner } from '@/features/products/quality/DataIssuesBanner'
 import { ManageCategoriesModal } from '@/features/products/categories/ManageCategoriesModal'
@@ -98,6 +104,8 @@ export function ProductListPage() {
    * still sees the affordance that leads to bulk stock-in.
    */
   const canImport = canManageProducts || permissions.includes(PERMISSIONS.MANAGE_INVENTORY)
+  const canStockIn = permissions.includes(PERMISSIONS.STOCK_IN)
+  const canStockOut = permissions.includes(PERMISSIONS.STOCK_OUT)
   const [searchParams, setSearchParams] = useSearchParams()
   const { search: committedSearch, statusFilter, categoryFilter, stockLevelFilter, sort, page } =
     readListState(searchParams)
@@ -106,6 +114,9 @@ export function ProductListPage() {
   const [manageCategoriesOpen, setManageCategoriesOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [addProductOpen, setAddProductOpen] = useState(false)
+  /** Phone selection (long press) is a mode; the desktop table's checkboxes are always there. */
+  const [selecting, setSelecting] = useState(false)
+  const searchRef = useRef<HTMLInputElement>(null)
 
   const debouncedSearch = useDebouncedValue(search, 350)
 
@@ -170,6 +181,12 @@ export function ProductListPage() {
   const updatedAt = onDevice ? catalog.syncedAt : server.updatedAt
   const retryRefresh = onDevice ? () => void syncCatalog() : refetch
 
+  // Quick stock in / out from a row or card (C1, U2): the same sheets and Undo as the product page.
+  // The device catalogue and caches update through the outbox; the server's paged list is refetched.
+  const stockActions = useStockActions({ onChanged: () => (onDevice ? undefined : refetch()) })
+  const quickActions: ProductQuickActions | undefined =
+    canStockIn || canStockOut ? { canStockIn, canStockOut, onAction: (kind, product) => stockActions.open(kind, product) } : undefined
+
   // Stock bought from ProcurePal and not yet received. Surfaced beside — never inside — the
   // quantity on hand, so "12 usable, 20 incoming" can never be misread as 32 usable.
   // On the device every row already carries its incoming figure, so nothing needs deriving from
@@ -178,6 +195,88 @@ export function ProductListPage() {
   const incomingTotals = onDevice
     ? { ...catalogList.incoming, awaitingReceiptUnits: 0, approximate: false }
     : serverIncomingTotals
+
+  // The notices that used to stack above the list, folded into one line (C1, U1).
+  const dataIssues = useDataIssuesNotice()
+  const attention: AttentionItem[] = []
+  if (dataIssues.issues.length > 0) {
+    const count = dataIssues.issues.length
+    attention.push({
+      key: 'data-issues',
+      summary: `${count} ${count === 1 ? 'product needs' : 'products need'} a quick fix`,
+      content: <DataIssuesBanner issues={dataIssues.issues} onDismiss={dataIssues.dismiss} />,
+    })
+  }
+  if (incomingTotals.units > 0) {
+    attention.push({
+      key: 'incoming',
+      summary:
+        incomingTotals.awaitingReceiptUnits > 0
+          ? `${incomingTotals.awaitingReceiptUnits} units delivered, waiting for you to confirm`
+          : `${incomingTotals.approximate ? 'at least ' : ''}${incomingTotals.units} units on the way`,
+      content: (
+        <IncomingStockNotice
+          units={incomingTotals.units}
+          productCount={incomingTotals.productCount}
+          awaitingReceiptUnits={incomingTotals.awaitingReceiptUnits}
+          approximate={incomingTotals.approximate}
+        />
+      ),
+    })
+  }
+
+  // The rows on screen, for the keyboard (C1): `/` search, j/k move, i/o stock in or out, Enter open.
+  const shownRef = useRef<Product[]>([])
+  shownRef.current = onDevice ? renderedProducts : (data?.content ?? [])
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return
+      const target = event.target instanceof HTMLElement ? event.target : null
+      if (target?.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"]')) return
+      if (document.getElementById('root')?.inert) return
+      if (event.key === '/') {
+        event.preventDefault()
+        searchRef.current?.focus()
+        return
+      }
+      if (!['j', 'k', 'i', 'o'].includes(event.key)) return
+      const rows = [...document.querySelectorAll<HTMLElement>('[data-product-row]')].filter((row) => row.offsetParent !== null)
+      if (rows.length === 0) return
+      const current = rows.findIndex((row) => row.contains(document.activeElement))
+      if (event.key === 'j' || event.key === 'k') {
+        event.preventDefault()
+        const next = current === -1 ? 0 : Math.min(rows.length - 1, Math.max(0, current + (event.key === 'j' ? 1 : -1)))
+        rows[next].querySelector<HTMLElement>('[data-row-link]')?.focus()
+        rows[next].scrollIntoView({ block: 'nearest' })
+        return
+      }
+      if (current === -1) return
+      const product = shownRef.current.find((entry) => entry.id === rows[current].dataset.productRow)
+      if (!product) return
+      if (event.key === 'i' && canStockIn) {
+        event.preventDefault()
+        stockActions.open('in', product)
+      } else if (event.key === 'o' && canStockOut) {
+        event.preventDefault()
+        stockActions.open('out', product)
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  })
+
+  /** Phone selection: a long press starts it with that card ticked. */
+  const cardSelection: CardSelection | undefined = canImport
+    ? {
+        active: selecting,
+        selectedIds,
+        onToggle: (id) => toggleSelected(id, !selectedIds.includes(id)),
+        onStart: (id) => {
+          setSelecting(true)
+          if (!selectedIds.includes(id)) toggleSelected(id, true)
+        },
+      }
+    : undefined
 
   function handleSortChange(field: ProductSortField) {
     const direction = sort.field === field && sort.direction === 'asc' ? 'desc' : 'asc'
@@ -288,8 +387,35 @@ export function ProductListPage() {
     noResults && isDefaultView && (statusFilter === 'all' || (activeViewIsEmpty && catalogHasInactive === false))
   const onlyInactiveExist = activeViewIsEmpty && catalogHasInactive === true
 
+  const barProps: InventoryBarProps = {
+    search,
+    onSearchChange: setSearch,
+    statusFilter,
+    onStatusFilterChange: handleStatusFilterChange,
+    stockLevelFilter,
+    onStockLevelFilterChange: handleStockLevelFilterChange,
+    stockLevelCounts:
+      onDevice && catalogList.ready
+        ? { all: catalogList.counts.all, OK: catalogList.counts.OK, LOW: catalogList.counts.LOW, OUT: catalogList.counts.OUT }
+        : undefined,
+    categories: categoryList.categories,
+    categoryFilter,
+    onCategoryFilterChange: handleCategoryFilterChange,
+    onClearFilters: () => updateListState({ status: null, category: null }),
+    canManageProducts,
+    canRecordDelivery: permissions.includes(PERMISSIONS.MANAGE_INVENTORY),
+    onAddProduct: () => setAddProductOpen(true),
+    onBulkUpload: () => navigate('/app/products/import'),
+    onRecordDelivery: () => navigate('/app/products/receive'),
+    onExpectedDeliveries: () => navigate('/app/products/expected'),
+    onExport: () => void handleExport(),
+    onSkuSettings: () => navigate('/app/products/sku-settings'),
+    onManageCategories: () => setManageCategoriesOpen(true),
+  }
+
   return (
-    <div className="flex flex-col gap-4">
+    // Room at the bottom on a phone for the action bar pinned there.
+    <div className="flex flex-col gap-4 pb-20 md:pb-0">
       <h1 className="text-2xl font-semibold text-neutral-900">Inventory</h1>
 
       <SavedDataNote showing={showingSaved} updatedAt={updatedAt} subject="stock levels" onRetry={retryRefresh} />
@@ -305,45 +431,9 @@ export function ProductListPage() {
         </p>
       )}
 
-      <DataIssuesBanner />
+      <InventoryBar ref={searchRef} {...barProps} />
 
-      <IncomingStockNotice
-        units={incomingTotals.units}
-        productCount={incomingTotals.productCount}
-        awaitingReceiptUnits={incomingTotals.awaitingReceiptUnits}
-        approximate={incomingTotals.approximate}
-      />
-
-      <ProductsToolbar
-        search={search}
-        onSearchChange={setSearch}
-        statusFilter={statusFilter}
-        onStatusFilterChange={handleStatusFilterChange}
-        stockLevelFilter={stockLevelFilter}
-        onStockLevelFilterChange={handleStockLevelFilterChange}
-        stockLevelCounts={
-          onDevice && catalogList.ready
-            ? {
-                all: catalogList.counts.all,
-                OK: catalogList.counts.OK,
-                LOW: catalogList.counts.LOW,
-                OUT: catalogList.counts.OUT,
-              }
-            : undefined
-        }
-        categories={categoryList.categories}
-        categoryFilter={categoryFilter}
-        onCategoryFilterChange={handleCategoryFilterChange}
-        canManageProducts={canManageProducts}
-        canRecordDelivery={permissions.includes(PERMISSIONS.MANAGE_INVENTORY)}
-        onAddProduct={() => setAddProductOpen(true)}
-        onBulkUpload={() => navigate('/app/products/import')}
-        onRecordDelivery={() => navigate('/app/products/receive')}
-        onExpectedDeliveries={() => navigate('/app/products/expected')}
-        onExport={() => void handleExport()}
-        onSkuSettings={() => navigate('/app/products/sku-settings')}
-        onManageCategories={() => setManageCategoriesOpen(true)}
-      />
+      <AttentionLine items={attention} />
 
       {/* The skeleton is for the FIRST load only. After that the rows on screen stay put while the
           next answer loads — dimmed, with a thin bar — instead of the whole table unmounting into
@@ -367,6 +457,8 @@ export function ProductListPage() {
             ) : null
           }
           onRenderedChange={setRenderedProducts}
+          quickActions={quickActions}
+          cardSelection={cardSelection}
         />
       )}
 
@@ -407,11 +499,23 @@ export function ProductListPage() {
             <>
               <div className="flex flex-col gap-2 md:hidden">
                 {data.content.map((product) => (
-                  <ProductCard key={product.id} product={product} incoming={incomingFor(product).quantity} />
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    incoming={incomingFor(product).quantity}
+                    quickActions={quickActions}
+                    selection={
+                      cardSelection && {
+                        active: cardSelection.active,
+                        selected: selectedIds.includes(product.id),
+                        onToggle: () => cardSelection.onToggle(product.id),
+                        onLongPress: () => cardSelection.onStart(product.id),
+                      }
+                    }
+                  />
                 ))}
               </div>
-              {/* The selection bar only exists on the desktop table — the mobile card list has
-                  no checkboxes, matching how the import review screen drops its grid below `md`. */}
+              {/* On a phone, selection lives in the bottom bar instead (C1, U4). */}
               {canImport && selectedIds.length > 0 && (
                 <SelectionBar count={selectedIds.length} onStockIn={handleStockInSelected} onClear={() => setSelectedIds([])} />
               )}
@@ -426,6 +530,7 @@ export function ProductListPage() {
                       ? { selectedIds, onToggle: toggleSelected, onToggleAll: toggleAllOnPage }
                       : undefined
                   }
+                  quickActions={quickActions}
                 />
               </div>
             </>
@@ -433,6 +538,36 @@ export function ProductListPage() {
           <Pagination page={data.number} totalPages={data.totalPages} onPageChange={handlePageChange} />
         </div>
       )}
+
+      {/* Said once, quietly, where a keyboard user is looking: under the list. */}
+      <p className="hidden text-xs text-neutral-500 md:block">
+        Keys: <Kbd>/</Kbd> search · <Kbd>j</Kbd> <Kbd>k</Kbd> move between products
+        {canStockIn && (
+          <>
+            {' '}· <Kbd>i</Kbd> stock in
+          </>
+        )}
+        {canStockOut && (
+          <>
+            {' '}· <Kbd>o</Kbd> stock out
+          </>
+        )}{' '}
+        · <Kbd>Enter</Kbd> open
+      </p>
+
+      <InventoryActionBar
+        {...barProps}
+        selecting={selecting}
+        selectedCount={selectedIds.length}
+        canStockInSelected={canImport}
+        onStockInSelected={handleStockInSelected}
+        onDoneSelecting={() => {
+          setSelecting(false)
+          setSelectedIds([])
+        }}
+      />
+
+      {stockActions.sheet}
 
       <ManageCategoriesModal
         open={manageCategoriesOpen && canManageProducts}
@@ -489,6 +624,8 @@ interface OnDeviceListProps {
   selection?: ProductTableSelection
   selectionBar: ReactNode
   onRenderedChange: (products: Product[]) => void
+  quickActions?: ProductQuickActions
+  cardSelection?: CardSelection
 }
 
 /**
@@ -509,6 +646,8 @@ function OnDeviceList({
   selection,
   selectionBar,
   onRenderedChange,
+  quickActions,
+  cardSelection,
 }: OnDeviceListProps) {
   if (!list.ready) return <ProductListSkeleton />
   if (list.catalogSize === 0) {
@@ -542,7 +681,13 @@ function OnDeviceList({
         onSortChange={onSortChange}
         selection={selection}
         onRenderedChange={onRenderedChange}
+        quickActions={quickActions}
+        cardSelection={cardSelection}
       />
     </div>
   )
+}
+
+function Kbd({ children }: { children: ReactNode }) {
+  return <kbd className="rounded-sm border border-neutral-200 bg-white px-1 font-sans text-[11px] text-neutral-600">{children}</kbd>
 }
