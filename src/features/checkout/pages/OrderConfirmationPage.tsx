@@ -28,6 +28,7 @@ import { useMarketplaceSettings } from '@/features/storefront/hooks/useMarketpla
 import { isAppError } from '@/types/api'
 import { formatNaira } from '@/utils/money'
 import { formatPerUnit, formatQuantity } from '@/utils/units'
+import { marketplacePaths } from '@/routes/marketplacePaths'
 
 function formatDateTime(value?: string): string {
   if (!value) return '—'
@@ -240,7 +241,7 @@ export function OrderConfirmationPage() {
                   <span className="text-sm font-semibold text-neutral-900">{formatNaira(entry.total)}</span>
                   {!entry.current && (
                     <Link
-                      to={`/order-confirmation/${entry.id}`}
+                      to={marketplacePaths.orderConfirmation(entry.id)}
                       className="rounded text-sm font-medium text-primary-600 hover:text-primary-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                     >
                       View
@@ -419,7 +420,7 @@ export function OrderConfirmationPage() {
           Track this order
           <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </Link>
-        <Link to="/" className={buttonClassName('secondary')}>
+        <Link to={marketplacePaths.home} className={buttonClassName('secondary')}>
           Continue shopping
         </Link>
       </div>

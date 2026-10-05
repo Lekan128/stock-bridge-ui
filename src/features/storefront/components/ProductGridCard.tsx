@@ -9,10 +9,11 @@ import { SellerBadge } from '@/features/storefront/components/SellerBadge'
 import type { MarketplaceProduct } from '@/features/storefront/types'
 import { formatNaira } from '@/utils/money'
 import { formatPerUnit, formatQuantity } from '@/utils/units'
+import { marketplacePaths } from '@/routes/marketplacePaths'
 
 /** Where a catalog row points. Slugs are the shareable form; the id is the fallback. */
 function productPath(product: Pick<MarketplaceProduct, 'id' | 'slug'>): string {
-  return `/product/${product.slug || product.id}`
+  return marketplacePaths.product(product.slug || product.id)
 }
 
 /** Below this the card nudges "only N left" — enough to matter to a buyer sizing an order. */

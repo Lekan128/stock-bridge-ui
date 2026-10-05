@@ -27,7 +27,7 @@ export function IosInstallHint() {
     <div className="flex shrink-0 items-start gap-3 border-b border-primary-100 bg-primary-50 px-4 py-2.5 text-sm text-primary-900 sm:px-6">
       <Share className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" aria-hidden="true" />
       <p className="flex-1">
-        Add Procure Paddy to your Home Screen so it opens even without a connection. Tap{' '}
+        Add Procurepaddy to your Home Screen so it opens even without a connection. Tap{' '}
         <span className="font-medium">Share</span>, then <span className="font-medium">Add to Home Screen</span>.
       </p>
       <button

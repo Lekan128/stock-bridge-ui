@@ -65,7 +65,7 @@ export function SellerStorefrontPage() {
           title="This seller is not available"
           description={
             sellerError ??
-            'They may no longer be selling on ProcurePaddy, or the link may be out of date. Browse the full catalog instead.'
+            'They may no longer be selling on ProcurePal, or the link may be out of date. Browse the full catalog instead.'
           }
         />
       </div>
@@ -96,7 +96,7 @@ export function SellerStorefrontPage() {
           <p className="mt-1 text-sm text-neutral-500">
             {seller.platformOwner
               ? 'Sold and fulfilled by ProcurePal.'
-              : 'A verified seller on the ProcurePaddy marketplace.'}
+              : 'A verified seller on the ProcurePal marketplace.'}
           </p>
           {/* The count comes from the server's own catalog predicate, so it can never disagree with
               the number of tiles below it. */}

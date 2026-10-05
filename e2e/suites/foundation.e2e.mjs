@@ -107,7 +107,7 @@ await page.waitForFunction(() => navigator.serviceWorker.controller?.state === '
 
 const toast = (text) => page.getByRole('status').filter({ hasText: text })
 
-await check('the workspace is set in IBM Plex Sans, stored for offline use; the storefront keeps Inter', async () => {
+await check('the workspace is set in IBM Plex Sans, stored for offline use; the marketplace keeps Inter', async () => {
   const workspace = await page.evaluate(() => getComputedStyle(document.body).fontFamily)
   assert(workspace.startsWith('"IBM Plex Sans Variable"'), workspace)
   assert(await page.evaluate(() => document.fonts.check('600 16px "IBM Plex Sans Variable"')), 'Plex not loaded')
@@ -119,7 +119,7 @@ await check('the workspace is set in IBM Plex Sans, stored for offline use; the 
     return false
   })
   assert(cached, 'Plex not precached')
-  await page.goto(`${UI}/`)
+  await page.goto(`${UI}/marketplace`)
   await page.waitForLoadState('networkidle')
   const storefront = await page.evaluate(() => getComputedStyle(document.body).fontFamily)
   assert(storefront.startsWith('Inter'), storefront)
@@ -272,7 +272,7 @@ await check('a page that cannot reach the server says so calmly, not "Something 
   await page.goto(`${UI}/app/products/sku-settings`)
   // The page keeps its own title; a failure to reach the server is set calm — a cloud, a neutral
   // border, no red — and never called "Something went wrong" (U8).
-  const alert = page.getByRole('alert').filter({ hasText: "Couldn't reach Procure Paddy" })
+  const alert = page.getByRole('alert').filter({ hasText: "Couldn't reach Procurepaddy" })
   await alert.waitFor({ timeout: 20000 })
   assert((await alert.locator('.lucide-cloud-off').count()) === 1, 'no cloud icon')
   const cls = await alert.getAttribute('class')

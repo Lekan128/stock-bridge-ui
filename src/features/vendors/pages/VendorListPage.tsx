@@ -24,7 +24,7 @@ type KindFilter = 'all' | VendorKind
 
 const KIND_FILTERS: { value: KindFilter; label: string }[] = [
   { value: 'all', label: 'All' },
-  { value: 'VERIFIED', label: 'ProcurePaddy sellers' },
+  { value: 'VERIFIED', label: 'ProcurePal sellers' },
   { value: 'EXTERNAL', label: 'Your own suppliers' },
 ]
 
@@ -102,7 +102,7 @@ export function VendorListPage() {
         <div>
           <h1 className="text-2xl font-semibold text-neutral-900">Suppliers</h1>
           <p className="mt-0.5 text-sm text-neutral-500">
-            Everyone your company buys from — ProcurePaddy sellers you have ordered from, and the
+            Everyone your company buys from — ProcurePal sellers you have ordered from, and the
             suppliers you deal with off-platform.
           </p>
         </div>

@@ -1,10 +1,11 @@
 import { BadgeCheck, Store } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { MarketplaceSeller } from '@/features/storefront/types'
+import { marketplacePaths } from '@/routes/marketplacePaths'
 
 /** Where a seller's storefront lives. Slugs are the shareable form; the id is the fallback. */
 export function sellerPath(seller: Pick<MarketplaceSeller, 'id' | 'slug'>): string {
-  return `/seller/${seller.slug || seller.id}`
+  return marketplacePaths.seller(seller.slug || seller.id)
 }
 
 export interface SellerBadgeProps {

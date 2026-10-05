@@ -111,7 +111,7 @@ export function VendorStatementPage() {
         <div>
           <h1 className="text-2xl font-semibold text-neutral-900">Statement</h1>
           <p className="text-sm text-neutral-500">
-            What you earned, what ProcurePaddy charged, and what you will be paid.
+            What you earned, what ProcurePal charged, and what you will be paid.
           </p>
         </div>
         {/* print:hidden on the whole control cluster: a printed statement should not carry
@@ -151,7 +151,7 @@ export function VendorStatementPage() {
           description={
             <>
               {data.sellerName} sells on its own marketplace, so there is no commission to charge and no
-              payout to make — ProcurePaddy cannot owe itself money. Sales figures for this account live
+              payout to make — ProcurePal cannot owe itself money. Sales figures for this account live
               on <span className="font-medium">My sales</span>.
             </>
           }

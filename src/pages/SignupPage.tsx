@@ -55,7 +55,7 @@ export function SignupPage() {
         password: values.password,
         confirmPassword: values.confirmPassword,
       })
-      showToast(`Welcome to Procure Paddy, ${tenantUser.clientName}!`, 'success')
+      showToast(`Welcome to Procurepaddy, ${tenantUser.clientName}!`, 'success')
       navigate(DEFAULT_AUTHENTICATED_PATH, { replace: true })
     } catch (err) {
       if (!isAppError(err)) {
@@ -103,7 +103,7 @@ export function SignupPage() {
               question-and-answer shape also matches how the two audiences differ: one is here to
               buy, the other to sell. */}
           <span className="border-t border-neutral-100 pt-2 text-neutral-500">
-            Want to sell on Procure Paddy?{' '}
+            Want to sell on ProcurePal?{' '}
             <Link
               to="/vendor-application"
               className="font-medium text-primary-600 hover:underline"

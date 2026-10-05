@@ -167,7 +167,7 @@ await check('401 followed by an unanswered refresh does not log out', async () =
   await page.route(`${API}/api/auth/refresh`, (route) => route.abort('internetdisconnected'))
   await page.evaluate(() => window.dispatchEvent(new Event('online'))) // triggers a catalogue sync
   await page.getByRole('button', { name: /^Low\s*\d*$/ }).click()
-  await page.getByText(/Couldn't reach Procure Paddy|Couldn't reach the server · showing/).first().waitFor({ timeout: 15000 })
+  await page.getByText(/Couldn't reach Procurepaddy|Couldn't reach the server · showing/).first().waitFor({ timeout: 15000 })
   assert(page.url().includes('/app/products'), `redirected to ${page.url()}`)
   assert((await page.evaluate(() => localStorage.getItem('sb.refreshToken'))) != null, 'session wiped')
   await context.close()

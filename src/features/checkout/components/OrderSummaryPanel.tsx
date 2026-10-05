@@ -7,6 +7,7 @@ import type { CheckoutQuote } from '@/features/checkout/types'
 import { ProductImage } from '@/features/products/components/ProductImage'
 import { formatNaira } from '@/utils/money'
 import { formatQuantity } from '@/utils/units'
+import { marketplacePaths } from '@/routes/marketplacePaths'
 
 export interface OrderSummaryPanelProps {
   quote: CheckoutQuote | null
@@ -157,7 +158,7 @@ export function OrderSummaryPanel({ quote, items, loading, refreshing }: OrderSu
       </div>
 
       <Link
-        to="/cart"
+        to={marketplacePaths.cart}
         className="mt-3 inline-block rounded text-xs font-medium text-primary-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
       >
         Edit cart

@@ -35,6 +35,13 @@
 # backend, with no error to explain why.
 [context.staging.environment]
   VITE_API_BASE_URL = "https://staging-api.procurepaddy.com"
+  # The landing page's canonical URL, sitemap and robots.txt (scripts/prerender.mjs). Staging tells
+  # search engines to stay away entirely, so it never competes with procurepaddy.com in results.
+  SITE_NOINDEX = "true"
+  # Staging shows the founding-offer page for review (LANDING_PAGE_PLAN.md, step 3). Production keeps
+  # the early-access page until the owners turn this on there, which the build refuses until the
+  # founders are in src/marketing/founders.ts.
+  VITE_FOUNDING_OFFER = "true"
 
 # Pull request previews point at staging too. A preview is unreviewed code, so
 # the failure mode of getting this wrong (writing to the production database
@@ -42,6 +49,7 @@
 # previewing against staging data.
 [context.deploy-preview.environment]
   VITE_API_BASE_URL = "https://staging-api.procurepaddy.com"
+  SITE_NOINDEX = "true"
 
 # --------------------------------------------------------------------------- Offline app shell
 # The service worker and the files it decides with must never be served stale from an HTTP
@@ -55,6 +63,12 @@
 
 [[headers]]
   for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+# The prerendered landing page changes with every deploy; never serve a stale copy at /.
+[[headers]]
+  for = "/landing.html"
   [headers.values]
     Cache-Control = "no-cache"
 

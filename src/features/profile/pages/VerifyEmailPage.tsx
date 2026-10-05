@@ -7,6 +7,7 @@ import { Spinner } from '@/components/Spinner'
 import { emailApi } from '@/features/profile/api/emailApi'
 import { useEmailVerification } from '@/features/profile/hooks/useEmailVerification'
 import { isAppError } from '@/types/api'
+import { marketplacePaths } from '@/routes/marketplacePaths'
 
 type Phase = 'missing-token' | 'verifying' | 'verified' | 'rejected' | 'unreachable'
 
@@ -156,7 +157,7 @@ export function VerifyEmailPage() {
               </Link>
             )}
 
-            <Link to="/" className={buttonClassName('secondary')}>
+            <Link to={marketplacePaths.home} className={buttonClassName('secondary')}>
               Back to the marketplace
             </Link>
           </div>

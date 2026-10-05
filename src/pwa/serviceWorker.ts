@@ -165,7 +165,7 @@ let installPrompt: BeforeInstallPromptEvent | null = null
 
 if (typeof window !== 'undefined') {
   window.addEventListener('beforeinstallprompt', (event) => {
-    // Hold the browser's own mini-infobar back: "Install Procure Paddy" in the account menu says
+    // Hold the browser's own mini-infobar back: "Install Procurepaddy" in the account menu says
     // what it does, where the generic banner would interrupt whatever the user was doing.
     event.preventDefault()
     installPrompt = event as BeforeInstallPromptEvent

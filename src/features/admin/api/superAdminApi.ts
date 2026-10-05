@@ -293,7 +293,7 @@ export const superAdminApiClient = {
   //
   // There is deliberately no tenant-facing equivalent of either call. A vendor learns the hold
   // that applies to THEIR money from their own statement, which carries the actual maturity
-  // dates — a more useful answer than the number — and nobody outside ProcurePaddy gets to poll
+  // dates — a more useful answer than the number — and nobody outside ProcurePal gets to poll
   // the platform's policy.
 
   getEscrowHoldSettings: () =>

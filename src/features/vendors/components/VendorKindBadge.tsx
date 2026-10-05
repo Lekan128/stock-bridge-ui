@@ -11,7 +11,7 @@ export interface VendorKindBadgeProps {
  * The one visual distinction between the two kinds of directory entry, in one place so the list,
  * the detail header and the purchase-history header cannot drift apart.
  *
- * VERIFIED is `info` (navy) with a check mark: it means "ProcurePaddy knows you traded with them",
+ * VERIFIED is `info` (navy) with a check mark: it means "ProcurePal knows you traded with them",
  * which is a *state of fact* rather than a good outcome — `success` green would read as an
  * endorsement of the supplier, which the platform is not making. EXTERNAL is neutral because a
  * supplier you added yourself is the ordinary case, not a lesser one; greying it out or warning on
@@ -24,9 +24,9 @@ export interface VendorKindBadgeProps {
 export function VendorKindBadge({ kind, className = '' }: VendorKindBadgeProps) {
   if (kind === 'VERIFIED') {
     return (
-      <Badge variant="info" className={className} title="Added automatically when you bought from this seller on ProcurePaddy">
+      <Badge variant="info" className={className} title="Added automatically when you bought from this seller on ProcurePal">
         <BadgeCheck className="h-3.5 w-3.5" aria-hidden="true" />
-        ProcurePaddy seller
+        ProcurePal seller
       </Badge>
     )
   }

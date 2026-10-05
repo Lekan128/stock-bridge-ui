@@ -11,6 +11,7 @@ import { StorefrontMobileDrawer } from '@/layouts/StorefrontMobileDrawer'
 import { StorefrontSearchInput } from '@/layouts/StorefrontSearchInput'
 import { UserMenu } from '@/layouts/UserMenu'
 import { formatNairaWhole } from '@/utils/money'
+import { marketplacePaths } from '@/routes/marketplacePaths'
 
 /**
  * Public storefront header.
@@ -68,7 +69,7 @@ export function StorefrontHeader() {
               <Menu className="h-5 w-5" />
             </button>
 
-            <Link to="/" className="shrink-0 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
+            <Link to={marketplacePaths.home} className="shrink-0 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
               <Logo brand="procurePal" size={28} />
             </Link>
 
@@ -128,7 +129,7 @@ export function StorefrontHeader() {
           <div className="mx-auto flex max-w-7xl items-center gap-1 px-4 sm:px-6 lg:px-8">
             <StorefrontCategoryMenu />
             <Link
-              to="/"
+              to={marketplacePaths.home}
               className="rounded-md px-2.5 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100"
             >
               All products

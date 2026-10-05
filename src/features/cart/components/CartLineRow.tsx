@@ -6,6 +6,7 @@ import type { CartItem } from '@/features/cart/types'
 import { ProductImage } from '@/features/products/components/ProductImage'
 import { formatNaira } from '@/utils/money'
 import { formatPerUnit, formatQuantity } from '@/utils/units'
+import { marketplacePaths } from '@/routes/marketplacePaths'
 
 export interface CartLineRowProps {
   item: CartItem
@@ -30,7 +31,7 @@ export function CartLineRow({ item, onQuantityChange, onRemove, disabled = false
   const moq = item.minOrderQuantity ?? 1
   const unavailable = !item.available
   const shortStock = item.available && item.quantityOnHand > 0 && item.quantity > item.quantityOnHand
-  const linkTarget = `/product/${item.slug || item.productId}`
+  const linkTarget = marketplacePaths.product(item.slug || item.productId)
 
   return (
     <li className={`flex gap-3 py-4 sm:gap-4 ${unavailable ? 'opacity-75' : ''}`}>

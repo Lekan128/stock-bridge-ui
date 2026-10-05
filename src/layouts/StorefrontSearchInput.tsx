@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Search, X } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { marketplacePaths } from '@/routes/marketplacePaths'
 
 export interface StorefrontSearchInputProps {
   /** Called after a submit — lets the mobile drawer close itself. */
@@ -31,7 +32,7 @@ export function StorefrontSearchInput({ onSubmitted, autoFocus = false, classNam
   function submit(next: string) {
     const trimmed = next.trim()
     // Dropping the param entirely (rather than `?q=`) keeps the "browse everything" URL clean.
-    navigate(trimmed ? `/?q=${encodeURIComponent(trimmed)}` : '/')
+    navigate(trimmed ? marketplacePaths.search(trimmed) : marketplacePaths.home)
     onSubmitted?.()
   }
 

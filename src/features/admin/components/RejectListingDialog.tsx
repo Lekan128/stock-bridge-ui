@@ -63,7 +63,7 @@ export function RejectListingDialog({ product, submitting, onCancel, onConfirm }
         {[
           'The product images are too low quality to list.',
           'The description does not match the product name.',
-          'This product cannot be sold on ProcurePaddy.',
+          'This product cannot be sold on ProcurePal.',
           'The price looks like an error — please confirm it.',
         ].map((suggestion) => (
           <button

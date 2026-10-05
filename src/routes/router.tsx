@@ -1,5 +1,5 @@
 import { Suspense, lazy } from 'react'
-import { Navigate, Route, Routes, useParams } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
 import { RedirectIfAuthenticated } from '@/auth/RedirectIfAuthenticated'
 import { RedirectIfSuperAdminAuthenticated } from '@/auth/RedirectIfSuperAdminAuthenticated'
@@ -14,22 +14,20 @@ import { AppLayout } from '@/layouts/AppLayout'
 import { StorefrontLayout } from '@/layouts/StorefrontLayout'
 import { ScrollToTop } from '@/routes/ScrollToTop'
 import { lazyPage } from '@/routes/lazyPage'
+import { MARKETPLACE_BASE } from '@/routes/marketplacePaths'
 
-// Eager: the public storefront and auth. These are the first paint for an anonymous visitor
-// arriving at `/`, so they must not wait on a second network round trip.
-import { CartPage } from '@/pages/CartPage'
+// Eager: log in and sign up, the landing page's two doors. They are the first paint for someone
+// arriving from it, so they must not wait on a second network round trip.
 import { LoginPage } from '@/pages/LoginPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { SignupPage } from '@/pages/SignupPage'
-import { StorefrontHomePage } from '@/pages/StorefrontHomePage'
-import { StorefrontProductDetailPage } from '@/pages/StorefrontProductDetailPage'
-// Eager for the same reason as the storefront: `/verify-email` is an entry point clicked from an
+// Eager for the same reason: `/verify-email` is an entry point clicked from an
 // email, by someone with no warm cache and often no session, and making them wait on a second
 // round trip for a chunk before anything appears is the wrong trade for a page this small.
 import { VerifyEmailPage } from '@/pages/VerifyEmailPage'
 
 /**
- * Everything past the storefront is code-split.
+ * Everything else is code-split, the marketplace included.
  *
  * The whole app was one 1.2MB chunk, which the storefront paid for on first load even though a
  * browsing visitor touches none of it. The workspace, the ProcurePal admin screens and the super
@@ -44,6 +42,15 @@ const DesignSpikePage =
   import.meta.env.DEV || import.meta.env.VITE_DESIGN_PREVIEW === 'true'
     ? lazy(() => import('@/features/designPreview/DesignSpikePage').then((m) => ({ default: m.DesignSpikePage })))
     : null
+// The ProcurePal marketplace (now under /marketplace). Lazy since / became the Procurepaddy landing
+// page: a marketplace visitor waits for one extra chunk, and nobody else downloads the catalogue.
+const StorefrontHomePage = lazy(() =>
+  import('@/pages/StorefrontHomePage').then((m) => ({ default: m.StorefrontHomePage })),
+)
+const StorefrontProductDetailPage = lazy(() =>
+  import('@/pages/StorefrontProductDetailPage').then((m) => ({ default: m.StorefrontProductDetailPage })),
+)
+const CartPage = lazy(() => import('@/pages/CartPage').then((m) => ({ default: m.CartPage })))
 const QuickModePage = lazyPage(() => import('@/features/quick/QuickModePage').then((m) => m.QuickModePage), <BootstrappingScreen />)
 const CheckoutPage = lazy(() =>
   import('@/pages/CheckoutPage').then((m) => ({ default: m.CheckoutPage })),
@@ -236,7 +243,7 @@ const AdminListingModerationPage = lazy(() =>
 )
 // A vendor's public storefront. Lazy rather than eager like the rest of the storefront: it is
 // reached by clicking a seller name, never as a cold first paint, so it does not need to be in
-// the entry chunk the way `/` and `/product/:idOrSlug` do.
+// the entry chunk (the marketplace pages are lazy too, since / became the landing page).
 const SellerStorefrontPage = lazy(() =>
   import('@/pages/SellerStorefrontPage').then((m) => ({
     default: m.SellerStorefrontPage,
@@ -307,6 +314,55 @@ function LegacyProductRedirect({ suffix = '' }: { suffix?: string }) {
   return <Navigate to={`/app/products/${id}${suffix}`} replace />
 }
 
+/**
+ * The marketplace's old addresses (`/product/…`, `/cart`, `/checkout/return?paymentReference=…`),
+ * moved under /marketplace with the query string and hash kept: Monnify's return carries the
+ * payment reference in it. Netlify answers these with 301s before the app loads; this covers dev,
+ * preview and links followed inside the app.
+ */
+function LegacyMarketplaceRedirect() {
+  const { pathname, search, hash } = useLocation()
+  return <Navigate to={`${MARKETPLACE_BASE}${pathname}${search}${hash}`} replace />
+}
+
+/** How recently this tab hopped to the landing page; a second hop inside this window is a loop. */
+const LANDING_HOP_KEY = 'pp.landingHop'
+
+/**
+ * `/` is the prerendered Procurepaddy landing page (`landing.html`), served by Netlify and by the
+ * dev and preview servers before this app loads. This app only sees `/` when it is reached from
+ * inside the app, or when something served the app shell there by mistake. Old marketplace
+ * searches (`/?q=…`, `/?categoryId=…`) go to the marketplace; anything else loads the real page,
+ * once: if the server answers `/` with this app again, a link is shown instead of looping.
+ */
+function RootRoute() {
+  const { search } = useLocation()
+  const params = new URLSearchParams(search)
+  if (params.has('q') || params.has('categoryId')) {
+    return <Navigate to={`${MARKETPLACE_BASE}${search}`} replace />
+  }
+  let hoppedRecently = false
+  try {
+    hoppedRecently = Date.now() - Number(sessionStorage.getItem(LANDING_HOP_KEY) ?? 0) < 5000
+    if (!hoppedRecently) sessionStorage.setItem(LANDING_HOP_KEY, String(Date.now()))
+  } catch {
+    // Storage blocked: hop anyway; the browser stops a true loop on its own.
+  }
+  if (!hoppedRecently) {
+    window.location.replace(`/${search}`)
+    return <BootstrappingScreen />
+  }
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-4 text-center">
+      <p className="text-sm text-neutral-600">The Procurepaddy home page didn't load.</p>
+      <div className="flex gap-4 text-sm font-medium">
+        <a href="/app" className="text-primary-600 hover:underline">Open your workspace</a>
+        <a href={MARKETPLACE_BASE} className="text-primary-600 hover:underline">Go to the marketplace</a>
+      </div>
+    </div>
+  )
+}
+
 /** Where a phone opens the app, and the page each lands on. */
 const ENTRY_PAGES: [RegExp, { preload: () => Promise<void> }][] = [
   [/^\/app\/?$/, DashboardPage],
@@ -331,10 +387,11 @@ export function preloadRoute(pathname: string): void {
 /**
  * Every route in the app.
  *
- * Three trees, split by path:
- *   `/…`      the public ProcurePal storefront (catalog, cart, checkout) under StorefrontLayout
- *   `/app/…`  the authenticated tenant workspace (was `/`) under AppLayout
- *   `/admin/…` super admin, unchanged
+ * Trees, split by path:
+ *   `/`                the Procurepaddy landing page: prerendered `landing.html`, not this app
+ *   `/marketplace/…`   the public ProcurePal marketplace (catalog, cart, checkout), StorefrontLayout
+ *   `/app/…`           the authenticated tenant workspace under AppLayout
+ *   `/admin/…`         super admin, unchanged
  *
  * This file is owned exclusively by M2. Feature modules fill in the components it points at; they
  * never add routes here, which is what keeps nine parallel workstreams out of each other's way.
@@ -347,27 +404,29 @@ export function AppRoutes() {
     <Suspense fallback={<BootstrappingScreen />}>
       <ScrollToTop />
       <Routes>
-        {/* ---------------------------------------------------------------- Public storefront */}
-        <Route element={<StorefrontLayout />}>
-          <Route path="/" element={<StorefrontHomePage />} />
-          <Route path="/product/:idOrSlug" element={<StorefrontProductDetailPage />} />
+        {/* ---------------------------------------------------- ProcurePal marketplace (public) */}
+        {/* Under /marketplace since the Procurepaddy landing page took / (LANDING_PAGE_PLAN.md,
+            step 2). Paths come from marketplacePaths; the old ones redirect below. */}
+        <Route path={MARKETPLACE_BASE} element={<StorefrontLayout />}>
+          <Route index element={<StorefrontHomePage />} />
+          <Route path="product/:idOrSlug" element={<StorefrontProductDetailPage />} />
           {/* One seller's storefront. Public, like the rest of the catalog — a buyer deciding
               whether to order from a third party should not have to sign in to see who they are. */}
-          <Route path="/seller/:idOrSlug" element={<SellerStorefrontPage />} />
+          <Route path="seller/:idOrSlug" element={<SellerStorefrontPage />} />
           {/* Anonymous carts are allowed — the cart lives in localStorage until login (contract §8). */}
-          <Route path="/cart" element={<CartPage />} />
+          <Route path="cart" element={<CartPage />} />
           <Route
-            path="/checkout"
+            path="checkout"
             element={
               <RequireAuth>
                 <CheckoutPage />
               </RequireAuth>
             }
           />
-          {/* Both Monnify landing paths render the same verify-and-route screen: `/checkout/return`
-            is the configured redirect URL, `/checkout/processing` the in-app waiting state. */}
+          {/* Both Monnify landing paths render the same verify-and-route screen: `checkout/return`
+            is the configured redirect URL, `checkout/processing` the in-app waiting state. */}
           <Route
-            path="/checkout/processing"
+            path="checkout/processing"
             element={
               <RequireAuth>
                 <PaymentReturnPage />
@@ -375,7 +434,7 @@ export function AppRoutes() {
             }
           />
           <Route
-            path="/checkout/return"
+            path="checkout/return"
             element={
               <RequireAuth>
                 <PaymentReturnPage />
@@ -383,14 +442,27 @@ export function AppRoutes() {
             }
           />
           <Route
-            path="/order-confirmation/:orderId"
+            path="order-confirmation/:orderId"
             element={
               <RequireAuth>
                 <OrderConfirmationPage />
               </RequireAuth>
             }
           />
+          <Route path="*" element={<NotFoundPage />} />
+        </Route>
 
+        {/* The landing page, and the marketplace's old addresses. */}
+        <Route path="/" element={<RootRoute />} />
+        <Route path="/product/:idOrSlug" element={<LegacyMarketplaceRedirect />} />
+        <Route path="/seller/:idOrSlug" element={<LegacyMarketplaceRedirect />} />
+        <Route path="/cart" element={<LegacyMarketplaceRedirect />} />
+        <Route path="/checkout" element={<LegacyMarketplaceRedirect />} />
+        <Route path="/checkout/processing" element={<LegacyMarketplaceRedirect />} />
+        <Route path="/checkout/return" element={<LegacyMarketplaceRedirect />} />
+        <Route path="/order-confirmation/:orderId" element={<LegacyMarketplaceRedirect />} />
+
+        <Route element={<StorefrontLayout />}>
           {/* The target of the link in every confirmation email. Deliberately public and
             deliberately inside the storefront chrome: the person clicking may have no session on
             this device (phone vs. the laptop they signed up on), and whatever the outcome they

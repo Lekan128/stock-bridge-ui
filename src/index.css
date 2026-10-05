@@ -159,9 +159,10 @@
     @apply bg-neutral-50 text-neutral-900 font-sans antialiased;
   }
 
-  /* Set on <html> by AppLayout while the workspace is open, so dialogs portaled to <body> get the
-     workspace face too. */
-  html[data-surface='workspace'] {
+  /* Set on <html> by AppLayout while the workspace is open (so dialogs portaled to <body> get the
+     workspace face too), and by landing.html for the Procurepaddy home page. */
+  html[data-surface='workspace'],
+  html[data-surface='marketing'] {
     --font-sans: var(--font-workspace);
   }
 }

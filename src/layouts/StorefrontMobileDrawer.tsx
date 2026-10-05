@@ -6,6 +6,7 @@ import { useAuth } from '@/auth/useAuth'
 import { buttonClassName } from '@/components/Button'
 import { Logo } from '@/components/Logo'
 import { useCategories } from '@/features/storefront/hooks/useCategories'
+import { marketplacePaths } from '@/routes/marketplacePaths'
 
 export interface StorefrontMobileDrawerProps {
   open: boolean
@@ -55,7 +56,7 @@ export function StorefrontMobileDrawer({ open, onClose }: StorefrontMobileDrawer
         }`}
       >
         <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
-          <Link to="/" onClick={onClose}>
+          <Link to={marketplacePaths.home} onClick={onClose}>
             <Logo brand="procurePal" size={26} />
           </Link>
           <button
@@ -69,7 +70,7 @@ export function StorefrontMobileDrawer({ open, onClose }: StorefrontMobileDrawer
         </div>
 
         <nav className="flex-1 overflow-y-auto px-2 py-3">
-          <Link to="/" onClick={onClose} className={linkClass}>
+          <Link to={marketplacePaths.home} onClick={onClose} className={linkClass}>
             <Store className="h-4 w-4 text-neutral-500" />
             All products
           </Link>
@@ -104,7 +105,7 @@ export function StorefrontMobileDrawer({ open, onClose }: StorefrontMobileDrawer
               {visibleCategories.map((category) => (
                 <Link
                   key={category.id}
-                  to={`/?categoryId=${category.id}`}
+                  to={marketplacePaths.category(category.id)}
                   onClick={onClose}
                   className="block rounded-md px-3 py-2 text-sm text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900"
                 >

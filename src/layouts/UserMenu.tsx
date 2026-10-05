@@ -49,10 +49,13 @@ export function UserMenu() {
     setConfirmLogout(false)
     await Promise.all([stopOutbox({ deleteData: true }), deleteAllDrafts()])
     await logout()
-    // Back to the public storefront rather than the login form. `/` works from either layout and
-    // is a live page with a prominent "Log in" — a bare login screen would be a dead end for
-    // someone who was only browsing the catalog.
-    navigate('/', { replace: true })
+    // Out to the Procurepaddy home page rather than the login form: a live page with "Log in" on
+    // it. A full page load, not a route change: `/` is the prerendered landing page, which is not
+    // part of this app's bundle (LANDING_PAGE_PLAN.md, step 2), and so not held offline. Offline,
+    // the log-in screen instead: it is part of the installed app, where `/` would be the browser's
+    // own "no internet" page.
+    if (navigator.onLine) window.location.replace('/')
+    else navigate('/login', { replace: true })
   }
 
   return (
@@ -103,7 +106,7 @@ export function UserMenu() {
               className={itemClassName}
             >
               <Download className="h-4 w-4" />
-              Install Procure Paddy
+              Install Procurepaddy
             </button>
           )}
           <button type="button" role="menuitem" onClick={() => void handleLogout()} className={itemClassName}>

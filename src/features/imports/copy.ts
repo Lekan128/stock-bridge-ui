@@ -89,12 +89,12 @@ export const copy = {
     cards: {
       PRODUCT_CATALOG: {
         title: 'Add products',
-        body: 'Put all your products on Procure Paddy at once — one row per product.',
+        body: 'Put all your products on Procurepaddy at once — one row per product.',
         footnote: 'Just the products. You record how many you have in the next step.',
       },
       STOCK_IN: {
         title: 'Record stock you received',
-        body: 'Deliveries you bought outside Procure Paddy.',
+        body: 'Deliveries you bought outside Procurepaddy.',
         footnote: 'We pre-fill your products — you just add the quantities.',
       },
     },

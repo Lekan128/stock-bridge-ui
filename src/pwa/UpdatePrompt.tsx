@@ -25,7 +25,7 @@ export function UpdatePrompt() {
 
   useEffect(() => {
     if (!offlineReady) return
-    showToast('Procure Paddy will now open on this device, even without a connection.', 'success')
+    showToast('Procurepaddy will now open on this device, even without a connection.', 'success')
     acknowledgeOfflineReady()
   }, [offlineReady, showToast])
 
@@ -39,7 +39,7 @@ export function UpdatePrompt() {
       <div className="flex items-start gap-3">
         <RefreshCw className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" aria-hidden="true" />
         <div>
-          <p className="text-sm font-medium text-neutral-900">A new version of Procure Paddy is ready</p>
+          <p className="text-sm font-medium text-neutral-900">A new version of Procurepaddy is ready</p>
           <p className="mt-0.5 text-sm text-neutral-500">Reload when you've finished what you're doing.</p>
         </div>
       </div>

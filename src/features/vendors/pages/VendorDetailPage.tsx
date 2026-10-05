@@ -168,7 +168,7 @@ export function VendorDetailPage() {
 
           {vendor.kind === 'VERIFIED' && (
             <p className="mt-4 rounded-md bg-neutral-50 px-3 py-2 text-xs text-neutral-600">
-              These details come from this seller’s own ProcurePaddy account, so they stay current
+              These details come from this seller’s own ProcurePal account, so they stay current
               without anyone here maintaining them — which is also why they cannot be edited from your
               directory.
             </p>
@@ -197,7 +197,7 @@ export function VendorDetailPage() {
             // Not an empty state to fix — a permanent, explained zero. Without this the reader
             // assumes the figures failed to load.
             <p className="mt-3 border-t border-neutral-100 pt-3 text-xs text-neutral-500">
-              You buy from this supplier outside ProcurePaddy, so there are no orders here to total.
+              You buy from this supplier outside ProcurePal, so there are no orders here to total.
             </p>
           )}
         </div>
@@ -265,7 +265,7 @@ function ProductRow({ product }: { product: VendorProductPrice }) {
         {/* An em dash, never ₦0.00. "We last paid nothing" is a different and false claim — see
             VendorProductPrice for the two ordinary ways the price is genuinely absent. */}
         {product.lastPurchaseUnitPrice === undefined ? (
-          <span className="text-neutral-500" title="Never bought from this supplier through ProcurePaddy">
+          <span className="text-neutral-500" title="Never bought from this supplier through ProcurePal">
             —
           </span>
         ) : (

@@ -56,7 +56,7 @@ export const PERMISSIONS = {
    * procurement decision. STOREKEEPER holds neither, so the nav entry does not render for them.
    *
    * Note what MANAGE_VENDORS does *not* buy: a VERIFIED entry (one created automatically when the
-   * company bought from a ProcurePaddy seller) is still not editable by anybody, whatever their
+   * company bought from a ProcurePal seller) is still not editable by anybody, whatever their
    * role — the server answers 409. The UI hides the edit affordance on those rows from the
    * `editable` flag the server sends, not from this permission.
    */

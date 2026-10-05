@@ -1,6 +1,7 @@
 import { ShoppingCart } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useCart } from '@/features/cart/hooks/useCart'
+import { marketplacePaths } from '@/routes/marketplacePaths'
 
 /**
  * Header cart link with its live item count.
@@ -16,7 +17,7 @@ export function StorefrontCartButton({ className = '' }: { className?: string })
 
   return (
     <Link
-      to="/cart"
+      to={marketplacePaths.cart}
       aria-label={`Cart, ${label}`}
       className={`relative flex items-center gap-2 rounded-md px-2.5 py-2 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${className}`}
     >

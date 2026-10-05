@@ -18,7 +18,7 @@ export interface RequestUnitOfMeasureModalProps {
 /**
  * The Amazon/Jumia "can't find your category? tell us" pattern, sized for a fixed list with
  * exactly one gap worth naming at a time: what unit, and why. Deliberately lightweight — this
- * posts an email to ProcurePaddy's support inbox, not a request that blocks the save the person
+ * posts an email to Procurepaddy's support inbox, not a request that blocks the save the person
  * came here to make. A vendor or company who cannot find their unit picks the closest one (or
  * leaves it blank; the pair is optional) and keeps going.
  *

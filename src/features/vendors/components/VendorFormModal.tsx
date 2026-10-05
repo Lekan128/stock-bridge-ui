@@ -110,7 +110,7 @@ export function VendorFormModal({ vendor, onClose, onSaved }: VendorFormModalPro
     >
       <form id="vendor-form" onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
         <p className="rounded-md bg-neutral-50 px-3 py-2 text-sm text-neutral-600">
-          For suppliers you deal with outside ProcurePaddy. Sellers you buy from on the marketplace are
+          For suppliers you deal with outside ProcurePal. Sellers you buy from on the marketplace are
           added to this directory automatically.
         </p>
 

@@ -159,7 +159,7 @@ export function ApproveVendorDialog({
         {/* Not a nicety. Nothing in the product will ever tell the vendor this password, so if the
             reviewer does not pass it on, nobody can. */}
         <p className="rounded-md bg-warning-50 px-3 py-2 text-xs text-warning-800">
-          We will not email this password — no email in Procure Paddy ever contains one. Give it to
+          We will not email this password — no email in Procurepaddy ever contains one. Give it to
           the vendor yourself, and tell them to change it from their profile after signing in.
         </p>
 

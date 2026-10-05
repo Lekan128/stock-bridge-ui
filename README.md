@@ -57,6 +57,30 @@ deployed backend's URL before building — it's baked into the build output, not
 `npm run preview` serves that `dist/` build locally, useful for a final sanity check before
 deploying.
 
+### Two pages: the app and the landing page
+
+The build makes two HTML entries (LANDING_PAGE_PLAN.md, step 2):
+
+- **`index.html`** is the app: the workspace, the marketplace (`/marketplace/…`) and every unknown
+  path's fallback. The service worker caches it for offline use.
+- **`landing.html`** is the Procurepaddy home page at `/`: its own small bundle
+  (`src/marketing/`), rendered to real HTML at build time by `scripts/prerender.mjs` so search
+  engines read it without running JavaScript. The same step writes `sitemap.xml` and `robots.txt`.
+
+Netlify serves `landing.html` at `/` and moves the marketplace's old addresses (`/product/…`,
+`/cart`, `/checkout/return?…`) to `/marketplace` with their query strings (`public/_redirects`).
+`npm run dev` and `npm run preview` route the same way.
+
+With `VITE_FOUNDING_OFFER=true` the home page is the full founding-offer page (step 3): static HTML
+with small interactive islands (`src/marketing/islands/`: the setup form, the live counts, the hero
+receipt, the sticky phone button), calling the API's public `/api/public/founding-offer` and
+`/api/public/setup-requests`. Staging builds it; production keeps the early-access page until the
+owners switch it on, and the build refuses that until `src/marketing/founders.ts` is filled in.
+`VITE_POSTHOG_KEY` (and optionally `VITE_POSTHOG_HOST`) turns on the funnel events. Build settings
+for the landing page, all optional: `SITE_URL` (canonical origin, default `https://procurepaddy.com`), `SITE_NOINDEX=true`
+(staging and previews set it), `GOOGLE_SITE_VERIFICATION` and `BING_SITE_VERIFICATION` (the
+search consoles' HTML-tag codes).
+
 Hosted builds run this same command on Netlify — `main` for production, `staging` for the
 staging branch deploy, each built against its own `VITE_API_BASE_URL`. See
 [`DEPLOYMENT.md`](./DEPLOYMENT.md).

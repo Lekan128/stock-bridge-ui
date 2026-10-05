@@ -73,7 +73,7 @@ function normalizeError(error: AxiosError): AppError {
 export const NETWORK_MESSAGES = {
   offline: "You're offline. Check your connection and try again.",
   timeout: 'The server took too long to answer. Check your connection and try again.',
-  unreachable: "Couldn't reach Procure Paddy. Check your connection and try again.",
+  unreachable: "Couldn't reach Procurepaddy. Check your connection and try again.",
 } as const
 
 export function isNetworkMessage(message: string | null | undefined): boolean {

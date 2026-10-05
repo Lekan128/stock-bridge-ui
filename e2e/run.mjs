@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url'
 const SUITES = [
   'urgent-fixes',
   'pwa-shell',
+  'landing',
   'lost-refresh',
   'data-layer',
   'catalog',

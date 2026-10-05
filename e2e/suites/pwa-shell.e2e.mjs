@@ -97,14 +97,16 @@ async function reconnect(page) {
 const swControlled = (page) =>
   page.waitForFunction(() => navigator.serviceWorker.controller?.state === 'activated', null, { timeout: 15000 })
 
-// 1. Anonymous shoppers never get the workspace's service worker.
-await check('storefront visitor gets no service worker', async () => {
+// 1. Visitors to the landing page and the marketplace never get the workspace's service worker.
+await check('landing page and marketplace visitors get no service worker', async () => {
   const context = await browser.newContext()
   const page = await context.newPage()
-  await page.goto(`${UI}/`)
-  await page.waitForTimeout(2500)
-  const registered = await page.evaluate(async () => !!(await navigator.serviceWorker.getRegistration()))
-  assert(!registered, 'a service worker was registered for an anonymous storefront visit')
+  for (const path of ['/', '/marketplace']) {
+    await page.goto(`${UI}${path}`)
+    await page.waitForTimeout(2500)
+    const registered = await page.evaluate(async () => !!(await navigator.serviceWorker.getRegistration()))
+    assert(!registered, `a service worker was registered for an anonymous visit to ${path}`)
+  }
   await context.close()
 })
 
@@ -116,7 +118,7 @@ await check('workspace installs the shell and says it now works offline', async 
   await open(page, `${UI}/app/products`)
   await page.getByRole('heading', { name: 'Inventory', level: 1 }).waitFor()
   await swControlled(page)
-  await page.getByText('Procure Paddy will now open on this device, even without a connection.').waitFor({ timeout: 10000 })
+  await page.getByText('Procurepaddy will now open on this device, even without a connection.').waitFor({ timeout: 10000 })
   await page.screenshot({ path: SHOTS + '2-offline-ready.png' })
   await page.close()
 })
@@ -182,7 +184,7 @@ await check('update waits for the user, then Reload switches to the new version'
   // Type into the search box first: an update must never throw this away on its own.
   await page.getByLabel('Search products').fill('half-typed')
   await page.evaluate(async () => (await navigator.serviceWorker.getRegistration())?.update())
-  await page.getByText('A new version of Procure Paddy is ready').waitFor({ timeout: 20000 })
+  await page.getByText('A new version of Procurepaddy is ready').waitFor({ timeout: 20000 })
   await page.waitForTimeout(1500)
   assert(
     (await page.getByLabel('Search products').inputValue()) === 'half-typed',
@@ -192,12 +194,12 @@ await check('update waits for the user, then Reload switches to the new version'
 
   // "Later" hides it; the next load offers it again.
   await page.getByRole('button', { name: 'Later' }).click()
-  assert((await page.getByText('A new version of Procure Paddy is ready').count()) === 0, 'Later did not hide it')
+  assert((await page.getByText('A new version of Procurepaddy is ready').count()) === 0, 'Later did not hide it')
   const reloaded = page.waitForResponse((r) => r.url().endsWith('/api/auth/refresh'))
   await page.reload()
   await reloaded
   await keepRefreshToken(page)
-  await page.getByText('A new version of Procure Paddy is ready').waitFor({ timeout: 15000 })
+  await page.getByText('A new version of Procurepaddy is ready').waitFor({ timeout: 15000 })
 
   const afterUpdate = page.waitForResponse((r) => r.url().endsWith('/api/auth/refresh'))
   await Promise.all([page.waitForEvent('load'), page.getByRole('button', { name: 'Reload' }).click()])
@@ -205,16 +207,16 @@ await check('update waits for the user, then Reload switches to the new version'
   await page.getByRole('heading', { name: 'Inventory', level: 1 }).waitFor()
   const newEntry = await page.evaluate(() => document.querySelector('script[type="module"]')?.getAttribute('src'))
   assert(newEntry && newEntry !== oldEntry, `still on the old version (${oldEntry})`)
-  assert((await page.getByText('A new version of Procure Paddy is ready').count()) === 0, 'prompt still shown')
+  assert((await page.getByText('A new version of Procurepaddy is ready').count()) === 0, 'prompt still shown')
   await keepRefreshToken(page)
   await page.close()
 })
 
-await check('account menu offers "Install Procure Paddy" only when the browser can install', async () => {
+await check('account menu offers "Install Procurepaddy" only when the browser can install', async () => {
   const page = await context.newPage()
   await open(page, `${UI}/app`)
   await page.getByRole('button', { name: 'Account menu' }).click()
-  assert((await page.getByRole('menuitem', { name: 'Install Procure Paddy' }).count()) === 0, 'shown with no prompt')
+  assert((await page.getByRole('menuitem', { name: 'Install Procurepaddy' }).count()) === 0, 'shown with no prompt')
   await page.getByRole('button', { name: 'Account menu' }).click()
 
   // Simulate Chromium offering installation.
@@ -228,7 +230,7 @@ await check('account menu offers "Install Procure Paddy" only when the browser c
     window.dispatchEvent(event)
   })
   await page.getByRole('button', { name: 'Account menu' }).click()
-  await page.getByRole('menuitem', { name: 'Install Procure Paddy' }).click()
+  await page.getByRole('menuitem', { name: 'Install Procurepaddy' }).click()
   assert(await page.evaluate(() => window.__installPrompted === true), 'browser install dialog not requested')
   await page.close()
 })
@@ -238,7 +240,7 @@ await check('iPhone: Add to Home Screen hint shows, and stays dismissed', async 
   const iphone = await signedInContext({ ...devices['iPhone 13'] })
   const page = await iphone.newPage()
   await open(page, `${UI}/app`)
-  const hint = page.getByText(/Add Procure Paddy to your Home Screen/)
+  const hint = page.getByText(/Add Procurepaddy to your Home Screen/)
   await hint.waitFor({ timeout: 10000 })
   await keepRefreshToken(page)
   await page.screenshot({ path: SHOTS + '7-ios-hint.png' })
@@ -256,7 +258,7 @@ await check('iPhone: Add to Home Screen hint shows, and stays dismissed', async 
   await open(p2, `${UI}/app`)
   await p2.getByRole('heading', { level: 1 }).first().waitFor()
   await keepRefreshToken(p2)
-  assert((await p2.getByText(/Add Procure Paddy to your Home Screen/).count()) === 0, 'hint shown on desktop')
+  assert((await p2.getByText(/Add Procurepaddy to your Home Screen/).count()) === 0, 'hint shown on desktop')
   await desktop.close()
 })
 

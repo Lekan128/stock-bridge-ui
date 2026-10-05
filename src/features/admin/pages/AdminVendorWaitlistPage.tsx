@@ -127,7 +127,7 @@ export function AdminVendorWaitlistPage() {
             Vendor waitlist
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-neutral-600">
-            Businesses that applied to sell on Procure Paddy. Approving one creates their vendor
+            Businesses that applied to sell on ProcurePal. Approving one creates their vendor
             account and emails them their login; declining sends them your note.
           </p>
         </div>

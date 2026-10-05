@@ -241,7 +241,7 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
   const activeDirectoryVendors = directoryVendors.filter((v) => v.active)
   const directoryOptions = activeDirectoryVendors.map((v) => ({
     id: v.id,
-    label: v.kind === 'VERIFIED' ? `${v.name} (ProcurePaddy ${UNIT_COPY.SELLER.toLowerCase()})` : v.name,
+    label: v.kind === 'VERIFIED' ? `${v.name} (ProcurePal ${UNIT_COPY.SELLER.toLowerCase()})` : v.name,
   }))
   const vendorFieldVisible = supplierOverride || activeProductVendors.length !== 1
   const vendorOptions: { id: string; label: string }[] =

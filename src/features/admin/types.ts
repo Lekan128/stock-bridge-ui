@@ -521,7 +521,7 @@ export interface SuperAdminVendorDetail {
   logoUrl: string | null
   commissionRate: number | null
   /**
-   * Where ProcurePaddy pays this seller out, and the registration number behind the business.
+   * Where ProcurePal pays this seller out, and the registration number behind the business.
    *
    * ⚠️ Not the same as the bank details on a *company vendor* row. A buying company's directory
    * entry for this same seller carries its own independent set — how that one buyer pays them

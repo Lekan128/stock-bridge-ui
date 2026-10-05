@@ -10,7 +10,7 @@ import { isAppError } from '@/types/api'
  * A 404 here is an ordinary outcome, not an exception to shout about: the id might name a buying
  * company, a deactivated vendor, or a seller with nothing listed yet. The API collapses all of
  * those into one "not available" deliberately — distinguishing them would turn a public endpoint
- * into a way to confirm which companies use ProcurePaddy — so the caller renders a plain
+ * into a way to confirm which companies use ProcurePal — so the caller renders a plain
  * not-found state rather than trying to explain which case it was.
  */
 export function useSeller(idOrSlug: string | undefined) {

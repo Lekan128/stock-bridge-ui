@@ -58,6 +58,7 @@ Screenshots — the ones suites take on purpose, and one per page whenever a che
 |---|---|
 | `urgent-fixes` | The session survives an unreachable server at startup; only a refused refresh logs out. |
 | `pwa-shell` | Installable; opens offline straight into the workspace; updates wait for the user. |
+| `landing` | Builds the page both ways. Founding offer: real HTML with FAQ markup and working links, under 70 KB of JavaScript, live counts, the stamp, the two-field form booking a setup (cleaned up after), the sticky phone button, axe clean. Early access: title, canonical and JSON-LD, hydrates cleanly, old marketplace addresses keep their query strings, an installed app still gets the real page. Leaves the early-access build in place. |
 | `lost-refresh` | A token refresh whose reply is lost doesn't log the user out (D7). |
 | `data-layer` | Screens open from the saved copy, marked as such, and refresh behind it. |
 | `catalog` | The on-device catalogue: search and filters offline, deletes, logout wipes it; at 100k, sync time, search latency, rows rendered, memory. |

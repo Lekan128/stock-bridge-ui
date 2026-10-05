@@ -89,9 +89,9 @@ export function SupplierField({
           <option key={vendor.id} value={vendor.id}>
             {vendor.name}
             {/* The kind is spelled out in the option text because a <select> cannot carry a badge,
-                and "which of these is an actual ProcurePaddy seller" is the same question the
+                and "which of these is an actual ProcurePal seller" is the same question the
                 directory list answers with one. */}
-            {vendor.kind === 'VERIFIED' ? ' (ProcurePaddy seller)' : ''}
+            {vendor.kind === 'VERIFIED' ? ' (ProcurePal seller)' : ''}
           </option>
         ))}
         {canCreate && <option value={NEW_SUPPLIER}>+ Add new supplier</option>}

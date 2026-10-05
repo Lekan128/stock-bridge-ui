@@ -13,7 +13,7 @@ export function Topbar({ onOpenMobileSidebar }: TopbarProps) {
   const location = useLocation()
   // Routes without a nav entry (profile, order detail, the marketplace admin sub-pages) fall back
   // to the product name rather than showing a stale title from a prefix match.
-  const pageTitle = findNavItemForPath(location.pathname)?.label ?? 'Procure Paddy'
+  const pageTitle = findNavItemForPath(location.pathname)?.label ?? 'Procurepaddy'
 
   return (
     <header className="flex h-16 shrink-0 items-center justify-between border-b border-neutral-200 bg-white px-4 sm:px-6">
