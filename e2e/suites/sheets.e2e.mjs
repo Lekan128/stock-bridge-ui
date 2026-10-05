@@ -185,13 +185,41 @@ await check('offline: the receipt stays RECORDED and says plainly where the writ
   await goOnline()
 })
 
-await check('count: the difference against the book is shown before anything is recorded', async () => {
+// Reported 2026-10-05: a line added at "1 bag" kept asking for 50 kg after the quantity became 2 kg,
+// and the sheet refused with "Allocated amounts must add up to 2 kg" — a mismatch it made itself.
+await check('stock out: a suggested delivery line follows the quantity until you type in it', async () => {
+  await page.getByRole('button', { name: 'Stock out' }).click()
+  const units = dialog.getByRole('group', { name: /counted in/i })
+  await units.getByRole('button', { name: 'Bag of 50 kg' }).click()
+  await dialog.getByLabel('Quantity').fill('1')
+  await dialog.getByRole('button', { name: /Choose which deliveries/ }).click()
+  await dialog.getByRole('button', { name: 'Add a line' }).click()
+  const amount = dialog.getByLabel('Amount (kg)')
+  assert((await amount.inputValue()) === '50', `suggested ${await amount.inputValue()}, not 50`)
+
+  const kg = units.getByRole('button', { name: 'kg', exact: true })
+  await kg.click()
+  assert((await kg.getAttribute('aria-pressed')) === 'true' && (await kg.getAttribute('class')).includes('bg-primary-600'), 'the chosen unit is not plainly selected')
+  await dialog.getByLabel('Quantity').fill('2')
+  await page.waitForFunction(() => document.querySelector('[id^="stock-out-lot-qty-"]')?.value === '2')
+  assert((await dialog.getByRole('alert').count()) === 0, 'a mismatch the sheet made itself')
+
+  // Typed by hand, the line is the user's: it stays, and the sheet says how to make them agree.
+  await amount.fill('5')
+  await dialog.getByLabel('Quantity').fill('3')
+  await dialog.getByRole('alert').getByText("These deliveries add up to 5 kg, but you're taking out 3 kg. Change the quantity or an amount so they match.").waitFor()
+  assert((await amount.inputValue()) === '5', 'a typed amount was overwritten')
+  await page.screenshot({ path: SHOTS + '5-allocation.png' })
+  await page.keyboard.press('Escape')
+})
+
+await check('count: the difference from what the app says is shown before anything is recorded', async () => {
   await page.getByRole('button', { name: 'Count', exact: true }).click()
   await dialog.getByLabel(/How much is on the shelf/).fill('1096')
-  await dialog.getByText('vs the book').waitFor()
+  await dialog.getByText('vs what the app says').waitFor()
   await dialog.locator('[data-stock-figure]').getByText('−4').waitFor()
   await dialog.getByLabel(/How much is on the shelf/).fill('1100')
-  await dialog.getByText('Matches the book.').waitFor()
+  await dialog.getByText('Matches what the app says.').waitFor()
   await page.screenshot({ path: SHOTS + '5-count.png' })
   await page.keyboard.press('Escape')
   assert((await onHand(rice.id)) === 1100, `server has ${await onHand(rice.id)}`)

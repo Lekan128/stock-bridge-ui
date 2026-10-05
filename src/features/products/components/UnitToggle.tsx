@@ -123,9 +123,11 @@ export function UnitToggle({ value, onChange, options, label = UNIT_COPY.COUNTED
             disabled={disabled}
             onClick={() => onChange(option)}
             className={`rounded-sm px-2.5 py-1 text-xs whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-60 ${
+              // Filled, like the other selected chips: a white chip on a near-white track was easy
+              // to misread, and the unit decides what the number means (2 g is not 2 baskets).
               selected
-                ? 'border border-neutral-200 bg-white font-semibold text-neutral-900 shadow-sm'
-                : 'border border-transparent font-medium text-neutral-500 hover:text-neutral-700'
+                ? 'border border-primary-600 bg-primary-600 font-semibold text-white shadow-sm'
+                : 'border border-transparent font-medium text-neutral-600 hover:bg-white hover:text-neutral-900'
             }`}
           >
             {option.label}

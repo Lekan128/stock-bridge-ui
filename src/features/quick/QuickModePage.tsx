@@ -42,13 +42,20 @@ import { isAppError } from '@/types/api'
 
 type Mode = 'in' | 'out' | 'count'
 
-const MODES: { value: Mode; label: string; verb: string }[] = [
-  { value: 'in', label: 'Receive', verb: 'Received' },
-  { value: 'out', label: 'Issue', verb: 'Issued' },
-  { value: 'count', label: 'Count', verb: 'Counted' },
+// The same names as everywhere else in the app (it said Receive and Issue, warehouse words a
+// shopkeeper had to guess at), each with one line saying what it does — Count most of all.
+const MODES: { value: Mode; label: string; verb: string; meaning: string }[] = [
+  { value: 'in', label: 'Stock in', verb: 'Stock in', meaning: 'Goods coming in, like a delivery or a return. Adds them to your stock.' },
+  { value: 'out', label: 'Stock out', verb: 'Stock out', meaning: 'Goods going out: sold, used or sent away. Takes them off your stock.' },
+  {
+    value: 'count',
+    label: 'Count',
+    verb: 'Counted',
+    meaning: "Count what's on the shelf. The app's figure is corrected to match, and the difference goes into the history.",
+  },
 ]
-/** The Record button says what it will do: "Receive 2 bags (100 kg)". */
-const ACTION: Record<Mode, string> = { in: 'Receive', out: 'Issue', count: 'Count' }
+/** The Record button says what it will do: "Stock in 2 bags (100 kg)". */
+const ACTION: Record<Mode, string> = { in: 'Stock in', out: 'Stock out', count: 'Record count:' }
 
 /** One write made in this session, and where it stands. */
 interface SessionEntry {
@@ -150,18 +157,30 @@ export function QuickModePage() {
       </header>
 
       <div className="mx-auto flex w-full max-w-md min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
-        <div role="group" aria-label="What are you doing?" className="grid grid-cols-3 gap-1 rounded-lg bg-neutral-100 p-1">
-          {MODES.filter((m) => allowed[m.value]).map((m) => (
-            <button
-              key={m.value}
-              type="button"
-              aria-pressed={mode === m.value}
-              onClick={() => chooseMode(m.value)}
-              className={`h-12 rounded-md text-base font-semibold ${mode === m.value ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-600'}`}
-            >
-              {m.label}
-            </button>
-          ))}
+        <div className="flex flex-col gap-2">
+          <div
+            role="group"
+            aria-label="What are you doing?"
+            aria-describedby="quick-mode-meaning"
+            className="grid grid-cols-3 gap-1 rounded-lg bg-neutral-100 p-1"
+          >
+            {MODES.filter((m) => allowed[m.value]).map((m) => (
+              <button
+                key={m.value}
+                type="button"
+                aria-pressed={mode === m.value}
+                onClick={() => chooseMode(m.value)}
+                className={`h-12 rounded-md text-base font-semibold ${
+                  mode === m.value ? 'bg-primary-600 text-white shadow-sm' : 'text-neutral-600'
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+          <p id="quick-mode-meaning" className="text-sm text-neutral-600">
+            {MODES.find((m) => m.value === mode)?.meaning}
+          </p>
         </div>
 
         {flash ? (
@@ -483,11 +502,11 @@ function AmountStep({
         {difference != null && (
           <div className="mt-2 flex items-baseline gap-2">
             {difference === 0 ? (
-              <span className="text-base font-medium text-accent-700">Matches the book.</span>
+              <span className="text-base font-medium text-accent-700">Matches what the app says.</span>
             ) : (
               <>
                 <StockFigure quantity={difference} unit={symbol} signed size="md" />
-                <span className="text-base text-neutral-600">vs the book</span>
+                <span className="text-base text-neutral-600">vs what the app says</span>
               </>
             )}
           </div>

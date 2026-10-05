@@ -126,7 +126,7 @@ export function StockAdjustmentModal({
           inputMode="numeric"
           autoFocus
           error={errors.countedQuantity?.message}
-          hint={`The book says ${formatQuantity(currentQuantity, stockUnit)}.`}
+          hint={`The app says ${formatQuantity(currentQuantity, stockUnit)}.`}
           {...register('countedQuantity')}
         />
         {/* The difference, before anything is recorded (C3, D1): set as a figure, because it is
@@ -134,11 +134,11 @@ export function StockAdjustmentModal({
         {difference != null && (
           <div role="status" className="flex items-baseline gap-2 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2">
             {difference === 0 ? (
-              <span className="text-sm font-medium text-accent-700">Matches the book.</span>
+              <span className="text-sm font-medium text-accent-700">Matches what the app says.</span>
             ) : (
               <>
                 <StockFigure quantity={difference} unit={stockUnit} signed size="md" />
-                <span className="text-sm text-neutral-600">vs the book</span>
+                <span className="text-sm text-neutral-600">vs what the app says</span>
               </>
             )}
           </div>

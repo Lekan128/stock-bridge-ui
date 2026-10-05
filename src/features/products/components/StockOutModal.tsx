@@ -48,6 +48,38 @@ interface AllocationRow {
   inMovementId: string
   /** **Base units**, like everything else about a lot. See {@link StockOutModal}'s javadoc. */
   quantity: string
+  /**
+   * Filled in by "Add a line" and not typed in since: it follows the quantity above. It was filled
+   * once and then left alone, so changing the quantity (or switching 1 basket to 2 g) left a line
+   * asking for the old amount and a "must add up" error the user never caused. Typing an amount
+   * makes the line the user's own.
+   */
+  auto: boolean
+}
+
+/**
+ * Shares what is still needed across the lines that follow the quantity, oldest line first, each
+ * up to what its delivery has left. Lines the user typed come off the total first. Returns the
+ * same array when nothing changes, so it is safe to run on every change.
+ */
+function followQuantity(
+  rows: AllocationRow[],
+  baseQuantity: number,
+  remainingFor: (inMovementId: string) => number | undefined,
+): AllocationRow[] {
+  if (!rows.some((row) => row.auto)) return rows
+  let outstanding = Math.max(0, baseQuantity - rows.filter((row) => !row.auto).reduce((sum, row) => sum + (Number(row.quantity) || 0), 0))
+  let changed = false
+  const next = rows.map((row) => {
+    if (!row.auto) return row
+    const take = Math.max(0, Math.min(outstanding, remainingFor(row.inMovementId) ?? outstanding))
+    outstanding -= take
+    const quantity = take > 0 ? String(take) : ''
+    if (quantity === row.quantity) return row
+    changed = true
+    return { ...row, quantity }
+  })
+  return changed ? next : rows
 }
 
 let rowKeySeq = 0
@@ -260,12 +292,25 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
 
   const lotById = new Map(openLots.map((lot) => [lot.inMovementId, lot]))
 
+  const remainingFor = (inMovementId: string) => lotById.get(inMovementId)?.remaining
+
   function removeAllocationRow(key: string) {
-    setAllocationRows((rows) => rows.filter((r) => r.key !== key))
+    setAllocationRows((rows) => followQuantity(rows.filter((r) => r.key !== key), baseQuantity, remainingFor))
   }
   function updateAllocationRow(key: string, patch: Partial<AllocationRow>) {
-    setAllocationRows((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)))
+    setAllocationRows((rows) =>
+      followQuantity(
+        rows.map((r) => (r.key === key ? { ...r, ...patch } : r)),
+        baseQuantity,
+        remainingFor,
+      ),
+    )
   }
+
+  // The quantity, its unit or the deliveries on file changed: the lines that follow it follow.
+  useEffect(() => {
+    setAllocationRows((rows) => followQuantity(rows, baseQuantity, (id) => openLots.find((lot) => lot.inMovementId === id)?.remaining))
+  }, [baseQuantity, openLots])
 
   /**
    * Odoo's "Add a line", pre-filled with the FIFO suggestion: the oldest open lot not already on
@@ -286,6 +331,7 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
           key: newRowKey(),
           inMovementId: suggestion?.inMovementId ?? '',
           quantity: suggestedQuantity > 0 ? String(suggestedQuantity) : '',
+          auto: suggestion != null,
         },
       ]
     })
@@ -317,7 +363,9 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
     const lot = lotById.get(row.inMovementId)
     return lot != null && Number(row.quantity) > lot.remaining
   })
-  const allocationRequirement = `Allocated amounts must add up to ${formatQuantity(baseQuantity, stockUnitText)}.`
+  /** What is wrong and what to do about it, in one sentence (it was "Allocated 5 g so far.
+   *  Allocated amounts must add up to 2 g." — true, and no help). */
+  const allocationRequirement = `These deliveries add up to ${formatQuantity(allocationTotal ?? 0, stockUnitText)}, but you're taking out ${formatQuantity(baseQuantity, stockUnitText)}. Change the quantity or an amount so they match.`
 
   async function submit() {
     setSubmitError(null)
@@ -566,7 +614,7 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
                               aria-invalid={overdrawn || undefined}
                               aria-describedby={lot ? `${qtyInputId}-hint` : undefined}
                               value={row.quantity}
-                              onChange={(e) => updateAllocationRow(row.key, { quantity: e.target.value })}
+                              onChange={(e) => updateAllocationRow(row.key, { quantity: e.target.value, auto: false })}
                               className={`w-full rounded-md border px-2 py-1.5 text-sm text-neutral-900 focus:ring-2 focus:outline-none ${
                                 overdrawn
                                   ? 'border-danger-300 focus:border-danger-500 focus:ring-danger-100'
@@ -602,7 +650,7 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
 
               {allocationMismatch && (
                 <p role="alert" className="text-xs text-danger-600">
-                  Allocated {formatQuantity(allocationTotal ?? 0, stockUnitText)} so far. {allocationRequirement}
+                  {allocationRequirement}
                 </p>
               )}
             </div>

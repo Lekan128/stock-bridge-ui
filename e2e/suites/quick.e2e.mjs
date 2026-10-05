@@ -109,6 +109,10 @@ await check('from Inventory on a phone, one tap opens quick mode, full screen, w
   assert(await search().evaluate((el) => el === document.activeElement), 'the search box is not ready for a scan')
   const box = await page.locator('.fixed.inset-0').first().boundingBox()
   assert(box.width >= 389 && box.height >= 843, 'not full screen')
+  // The app's own words, and each mode says what it does (it said Receive / Issue / Count, unexplained).
+  const modes = await page.getByRole('group', { name: 'What are you doing?' }).getByRole('button').allInnerTexts()
+  assert(JSON.stringify(modes) === JSON.stringify(['Stock in', 'Stock out', 'Count']), `modes: ${modes}`)
+  await page.getByText('Goods coming in, like a delivery or a return. Adds them to your stock.').waitFor()
 })
 
 await check('receive: find, a keypad amount in bags, the stamp, and straight back to the scan box', async () => {
@@ -118,12 +122,12 @@ await check('receive: find, a keypad amount in bags, the stamp, and straight bac
   assert(key.height >= 56, `keypad key ${key.height}px`)
   await keypad(['2'])
   await page.getByText('2 bags (100 kg)').first().waitFor()
-  await page.getByRole('button', { name: 'Receive 2 bags (100 kg)' }).click()
+  await page.getByRole('button', { name: 'Stock in 2 bags (100 kg)' }).click()
   await page.locator('[role="status"] [data-stamp="synced"]').first().waitFor()
   await page.screenshot({ path: SHOTS + '1-stamp.png' })
   await search().waitFor({ timeout: 3000 })
   await page.waitForFunction(() => document.activeElement?.id === 'quick-search')
-  await session().getByText('Received · 2 bags (100 kg)').waitFor()
+  await session().getByText('Stock in · 2 bags (100 kg)').waitFor()
   assert((await onHand(rice.id)) === 1100, `server has ${await onHand(rice.id)}`)
 })
 
@@ -134,7 +138,7 @@ await check('Undo takes the last one back', async () => {
 })
 
 await check('nothing typed: says so instead of recording', async () => {
-  await page.getByRole('button', { name: 'Issue', exact: true }).click()
+  await page.getByRole('button', { name: 'Stock out', exact: true }).click()
   await search().fill('rice (c4)')
   await page.getByRole('button', { name: /Rice \(c4\)/ }).click()
   await page.getByRole('button', { name: 'Record' }).click()
@@ -149,7 +153,7 @@ await check('offline: a scanned barcode finds the product on the phone; the issu
   await page.keyboard.press('Enter')
   await page.getByText('Bar soap (c4)').first().waitFor()
   await keypad(['5'])
-  await page.getByRole('button', { name: /^Issue 5 pieces/ }).click()
+  await page.getByRole('button', { name: /^Stock out 5 pieces/ }).click()
   await search().waitFor({ timeout: 4000 })
   const row = session().locator('li').filter({ hasText: 'Bar soap (c4)' })
   await row.locator('[data-stamp="recorded"]').waitFor()
@@ -160,15 +164,16 @@ await check('offline: a scanned barcode finds the product on the phone; the issu
   assert((await onHand(soap.id)) === 35, `server has ${await onHand(soap.id)}`)
 })
 
-await check('count: the shelf figure and its difference from the book, then recorded', async () => {
+await check('count: says what it does, then the shelf figure and its difference from the app, then recorded', async () => {
   await page.getByRole('button', { name: 'Count', exact: true }).click()
+  await page.getByText("Count what's on the shelf. The app's figure is corrected to match").waitFor()
   await search().fill('rice (c4)')
   await page.getByRole('button', { name: /Rice \(c4\)/ }).click()
   await keypad(['9', '9', '6'])
-  await page.getByText('vs the book').waitFor()
+  await page.getByText('vs what the app says').waitFor()
   await page.locator('[data-stock-figure]').getByText('−4').waitFor()
   await page.screenshot({ path: SHOTS + '3-count.png' })
-  await page.getByRole('button', { name: /^Count 996 kg/ }).click()
+  await page.getByRole('button', { name: /^Record count: 996 kg/ }).click()
   await search().waitFor({ timeout: 4000 })
   assert((await onHand(rice.id)) === 996, `server has ${await onHand(rice.id)}`)
 })
