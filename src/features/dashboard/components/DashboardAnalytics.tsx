@@ -1,13 +1,5 @@
 import { useState } from 'react'
-import {
-  AlertTriangle,
-  ArrowDownToLine,
-  ArrowUpFromLine,
-  PackageCheck,
-  PackageMinus,
-  PackagePlus,
-  PackageX,
-} from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
 import { ChartCard } from '@/components/analytics/ChartCard'
@@ -20,8 +12,6 @@ import {
 } from '@/components/analytics/dateRange'
 import { formatCompactCurrency, formatDateRange, formatNumber } from '@/components/analytics/formatters'
 import { MovementsChart } from '@/components/analytics/MovementsChart'
-import { StatCard } from '@/components/analytics/StatCard'
-import { SummaryCardsSkeleton } from '@/components/analytics/SummaryCardsSkeleton'
 import { TopProductsChart } from '@/components/analytics/TopProductsChart'
 import type { TopProductsDirection, TopProductsMetric } from '@/components/analytics/types'
 import { useAnalyticsSummary } from '@/features/analytics/hooks/useAnalyticsSummary'
@@ -31,8 +21,9 @@ import { useTopProducts } from '@/features/analytics/hooks/useTopProducts'
 const TOP_PRODUCTS_LIMIT = 8
 
 /**
- * Analytics half of the dashboard. Mounted only for users with VIEW_ANALYTICS so
- * that the analytics hooks below never fire (and never 403) for anyone else.
+ * The movements half of the dashboard (C5): one chart of value in and out, its legend carrying the
+ * totals the four old cards did, and top products. Mounted only for users with VIEW_ANALYTICS so
+ * the analytics hooks never fire (and never 403) for anyone else.
  */
 export function DashboardAnalytics() {
   const { user } = useAuth()
@@ -43,7 +34,6 @@ export function DashboardAnalytics() {
   const params = { from: toApiDateTime(range.from), to: toApiDateTime(range.to) }
   const granularity = granularityForRange(range.from, range.to)
   const rangeLabel = formatDateRange(range.from, range.to)
-  const canViewProducts = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.VIEW_PRODUCTS)
   /**
    * Gates the drill-through on the four movement cards. MANAGE_INVENTORY because that is what the
    * report itself requires — linking somebody to a 403 is worse than not linking them.
@@ -60,7 +50,7 @@ export function DashboardAnalytics() {
     return `/app/stock-movements?${query.toString()}`
   }
 
-  const { data: summary, loading: summaryLoading, error: summaryError } = useAnalyticsSummary(params)
+  const summary = useAnalyticsSummary(params)
   const {
     data: movements,
     loading: movementsLoading,
@@ -72,93 +62,55 @@ export function DashboardAnalytics() {
     error: topProductsError,
   } = useTopProducts({ ...params, by: metric, direction, limit: TOP_PRODUCTS_LIMIT })
 
+  // Pattern C: the figures say when they were true — and that they are the saved copy, offline.
+  const asOf =
+    summary.updatedAt != null
+      ? `${summary.showingSaved ? 'Offline · ' : ''}as of ${new Date(summary.updatedAt).toLocaleTimeString(undefined, {
+          hour: 'numeric',
+          minute: '2-digit',
+        })}`
+      : null
+
   return (
-    <div className="flex flex-col gap-6">
+    <section aria-labelledby="movements-heading" className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">Dashboard</h1>
-          <p className="text-sm text-neutral-500">Stock movement trends and top products.</p>
+          <h2 id="movements-heading" className="text-base font-semibold text-neutral-900">
+            Stock movements
+          </h2>
+          <p className="text-sm text-neutral-500">
+            {rangeLabel}
+            {asOf && <span data-as-of> · {asOf}</span>}
+          </p>
         </div>
         <DateRangeControl value={range} onChange={setRange} />
       </div>
 
-      {summaryLoading && !summary && <SummaryCardsSkeleton />}
-
-      {summaryError && !summary && (
-        <div className="rounded-md border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700">
-          {summaryError}
-        </div>
-      )}
-
-      {summary && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard
-            label="Stock In Value"
-            value={formatCompactCurrency(summary.totalInValue)}
-            subtitle={rangeLabel}
-            icon={PackagePlus}
-            href={movementsHref('IN')}
-          />
-          <StatCard
-            label="Stock Out Value"
-            value={formatCompactCurrency(summary.totalOutValue)}
-            subtitle={rangeLabel}
-            icon={PackageMinus}
-            href={movementsHref('OUT')}
-          />
-          <StatCard
-            label="Units Moved In"
-            value={formatNumber(summary.totalUnitsIn)}
-            subtitle={rangeLabel}
-            icon={ArrowDownToLine}
-            href={movementsHref('IN')}
-          />
-          <StatCard
-            label="Units Moved Out"
-            value={formatNumber(summary.totalUnitsOut)}
-            subtitle={rangeLabel}
-            icon={ArrowUpFromLine}
-            href={movementsHref('OUT')}
-          />
-          <StatCard
-            label="Active Products"
-            value={formatNumber(summary.activeProductCount)}
-            subtitle="Currently active in catalog"
-            icon={PackageCheck}
-          />
-          {/* The census half of stock visibility (`UX_CONSISTENCY_DESIGN_PLAN.md`, Pattern B) —
-              "Low Stock" on its own was the only stock-level figure on this dashboard; a count
-              that is never shown next to anything never tells you whether it's good or bad. */}
-          <StatCard
-            label="Well Stocked"
-            value={formatNumber(summary.wellStockedProductCount)}
-            subtitle="Above their low-stock alert"
-            icon={PackageCheck}
-            variant="success"
-            href={canViewProducts ? '/app/products?stockStatus=OK' : undefined}
-          />
-          <StatCard
-            label="Low Stock"
-            value={formatNumber(summary.lowStockProductCount)}
-            subtitle={summary.lowStockProductCount > 0 ? 'Needs attention' : 'All stocked up'}
-            icon={AlertTriangle}
-            variant="warning"
-            href={canViewProducts ? '/app/products/low-stock' : undefined}
-          />
-          <StatCard
-            label="Out of Stock"
-            value={formatNumber(summary.outOfStockProductCount)}
-            subtitle={summary.outOfStockProductCount > 0 ? 'Nothing left to sell' : 'Nothing has run out'}
-            icon={PackageX}
-            variant={summary.outOfStockProductCount > 0 ? 'danger' : 'default'}
-            href={canViewProducts ? '/app/products?stockStatus=OUT' : undefined}
-          />
-        </div>
-      )}
-
-      <ChartCard title="Movements over time" subtitle="Stock-in vs stock-out value">
-        <MovementsChart data={movements} loading={movementsLoading} error={movementsError} granularity={granularity} />
-      </ChartCard>
+      {/* One chart; the four in/out cards it replaces are its legend now (C5, U7). Each total
+          links to the report behind it, for the same dates. */}
+      <div className="rounded-lg border border-neutral-200 bg-white p-5">
+        {summary.error && !summary.data ? (
+          <p className="text-sm text-danger-700">{summary.error}</p>
+        ) : (
+          <dl className="mb-4 flex flex-wrap gap-x-8 gap-y-3" data-legend>
+            <LegendTotal
+              label="In"
+              swatch="bg-primary-500"
+              value={summary.data ? formatCompactCurrency(summary.data.totalInValue) : '…'}
+              units={summary.data ? `${formatNumber(summary.data.totalUnitsIn)} units` : ''}
+              href={movementsHref('IN')}
+            />
+            <LegendTotal
+              label="Out"
+              swatch="bg-accent-600"
+              value={summary.data ? formatCompactCurrency(summary.data.totalOutValue) : '…'}
+              units={summary.data ? `${formatNumber(summary.data.totalUnitsOut)} units` : ''}
+              href={movementsHref('OUT')}
+            />
+          </dl>
+        )}
+        <MovementsChart data={movements} loading={movementsLoading} error={movementsError} granularity={granularity} showLegend={false} />
+      </div>
 
       <ChartCard title="Top products" subtitle="Ranked by value or quantity, in or out">
         <TopProductsChart
@@ -171,6 +123,41 @@ export function DashboardAnalytics() {
           onDirectionChange={setDirection}
         />
       </ChartCard>
-    </div>
+    </section>
+  )
+}
+
+function LegendTotal({
+  label,
+  swatch,
+  value,
+  units,
+  href,
+}: {
+  label: string
+  swatch: string
+  value: string
+  units: string
+  href?: string
+}) {
+  const body = (
+    <>
+      <dt className="flex items-center gap-1.5 text-xs font-medium text-neutral-500">
+        {/* The chart's own series colours (chartTokens): in navy, out green. */}
+        <span className={`h-2.5 w-2.5 rounded-sm ${swatch}`} aria-hidden="true" />
+        {label}
+      </dt>
+      <dd className="mt-0.5 flex items-baseline gap-2 tabular-nums">
+        <span className="text-xl font-semibold text-neutral-900">{value}</span>
+        <span className="text-sm text-neutral-500">{units}</span>
+      </dd>
+    </>
+  )
+  return href ? (
+    <Link to={href} className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
+      <div>{body}</div>
+    </Link>
+  ) : (
+    <div>{body}</div>
   )
 }

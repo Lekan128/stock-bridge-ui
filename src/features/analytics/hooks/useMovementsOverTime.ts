@@ -11,5 +11,13 @@ export function useMovementsOverTime(params: AnalyticsDateRangeParams & { granul
     keepPrevious: true,
   })
 
-  return { data: result.data ?? null, loading: result.loading, error: result.error }
+  // When the figures were true, and whether they are the phone's saved copy — for the dashboard's
+  // "as of" line (C5, Pattern C: every number shows its freshness).
+  return {
+    data: result.data ?? null,
+    loading: result.loading,
+    error: result.error,
+    updatedAt: result.updatedAt,
+    showingSaved: result.showingSaved,
+  }
 }
