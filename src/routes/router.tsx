@@ -43,6 +43,9 @@ const DesignSpikePage =
   import.meta.env.DEV || import.meta.env.VITE_DESIGN_PREVIEW === 'true'
     ? lazy(() => import('@/features/designPreview/DesignSpikePage').then((m) => ({ default: m.DesignSpikePage })))
     : null
+const QuickModePage = lazy(() =>
+  import('@/features/quick/QuickModePage').then((m) => ({ default: m.QuickModePage })),
+)
 const CheckoutPage = lazy(() =>
   import('@/pages/CheckoutPage').then((m) => ({ default: m.CheckoutPage })),
 )
@@ -511,6 +514,16 @@ export function AppRoutes() {
             refusal the network tab would never explain. */}
           {/* "Record a delivery" — static, so declared above products/:id like the import routes.
             MANAGE_INVENTORY alone, matching both endpoints it calls: it only ever records stock. */}
+          {/* Quick mode (C4): any one of the three stock authorities; the page offers only the
+            modes the person may use. */}
+          <Route
+            path="quick"
+            element={
+              <RequirePermission anyOf={[PERMISSIONS.STOCK_IN, PERMISSIONS.STOCK_OUT, PERMISSIONS.MANAGE_INVENTORY]}>
+                <QuickModePage />
+              </RequirePermission>
+            }
+          />
           <Route
             path="products/receive"
             element={

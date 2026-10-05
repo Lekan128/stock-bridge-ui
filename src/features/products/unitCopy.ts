@@ -235,7 +235,11 @@ export function stockUnitWord(symbol: string, quantity: number): string {
  * {@link formatQuantityInUnit} which does that for you.
  */
 export function formatQuantity(quantity: number, unitLabel: string | null | undefined): string {
-  const noun = unitLabel?.trim() || UNIT_COPY.NO_UNIT_LABEL
+  const label = unitLabel?.trim() || UNIT_COPY.NO_UNIT_LABEL
+  // A counted unit's label is one capitalised word ("Piece", "Bottle"); after a number it reads as
+  // a code ("5 Pieces"), so it is lower-cased first. Symbols ("kg", "L") and phrases ("Bag of 50 kg")
+  // are left exactly as they are.
+  const noun = /^[A-Z][a-z]+$/.test(label) ? label.toLowerCase() : label
   return `${formatNumber(quantity)} ${pluraliseUnitNoun(noun, quantity)}`
 }
 

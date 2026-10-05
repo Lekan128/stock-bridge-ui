@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useId, useRef, useState } from 'react'
-import { CalendarClock, Download, Plus, Search, Settings, SlidersHorizontal, Tags, Truck, Upload } from 'lucide-react'
+import { CalendarClock, Download, Plus, Search, Settings, SlidersHorizontal, Tags, Truck, Upload, Zap } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { OverflowMenu, type OverflowMenuItem } from '@/components/OverflowMenu'
 import type { CompanyCategory } from '@/features/products/categories/types'
@@ -24,6 +24,8 @@ export interface InventoryBarProps {
   onClearFilters: () => void
   canManageProducts: boolean
   canRecordDelivery: boolean
+  /** Quick mode (C4): receive, issue or count one item after another. */
+  onQuickMode?: () => void
   onAddProduct: () => void
   onBulkUpload: () => void
   onRecordDelivery: () => void
@@ -51,6 +53,9 @@ const STATUS_OPTIONS: { value: ProductStatusFilter; label: string }[] = [
 function inventoryMenuItems(props: InventoryBarProps): OverflowMenuItem[] {
   const icon = 'h-4 w-4 text-neutral-500'
   return [
+    ...(props.onQuickMode
+      ? [{ label: 'Quick mode', icon: <Zap className={icon} aria-hidden="true" />, onSelect: props.onQuickMode }]
+      : []),
     { label: 'Expected deliveries', icon: <CalendarClock className={icon} aria-hidden="true" />, onSelect: props.onExpectedDeliveries },
     ...(props.canManageProducts
       ? [

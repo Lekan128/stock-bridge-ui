@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Truck, X } from 'lucide-react'
+import { Truck, X, Zap } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
@@ -404,6 +404,7 @@ export function ProductListPage() {
     onClearFilters: () => updateListState({ status: null, category: null }),
     canManageProducts,
     canRecordDelivery: permissions.includes(PERMISSIONS.MANAGE_INVENTORY),
+    onQuickMode: canStockIn || canStockOut || permissions.includes(PERMISSIONS.MANAGE_INVENTORY) ? () => navigate('/app/quick') : undefined,
     onAddProduct: () => setAddProductOpen(true),
     onBulkUpload: () => navigate('/app/products/import'),
     onRecordDelivery: () => navigate('/app/products/receive'),
@@ -416,7 +417,20 @@ export function ProductListPage() {
   return (
     // Room at the bottom on a phone for the action bar pinned there.
     <div className="flex flex-col gap-4 pb-20 md:pb-0">
-      <h1 className="text-2xl font-semibold text-neutral-900">Inventory</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold text-neutral-900">Inventory</h1>
+        {/* On a phone, quick mode is one tap from the list (C4); on a laptop it is in "⋯". */}
+        {barProps.onQuickMode && (
+          <button
+            type="button"
+            onClick={barProps.onQuickMode}
+            className="inline-flex h-10 items-center gap-1.5 rounded-md border border-neutral-200 bg-white px-3 text-sm font-medium text-neutral-700 md:hidden"
+          >
+            <Zap className="h-4 w-4" aria-hidden="true" />
+            Quick mode
+          </button>
+        )}
+      </div>
 
       <SavedDataNote showing={showingSaved} updatedAt={updatedAt} subject="stock levels" onRetry={retryRefresh} />
 

@@ -18,6 +18,8 @@ interface StoredRow extends CatalogRow {
   /** Lower-cased once, for search. */
   _name: string
   _sku: string
+  /** The barcode, so a scanner typing into a search box finds the product offline (C4). */
+  _barcode: string
 }
 
 class CatalogDatabase extends Dexie {
@@ -42,7 +44,7 @@ const sorted = new Map<string, StoredRow[]>()
 const collator = new Intl.Collator(undefined, { sensitivity: 'base' })
 
 function toStored(row: CatalogRow): StoredRow {
-  return { ...row, _name: row.name.toLowerCase(), _sku: row.sku.toLowerCase() }
+  return { ...row, _name: row.name.toLowerCase(), _sku: row.sku.toLowerCase(), _barcode: (row.barcode ?? '').toLowerCase() }
 }
 
 function compare(field: CatalogSortField, a: StoredRow, b: StoredRow): number {
@@ -83,7 +85,7 @@ function query(q: CatalogQuery): CatalogQueryResult {
     if (q.status === 'active' && !row.active) continue
     if (q.status === 'inactive' && row.active) continue
     if (q.categoryId && row.categoryId !== q.categoryId) continue
-    if (term && !row._name.includes(term) && !row._sku.includes(term)) continue
+    if (term && !row._name.includes(term) && !row._sku.includes(term) && !row._barcode.includes(term)) continue
     counts.all += 1
     counts[row.stockStatus] += 1
     if (q.stockStatus !== 'all' && row.stockStatus !== q.stockStatus) continue
@@ -111,7 +113,7 @@ function query(q: CatalogQuery): CatalogQueryResult {
   }
 }
 
-function strip({ _name: _n, _sku: _s, ...row }: StoredRow): CatalogRow {
+function strip({ _name: _n, _sku: _s, _barcode: _b, ...row }: StoredRow): CatalogRow {
   return row
 }
 
@@ -186,7 +188,10 @@ async function handle(request: Request): Promise<unknown> {
     }
     case 'patch': {
       // The answer to a write this phone just made, shown before the feed confirms it.
-      if (rows.has(request.product.id)) await upsert([request.product])
+      // Merged over the stored row: an API product doesn't carry everything the feed does (its
+      // barcode, which the scan search in quick mode needs, C4).
+      const stored = rows.get(request.product.id)
+      if (stored) await upsert([{ ...strip(stored), ...request.product, barcode: request.product.barcode ?? stored.barcode }])
       return null
     }
     case 'query':
