@@ -1,5 +1,6 @@
 import { PackageCheck, Truck, Wallet } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { ContourLines } from '@/components/brand/ContourLines'
 import type { MarketplaceSettings } from '@/features/storefront/types'
 import { formatNairaWhole } from '@/utils/money'
 
@@ -41,8 +42,11 @@ export function StorefrontHero({ settings }: StorefrontHeroProps) {
   ]
 
   return (
-    <section className="bg-primary-600 text-white">
-      <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
+    // Navy with the brand's contour lines, as on the brand board: a large surface in the bright
+    // blues reads loud and generic.
+    <section className="relative overflow-hidden bg-primary-900 text-white">
+      <ContourLines className="absolute inset-0 h-full w-full text-white/[0.07]" />
+      <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
         <div className="max-w-2xl">
           <p className="text-xs font-semibold uppercase tracking-widest text-primary-200">
             ProcurePal wholesale marketplace
@@ -58,13 +62,13 @@ export function StorefrontHero({ settings }: StorefrontHeroProps) {
           <div className="mt-6 flex flex-wrap gap-3">
             <a
               href="#catalog"
-              className="rounded-md bg-white px-4 py-2.5 text-sm font-semibold text-primary-700 transition-colors hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-primary-600"
+              className="rounded-md bg-white px-4 py-2.5 text-sm font-semibold text-primary-700 transition-colors hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-primary-900"
             >
               Browse the catalog
             </a>
             <Link
               to="/signup"
-              className="rounded-md border border-primary-300 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-primary-600"
+              className="rounded-md border border-primary-300 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-primary-900"
             >
               Create a company account
             </Link>
@@ -73,7 +77,7 @@ export function StorefrontHero({ settings }: StorefrontHeroProps) {
 
         <ul className="mt-8 grid gap-4 sm:mt-10 sm:grid-cols-3">
           {points.map((point) => (
-            <li key={point.title} className="flex gap-3 rounded-lg bg-primary-700/50 p-3.5">
+            <li key={point.title} className="flex gap-3 rounded-lg bg-white/[0.06] p-3.5 ring-1 ring-white/10">
               <point.icon className="mt-0.5 h-5 w-5 shrink-0 text-accent-300" aria-hidden="true" />
               <div>
                 <p className="text-sm font-semibold">{point.title}</p>

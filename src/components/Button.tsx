@@ -20,7 +20,7 @@ const base =
 
 const variants = {
   action: 'bg-action text-white hover:bg-action-hover focus-visible:ring-action',
-  primary: 'bg-primary-600 text-white hover:bg-primary-700 focus-visible:ring-primary-500',
+  primary: 'bg-primary-900 text-white hover:bg-primary-800 focus-visible:ring-primary-500',
   secondary:
     'border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50 focus-visible:ring-neutral-400',
   quiet: 'text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900 focus-visible:ring-neutral-400',

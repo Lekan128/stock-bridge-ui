@@ -60,6 +60,7 @@ export function LoginPage() {
 
   return (
     <AuthCard
+      showcase
       title="Log in"
       footer={
         <div className="flex flex-col gap-2">

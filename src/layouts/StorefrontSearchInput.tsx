@@ -72,7 +72,7 @@ export function StorefrontSearchInput({ onSubmitted, autoFocus = false, classNam
       )}
       <button
         type="submit"
-        className="absolute right-1 rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-1"
+        className="absolute right-1 rounded-md bg-primary-900 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-1"
       >
         Search
       </button>

@@ -13,39 +13,46 @@ run the checklist at the end of this file.
 
 ## Color
 
-> **Under team review (decision D5).** The values below are what ships today. Plan §3 proposes
-> three options — warm kraft neutrals, plus a palm-oil orange action colour, plus adire indigo for
-> the brand — and every one is token-only. Until the team decides, nothing here changes; when it
-> does, the `--color-neutral-*`, `--color-action*` and (option 3) `--color-primary-*` values are
-> the only edits. A build made with `VITE_DESIGN_PREVIEW=true` previews each option on real
-> screens at `/app/design-spike`.
+> **Decided (D5, 2026-10-05): the Procurepaddy brand.** Navy `#08205B`, bright blue `#3B82F6`,
+> pale blue `#D6E8FF`, white, slate `#272F3C`. The brand sheet labels the bright blue `#3832F6`;
+> its swatch is `#3B82F6` (a typo — `#3832F6` is a violet), and the swatch is what's used.
+> The three blues are one ramp, so they are one token family, `primary`.
+
+**Who gets which blue.** Navy is the brand and the one main action. Bright blue marks *where you
+are* — focus rings, focused fields, selection, chart marks — and never carries text (3.7:1 on
+white). Pale blue is the tint for the current nav item and selected rows. Text in blue (links) is
+`primary-600` or darker. Large surfaces are navy, never the bright blues (they read loud and
+generic at that size), and they carry the brand's contour lines (`<ContourLines>`).
+
+Green is **not** brand: it still means good news (SYNCED, success), as amber and red still mean
+low stock and danger. A rebrand must not take a meaning away.
 
 ### Action — the one main thing to do on a screen
-`--color-action` / `--color-action-hover` → `bg-action`, `hover:bg-action-hover`. Used only by
-`<Button variant="action">`, and only once per screen (see Buttons below). Today it points at
-`primary-600` / `primary-700`, so it looks like a primary button; it is its own token so the §3
-decision can give it its own colour without touching anything else.
+`--color-action` / `--color-action-hover` → `bg-action`, `hover:bg-action-hover`: the brand navy
+(`primary-900`), hover `primary-800`. Used by `<Button variant="action">`, once per screen.
+`<Button variant="primary">` (a dialog's confirm) is navy too; the difference between them is how
+often they appear, not their colour.
 
-If palm-oil orange is chosen, the button colour is **`#C4471B`** (4.92:1 with a white label), not
-§3's `#D9531E` (4.03:1, below WCAG AA for a 14px label). The brighter value is fine for fills that
-carry no text. Measured in the B1 spike.
-
-### Primary — deep navy blue
-Brand color. Base is `primary-600` (`#1E3A8A`). Links, the active navigation pill, focus rings,
-selected rows, and `primary` buttons that are not the screen's action.
-
+### Primary — the brand blues
 | Token | Hex | Typical use |
 |---|---|---|
-| primary-50  | `#EEF2FA` | active nav pill, selected row |
-| primary-100 | `#D9E2F5` | selected row hover |
-| primary-200 | `#B3C5EB` | borders on tinted surfaces |
-| primary-300 | `#8CA8E0` | disabled text on dark |
-| primary-400 | `#5F82CC` | secondary icons |
-| primary-500 | `#3D5FAE` | focus ring |
-| **primary-600** | **`#1E3A8A`** | **default — links, primary buttons, RECORDED stamp** |
-| primary-700 | `#172F6E` | hover/active state, link text |
-| primary-800 | `#112353` | text on primary-50 (active nav) |
-| primary-900 | `#0B1836` | high-contrast text on light |
+| primary-50  | `#EFF5FF` | selected row, hover tint |
+| **primary-100** | **`#D6E8FF`** | **brand pale — the current nav item, selected chips' ground** |
+| primary-200 | `#B6D3FF` | borders on tinted surfaces, text on navy |
+| primary-300 | `#8BB7FC` | outlines on navy |
+| primary-400 | `#5E99F8` | — |
+| **primary-500** | **`#3B82F6`** | **brand bright — focus rings, focused borders, chart "In", progress** (graphics only, 3.7:1) |
+| primary-600 | `#1F56D1` | links and blue text (6.3:1), RECORDED stamp, selected chips, avatars |
+| primary-700 | `#183FA0` | link hover, text on primary-50 |
+| primary-800 | `#112E7A` | navy hover |
+| **primary-900** | **`#08205B`** | **brand navy — the logo, the action, large brand surfaces** |
+
+### Logo
+`<Logo>` draws the Procurepaddy mark and wordmark as vectors (`src/components/brand/logoPaths.ts`):
+the mark rebuilt on its own 2:1 isometric grid from the team's artwork, the wordmark traced from
+it. `variant="icon"` is the mark alone; `tone="inverse"` is white, for navy surfaces. Never set the
+name in type next to the mark for Procurepaddy — the drawn wordmark is the name. App icons and the
+favicon are the white mark on a navy tile (`public/icons`, `public/favicon.svg`).
 
 ### Accent — emerald green
 Success and good news: a healthy empty state, "All caught up", the SYNCED stamp, success toasts.
@@ -77,8 +84,8 @@ carry no colour at all (plan §2, "calm by default").
 | neutral-500 | `#6B7280` | secondary/muted text, units after a figure |
 | neutral-600 | `#4B5563` | body text (secondary emphasis) |
 | neutral-700 | `#374151` | body text |
-| neutral-800 | `#232833` | headings |
-| neutral-900 | `#171A21` | primary text, stock figures |
+| neutral-800 | `#272F3C` | headings — the brand's slate |
+| neutral-900 | `#171B24` | primary text, stock figures |
 
 `neutral-500` on `neutral-50` is 4.55:1 — it clears AA, narrowly. Don't go lighter for anything
 someone has to read.

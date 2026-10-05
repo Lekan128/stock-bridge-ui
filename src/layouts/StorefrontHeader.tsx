@@ -108,7 +108,7 @@ export function StorefrontHeader() {
                       keep this visible at 375px, where it wraps and doubles the header height. */}
                   <Link
                     to="/signup"
-                    className="hidden whitespace-nowrap rounded-md bg-primary-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 sm:inline-flex"
+                    className="hidden whitespace-nowrap rounded-md bg-primary-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 sm:inline-flex"
                   >
                     Sign up
                   </Link>

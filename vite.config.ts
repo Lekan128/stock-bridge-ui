@@ -30,7 +30,7 @@ export default defineConfig({
         display: 'standalone',
         orientation: 'any',
         // The current brand navy and app background (DESIGN.md). Revisit with the colour review.
-        theme_color: '#1E3A8A',
+        theme_color: '#08205B',
         background_color: '#F7F8FA',
         icons: [
           { src: '/icons/pwa-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },

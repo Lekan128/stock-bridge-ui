@@ -85,6 +85,7 @@ export function SignupPage() {
 
   return (
     <AuthCard
+      showcase
       title="Create your account"
       footer={
         <div className="flex flex-col gap-2">

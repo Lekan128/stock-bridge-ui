@@ -89,6 +89,9 @@ async function keepToken(page) {
 
 /** axe on what is on screen now; returns violations as readable lines. */
 async function axe(page, label) {
+  // Colours are judged at rest: mid-animation (a stamp landing, a sheet sliding in) everything is
+  // partly transparent and reads as low contrast.
+  await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => {}))))
   await page.addScriptTag({ path: AXE })
   const violations = await page.evaluate(async () => {
     const result = await window.axe.run(document, {

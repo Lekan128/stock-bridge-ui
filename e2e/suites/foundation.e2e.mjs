@@ -140,7 +140,7 @@ await check('Inventory: one figure component and a bar against the alert level; 
   const action = page.getByRole('button', { name: 'Record a delivery' }).first()
   assert((await action.getAttribute('class')).includes('bg-action'), 'Record a delivery is not the action button')
   const active = page.getByRole('link', { name: 'Inventory' }).first()
-  assert((await active.getAttribute('class')).includes('bg-primary-50'), 'sidebar active is not a pill')
+  assert((await active.getAttribute('class')).includes('bg-primary-100'), 'sidebar active is not the brand-tint pill')
   await page.screenshot({ path: SHOTS + '1-inventory.png' })
 })
 
