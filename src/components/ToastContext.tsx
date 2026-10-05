@@ -39,7 +39,9 @@ const variantClasses: Record<ToastVariant, string> = {
  * way of the page's own header and where the thumb already is. A toast can carry one action
  * ("Undo"); one that does stays longer, pauses while hovered or focused, and can be closed.
  *
- * Portaled to <body>, beside any open dialog rather than inside the page that a dialog makes inert.
+ * Portaled to <body>. Below dialogs (z-40 under their z-50) and above bottom bars (z-30): an open
+ * sheet makes everything else inert, so a toast drawn over it would only hide the sheet's fields
+ * behind a button nobody can press.
  * On a phone they sit above a screen's bottom action bar, which publishes its height as
  * `--bottom-bar-height` (`InventoryActionBar`).
  */
@@ -59,7 +61,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       {createPortal(
         <div
-          className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex flex-col items-stretch gap-2 px-4 pb-[calc(1rem+env(safe-area-inset-bottom)+var(--bottom-bar-height,0px))] sm:right-auto sm:items-start sm:px-6 md:pb-6"
+          className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex flex-col items-stretch gap-2 px-4 pb-[calc(1rem+env(safe-area-inset-bottom)+var(--bottom-bar-height,0px))] sm:right-auto sm:items-start sm:px-6 md:pb-6"
           aria-live="polite"
         >
           {toasts.map((toast) => (

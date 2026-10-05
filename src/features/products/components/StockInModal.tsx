@@ -47,7 +47,7 @@ import {
 } from '@/features/products/unitSet'
 import type { ProductVendor } from '@/features/products/vendors/types'
 import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
-import { QueuedReceipt } from '@/features/outbox/QueuedReceipt'
+import { StockReceipt } from '@/features/products/components/StockReceipt'
 import { submitStockWrite } from '@/features/outbox/outboxStore'
 import { isAppError } from '@/types/api'
 
@@ -390,6 +390,23 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
   const quantityRefused = roundsToZero || notAWholeCount
 
   const unitPriceNumber = unitPriceStr ? Number(unitPriceStr) : null
+  /** "More details" (C3): open when asked, or when something inside it is set up or needs fixing. */
+  const [moreOpen, setMoreOpen] = useState(false)
+  const noteText = (watch('note') ?? '').trim()
+  const showMore =
+    moreOpen ||
+    packOverride ||
+    supplierOverride ||
+    Boolean(errors.unitPrice || errors.packagingUnit || errors.packagingSize || errors.note)
+  const moreSummary =
+    [
+      unitPriceNumber != null && unitPriceNumber > 0 ? `${formatPricePerOption(unitPriceNumber, selectedOption)}` : null,
+      packOverride ? 'a different pack' : null,
+      supplierOverride ? 'a different supplier' : null,
+      noteText ? 'a note' : null,
+    ]
+      .filter(Boolean)
+      .join(' · ') || 'price, note, a different pack or supplier'
   const basePriceNumber = unitPriceNumber == null ? null : toBasePrice(unitPriceNumber, selectedOption)
   /** True when the price field's own unit is not the stock unit, i.e. when a division is happening
    *  between what is typed and what is stored (§3.2). The two price echoes below are gated on it
@@ -511,6 +528,9 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
       saveAsSupplierDefault: hasDeliveryPack && values.saveAsSupplierDefault ? true : undefined,
       note: values.note || undefined,
     }
+    // The receipt lands the moment Confirm is pressed, stamped RECORDED, and turns SYNCED when the
+    // server has it (C3, U6). A refusal sends the person back to the confirm step with the reason.
+    setStep('receipt')
     try {
       // Through the outbox (A4): sent now when the server can be reached, otherwise kept on this
       // phone and sent later. A refusal that comes back now is still shown here, as before.
@@ -527,9 +547,9 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
         setQueued(true)
         setQueuedOpId(outcome.op.id)
       }
-      setStep('receipt')
     } catch (err) {
       setSubmitError(isAppError(err) ? err.message : 'Something went wrong. Please try again.')
+      setStep('confirm')
     } finally {
       setSubmitting(false)
     }
@@ -566,8 +586,18 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
     <Sheet
       open
       onClose={onClose}
-      size="xl"
-      title={step === 'form' ? 'Stock in' : step === 'confirm' ? 'Confirm stock in' : queued ? 'Saved on this phone' : 'Stock in recorded'}
+      size="lg"
+      title={
+        step === 'form'
+          ? 'Stock in'
+          : step === 'confirm'
+            ? 'Confirm stock in'
+            : queued
+              ? 'Saved on this phone'
+              : result
+                ? 'Stock in recorded'
+                : 'Recording stock in'
+      }
       footer={
         step === 'form' ? (
           <>
@@ -588,7 +618,12 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
             </Button>
           </>
         ) : (
-          <Button onClick={() => (result ? onSuccess(result) : queuedOpId && onQueued?.(queuedOpId))}>Done</Button>
+          <Button
+            onClick={() => (result ? onSuccess(result) : queuedOpId && onQueued?.(queuedOpId))}
+            disabled={!result && !queued}
+          >
+            Done
+          </Button>
         )
       }
     >
@@ -605,6 +640,7 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
               <div className="flex-1">
                 <TextField
                   label="Quantity"
+                  data-autofocus
                   // `decimal`, not `numeric`: §9.1 accepts decimals on a count of packs ("thirty
                   // kegs and a half-full one is a real shelf") and a phone keypad with no decimal
                   // point cannot type one.
@@ -699,180 +735,199 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
             </p>
           )}
 
-          {/* Named action 1. Only offered when there is somewhere else to go: with no directory
-              (or no permission to read it) this would reveal an empty select, which reads as
-              broken rather than as "nothing to choose". */}
-          {!supplierOverride && canViewVendors && activeDirectoryVendors.length > 0 && (
-            <div>
-              <button
-                type="button"
-                onClick={() => setSupplierOverride(true)}
-                className="flex items-center gap-1.5 rounded-sm text-sm font-medium text-primary-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-              >
-                <Truck className="h-4 w-4" aria-hidden="true" />
-                Use a different {UNIT_COPY.SUPPLIER.toLowerCase()}
-              </button>
-            </div>
-          )}
-
-          {/* Named action 2 — plan §6.2. Says what it reveals, and what it reveals is one idea
-              (a Pack) plus one explicit decision about it, not four unrelated controls.
-
-              Offered only once the product has a stock unit. §2.1's single-entry set is the
-              pre-V17 product that never got one, and a pack for it would be "Bag of 25 units" —
-              25 of nothing. `unitSet.buildUnitOptions` refuses to build a pack option in that
-              case for exactly this reason ("a pack of 50 with nothing to be 50 OF is not a
-              conversion"), so offering the control would reveal two fields that cannot produce a
-              usable option. The way out is to give the product a stock unit on the product form,
-              which is where that decision belongs. */}
-          {product.unitOfMeasure && (
-            <>
+          {/* Everything optional, folded into one line (C3, U5): the price, a note, a pack this delivery
+              came in, another supplier. The line says what is already set; it opens by itself when
+              something inside needs attention. A supplier the server REQUIRES is never in here —
+              that picker stays above, in plain sight. */}
+          <button
+            type="button"
+            aria-expanded={showMore}
+            aria-controls="stock-in-more"
+            onClick={() => setMoreOpen((open) => !open)}
+            className="flex w-full items-center justify-between gap-3 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 text-left text-sm hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+          >
+            <span className="min-w-0 truncate">
+              <span className="font-medium text-neutral-800">More details</span>
+              <span className="text-neutral-500"> · {moreSummary}</span>
+            </span>
+            {showMore ? <ChevronUp className="h-4 w-4 shrink-0" aria-hidden="true" /> : <ChevronDown className="h-4 w-4 shrink-0" aria-hidden="true" />}
+          </button>
+          <div id="stock-in-more" hidden={!showMore} className="flex flex-col gap-4">
+            {/* Named action 1. Only offered when there is somewhere else to go: with no directory
+                (or no permission to read it) this would reveal an empty select, which reads as
+                broken rather than as "nothing to choose". */}
+            {!supplierOverride && canViewVendors && activeDirectoryVendors.length > 0 && (
               <div>
                 <button
                   type="button"
-                  onClick={togglePackOverride}
-                  aria-expanded={packOverride}
-                  aria-controls="stock-in-delivery-pack"
+                  onClick={() => setSupplierOverride(true)}
                   className="flex items-center gap-1.5 rounded-sm text-sm font-medium text-primary-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                 >
-                  {packOverride ? <ChevronUp className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
-                  <Package className="h-4 w-4" aria-hidden="true" />
-                  This delivery came in a different pack
+                  <Truck className="h-4 w-4" aria-hidden="true" />
+                  Use a different {UNIT_COPY.SUPPLIER.toLowerCase()}
                 </button>
               </div>
-
-              {packOverride && (
-                <div id="stock-in-delivery-pack" className="flex flex-col gap-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
-                  {/* One idea, one row, stacking at 360px — the same layout the product form uses
-                      for the same pair, because §1 makes them a single phrase ("Bag of 25 kg")
-                      and a reader must never have to join a noun and a bare number themselves. */}
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div>
-                      <label htmlFor="stock-in-delivery-pack-unit" className="mb-1.5 block text-sm font-medium text-neutral-700">
-                        {UNIT_COPY.PACK}
-                      </label>
-                      <select
-                        id="stock-in-delivery-pack-unit"
-                        className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
-                        {...register('packagingUnit')}
-                      >
-                        <option value="">Choose what it arrived in</option>
-                        {packagingOptions.map((o) => (
-                          <option key={o.code} value={o.code}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </select>
-                      {errors.packagingUnit?.message && <p className="mt-1.5 text-xs text-danger-600">{errors.packagingUnit.message}</p>}
-                    </div>
-                    <TextField
-                      label={UNIT_COPY.CONTAINS}
-                      inputMode="decimal"
-                      hint={overridePackHint ?? `How many ${stockUnitText} came in one of them`}
-                      error={errors.packagingSize?.message}
-                      {...register('packagingSize')}
-                    />
-                  </div>
-
-                  {/* The pack is now in the toggle, so the user can see the option they just
-                      created and the conversion that follows from it. Tinted primary-50 because
-                      it is a RESULT, not a hint — and the sentence says everything on its own for
-                      anyone who cannot see the tint. */}
-                  {deliveryPackOption && (
-                    <p className="rounded-md border border-primary-200 bg-primary-50 px-3 py-2 text-xs text-primary-900">
-                      &ldquo;{deliveryPackOption.label}&rdquo; is now one of the units you can count this delivery in.
-                    </p>
-                  )}
-
-                  {/* §3.4 / non-negotiable 7 — the opt-in, unchecked, on the same screen as the
-                      override it governs. Disabled with the reason on screen when there is no
-                      supplier for a default to belong to, rather than hidden: a checkbox that
-                      appears and disappears as the supplier field changes is harder to trust
-                      than one that stays put and explains itself. */}
-                  <label className="flex items-start gap-2.5">
-                    <input
-                      type="checkbox"
-                      disabled={supplierForDefault == null}
-                      className="mt-0.5 h-4 w-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50"
-                      {...register('saveAsSupplierDefault')}
-                    />
-                    <span>
-                      <span className="block text-sm font-medium text-neutral-700">
-                        {supplierForDefault
-                          ? `Make this ${supplierForDefault}'s usual pack`
-                          : `Make this the ${UNIT_COPY.SUPPLIER.toLowerCase()}'s usual pack`}
-                      </span>
-                      <span className="block text-xs text-neutral-500">
-                        {supplierForDefault == null
-                          ? `Choose a ${UNIT_COPY.SUPPLIER.toLowerCase()} first.`
-                          : saveAsSupplierDefault
-                            ? `Every future delivery from ${supplierForDefault} will start in this pack.`
-                            : `Left unticked, this pack applies to this delivery only — ${supplierForDefault}'s usual pack stays exactly as it is.`}
-                      </span>
-                    </span>
-                  </label>
-                </div>
-              )}
-            </>
-          )}
-
-          {/* PLACEMENT — the price comes after the pack, not before it.
-              §7.2 says no price field is labelled without naming what it is per, and this field
-              names its basis from the "Counted in" control ("₦ per bag"). That is only honest if
-              the basis is settled before the number is typed: declaring a 25 kg bag half-way down
-              the form silently re-points a price already entered against the usual 50 kg one — the
-              noun in the label does not even change, only the factor behind it. So the two named
-              overrides that can move the basis (the supplier, whose own pack re-scopes the unit
-              set per §2.3, and this delivery's pack per §3.1) are both resolved above, and the
-              price is asked last. The cheaper-supplier hint stays glued to it, since it is a
-              statement about the number just typed. */}
-          <div>
-            {/* §7.2 / P0-1: the unit is part of the price field's own label, never inferred from a
-                neighbouring field. "Unit price" alone is the ambiguity; "₦ per bag" is not. The
-                same label shape the product form and the price-break form use, because they are
-                the same question asked in three places. */}
-            <TextField
-              label={`Unit price (₦ per ${unitNoun(selectedOption)})`}
-              inputMode="decimal"
-              hint="Optional"
-              error={errors.unitPrice?.message}
-              {...register('unitPrice')}
-            />
-            {/* ÷ factor — what the ledger will hold (§3.2). "stored" is said out loud rather than
-                left to the reader to infer from an equals sign. */}
-            {priceConverts && basePriceNumber != null && unitPriceNumber != null && unitPriceNumber > 0 && (
-              <p className="mt-1.5 text-xs text-neutral-500">{formatPriceEcho(basePriceNumber, stockUnitText)} stored</p>
             )}
-            {/* × factor, the other direction — §9.2's per-pack echo, for a price typed in the
-                stock unit beside a product that comes in a pack. See `packCostEcho`: never on
-                screen at the same time as the line above. */}
-            {packCostEcho && <p className="mt-1.5 text-xs text-neutral-500">{packCostEcho}</p>}
-            {/* Always, not only when a conversion is happening. With two echoes possible the
-                question "which of these numbers is the one that gets saved?" is live in both
-                directions, and §9.2's whole justification for anchoring cost to the stock unit —
-                suppliers with different pack sizes stay comparable — is the answer. */}
-            <p className="mt-1.5 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-neutral-600">
-              {priceBasisNote(stockUnitText)}
-            </p>
-          </div>
 
-          {cheaperPreview && (
-            <p className="text-sm text-primary-700">
-              {cheaperPreview.vendorName} is {formatPricePer(cheaperPreview.savings, stockUnitText)} cheaper at this quantity.
-            </p>
-          )}
+            {/* Named action 2 — plan §6.2. Says what it reveals, and what it reveals is one idea
+                (a Pack) plus one explicit decision about it, not four unrelated controls.
 
-          <div>
-            <label htmlFor="stock-in-note" className="mb-1.5 block text-sm font-medium text-neutral-700">
-              Note
-            </label>
-            <textarea
-              id="stock-in-note"
-              rows={2}
-              className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
-              {...register('note')}
-            />
-            {errors.note?.message && <p className="mt-1.5 text-xs text-danger-600">{errors.note.message}</p>}
+                Offered only once the product has a stock unit. §2.1's single-entry set is the
+                pre-V17 product that never got one, and a pack for it would be "Bag of 25 units" —
+                25 of nothing. `unitSet.buildUnitOptions` refuses to build a pack option in that
+                case for exactly this reason ("a pack of 50 with nothing to be 50 OF is not a
+                conversion"), so offering the control would reveal two fields that cannot produce a
+                usable option. The way out is to give the product a stock unit on the product form,
+                which is where that decision belongs. */}
+            {product.unitOfMeasure && (
+              <>
+                <div>
+                  <button
+                    type="button"
+                    onClick={togglePackOverride}
+                    aria-expanded={packOverride}
+                    aria-controls="stock-in-delivery-pack"
+                    className="flex items-center gap-1.5 rounded-sm text-sm font-medium text-primary-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                  >
+                    {packOverride ? <ChevronUp className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
+                    <Package className="h-4 w-4" aria-hidden="true" />
+                    This delivery came in a different pack
+                  </button>
+                </div>
+
+                {packOverride && (
+                  <div id="stock-in-delivery-pack" className="flex flex-col gap-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                    {/* One idea, one row, stacking at 360px — the same layout the product form uses
+                        for the same pair, because §1 makes them a single phrase ("Bag of 25 kg")
+                        and a reader must never have to join a noun and a bare number themselves. */}
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div>
+                        <label htmlFor="stock-in-delivery-pack-unit" className="mb-1.5 block text-sm font-medium text-neutral-700">
+                          {UNIT_COPY.PACK}
+                        </label>
+                        <select
+                          id="stock-in-delivery-pack-unit"
+                          className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
+                          {...register('packagingUnit')}
+                        >
+                          <option value="">Choose what it arrived in</option>
+                          {packagingOptions.map((o) => (
+                            <option key={o.code} value={o.code}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                        {errors.packagingUnit?.message && <p className="mt-1.5 text-xs text-danger-600">{errors.packagingUnit.message}</p>}
+                      </div>
+                      <TextField
+                        label={UNIT_COPY.CONTAINS}
+                        inputMode="decimal"
+                        hint={overridePackHint ?? `How many ${stockUnitText} came in one of them`}
+                        error={errors.packagingSize?.message}
+                        {...register('packagingSize')}
+                      />
+                    </div>
+
+                    {/* The pack is now in the toggle, so the user can see the option they just
+                        created and the conversion that follows from it. Tinted primary-50 because
+                        it is a RESULT, not a hint — and the sentence says everything on its own for
+                        anyone who cannot see the tint. */}
+                    {deliveryPackOption && (
+                      <p className="rounded-md border border-primary-200 bg-primary-50 px-3 py-2 text-xs text-primary-900">
+                        &ldquo;{deliveryPackOption.label}&rdquo; is now one of the units you can count this delivery in.
+                      </p>
+                    )}
+
+                    {/* §3.4 / non-negotiable 7 — the opt-in, unchecked, on the same screen as the
+                        override it governs. Disabled with the reason on screen when there is no
+                        supplier for a default to belong to, rather than hidden: a checkbox that
+                        appears and disappears as the supplier field changes is harder to trust
+                        than one that stays put and explains itself. */}
+                    <label className="flex items-start gap-2.5">
+                      <input
+                        type="checkbox"
+                        disabled={supplierForDefault == null}
+                        className="mt-0.5 h-4 w-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50"
+                        {...register('saveAsSupplierDefault')}
+                      />
+                      <span>
+                        <span className="block text-sm font-medium text-neutral-700">
+                          {supplierForDefault
+                            ? `Make this ${supplierForDefault}'s usual pack`
+                            : `Make this the ${UNIT_COPY.SUPPLIER.toLowerCase()}'s usual pack`}
+                        </span>
+                        <span className="block text-xs text-neutral-500">
+                          {supplierForDefault == null
+                            ? `Choose a ${UNIT_COPY.SUPPLIER.toLowerCase()} first.`
+                            : saveAsSupplierDefault
+                              ? `Every future delivery from ${supplierForDefault} will start in this pack.`
+                              : `Left unticked, this pack applies to this delivery only — ${supplierForDefault}'s usual pack stays exactly as it is.`}
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* PLACEMENT — the price comes after the pack, not before it.
+                §7.2 says no price field is labelled without naming what it is per, and this field
+                names its basis from the "Counted in" control ("₦ per bag"). That is only honest if
+                the basis is settled before the number is typed: declaring a 25 kg bag half-way down
+                the form silently re-points a price already entered against the usual 50 kg one — the
+                noun in the label does not even change, only the factor behind it. So the two named
+                overrides that can move the basis (the supplier, whose own pack re-scopes the unit
+                set per §2.3, and this delivery's pack per §3.1) are both resolved above, and the
+                price is asked last. The cheaper-supplier hint stays glued to it, since it is a
+                statement about the number just typed. */}
+            <div>
+              {/* §7.2 / P0-1: the unit is part of the price field's own label, never inferred from a
+                  neighbouring field. "Unit price" alone is the ambiguity; "₦ per bag" is not. The
+                  same label shape the product form and the price-break form use, because they are
+                  the same question asked in three places. */}
+              <TextField
+                label={`Unit price (₦ per ${unitNoun(selectedOption)})`}
+                inputMode="decimal"
+                hint="Optional"
+                error={errors.unitPrice?.message}
+                {...register('unitPrice')}
+              />
+              {/* ÷ factor — what the ledger will hold (§3.2). "stored" is said out loud rather than
+                  left to the reader to infer from an equals sign. */}
+              {priceConverts && basePriceNumber != null && unitPriceNumber != null && unitPriceNumber > 0 && (
+                <p className="mt-1.5 text-xs text-neutral-500">{formatPriceEcho(basePriceNumber, stockUnitText)} stored</p>
+              )}
+              {/* × factor, the other direction — §9.2's per-pack echo, for a price typed in the
+                  stock unit beside a product that comes in a pack. See `packCostEcho`: never on
+                  screen at the same time as the line above. */}
+              {packCostEcho && <p className="mt-1.5 text-xs text-neutral-500">{packCostEcho}</p>}
+              {/* Always, not only when a conversion is happening. With two echoes possible the
+                  question "which of these numbers is the one that gets saved?" is live in both
+                  directions, and §9.2's whole justification for anchoring cost to the stock unit —
+                  suppliers with different pack sizes stay comparable — is the answer. */}
+              <p className="mt-1.5 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-neutral-600">
+                {priceBasisNote(stockUnitText)}
+              </p>
+            </div>
+
+            {cheaperPreview && (
+              <p className="text-sm text-primary-700">
+                {cheaperPreview.vendorName} is {formatPricePer(cheaperPreview.savings, stockUnitText)} cheaper at this quantity.
+              </p>
+            )}
+
+            <div>
+              <label htmlFor="stock-in-note" className="mb-1.5 block text-sm font-medium text-neutral-700">
+                Note
+              </label>
+              <textarea
+                id="stock-in-note"
+                rows={2}
+                className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
+                {...register('note')}
+              />
+              {errors.note?.message && <p className="mt-1.5 text-xs text-danger-600">{errors.note.message}</p>}
+            </div>
           </div>
         </form>
       )}
@@ -932,45 +987,46 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
         </div>
       )}
 
-      {step === 'receipt' && queued && (
-        <QueuedReceipt
-          sentence={`${quantityBothWays} of ${product.name}${confirmVendorName ? ` from ${confirmVendorName}` : ''}, to be added.`}
-        />
-      )}
-
-      {step === 'receipt' && result && (
-        <div className="flex flex-col gap-4">
-          <div className="rounded-lg border border-accent-200 bg-accent-50 p-4">
-            <p className="text-sm font-semibold text-accent-800">Recorded</p>
-            <p className="mt-1 text-sm text-accent-700">
-              {quantityBothWays} of {product.name} added
-              {confirmVendorName && ` from ${confirmVendorName}`}.
-            </p>
-          </div>
-          <dl className="grid grid-cols-1 gap-3 rounded-lg border border-neutral-200 bg-white p-4 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="text-neutral-500">New {UNIT_COPY.ON_HAND.toLowerCase()}</dt>
-              {/* Base units, and said so — plan §3's P2 was this exact figure rendered bare. */}
-              <dd className="mt-0.5 font-medium text-neutral-900">{formatQuantity(result.product.quantityOnHand, stockUnitText)}</dd>
-            </div>
-            {result.vendorIsNewToProduct && confirmVendorName && (
-              <div className="sm:col-span-2">
-                <dt className="text-neutral-500">{UNIT_COPY.SUPPLIER}</dt>
-                <dd className="mt-0.5 text-neutral-700">{confirmVendorName} is now linked to this product.</dd>
+      {step === 'receipt' && (
+        <StockReceipt
+          state={result ? 'synced' : queued ? 'recorded' : 'sending'}
+          kind="Stock in"
+          id={result?.movement?.id ?? queuedOpId}
+          lines={[
+            { label: 'Product', value: product.name },
+            { label: 'Received', value: quantityBothWays },
+            ...(confirmVendorName ? [{ label: UNIT_COPY.SUPPLIER, value: confirmVendorName }] : []),
+            ...(priceBothWays ? [{ label: 'Price', value: priceBothWays }] : []),
+            ...(deliveryPackOption ? [{ label: UNIT_COPY.PACK, value: deliveryPackOption.label }] : []),
+            ...(noteText ? [{ label: 'Note', value: noteText }] : []),
+          ]}
+        >
+          {result && (
+            <dl className="grid grid-cols-1 gap-3 rounded-lg border border-neutral-200 bg-white p-4 text-sm sm:grid-cols-2">
+              <div>
+                <dt className="text-neutral-500">New {UNIT_COPY.ON_HAND.toLowerCase()}</dt>
+                {/* Base units, and said so — plan §3's P2 was this exact figure rendered bare. */}
+                <dd className="mt-0.5 font-medium text-neutral-900">{formatQuantity(result.product.quantityOnHand, stockUnitText)}</dd>
               </div>
-            )}
-            {result.cheaperVendorHint && (
-              <div className="sm:col-span-2">
-                <dt className="text-neutral-500">Worth knowing</dt>
-                <dd className="mt-0.5 text-primary-700">
-                  {/* `savingsPerUnit` is per stock unit (§3.2) and now says so. */}
-                  {result.cheaperVendorHint.companyVendorName} is{' '}
-                  {formatPricePer(result.cheaperVendorHint.savingsPerUnit, stockUnitText)} cheaper at this quantity.
-                </dd>
-              </div>
-            )}
-          </dl>
-        </div>
+              {result.vendorIsNewToProduct && confirmVendorName && (
+                <div className="sm:col-span-2">
+                  <dt className="text-neutral-500">{UNIT_COPY.SUPPLIER}</dt>
+                  <dd className="mt-0.5 text-neutral-700">{confirmVendorName} is now linked to this product.</dd>
+                </div>
+              )}
+              {result.cheaperVendorHint && (
+                <div className="sm:col-span-2">
+                  <dt className="text-neutral-500">Worth knowing</dt>
+                  <dd className="mt-0.5 text-primary-700">
+                    {/* `savingsPerUnit` is per stock unit (§3.2) and now says so. */}
+                    {result.cheaperVendorHint.companyVendorName} is{' '}
+                    {formatPricePer(result.cheaperVendorHint.savingsPerUnit, stockUnitText)} cheaper at this quantity.
+                  </dd>
+                </div>
+              )}
+            </dl>
+          )}
+        </StockReceipt>
       )}
     </Sheet>
   )

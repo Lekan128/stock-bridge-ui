@@ -29,7 +29,7 @@ import {
   toBaseQuantity,
   unitOptionsForProduct,
 } from '@/features/products/unitSet'
-import { QueuedReceipt } from '@/features/outbox/QueuedReceipt'
+import { StockReceipt } from '@/features/products/components/StockReceipt'
 import { submitStockWrite } from '@/features/outbox/outboxStore'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
@@ -125,6 +125,7 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
   const { options: unitOfMeasureOptions } = useUnitOfMeasureOptions()
 
   const [choosingLots, setChoosingLots] = useState(false)
+  const [noteOpen, setNoteOpen] = useState(false)
   /** The selected option's `label`, or `null` for "not chosen yet" — not its `code`, per
    *  `UnitToggle`'s own doc comment (a code can repeat once a vendor has more than one pack). Same
    *  self-healing resolution as `StockInModal`'s, for the same reason: an option list that arrives
@@ -332,6 +333,8 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
       return
     }
     setSubmitting(true)
+    // The receipt lands at once, stamped RECORDED, and turns SYNCED when the server has it (C3).
+    setStep('receipt')
     try {
       const payload: StockOutPayload = {
         quantity: quantityNumber,
@@ -354,8 +357,9 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
         setQueued(true)
         setQueuedOpId(outcome.op.id)
       }
-      setStep('receipt')
     } catch (err) {
+      // Refused now (oversold, invalid): back to the form, where the reason is shown.
+      setStep('form')
       if (isAppError(err) && err.availableQuantity != null && err.requestedQuantity != null) {
         setOversellInfo({ available: err.availableQuantity, requested: err.requestedQuantity })
       } else {
@@ -378,13 +382,15 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
    */
   const quantityBothWays =
     formatEnteredAndBase(quantityNumber, selectedOption, baseQuantity, stockUnitText)
+  const noteText = (watch('note') ?? '').trim()
+  const showNote = noteOpen || noteText !== '' || Boolean(errors.note)
 
   return (
     <Sheet
       open
       onClose={onClose}
       size={choosingLots ? 'xl' : 'md'}
-      title={step === 'form' ? 'Stock out' : queued ? 'Saved on this phone' : 'Stock out recorded'}
+      title={step === 'form' ? 'Stock out' : queued ? 'Saved on this phone' : result ? 'Stock out recorded' : 'Recording stock out'}
       footer={
         step === 'form' ? (
           <>
@@ -396,7 +402,12 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
             </Button>
           </>
         ) : (
-          <Button onClick={() => (result ? onSuccess(result) : queuedOpId && onQueued?.(queuedOpId))}>Done</Button>
+          <Button
+            onClick={() => (result ? onSuccess(result) : queuedOpId && onQueued?.(queuedOpId))}
+            disabled={!result && !queued}
+          >
+            Done
+          </Button>
         )
       }
     >
@@ -415,6 +426,7 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
               <div className="flex-1">
                 <TextField
                   label="Quantity"
+                  data-autofocus
                   // `decimal`, not `numeric`: §9.1 accepts decimals and a phone keypad without a
                   // decimal point makes "half a bag" untypeable on the device most of these
                   // entries are made on.
@@ -596,18 +608,29 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
             </div>
           )}
 
-          <div>
-            <label htmlFor="stock-out-note" className="mb-1.5 block text-sm font-medium text-neutral-700">
-              Note
-            </label>
-            <textarea
-              id="stock-out-note"
-              rows={2}
-              className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
-              {...register('note')}
-            />
-            {errors.note?.message && <p className="mt-1.5 text-xs text-danger-600">{errors.note.message}</p>}
-          </div>
+          {/* The note is optional, so it waits behind one line (C3) unless there is one already. */}
+          {showNote ? (
+            <div>
+              <label htmlFor="stock-out-note" className="mb-1.5 block text-sm font-medium text-neutral-700">
+                Note <span className="font-normal text-neutral-500">(optional)</span>
+              </label>
+              <textarea
+                id="stock-out-note"
+                rows={2}
+                className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
+                {...register('note')}
+              />
+              {errors.note?.message && <p className="mt-1.5 text-xs text-danger-600">{errors.note.message}</p>}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setNoteOpen(true)}
+              className="self-start rounded-sm text-sm font-medium text-primary-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+            >
+              Add a note
+            </button>
+          )}
 
           {/* A 409 oversell gets its own card — the two numbers (available vs. requested) are
               the actionable content of this error, and burying them in FormError's one-line
@@ -631,41 +654,40 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
         </form>
       )}
 
-      {step === 'receipt' && queued && <QueuedReceipt sentence={`${quantityBothWays} of ${product.name}, to be taken out.`} />}
-
-      {step === 'receipt' && result && (
-        <div className="flex flex-col gap-4">
-          <div className="rounded-lg border border-accent-200 bg-accent-50 p-4">
-            <p className="text-sm font-semibold text-accent-800">Recorded</p>
-            <p className="mt-1 text-sm text-accent-700">
-              {quantityBothWays} of {product.name} removed.
-            </p>
-          </div>
-
-          {result.breakdown && result.breakdown.length > 0 ? (
-            <div>
-              <p className="mb-1.5 text-sm font-medium text-neutral-700">Where it came from</p>
-              <ul className="divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
-                {result.breakdown.map((line) => (
-                  <li key={line.inMovementId} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm">
-                    {/* The server's own label when it sent one, so this names the delivery with
-                        the same phrase the picker did. The fallback is what this composed before
-                        the label existed — kept because the API omits null fields and an older
-                        response must still render. */}
-                    <span className="text-neutral-700">
-                      {line.label ?? `${line.companyVendorName}’s ${formatDateTime(line.inMovementCreatedAt)} delivery`}
-                    </span>
-                    <span className="font-medium text-neutral-900">{formatQuantity(line.quantity, stockUnitText)}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : (
-            <p className="text-sm text-neutral-500">
-              New {UNIT_COPY.ON_HAND.toLowerCase()}: {formatQuantity(result.product.quantityOnHand, stockUnitText)}.
-            </p>
-          )}
-        </div>
+      {step === 'receipt' && (
+        <StockReceipt
+          state={result ? 'synced' : queued ? 'recorded' : 'sending'}
+          kind="Stock out"
+          id={result?.movement?.id ?? queuedOpId}
+          lines={[
+            { label: 'Product', value: product.name },
+            { label: 'Taken out', value: quantityBothWays },
+            ...(noteText ? [{ label: 'Note', value: noteText }] : []),
+          ]}
+        >
+          {result &&
+            (result.breakdown && result.breakdown.length > 0 ? (
+              <div>
+                <p className="mb-1.5 text-sm font-medium text-neutral-700">Where it came from</p>
+                <ul className="divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
+                  {result.breakdown.map((line) => (
+                    <li key={line.inMovementId} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm">
+                      {/* The server's own label when it sent one, so this names the delivery with
+                          the same phrase the picker did; the fallback is for an older response. */}
+                      <span className="text-neutral-700">
+                        {line.label ?? `${line.companyVendorName}’s ${formatDateTime(line.inMovementCreatedAt)} delivery`}
+                      </span>
+                      <span className="font-medium text-neutral-900">{formatQuantity(line.quantity, stockUnitText)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <p className="text-sm text-neutral-500">
+                New {UNIT_COPY.ON_HAND.toLowerCase()}: {formatQuantity(result.product.quantityOnHand, stockUnitText)}.
+              </p>
+            ))}
+        </StockReceipt>
       )}
     </Sheet>
   )

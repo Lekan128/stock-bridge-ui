@@ -5,7 +5,8 @@ import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
 import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
-import { QueuedReceipt } from '@/features/outbox/QueuedReceipt'
+import { StockFigure } from '@/features/products/components/StockFigure'
+import { StockReceipt } from '@/features/products/components/StockReceipt'
 import { submitStockWrite } from '@/features/outbox/outboxStore'
 import { stockCountSchema, type StockCountFormValues } from '@/features/products/schemas'
 import type { StockMutationResponse } from '@/features/products/types'
@@ -72,7 +73,7 @@ export function StockAdjustmentModal({
       })
       if (outcome.status === 'sent') onSuccess(outcome.response)
       else {
-        setQueuedSentence(`A count of ${formatQuantity(countedQuantity, stockUnit)} for ${productName}.`)
+        setQueuedSentence(formatQuantity(countedQuantity, stockUnit))
         setQueuedOpId(outcome.op.id)
       }
     } catch (err) {
@@ -89,7 +90,15 @@ export function StockAdjustmentModal({
         size="sm"
         footer={<Button onClick={() => (queuedOpId && onQueued ? onQueued(queuedOpId) : onClose())}>Done</Button>}
       >
-        <QueuedReceipt sentence={queuedSentence} />
+        <StockReceipt
+          state="recorded"
+          kind="Count"
+          id={queuedOpId}
+          lines={[
+            { label: 'Product', value: productName },
+            { label: 'Counted', value: queuedSentence },
+          ]}
+        />
       </Sheet>
     )
   }
@@ -117,18 +126,22 @@ export function StockAdjustmentModal({
           inputMode="numeric"
           autoFocus
           error={errors.countedQuantity?.message}
-          hint={`The books say ${formatQuantity(currentQuantity, stockUnit)}.`}
+          hint={`The book says ${formatQuantity(currentQuantity, stockUnit)}.`}
           {...register('countedQuantity')}
         />
+        {/* The difference, before anything is recorded (C3, D1): set as a figure, because it is
+            the thing a count is for. */}
         {difference != null && (
-          <p
-            role="status"
-            className={`text-sm font-medium tabular-nums ${difference === 0 ? 'text-accent-700' : 'text-neutral-800'}`}
-          >
-            {difference === 0
-              ? 'Matches the books.'
-              : `${difference > 0 ? '+' : '−'}${formatQuantity(Math.abs(difference), stockUnit)} against the books.`}
-          </p>
+          <div role="status" className="flex items-baseline gap-2 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2">
+            {difference === 0 ? (
+              <span className="text-sm font-medium text-accent-700">Matches the book.</span>
+            ) : (
+              <>
+                <StockFigure quantity={difference} unit={stockUnit} signed size="md" />
+                <span className="text-sm text-neutral-600">vs the book</span>
+              </>
+            )}
+          </div>
         )}
         <div>
           <label htmlFor="count-note" className="mb-1.5 block text-sm font-medium text-neutral-700">
