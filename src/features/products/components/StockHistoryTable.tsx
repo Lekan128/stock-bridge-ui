@@ -1,6 +1,8 @@
 import { Badge, type BadgeVariant } from '@/components/Badge'
 import { Pagination } from '@/components/Pagination'
 import { Skeleton } from '@/components/Skeleton'
+import { Stamp } from '@/components/Stamp'
+import type { OutboxOp } from '@/features/outbox/types'
 import { useAuth } from '@/auth/useAuth'
 import { formatCurrency, formatDateTime } from '@/features/products/formatters'
 import type { MovementType, PageResponse, StockMovement, UnitOfMeasureOption } from '@/features/products/types'
@@ -9,6 +11,7 @@ import { buildPackOption } from '@/features/products/unitSet'
 import { StockFigure } from '@/features/products/components/StockFigure'
 
 const movementLabels: Record<MovementType, string> = { IN: 'Stock in', OUT: 'Stock out', ADJUSTMENT: 'Adjustment' }
+const PENDING_LABEL: Record<OutboxOp['kind'], string> = { STOCK_IN: 'Stock in', STOCK_OUT: 'Stock out', COUNT: 'Count' }
 const movementVariants: Record<MovementType, BadgeVariant> = { IN: 'success', OUT: 'danger', ADJUSTMENT: 'neutral' }
 
 /** The movement as a signed change in stock units: a stock-out is always a fall. */
@@ -51,6 +54,8 @@ export interface StockHistoryTableProps {
    *  one-off pack (see {@link enteredPackEcho}) — every other column is unit-agnostic. */
   stockUnit: string
   unitOfMeasureOptions: UnitOfMeasureOption[]
+  /** This product's writes still waiting on this phone (A4), shown first and stamped (C2). */
+  pending?: OutboxOp[]
 }
 
 export function StockHistoryTable({
@@ -61,6 +66,7 @@ export function StockHistoryTable({
   onPageChange,
   stockUnit,
   unitOfMeasureOptions,
+  pending = [],
 }: StockHistoryTableProps) {
   const { user } = useAuth()
 
@@ -78,13 +84,65 @@ export function StockHistoryTable({
     return <div className="rounded-md border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700">{error}</div>
   }
 
-  if (!data || data.content.length === 0) {
+  const movements = data?.content ?? []
+  // Waiting writes only lead the first page: they are the newest thing about this product.
+  const waiting = page === 0 ? pending : []
+  if (movements.length === 0 && waiting.length === 0) {
     return <p className="py-6 text-center text-sm text-neutral-500">No stock movements yet.</p>
   }
 
+  const who = (movement: StockMovement) =>
+    movement.createdByUserId
+      ? movement.createdByUserId === user?.id
+        ? 'You'
+        : `User ${movement.createdByUserId.slice(0, 8)}`
+      : '—'
+  // When it happened, which for a backdated delivery or a late write from a phone is not when it was typed in.
+  const when = (movement: StockMovement) => formatDateTime(movement.occurredAt ?? movement.createdAt)
+
   return (
     <div className="flex flex-col gap-3">
-      <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+      {/* A phone: ledger rows, one per movement, instead of a table that scrolls sideways (B1/C2). */}
+      <ul className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white md:hidden">
+        {waiting.map((op) => (
+          <li key={op.id} className="flex items-start justify-between gap-3 px-4 py-3">
+            <div className="min-w-0">
+              <p className="flex items-center gap-2 text-sm font-medium text-neutral-900">
+                {PENDING_LABEL[op.kind]}
+                <Stamp kind={op.status === 'needs_attention' ? 'check' : 'recorded'} />
+              </p>
+              <p className="mt-0.5 text-xs text-neutral-500">{op.summary}</p>
+              <p className="mt-0.5 text-xs tabular-nums text-neutral-500">You · recorded {formatDateTime(new Date(op.createdAt).toISOString())}</p>
+            </div>
+            {op.baseDelta != null && <StockFigure quantity={op.baseDelta} unit={stockUnit} signed align="end" />}
+          </li>
+        ))}
+        {movements.map((movement) => (
+          <li key={movement.id} className="flex items-start justify-between gap-3 px-4 py-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-neutral-900">{movementLabels[movement.movementType]}</p>
+              {movement.note && <p className="mt-0.5 truncate text-xs text-neutral-600">{movement.note}</p>}
+              <p className="mt-0.5 text-xs tabular-nums text-neutral-500">
+                {who(movement)} · {when(movement)}
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-col items-end">
+              <StockFigure
+                quantity={signedQuantity(movement)}
+                unit={stockUnit}
+                pack={enteredPackEcho(movement, stockUnit, unitOfMeasureOptions)}
+                signed
+                align="end"
+              />
+              {movement.unitPriceAtTime != null && (
+                <span className="mt-0.5 text-xs tabular-nums text-neutral-500">@ {formatCurrency(movement.unitPriceAtTime)}</span>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      <div className="hidden overflow-x-auto rounded-lg border border-neutral-200 bg-white md:block">
         <table className="w-full text-sm">
           <thead>
             <tr>
@@ -106,7 +164,31 @@ export function StockHistoryTable({
             </tr>
           </thead>
           <tbody>
-            {data.content.map((movement) => (
+            {/* Recorded on this phone and not sent yet (Pattern C): stamped, never mixed into the
+                server's rows without saying so. */}
+            {waiting.map((op) => (
+              <tr key={op.id} className="bg-primary-50/40">
+                <td className="border-b border-neutral-100 px-4 py-2.5">
+                  <span className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-neutral-800">{PENDING_LABEL[op.kind]}</span>
+                    <Stamp kind={op.status === 'needs_attention' ? 'check' : 'recorded'} />
+                  </span>
+                </td>
+                <td className="border-b border-neutral-100 px-4 py-2.5 text-right">
+                  {op.baseDelta != null ? (
+                    <StockFigure quantity={op.baseDelta} unit={stockUnit} pack={op.summary} signed align="end" />
+                  ) : (
+                    <span className="text-sm text-neutral-700">{op.summary}</span>
+                  )}
+                </td>
+                <td className="border-b border-neutral-100 px-4 py-2.5 text-neutral-500">Saved on this phone</td>
+                <td className="border-b border-neutral-100 px-4 py-2.5 text-neutral-600">You</td>
+                <td className="border-b border-neutral-100 px-4 py-2.5 whitespace-nowrap text-neutral-600">
+                  {formatDateTime(new Date(op.createdAt).toISOString())}
+                </td>
+              </tr>
+            ))}
+            {movements.map((movement) => (
               <tr key={movement.id}>
                 <td className="border-b border-neutral-100 px-4 py-2.5">
                   <Badge variant={movementVariants[movement.movementType]}>{movementLabels[movement.movementType]}</Badge>
@@ -130,22 +212,14 @@ export function StockHistoryTable({
                 <td className="max-w-xs truncate border-b border-neutral-100 px-4 py-2.5 text-neutral-600">
                   {movement.note || '—'}
                 </td>
-                <td className="border-b border-neutral-100 px-4 py-2.5 text-neutral-600">
-                  {movement.createdByUserId
-                    ? movement.createdByUserId === user?.id
-                      ? 'You'
-                      : `User ${movement.createdByUserId.slice(0, 8)}`
-                    : '—'}
-                </td>
-                <td className="border-b border-neutral-100 px-4 py-2.5 whitespace-nowrap text-neutral-600">
-                  {formatDateTime(movement.createdAt)}
-                </td>
+                <td className="border-b border-neutral-100 px-4 py-2.5 text-neutral-600">{who(movement)}</td>
+                <td className="border-b border-neutral-100 px-4 py-2.5 whitespace-nowrap text-neutral-600">{when(movement)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <Pagination page={page} totalPages={data.totalPages} onPageChange={onPageChange} />
+      {data && <Pagination page={page} totalPages={data.totalPages} onPageChange={onPageChange} />}
     </div>
   )
 }

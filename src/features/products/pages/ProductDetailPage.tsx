@@ -1,15 +1,15 @@
-import { useEffect, useState } from 'react'
-import { ArrowLeft, Pencil } from 'lucide-react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { ArrowLeft, Minus, Pencil, Plus } from 'lucide-react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { PERMISSIONS } from '@/auth/permissions'
-import { Button, buttonClassName } from '@/components/Button'
+import { Button } from '@/components/Button'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { SavedDataNote } from '@/components/SavedDataNote'
-import { PendingStockNote } from '@/features/outbox/PendingStockNote'
+import { useOutboxState } from '@/features/outbox/useOutbox'
 import { useToast } from '@/components/useToast'
 import { productsApi } from '@/features/products/api/productsApi'
-import { IncomingStockBadge } from '@/features/products/components/IncomingStockBadge'
+import { ProductActionBar } from '@/features/products/components/ProductActionBar'
 import { ProductDetailSkeleton } from '@/features/products/components/ProductDetailSkeleton'
 import { ProductImage } from '@/features/products/components/ProductImage'
 import { StatusBadge } from '@/features/products/components/StatusBadge'
@@ -28,16 +28,17 @@ import {
   packPhrase,
   stockUnitSymbol,
 } from '@/features/products/unitCopy'
+import type { StockMovement } from '@/features/products/types'
 import { buildPackOption } from '@/features/products/unitSet'
 import { VendorsTab } from '@/features/products/vendors/components/VendorsTab'
 import { isAppError } from '@/types/api'
-import { OverflowMenu } from '@/components/OverflowMenu'
+import { OverflowMenu, type OverflowMenuItem } from '@/components/OverflowMenu'
 
 
 type ProductDetailTab = 'overview' | 'vendors'
 
 const DETAIL_TABS: { value: ProductDetailTab; label: string }[] = [
-  { value: 'overview', label: 'Overview' },
+  { value: 'overview', label: 'Details and history' },
   { value: 'vendors', label: UNIT_COPY.SUPPLIERS },
 ]
 
@@ -160,6 +161,16 @@ export function ProductDetailPage() {
     }
   }
 
+  // The newest movement, for the hero's "last movement" line: page one's first row, kept while
+  // the history is paged further back.
+  const [lastMovement, setLastMovement] = useState<StockMovement | null>(null)
+  useEffect(() => {
+    if (historyPage === 0 && history) setLastMovement(history.content[0] ?? null)
+  }, [history, historyPage])
+  // This product's writes still waiting on this phone, shown first in the history (C2).
+  const { ops } = useOutboxState()
+  const pending = ops.filter((op) => op.productId === id)
+
   if (loading) return <ProductDetailSkeleton />
 
   if (error || !product) {
@@ -194,50 +205,79 @@ export function ProductDetailPage() {
   const unitPricePackEcho = formatPackCostEcho(product.unitPrice, packOption)
   const costPricePackEcho = formatPackCostEcho(product.costPrice, packOption)
 
+  // Stock in / out / count: inside the hero from a laptop up, in a bar pinned to the bottom on a phone.
+  const stockButtons =
+    canStockIn || canStockOut || canManageInventory ? (
+      <>
+        {canStockIn && (
+          <Button variant="action" onClick={() => stockActions.open('in', product)}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Stock in
+          </Button>
+        )}
+        {canStockOut && (
+          <Button variant="secondary" onClick={() => stockActions.open('out', product)}>
+            <Minus className="h-4 w-4" aria-hidden="true" />
+            Stock out
+          </Button>
+        )}
+        {canManageInventory && (
+          <Button variant="secondary" onClick={() => stockActions.open('count', product)}>
+            Count
+          </Button>
+        )}
+      </>
+    ) : null
+
+  // Edit and the rare, destructive things live in "⋯" (C2, finding U3); Deactivate behind its confirmation.
+  const menuItems: OverflowMenuItem[] = canManageProducts
+    ? [
+        {
+          label: 'Edit product',
+          icon: <Pencil className="h-4 w-4 text-neutral-500" aria-hidden="true" />,
+          onSelect: () => navigate(`/app/products/${product.id}/edit`),
+        },
+        product.active
+          ? { label: 'Deactivate', tone: 'danger', onSelect: () => setConfirmDeactivate(true) }
+          : { label: activating ? 'Activating…' : 'Activate', onSelect: () => void handleActivate(), disabled: activating },
+      ]
+    : []
+
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex items-start gap-3">
+    // Room at the bottom on a phone for the action bar pinned there.
+    <div className={`flex flex-col gap-6 ${stockButtons ? 'pb-20 md:pb-0' : ''}`}>
+      {/* The name, small: the photo is a thumbnail beside it now (C2), not a 160px block above the stock. */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
           <button
             type="button"
             onClick={goBack}
             aria-label="Back"
-            className="mt-0.5 rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100"
+            className="mt-1 rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <div>
+          <ProductImage src={product.imageUrl} alt={product.name} className="h-12 w-12 shrink-0 rounded-md" iconClassName="h-5 w-5" />
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-semibold text-neutral-900">{product.name}</h1>
-              <StatusBadge active={product.active} />
-              <IncomingStockBadge quantity={incoming.quantity} />
+              <h1 className="text-xl font-semibold text-neutral-900 sm:text-2xl">{product.name}</h1>
+              {!product.active && <StatusBadge active={false} />}
             </div>
-            <p className="mt-0.5 text-sm text-neutral-500">SKU: {product.sku}</p>
+            <p className="mt-0.5 truncate text-sm text-neutral-500">
+              SKU: {product.sku}
+              {product.categoryName != null && ` · ${product.categoryName}`}
+            </p>
           </div>
         </div>
-        {canManageProducts && (
-          <div className="flex items-center gap-2">
-            <Link to={`/app/products/${product.id}/edit`} className={buttonClassName('secondary')}>
-              <Pencil className="h-4 w-4" />
-              Edit
-            </Link>
-            {/* Deactivate lives in "⋯", behind its confirmation (B2): the header stays calm, and a
-                red button never sits beside Stock in. */}
-            {product.active ? (
-              <OverflowMenu
-                label={`More actions for ${product.name}`}
-                items={[{ label: 'Deactivate', tone: 'danger', onSelect: () => setConfirmDeactivate(true) }]}
-              />
-            ) : (
-              <Button variant="secondary" onClick={() => void handleActivate()} loading={activating}>
-                Activate
-              </Button>
-            )}
-          </div>
-        )}
+        {menuItems.length > 0 && <OverflowMenu label={`More actions for ${product.name}`} items={menuItems} />}
       </div>
 
       <SavedDataNote showing={showingSaved} updatedAt={updatedAt} subject="this product" onRetry={refetchProduct} />
+
+      {/* The hero, first (C2; plan §2 "the number is the hero"): on hand with its packs and anything
+          waiting on this phone, the bar against the alert level, what is on the way, the last
+          movement — and the stock actions beside it. */}
+      <StockBreakdownPanel product={product} incoming={incoming} actions={stockButtons ?? undefined} lastMovement={lastMovement} />
 
       <div role="tablist" aria-label="Product detail" className="flex gap-1 border-b border-neutral-200">
         {DETAIL_TABS.map((option) => {
@@ -268,152 +308,80 @@ export function ProductDetailPage() {
           role="tabpanel"
           id="product-detail-panel-overview"
           aria-labelledby="product-detail-tab-overview"
-          className="flex flex-col gap-6"
+          className="flex flex-col gap-8"
         >
-          <div className="grid grid-cols-1 gap-6 rounded-lg border border-neutral-200 bg-white p-5 md:grid-cols-3">
-            <ProductImage
-              src={product.imageUrl}
-              alt={product.name}
-              className="h-40 w-40 rounded-lg"
-              iconClassName="h-10 w-10"
-            />
-            <div className="md:col-span-2">
-              <dl className="grid grid-cols-2 gap-4 text-sm">
-            {/* Structurally absent, not blank, for a buying company: `unitPrice` is `null` on
-                every one of their products (it is a marketplace selling price, meaningless for
-                private stock), and a "Unit price" row rendering an em dash on every product
-                would read as broken rather than as "not applicable". `isVendor` and "value
-                present" agree in practice — a company's is always null — so gating on the
-                value is enough and needs no extra import here. */}
-            {product.unitPrice != null && (
-              <div>
-                <dt className="text-neutral-500">Unit price</dt>
-                <dd className="mt-0.5 font-medium text-neutral-900">
-                  {formatPricePer(product.unitPrice, stockUnitText)}
-                </dd>
-                {unitPricePackEcho && <dd className="text-xs text-neutral-500">{unitPricePackEcho}</dd>}
-              </div>
-            )}
-            {/* Both price rows were bare naira figures — `UNIT_UX_CONTRACT.md` §7.2's
-                non-negotiable ("no price field is labelled without naming what it is per"), on the
-                one screen a buyer checks a cost against a supplier's invoice.
-
-                `Product.costPrice` is a weighted average held per ONE stock unit — its own entity
-                doc says so in those words, and §9.2 pins the basis. That anchoring is deliberate
-                and is what makes two suppliers with different pack sizes comparable at all, but it
-                is also why a bare "₦1,000" here reads as wrong to anyone holding an ₦80,000
-                invoice for a bag. So the row states the basis and echoes the pack equivalent
-                underneath, exactly as §9.2 requires wherever a cost meets a product with a pack. */}
-            <div>
-              <dt className="text-neutral-500">Cost price</dt>
-              <dd className="mt-0.5 font-medium text-neutral-900">
-                {formatPricePer(product.costPrice, stockUnitText)}
-              </dd>
-              {costPricePackEcho && <dd className="text-xs text-neutral-500">{costPricePackEcho}</dd>}
-            </div>
-            {/* Shown for BOTH tenant types when set, unlike unit price. Two rows, not one: the
-                stock unit is what every stored quantity on this page is counted in, and the pack
-                is an optional container described in terms of it. */}
-            {stockUnitLabel && (
-              <div>
-                <dt className="text-neutral-500">{UNIT_COPY.STOCK_UNIT}</dt>
-                <dd className="mt-0.5 font-medium text-neutral-900">{stockUnitLabel}</dd>
-              </div>
-            )}
-            {packLabel && (
-              <div>
-                <dt className="text-neutral-500">{UNIT_COPY.PACK}</dt>
-                <dd className="mt-0.5 flex flex-wrap items-center gap-2">
+          {/* Prices, units, pack and supplier: needed, but not the reason anyone opened this page —
+              so a quiet ruled list below the stock, not a card above it (C2). */}
+          <section aria-labelledby="product-details-heading" className="flex flex-col gap-3">
+            <h2 id="product-details-heading" className="text-base font-semibold text-neutral-900">
+              Details
+            </h2>
+            <dl className="grid grid-cols-1 gap-x-8 border-t border-neutral-200 text-sm sm:grid-cols-2">
+              {/* A buying company's unit price is always null (a marketplace selling price), so the
+                  row is absent rather than an em dash on every product. */}
+              {product.unitPrice != null && (
+                <DetailRow label="Unit price">
+                  <span className="font-medium text-neutral-900">{formatPricePer(product.unitPrice, stockUnitText)}</span>
+                  {unitPricePackEcho && <span className="block text-xs text-neutral-500">{unitPricePackEcho}</span>}
+                </DetailRow>
+              )}
+              {/* `costPrice` is a weighted average per ONE stock unit (§9.2), so the row names its
+                  basis and echoes the pack equivalent — "₦1,463.20 / kg, = ₦73,160 / bag". */}
+              <DetailRow label="Cost price">
+                <span className="font-medium text-neutral-900">{formatPricePer(product.costPrice, stockUnitText)}</span>
+                {costPricePackEcho && <span className="block text-xs text-neutral-500">{costPricePackEcho}</span>}
+              </DetailRow>
+              {stockUnitLabel && (
+                <DetailRow label={UNIT_COPY.STOCK_UNIT}>
+                  <span className="font-medium text-neutral-900">{stockUnitLabel}</span>
+                </DetailRow>
+              )}
+              {packLabel && (
+                <DetailRow label={UNIT_COPY.PACK}>
                   <span className="font-medium text-neutral-900">
                     {packLabel}
-                    {/* This row is always the product's OWN pack, singular by design
-                        (MULTI_PACK_PER_VENDOR_DESIGN.md §3) — but a vendor can have others, and
-                        with no signal here that reads as "the only pack" rather than "the
-                        default among several", same gap the Preferred-supplier row solved with
-                        a name plus a link. */}
                     {product.hasMultiplePacks && <span className="font-normal text-neutral-500"> (default)</span>}
                   </span>
                   {product.hasMultiplePacks && (
-                    <Link to={{ search: '?tab=vendors' }} className="text-xs font-medium text-primary-600 hover:underline">
+                    <Link to={{ search: '?tab=vendors' }} className="ml-2 text-xs font-medium text-primary-600 hover:underline">
                       View packs
                     </Link>
                   )}
-                </dd>
-              </div>
-            )}
-            {/* Where this stock comes from. Rendered even when unset, as an em dash, rather than
-                hidden: an absent row reads as "this product has no supplier concept", where a dash
-                reads as "nobody has said yet" — and the second is the true one.
-
-                A product can now have many vendors (see the Vendors tab), so this row shows only
-                the preferred one — `preferredVendorName` has no id/kind alongside it (unlike the
-                old single `companyVendorId`/`companyVendorName`/`companyVendorKind` trio), so it
-                renders as plain text with a link into the Vendors tab for the full picture, rather
-                than linking straight to a vendor detail page it no longer has an id for. */}
-            <div className="col-span-2">
-              <dt className="text-neutral-500">Preferred {UNIT_COPY.SUPPLIER.toLowerCase()}</dt>
-              <dd className="mt-0.5 flex flex-wrap items-center gap-2">
+                </DetailRow>
+              )}
+              {/* An em dash, not an absent row: "nobody has said yet" is the true reading. Only the
+                  preferred supplier; the Suppliers tab has the rest. */}
+              <DetailRow label={`Preferred ${UNIT_COPY.SUPPLIER.toLowerCase()}`}>
                 {product.preferredVendorName ? (
                   <span className="font-medium text-neutral-900">{product.preferredVendorName}</span>
                 ) : (
                   <span className="text-neutral-400">—</span>
                 )}
-                <Link
-                  to={{ search: '?tab=vendors' }}
-                  className="text-xs font-medium text-primary-600 hover:underline"
-                >
+                <Link to={{ search: '?tab=vendors' }} className="ml-2 text-xs font-medium text-primary-600 hover:underline">
                   View {UNIT_COPY.SUPPLIERS.toLowerCase()}
                 </Link>
-              </dd>
-            </div>
-          </dl>
-          <div className="mt-4">
-            <p className="text-sm text-neutral-500">Description</p>
-            <p className="mt-0.5 text-sm text-neutral-700">{product.description || 'No description provided.'}</p>
-          </div>
-        </div>
-      </div>
+              </DetailRow>
+              <DetailRow label="Description" wide>
+                <span className="text-neutral-700">{product.description || 'No description provided.'}</span>
+              </DetailRow>
+            </dl>
+          </section>
 
-      <PendingStockNote productId={product.id} stockUnit={stockUnitText} />
-
-      <StockBreakdownPanel
-        product={product}
-        incoming={incoming}
-        actions={
-          canStockIn || canStockOut || canManageInventory ? (
-            <>
-              {canStockIn && (
-                <Button variant="action" onClick={() => stockActions.open('in', product)}>
-                  Stock In
-                </Button>
-              )}
-              {canStockOut && (
-                <Button variant="secondary" onClick={() => stockActions.open('out', product)}>
-                  Stock Out
-                </Button>
-              )}
-              {canManageInventory && (
-                <Button variant="secondary" onClick={() => stockActions.open('count', product)}>
-                  Count
-                </Button>
-              )}
-            </>
-          ) : undefined
-        }
-      />
-
-      <div>
-        <h2 className="mb-3 text-base font-semibold text-neutral-900">Movement history</h2>
-        <StockHistoryTable
-          data={history}
-          loading={historyLoading}
-          error={historyError}
-          page={historyPage}
-          onPageChange={setHistoryPage}
-          stockUnit={stockUnitText}
-          unitOfMeasureOptions={unitOfMeasureOptions}
-        />
-      </div>
+          <section aria-labelledby="product-history-heading" className="flex flex-col gap-3">
+            <h2 id="product-history-heading" className="text-base font-semibold text-neutral-900">
+              Movement history
+            </h2>
+            <StockHistoryTable
+              data={history}
+              loading={historyLoading}
+              error={historyError}
+              page={historyPage}
+              onPageChange={setHistoryPage}
+              stockUnit={stockUnitText}
+              unitOfMeasureOptions={unitOfMeasureOptions}
+              pending={pending}
+            />
+          </section>
         </div>
       )}
 
@@ -428,6 +396,8 @@ export function ProductDetailPage() {
         </div>
       )}
 
+      {stockButtons && <ProductActionBar>{stockButtons}</ProductActionBar>}
+
       {stockActions.sheet}
 
       <ConfirmDialog
@@ -439,6 +409,16 @@ export function ProductDetailPage() {
         onConfirm={() => void handleDeactivate()}
         onCancel={() => setConfirmDeactivate(false)}
       />
+    </div>
+  )
+}
+
+/** One ruled line of the Details list: label above, value below. */
+function DetailRow({ label, wide = false, children }: { label: string; wide?: boolean; children: ReactNode }) {
+  return (
+    <div className={`border-b border-neutral-100 py-3 ${wide ? 'sm:col-span-2' : ''}`}>
+      <dt className="text-neutral-500">{label}</dt>
+      <dd className="mt-0.5">{children}</dd>
     </div>
   )
 }
