@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { CircleCheck } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { signupSchema, type SignupFormValues } from '@/auth/schemas'
@@ -35,6 +35,9 @@ export function SignupPage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const [formError, setFormError] = useState<string | null>(null)
+  // The honeypot (see the hidden field below). Uncontrolled and outside the form schema on
+  // purpose: people never see it, so it has no validation or state of its own to manage.
+  const honeypotRef = useRef<HTMLInputElement>(null)
 
   const setupId = params.get('setup')
   const setupRequestId = setupId && UUID_PATTERN.test(setupId) ? setupId : undefined
@@ -79,6 +82,7 @@ export function SignupPage() {
         adminEmail: values.adminEmail,
         password: values.password,
         setupRequestId,
+        website: honeypotRef.current?.value || undefined,
       })
       // Lead to signup (plan §4, what we measure). Same visitor id as the landing page's events.
       track('signup_completed', { fromSetup, founding })
@@ -103,6 +107,14 @@ export function SignupPage() {
         }
       }
       if (mappedAny) return
+
+      // Too many sign-ups for this address or network. Said at the form, not pinned to the email
+      // field: the email is not wrong, and the likeliest fix is logging in to the account that
+      // already exists (the link is right below the form).
+      if (err.status === 429) {
+        setFormError(err.message)
+        return
+      }
 
       const lower = err.message.toLowerCase()
       if (lower.includes('identifier')) {
@@ -242,6 +254,14 @@ export function SignupPage() {
           error={errors.password?.message}
           {...register('password')}
         />
+        {/* Honeypot. Off-screen, out of the tab order and hidden from assistive tech, so a person
+            never fills it in - and a form-filling bot that fills every field gets refused by the
+            server without the address it typed being mailed. Not display:none, which some bots
+            skip; not type="hidden", which they all skip. */}
+        <div aria-hidden="true" className="pointer-events-none absolute -left-[10000px] h-px w-px overflow-hidden">
+          <label htmlFor="signup-website">Website</label>
+          <input id="signup-website" ref={honeypotRef} type="text" name="website" tabIndex={-1} autoComplete="off" />
+        </div>
         <FormError message={formError} />
         <Button type="submit" loading={isSubmitting} className="w-full">
           {fromSetup ? 'Create my account' : 'Create account'}

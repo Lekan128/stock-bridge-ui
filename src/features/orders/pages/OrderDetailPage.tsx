@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useContext, useState } from 'react'
 import { CreditCard, PackageCheck, Repeat, Warehouse } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
@@ -14,6 +14,7 @@ import { PAYMENT_METHOD_LABELS } from '@/constants/orderStatus'
 import { useCart } from '@/features/cart/hooks/useCart'
 import { CancelOrderModal } from '@/features/orders/components/CancelOrderModal'
 import { OrderDetailSkeleton } from '@/features/orders/components/OrderDetailSkeleton'
+import { PaymentDeadlineNote } from '@/features/orders/components/PaymentDeadlineNote'
 import { OrderItemsList } from '@/features/orders/components/OrderItemsList'
 import { OrderTimeline } from '@/features/orders/components/OrderTimeline'
 import { ReceiveOrderModal } from '@/features/orders/components/ReceiveOrderModal'
@@ -24,6 +25,8 @@ import { useOrder } from '@/features/orders/hooks/useOrder'
 import { useRetryPayment } from '@/features/orders/hooks/useRetryPayment'
 import { invalidateIncomingStock } from '@/features/orders/incomingStock'
 import type { Order, ReorderResult } from '@/features/orders/types'
+import { EmailVerificationContext } from '@/features/profile/context/EmailVerificationContext'
+import { VerifyEmailToOrderNotice } from '@/features/profile/components/VerifyEmailToOrderNotice'
 import { isAppError } from '@/types/api'
 import { formatNaira } from '@/utils/money'
 import { OverflowMenu } from '@/components/OverflowMenu'
@@ -53,6 +56,10 @@ export function OrderDetailPage() {
   const { refetch: refetchCart } = useCart()
   const { order, setOrder, loading, error, refetch } = useOrder(id)
   const { retry, pendingOrderId } = useRetryPayment()
+  const verification = useContext(EmailVerificationContext)
+  // Paying needs a confirmed email (the server refuses otherwise). Only asserted once GET /api/me
+  // has answered, so a slow profile load never flashes a disabled button at a verified buyer.
+  const mustVerifyEmail = !!verification?.hasLoaded && !verification.emailVerified
 
   const [showReceive, setShowReceive] = useState(false)
   const [showCancel, setShowCancel] = useState(false)
@@ -143,7 +150,11 @@ export function OrderDetailPage() {
 
         <div className="flex flex-wrap items-center gap-2">
           {order.status === 'PENDING_PAYMENT' && (
-            <Button onClick={() => void retry(order.id)} loading={pendingOrderId === order.id}>
+            <Button
+              onClick={() => void retry(order.id)}
+              loading={pendingOrderId === order.id}
+              disabled={mustVerifyEmail}
+            >
               <CreditCard className="h-4 w-4" aria-hidden="true" />
               Retry payment
             </Button>
@@ -163,6 +174,13 @@ export function OrderDetailPage() {
           )}
         </div>
       </div>
+
+      {order.status === 'PENDING_PAYMENT' && (
+        <>
+          <PaymentDeadlineNote paymentDueBy={order.paymentDueBy} />
+          {mustVerifyEmail && <VerifyEmailToOrderNotice />}
+        </>
+      )}
 
       {/* The headline action, when the server says receipt is possible. It sits above everything
           else because it is the step between "the goods are here" and "the goods are usable". */}

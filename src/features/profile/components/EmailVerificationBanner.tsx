@@ -13,10 +13,10 @@ const feedbackClasses = {
  * The app-shell prompt for a user whose address has never been confirmed.
  *
  * It lives in the chrome, not on the profile page, because the consequence is not a
- * profile-page consequence. Until the address is confirmed the account receives **no order
- * receipts, no fulfilment updates and no payment confirmations** — silently, with nothing
- * anywhere else in the product to hint at it. Somebody who is told only "please verify your
- * email" has no reason to bother, so the copy leads with what they are missing.
+ * profile-page consequence. Until the address is confirmed the account **cannot place or pay for
+ * orders** (the server refuses both) and receives no order receipts or fulfilment updates.
+ * Somebody who is told only "please verify your email" has no reason to bother, so the copy leads
+ * with what they are missing.
  *
  * Renders nothing at all for a verified user, a signed-out visitor, an account with no address
  * to confirm, or anyone who dismissed it in the last day.
@@ -42,12 +42,12 @@ export function EmailVerificationBanner() {
 
       <div className="min-w-0 flex-1">
         <p id="email-verification-banner-title" className="text-sm font-semibold text-warning-900">
-          Confirm your email address to start receiving order emails
+          Confirm your email address to place orders
         </p>
         <p className="mt-0.5 text-sm text-warning-800">
-          Until <strong className="break-all">{address}</strong> is confirmed we cannot email you — no order
-          receipts, no delivery updates and no payment confirmations. Everything in the app keeps working; it is
-          only the emails that stop. Click the link we sent you, or send it again.
+          Until <strong className="break-all">{address}</strong> is confirmed you cannot place marketplace orders or
+          pay for them, and we cannot email you order receipts or delivery updates. Everything else in the app keeps
+          working. Click the link we sent you, or send it again.
         </p>
 
         {/* The result of the resend is announced where the button is, so a screen reader user

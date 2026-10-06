@@ -112,8 +112,8 @@ export function EmailSettingsPanel({ profile, onUpdated }: EmailSettingsPanelPro
         {address !== null && !profile.emailVerified && (
           <>
             <p className="text-sm text-neutral-600">
-              We are not sending anything to this address yet — no order receipts, no delivery updates, no payment
-              confirmations — because nobody has clicked the confirmation link we sent to it.
+              Nobody has clicked the confirmation link we sent to this address yet. Until then you cannot place or pay
+              for orders, and we are not sending it order receipts, delivery updates or payment confirmations.
             </p>
             <div className="mt-1 flex flex-wrap items-center gap-3">
               <button
