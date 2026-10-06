@@ -86,4 +86,6 @@ export interface ClientSignupRequest {
   phone?: string
   /** The landing page's setup request this signup follows (`/signup?setup=`). */
   setupRequestId?: string
+  /** Honeypot: always empty from a person (the field is hidden). Anything here is refused. */
+  website?: string
 }
