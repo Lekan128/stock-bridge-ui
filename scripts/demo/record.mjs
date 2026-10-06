@@ -70,7 +70,9 @@ const context = await browser.newContext({
   deviceScaleFactor: 2,
   isMobile: true,
   hasTouch: true,
-  recordVideo: { dir: TMP, size: { width: 780, height: 1688 } },
+  // The video is captured at the screen's own size (CSS pixels), whatever the pixel ratio: a larger
+  // size only pads it with grey. (The poster screenshot does use the 2x ratio.)
+  recordVideo: { dir: TMP, size: { width: 390, height: 844 } },
 })
 await context.addInitScript(
   ([rt, id]) => {

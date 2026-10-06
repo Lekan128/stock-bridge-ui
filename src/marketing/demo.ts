@@ -11,8 +11,8 @@ import recording from '@/marketing/demo-chapters.json'
 export const DEMO = {
   src: '/marketing/demo.webm',
   poster: '/marketing/demo-poster.jpg',
-  width: 780,
-  height: 1688,
+  width: 390,
+  height: 844,
   durationSeconds: recording.durationSeconds,
   uploadDate: '2026-10-06',
   chapters: recording.chapters,

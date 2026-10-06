@@ -43,8 +43,8 @@ export function DemoPage() {
           playsInline
           preload="none"
           poster={DEMO.poster}
-          width={DEMO.width / 2}
-          height={DEMO.height / 2}
+          width={DEMO.width}
+          height={DEMO.height}
           className="mx-auto w-full max-w-xs rounded-[2rem] border-[10px] border-neutral-900 bg-neutral-900 shadow-paper"
           aria-describedby="demo-transcript"
         >
