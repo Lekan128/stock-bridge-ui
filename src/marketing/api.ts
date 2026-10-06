@@ -34,7 +34,8 @@ export function fetchOffer(): Promise<FoundingOffer> {
 export async function requestSetup(body: {
   businessName: string
   whatsapp: string
-  source: 'landing' | 'founding' | 'pricing'
+  /** The page the request came from: landing, founding, pricing, a /for/ page… (the team's queue shows it). */
+  source: string
   website: string
 }): Promise<SetupRequestResult> {
   let response: Response

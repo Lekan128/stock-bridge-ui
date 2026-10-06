@@ -58,7 +58,7 @@ async function api(path, { token, method = 'GET', body } = {}) {
 }
 
 // A shop that has just signed up with its WhatsApp number, and a super admin for the team.
-const owner = (await api('/api/clients/signup', { method: 'POST', body: { name: SHOP, phone: local, password: PASSWORD } })).json
+const owner = (await api('/api/clients/signup', { method: 'POST', body: { name: SHOP, adminEmail: `first-week-${run}@example.com`, phone: local, password: PASSWORD } })).json
 const companyId = owner.user.clientIdentifier
 const admin = `e2e-admin-${run}`
 psql(`INSERT INTO super_admins (username, password_hash) SELECT '${admin}', u.password_hash FROM users u JOIN clients c ON c.id = u.client_id WHERE c.slug = '${companyId}' LIMIT 1;`)
@@ -229,6 +229,9 @@ await check('axe finds nothing on the checklist or the first-week page (the list
   await adminPage.getByRole('link', { name: 'First Week' }).click()
   await adminPage.getByPlaceholder('Find a shop or Company ID').fill(companyId)
   await adminPage.getByRole('listitem').filter({ hasText: SHOP }).waitFor()
+  // The list dims while a search loads; scan the settled page, not the fade.
+  await adminPage.waitForFunction(() => document.querySelectorAll('li').length > 0 && !document.querySelector('ul.opacity-60'))
+  await adminPage.waitForTimeout(400)
   const firstWeek = await axeScan(adminPage)
   await laptop.close()
   const all = [...dashboard, ...firstWeek]

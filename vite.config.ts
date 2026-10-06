@@ -1,8 +1,10 @@
-import { defineConfig, type Connect, type Plugin } from 'vite'
+import { defineConfig, type Connect, type Plugin, type ViteDevServer } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'node:path'
+import { readFileSync } from 'node:fs'
+import { MARKETING_PATHS, marketingFile } from './src/marketing/paths.ts'
 
 /** The marketplace's old addresses, before it moved under /marketplace (LANDING_PAGE_PLAN.md, step 2). */
 const LEGACY_MARKETPLACE = /^\/(product\/|seller\/|cart$|checkout(\/|$)|order-confirmation\/)/
@@ -14,20 +16,47 @@ const LEGACY_MARKETPLACE = /^\/(product\/|seller\/|cart$|checkout(\/|$)|order-co
  * (index.html) for everything else.
  */
 function routeLikeNetlify(): Plugin {
-  // /founding is prerendered into founding.html at build time; the dev server has only the
-  // unrendered landing page, which renders the same thing client-side.
-  const route = (foundingPage: string): Connect.NextHandleFunction => (req, res, next) => {
+  // The marketing pages (/founding, /pricing, /guides/…) are prerendered into dist/<path>.html at
+  // build time (scripts/prerender.mjs), which the preview serves. The dev server renders them on
+  // each request with the same code (entry-server's renderPath), so `npm run dev` shows the real
+  // pages, links and all, not an empty shell.
+  const renderInDev = async (server: ViteDevServer, page: string, originalUrl: string): Promise<string | null> => {
+    const { renderPath } = await server.ssrLoadModule('/src/marketing/entry-server.tsx')
+    const rendered = renderPath(page, { siteUrl: 'http://localhost:5173' })
+    if (!rendered) return null
+    const template = await server.transformIndexHtml(originalUrl, readFileSync(path.resolve(__dirname, 'landing.html'), 'utf8'))
+    return template
+      .replace('data-surface="marketing"', rendered.id ? `data-surface="marketing" data-page="${rendered.id}"` : 'data-surface="marketing"')
+      .replace('<!--marketing-head-->', rendered.head)
+      .replace('<!--marketing-html-->', rendered.html)
+  }
+  const route = (prerendered: boolean, server?: ViteDevServer): Connect.NextHandleFunction => (req, res, next) => {
     const url = new URL(req.url ?? '/', 'http://localhost')
     const moveTo = (location: string) => {
       res.statusCode = 301
       res.setHeader('Location', location)
       res.end()
     }
-    if (url.pathname === '/') {
-      if (url.searchParams.has('q') || url.searchParams.has('categoryId')) return moveTo(`/marketplace${url.search}`)
+    const page = url.pathname === '/' ? '/' : url.pathname.replace(/\/$/, '')
+    if (page === '/' && (url.searchParams.has('q') || url.searchParams.has('categoryId'))) return moveTo(`/marketplace${url.search}`)
+    if (server && (page === '/' || MARKETING_PATHS.includes(page))) {
+      renderInDev(server, page, req.originalUrl ?? req.url ?? '/').then(
+        (html) => {
+          if (html == null) return next()
+          res.setHeader('Content-Type', 'text/html; charset=utf-8')
+          res.end(html)
+        },
+        (error: Error) => {
+          server.ssrFixStacktrace(error)
+          next(error)
+        },
+      )
+      return
+    }
+    if (page === '/') {
       req.url = `/landing.html${url.search}`
-    } else if (url.pathname === '/founding' || url.pathname === '/founding/') {
-      req.url = `${foundingPage}${url.search}`
+    } else if (MARKETING_PATHS.includes(page)) {
+      req.url = `${prerendered ? `/${marketingFile(page)}` : '/landing.html'}${url.search}`
     } else if (LEGACY_MARKETPLACE.test(url.pathname)) {
       return moveTo(`/marketplace${url.pathname}${url.search}`)
     }
@@ -35,8 +64,8 @@ function routeLikeNetlify(): Plugin {
   }
   return {
     name: 'route-like-netlify',
-    configureServer: (server) => void server.middlewares.use(route('/landing.html')),
-    configurePreviewServer: (server) => void server.middlewares.use(route('/founding.html')),
+    configureServer: (server) => void server.middlewares.use(route(false, server)),
+    configurePreviewServer: (server) => void server.middlewares.use(route(true)),
   }
 }
 
@@ -108,7 +137,7 @@ export default defineConfig(({ isSsrBuild }) => ({
           'assets/ibm-plex-sans-latin-standard-normal-*.woff2',
         ],
         // The landing page isn't the app and needn't be held offline.
-        globIgnores: ['landing.html', 'founding.html', 'icons/og-*.png'],
+        globIgnores: ['landing.html', ...MARKETING_PATHS.map(marketingFile), 'icons/og-*.png', 'downloads/**', 'marketing/**'],
         // The precache answers a directory URL with its index file, and checks that BEFORE the
         // denylist below: `/` came back as the precached app shell, not the landing page. Naming
         // the landing page (deliberately not precached) sends `/` to the network instead.
@@ -118,7 +147,10 @@ export default defineConfig(({ isSsrBuild }) => ({
         // ...except the marketing pages, which come from the network so they are the real,
         // prerendered page: `/` and `/founding` (with or without a query string) for now; step 7's
         // pages join them.
-        navigateFallbackDenylist: [/^\/(\?.*)?$/, /^\/founding\/?(\?.*)?$/],
+        navigateFallbackDenylist: [
+          /^\/(\?.*)?$/,
+          new RegExp(`^(${MARKETING_PATHS.map((page: string) => page.replace(/[/-]/g, '\\$&')).join('|')})\\/?(\\?.*)?$`),
+        ],
         // The recharts chunk is ~370 kB; the default 2 MiB cap is fine, but keep headroom so a
         // larger chunk fails the build loudly instead of silently dropping out of the precache.
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,

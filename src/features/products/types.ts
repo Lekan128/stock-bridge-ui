@@ -385,6 +385,8 @@ export interface StockMovement {
   unitPriceAtTime: number | null
   note: string | null
   createdByUserId: string | null
+  /** Who recorded it: "Amaka Obi", or their username when no name was given. Absent on older APIs. */
+  createdByName?: string
   /**
    * ⚠️ Two different questions, and they must not be used interchangeably. `occurredAt` is when
    * the delivery or sale actually HAPPENED; `createdAt` is when the row was WRITTEN. They are

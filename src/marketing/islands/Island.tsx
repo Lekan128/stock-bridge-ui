@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-export type IslandName = 'account' | 'scarcity' | 'receipt' | 'setup' | 'sticky'
+export type IslandName = 'account' | 'scarcity' | 'receipt' | 'setup' | 'sticky' | 'loss'
 
 /**
  * A part of the static landing page that comes alive in the browser. The page is prerendered HTML
@@ -17,3 +17,6 @@ export function Island({ name, props, children }: { name: IslandName; props?: ob
 
 /** Every CTA carries this; one listener in `../main.tsx` turns a click into the setup form. */
 export const OPEN_SETUP_EVENT = 'pp:open-setup'
+
+/** The setup form announces it is listening (it hydrates after the page's buttons are tappable). */
+export const SETUP_READY_EVENT = 'pp:setup-ready'

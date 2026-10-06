@@ -55,7 +55,12 @@ export function SetupChecklist() {
   const done = steps.filter(Boolean).length
   const allDone = done === steps.length
   const listWaiting = status.products === 0 && status.listFiles > 0
-  const login = welcome && welcome.clientIdentifier === companyId ? displayUsername(welcome.username) : null
+  const mine = welcome && welcome.clientIdentifier === companyId ? welcome : null
+  const login = mine
+    ? mine.phone
+      ? `${displayUsername(mine.username)} or ${displayUsername(mine.phone)}`
+      : displayUsername(mine.username)
+    : null
 
   function hide() {
     try {

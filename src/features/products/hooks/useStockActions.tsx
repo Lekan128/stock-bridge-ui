@@ -1,3 +1,4 @@
+import { usePendingStock } from '@/features/outbox/useOutbox'
 import { useState, type ReactNode } from 'react'
 import { useToast } from '@/components/useToast'
 import { applyStockResult, discardOp, getOutboxState, isInFlight } from '@/features/outbox/outboxStore'
@@ -36,6 +37,9 @@ export function useStockActions({ onChanged }: { onChanged?: (product: Product) 
   const { showToast } = useToast()
   const { options } = useUnitOfMeasureOptions()
   const [active, setActive] = useState<{ kind: StockActionKind; product: Product } | null>(null)
+  // This phone's changes not yet folded into the figure: a count compares against the stock after
+  // them, as the list shows it ("−3 kg waiting"), not before.
+  const pending = usePendingStock(active?.product.id)
 
   /** "1,020 kg", "96 pieces" — a figure in the product's own unit. */
   function figure(product: Product, quantity: number): string {
@@ -122,7 +126,7 @@ export function useStockActions({ onChanged }: { onChanged?: (product: Product) 
       <StockAdjustmentModal
         productId={active.product.id}
         productName={active.product.name}
-        currentQuantity={active.product.quantityOnHand}
+        currentQuantity={active.product.quantityOnHand + pending.delta}
         stockUnit={resolveUnitSymbol(active.product.unitOfMeasure, options)}
         onClose={close}
         onSuccess={(result) => succeeded('count', result)}

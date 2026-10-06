@@ -10,7 +10,8 @@
 //   GOOGLE_SITE_VERIFICATION   Search Console's HTML-tag code
 //   BING_SITE_VERIFICATION     Bing Webmaster Tools' code
 //   SITE_NOINDEX=true          staging: tell crawlers to stay away entirely
-import { readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
@@ -20,7 +21,7 @@ const ssr = `${root}dist-ssr/`
 const siteUrl = (process.env.SITE_URL || 'https://procurepaddy.com').replace(/\/$/, '')
 const noindex = process.env.SITE_NOINDEX === 'true'
 
-const { renderHome, renderFounding, SITEMAP_PATHS } = await import(pathToFileURL(`${ssr}entry-server.js`).href)
+const { renderHome, renderFounding, renderPages, SITEMAP_PATHS } = await import(pathToFileURL(`${ssr}entry-server.js`).href)
 const headOptions = {
   siteUrl,
   googleVerification: process.env.GOOGLE_SITE_VERIFICATION,
@@ -64,6 +65,32 @@ writeFileSync(
     : `<!doctype html><html lang="en-NG"><head><meta charset="utf-8" /><meta name="robots" content="noindex" /><link rel="canonical" href="${siteUrl}/" /><meta http-equiv="refresh" content="0; url=/" /><title>Procurepaddy</title></head><body><a href="/">Procurepaddy</a></body></html>\n`,
 )
 
+// Every other marketing page (step 7): each into dist/<path>.html, with its own head, and a
+// data-page on <html> for anything only that page needs (the count sheet's print styles).
+const pages = renderPages(headOptions)
+for (const page of pages) {
+  const out = `${dist}${page.file}`
+  mkdirSync(dirname(out), { recursive: true })
+  writeFileSync(
+    out,
+    template
+      .replace('data-surface="marketing"', `data-surface="marketing" data-page="${page.id}"`)
+      .replace('<!--marketing-head-->', robotsMeta + fontPreload + page.head)
+      .replace('<!--marketing-html-->', page.html),
+  )
+}
+
+// Netlify: each page is served as itself, ahead of the app shell's catch-all (public/_redirects
+// ends with /* /index.html). Written into the copy in dist, just before that last rule.
+const redirects = readFileSync(`${dist}_redirects`, 'utf8')
+const catchAll = '# Everything else is the app.'
+if (!redirects.includes(catchAll)) throw new Error(`public/_redirects is missing "${catchAll}"`)
+const rules = pages.map((page) => `${page.path}  /${page.file}  200!`).join('\n')
+writeFileSync(
+  `${dist}_redirects`,
+  redirects.replace(catchAll, `# The marketing pages, written by scripts/prerender.mjs.\n${rules}\n\n${catchAll}`),
+)
+
 const today = new Date().toISOString().slice(0, 10)
 writeFileSync(
   `${dist}sitemap.xml`,
@@ -96,5 +123,5 @@ Sitemap: ${siteUrl}/sitemap.xml
 
 rmSync(ssr, { recursive: true, force: true })
 console.log(
-  `prerendered / (${foundingOffer ? 'founding offer' : 'early access'}) and /founding${founding ? '' : ' (redirect)'} for ${siteUrl}${noindex ? ' (noindex)' : ''}; wrote sitemap.xml and robots.txt`,
+  `prerendered / (${foundingOffer ? 'founding offer' : 'early access'}), /founding${founding ? '' : ' (redirect)'} and ${pages.length} more pages for ${siteUrl}${noindex ? ' (noindex)' : ''}; wrote sitemap.xml, robots.txt and the _redirects rules`,
 )

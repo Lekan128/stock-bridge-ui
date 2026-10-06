@@ -70,12 +70,12 @@ export interface ClientSignupRequest {
   name: string
   /** Optional: generated from the name when absent, and never refused for being taken. */
   clientIdentifier?: string
-  /** Optional since the landing page's step 4. When present, the owner logs in with it. */
-  adminEmail?: string
+  /** Required (owners, 2026-10-06): the owner's username, and where Procurepaddy writes to the company. */
+  adminEmail: string
   password: string
   /** Optional: the form shows the password instead of asking for it twice. */
   confirmPassword?: string
-  /** The shop's WhatsApp number. Required without an email, and then the owner logs in with it. */
+  /** The shop's WhatsApp number (the form requires it). The owner can log in with it too, typed any way. */
   phone?: string
   /** The landing page's setup request this signup follows (`/signup?setup=`). */
   setupRequestId?: string

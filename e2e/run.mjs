@@ -13,6 +13,7 @@ const SUITES = [
   'pwa-shell',
   'landing',
   'first-week',
+  'seo-pages',
   'lost-refresh',
   'data-layer',
   'catalog',

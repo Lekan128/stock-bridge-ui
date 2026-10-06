@@ -1,24 +1,25 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { X } from 'lucide-react'
 import { buttonClassName } from '@/components/Button'
 import { requestSetup, type SetupRequestResult } from '@/marketing/api'
 import { track } from '@/marketing/analytics'
 import { formatWeek } from '@/marketing/offer'
 import { WHATSAPP_NUMBER, WHATSAPP_URL } from '@/marketing/site'
-import { OPEN_SETUP_EVENT } from '@/marketing/islands/Island'
+import { OPEN_SETUP_EVENT, SETUP_READY_EVENT } from '@/marketing/islands/Island'
 
 /**
  * The page's one action (conversion rule 4): two fields, and that alone books the setup. The
  * account comes after. A native <dialog>, so focus is held inside it, Escape closes it, and the page
  * behind is inert, with almost no code. Every "Get my free setup" opens it (`../main.tsx`).
  */
-export function SetupDialog({ source = 'landing' }: { source?: 'landing' | 'founding' | 'pricing' }) {
+export function SetupDialog({ source = 'landing' }: { source?: string }) {
   const dialog = useRef<HTMLDialogElement>(null)
   const firstField = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [booked, setBooked] = useState<(SetupRequestResult & { businessName: string; whatsapp: string }) | null>(null)
-  const id = useId()
+  // Fixed, not useId: an island hydrates on its own, so a generated id wouldn't match the page's.
+  const id = 'setup'
 
   useEffect(() => {
     const open = () => {
@@ -26,6 +27,8 @@ export function SetupDialog({ source = 'landing' }: { source?: 'landing' | 'foun
       firstField.current?.focus()
     }
     window.addEventListener(OPEN_SETUP_EVENT, open)
+    ;(window as Window & { ppSetupReady?: boolean }).ppSetupReady = true
+    window.dispatchEvent(new Event(SETUP_READY_EVENT))
     return () => window.removeEventListener(OPEN_SETUP_EVENT, open)
   }, [])
 

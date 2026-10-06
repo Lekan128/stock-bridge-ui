@@ -178,6 +178,26 @@ await check('count: says what it does, then the shelf figure and its difference 
   assert((await onHand(rice.id)) === 996, `server has ${await onHand(rice.id)}`)
 })
 
+await check('a count straight after an offline sale compares against the stock after that sale', async () => {
+  await context.setOffline(true)
+  await page.getByRole('button', { name: 'Stock out', exact: true }).click()
+  await search().fill('rice (c4)')
+  await page.getByRole('button', { name: /Rice \(c4\)/ }).click()
+  await keypad(['6'])
+  await page.getByRole('button', { name: /^Stock out 6 kg/ }).click()
+  await search().waitFor({ timeout: 4000 })
+  // 996 after the count above, then 6 out on this phone, not yet sent: the app says 990.
+  await page.getByRole('button', { name: 'Count', exact: true }).click()
+  await search().fill('rice (c4)')
+  await page.getByRole('button', { name: /Rice \(c4\)/ }).click()
+  await page.getByText('On hand 990 kg').waitFor()
+  await keypad(['9', '8', '8'])
+  await page.locator('[data-stock-figure]').getByText('−2').waitFor()
+  await page.getByRole('button', { name: 'Change' }).click()
+  await goOnline()
+  await search().waitFor()
+})
+
 await check('Exit goes back to Inventory', async () => {
   await page.getByRole('button', { name: 'Exit' }).click()
   await page.waitForURL(/\/app\/products$/)

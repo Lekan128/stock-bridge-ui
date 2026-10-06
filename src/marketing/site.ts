@@ -44,10 +44,23 @@ function escapeHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
+export interface HeadExtras {
+  faq?: { question: string; answer: string }[]
+  /** Home › Guides › This guide. Becomes BreadcrumbList JSON-LD. */
+  breadcrumbs?: { name: string; path: string }[]
+  /** More JSON-LD for this page (Article, VideoObject, Product offers…). */
+  jsonLd?: object[]
+}
+
 /** The page's <head> tags: title, description, canonical, social cards, verification, JSON-LD. */
-export function headTags(page: PageMeta, options: HeadOptions, faq?: { question: string; answer: string }[]): string {
+export function headTags(
+  page: PageMeta,
+  options: HeadOptions,
+  extras?: { question: string; answer: string }[] | HeadExtras,
+): string {
+  const { faq, breadcrumbs, jsonLd: more = [] } = Array.isArray(extras) ? { faq: extras } : (extras ?? {})
   const origin = options.siteUrl.replace(/\/$/, '')
-  const url = `${origin}${page.path}`
+  const url = `${origin}${page.path === '/' ? '/' : page.path}`
   const image = `${origin}/icons/og-1200x630.png`
   const jsonLd = [
     {
@@ -82,6 +95,21 @@ export function headTags(page: PageMeta, options: HeadOptions, faq?: { question:
           },
         ]
       : []),
+    ...(breadcrumbs && breadcrumbs.length > 0
+      ? [
+          {
+            '@context': 'https://schema.org',
+            '@type': 'BreadcrumbList',
+            itemListElement: [{ name: 'Home', path: '/' }, ...breadcrumbs].map((crumb, index) => ({
+              '@type': 'ListItem',
+              position: index + 1,
+              name: crumb.name,
+              item: `${origin}${crumb.path}`,
+            })),
+          },
+        ]
+      : []),
+    ...more.map((item) => ({ '@context': 'https://schema.org', ...item })),
   ]
   const tags = [
     `<title>${escapeHtml(page.title)}</title>`,
@@ -102,5 +130,7 @@ export function headTags(page: PageMeta, options: HeadOptions, faq?: { question:
   return tags.filter(Boolean).join('\n    ')
 }
 
-/** Every page the sitemap lists. Step 7's pages join this list as they are written. */
-export const SITEMAP_PATHS = ['/']
+/** The site's origin-relative address for a JSON-LD `url`, given the build's origin. */
+export function absolute(options: HeadOptions, path: string): string {
+  return `${options.siteUrl.replace(/\/$/, '')}${path}`
+}

@@ -83,6 +83,20 @@ WhatsApp number, and super admins answer the request from `/admin/setup-requests
 owner's dashboard then shows the setup checklist with "Send us your list" (`src/features/onboarding/`);
 the team loads the list from inside the shop as Procurepaddy support and follows each shop's first
 week at `/admin/first-week` (step 5).
+
+**The other marketing pages** (steps 6 and 7): pricing, the demo, about, two comparisons, five
+`/for/` trade pages, two free tools and the guides. Each is listed in `src/marketing/paths.ts`
+(which the preview server and the service worker read too), defined in
+`src/marketing/pages/registry.tsx`, and prerendered to `dist/<path>.html` with its own head, a
+sitemap entry and a Netlify rule (written into `dist/_redirects`). Guides live in
+`src/marketing/guides/`; a new one needs its slug in `paths.ts` and an entry in `guides/index.ts`.
+Real shops' results go in `src/marketing/proof.ts`, only with their written permission.
+
+- `scripts/lead-magnets/build.py` (Python 3 + openpyxl) rebuilds the two free downloads in
+  `public/downloads/` from the API's import template (`scripts/lead-magnets/import-template.xlsx`,
+  saved from `GET /api/products/template`).
+- `scripts/demo/record.mjs` re-records the demo video (`public/marketing/demo.webm`, its poster and
+  `src/marketing/demo-chapters.json`) against a running API and preview.
 `VITE_POSTHOG_KEY` (and optionally `VITE_POSTHOG_HOST`) turns on the funnel events. Build settings
 for the landing page, all optional: `SITE_URL` (canonical origin, default `https://procurepaddy.com`), `SITE_NOINDEX=true`
 (staging and previews set it), `GOOGLE_SITE_VERIFICATION` and `BING_SITE_VERIFICATION` (the

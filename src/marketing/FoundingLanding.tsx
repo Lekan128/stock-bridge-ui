@@ -12,13 +12,14 @@ import {
   UserCheck,
   WifiOff,
 } from 'lucide-react'
-import { Logo } from '@/components/Logo'
+import { MarketingFooter, MarketingHeader } from '@/marketing/components'
+import { DEMO_MINUTES } from '@/marketing/demo'
+import { ShopResults } from '@/marketing/ShopResults'
 import { ContourLines } from '@/components/brand/ContourLines'
 import { FAQ } from '@/marketing/faq'
 import { FOUNDERS } from '@/marketing/founders'
 import { STACK } from '@/marketing/offer'
-import { WHATSAPP_NUMBER, WHATSAPP_URL } from '@/marketing/site'
-import { AccountLink } from '@/marketing/islands/AccountLink'
+import { WHATSAPP_URL } from '@/marketing/site'
 import { HeroReceipt } from '@/marketing/islands/HeroReceipt'
 import { Island } from '@/marketing/islands/Island'
 import { ScarcityLine } from '@/marketing/islands/ScarcityLine'
@@ -99,39 +100,7 @@ export function FoundingLanding({ variant = 'home' }: { variant?: 'home' | 'foun
         Skip to content
       </a>
 
-      <header className="px-4 sm:px-6">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 py-5">
-        {focused ? (
-          <Logo size={26} />
-        ) : (
-          <a href="/" aria-label="Procurepaddy home">
-            <Logo size={26} />
-          </a>
-        )}
-        <nav aria-label="Main" className="flex items-center gap-1 text-sm">
-          {!focused && (
-            <>
-              <a href="#how" className="hidden rounded-md px-3 py-2 font-medium text-neutral-700 hover:bg-neutral-100 md:inline">
-                How it works
-              </a>
-              <a href="#faq" className="hidden rounded-md px-3 py-2 font-medium text-neutral-700 hover:bg-neutral-100 md:inline">
-                FAQ
-              </a>
-            </>
-          )}
-          <Island name="account">
-            <AccountLink />
-          </Island>
-          <a
-            href="/signup"
-            data-cta="header"
-            className="hidden min-h-10 items-center rounded-md bg-action px-4 font-semibold whitespace-nowrap text-white hover:bg-action-hover sm:inline-flex"
-          >
-            Get my free setup
-          </a>
-        </nav>
-        </div>
-      </header>
+      <MarketingHeader focused={focused} />
 
       <main id="main">
         {/* Hero: the whole value equation, the offer, proof and urgency in one screen. */}
@@ -150,8 +119,8 @@ export function FoundingLanding({ variant = 'home' }: { variant?: 'home' | 'foun
               </p>
               <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
                 <Cta place="hero" />
-                <a href="#how" className="text-base font-medium text-primary-700 hover:underline">
-                  See how it works
+                <a href="/demo" className="text-base font-medium text-primary-700 hover:underline">
+                  Watch it work ({DEMO_MINUTES})
                 </a>
               </div>
               <p className="flex items-start gap-2 text-sm text-neutral-800">
@@ -270,11 +239,16 @@ export function FoundingLanding({ variant = 'home' }: { variant?: 'home' | 'foun
                 </li>
               ))}
             </ul>
-            <div className="mt-12">
+            <div className="mt-12 flex flex-wrap items-center gap-x-6 gap-y-3">
               <Cta place="proof" onNavy />
+              <a href="/demo" className="text-base font-semibold text-white underline">
+                Watch it work ({DEMO_MINUTES})
+              </a>
             </div>
           </div>
         </section>
+
+        <ShopResults />
 
         {/* The offer, printed the way the app prints a stock change: a receipt. */}
         <Section id="offer" label="The founding offer">
@@ -472,24 +446,7 @@ export function FoundingLanding({ variant = 'home' }: { variant?: 'home' | 'foun
         )}
       </main>
 
-      <footer className="border-t border-neutral-200 px-4 py-10 pb-28 sm:px-6 sm:pb-10">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-6 text-sm text-neutral-600">
-          <Logo size={20} />
-          <nav aria-label="Footer" className="flex flex-wrap gap-x-6 gap-y-2">
-            {!focused && (
-              <>
-                <a href="#how" className="hover:text-neutral-900 hover:underline">How it works</a>
-                <a href="#faq" className="hover:text-neutral-900 hover:underline">FAQ</a>
-              </>
-            )}
-            <a href="/login" className="hover:text-neutral-900 hover:underline">Log in</a>
-            <a href={WHATSAPP_URL} className="hover:text-neutral-900 hover:underline" target="_blank" rel="noreferrer">
-              WhatsApp {WHATSAPP_NUMBER}
-            </a>
-          </nav>
-          <p>© 2026 Procurepaddy</p>
-        </div>
-      </footer>
+      <MarketingFooter focused={focused} />
 
       <Island name="sticky">
         <StickyCta />

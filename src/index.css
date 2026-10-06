@@ -166,3 +166,19 @@
     --font-sans: var(--font-workspace);
   }
 }
+
+/* The stock count sheet prints on its own: the page around it is for the screen
+   (src/marketing/pages/ToolPages.tsx). */
+@media print {
+  html[data-page='count-sheet'] body * {
+    visibility: hidden;
+  }
+  html[data-page='count-sheet'] .count-sheet,
+  html[data-page='count-sheet'] .count-sheet * {
+    visibility: visible;
+  }
+  html[data-page='count-sheet'] .count-sheet {
+    position: absolute;
+    inset: 0 0 auto 0;
+  }
+}

@@ -1,3 +1,4 @@
+import { displayUsername } from '@/utils/whatsappNumber'
 import { Badge, type BadgeVariant } from '@/components/Badge'
 import { Pagination } from '@/components/Pagination'
 import { Skeleton } from '@/components/Skeleton'
@@ -95,7 +96,9 @@ export function StockHistoryTable({
     movement.createdByUserId
       ? movement.createdByUserId === user?.id
         ? 'You'
-        : `User ${movement.createdByUserId.slice(0, 8)}`
+        : movement.createdByName
+          ? displayUsername(movement.createdByName)
+          : `User ${movement.createdByUserId.slice(0, 8)}`
       : '—'
   // When it happened, which for a backdated delivery or a late write from a phone is not when it was typed in.
   const when = (movement: StockMovement) => formatDateTime(movement.occurredAt ?? movement.createdAt)

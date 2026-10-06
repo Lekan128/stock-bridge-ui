@@ -161,6 +161,8 @@ const WELCOME_KEY = 'pp.welcome.v1'
 export interface StoredWelcome {
   clientIdentifier: string
   username: string
+  /** The WhatsApp number in +234 form: the owner can log in with it too. */
+  phone?: string
   /** Came from a landing-page setup request: the team is loading their products. */
   fromSetup: boolean
 }

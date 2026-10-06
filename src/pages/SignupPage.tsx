@@ -45,7 +45,6 @@ export function SignupPage() {
 
   const [editingId, setEditingId] = useState(false)
   const [identifierEdited, setIdentifierEdited] = useState(false)
-  const [showEmail, setShowEmail] = useState(false)
 
   const {
     register,
@@ -76,16 +75,17 @@ export function SignupPage() {
         // Only a Company ID the owner chose is sent. A generated one is the server's to pick, so it
         // can add -2 when another shop already has the name instead of refusing.
         clientIdentifier: identifierEdited ? values.clientIdentifier || undefined : undefined,
-        phone: values.phone ? (normaliseWhatsApp(values.phone) ?? values.phone) : undefined,
-        adminEmail: values.adminEmail || undefined,
+        phone: normaliseWhatsApp(values.phone) ?? values.phone,
+        adminEmail: values.adminEmail,
         password: values.password,
         setupRequestId,
       })
       // Lead to signup (plan §4, what we measure). Same visitor id as the landing page's events.
-      track('signup_completed', { fromSetup, founding, withEmail: values.adminEmail !== '' })
+      track('signup_completed', { fromSetup, founding })
       welcomeStorage.set({
         clientIdentifier: tenantUser.clientIdentifier,
         username: tenantUser.username,
+        phone: normaliseWhatsApp(values.phone) ?? undefined,
         fromSetup,
       })
       navigate(DEFAULT_AUTHENTICATED_PATH, { replace: true })
@@ -111,6 +111,14 @@ export function SignupPage() {
         setFocus('clientIdentifier')
       } else if (lower.includes('whatsapp') || lower.includes('mobile number')) {
         setError('phone', { message: err.message })
+      } else if (lower.includes('email')) {
+        setError('adminEmail', { message: err.message })
+      } else if (err.status === 400 && err.message === 'Something went wrong. Please try again.') {
+        // A refusal with no reason (an API older than this form would answer a phone-only sign-up
+        // this way): say what can be done instead of "something went wrong".
+        setFormError(
+          "We couldn't create the account with these details. Check them and try again, or WhatsApp us on +234 818 410 3312 and we'll set it up with you.",
+        )
       } else {
         setFormError(err.message)
       }
@@ -190,10 +198,7 @@ export function SignupPage() {
               )}
               <button
                 type="button"
-                onClick={() => {
-                  setEditingId(true)
-                  setTimeout(() => setFocus('clientIdentifier'))
-                }}
+                onClick={() => setEditingId(true)}
                 className="font-medium text-primary-600 hover:underline"
               >
                 Change
@@ -205,6 +210,7 @@ export function SignupPage() {
           <TextField
             label="Company ID"
             hint="Your staff type this to log in. Lowercase letters, numbers and hyphens."
+            autoFocus
             autoCapitalize="none"
             spellCheck={false}
             error={errors.clientIdentifier?.message}
@@ -212,12 +218,20 @@ export function SignupPage() {
           />
         )}
         <TextField
+          label="Email"
+          type="email"
+          autoComplete="email"
+          hint="Receipts and account messages come here. You can log in with it."
+          error={errors.adminEmail?.message}
+          {...register('adminEmail')}
+        />
+        <TextField
           label="WhatsApp number"
           type="tel"
           inputMode="tel"
           autoComplete="tel"
           placeholder="0803 123 4567"
-          hint="You log in with this number. We message you here to load your products."
+          hint="We message you here to load your products. You can log in with it too."
           error={errors.phone?.message}
           {...register('phone')}
         />
@@ -228,27 +242,6 @@ export function SignupPage() {
           error={errors.password?.message}
           {...register('password')}
         />
-        {showEmail ? (
-          <TextField
-            label="Email (optional)"
-            type="email"
-            autoComplete="email"
-            hint="For receipts. You can log in with it too."
-            error={errors.adminEmail?.message}
-            {...register('adminEmail')}
-          />
-        ) : (
-          <button
-            type="button"
-            onClick={() => {
-              setShowEmail(true)
-              setTimeout(() => setFocus('adminEmail'))
-            }}
-            className="self-start text-sm font-medium text-primary-600 hover:underline"
-          >
-            Add an email (optional)
-          </button>
-        )}
         <FormError message={formError} />
         <Button type="submit" loading={isSubmitting} className="w-full">
           {fromSetup ? 'Create my account' : 'Create account'}

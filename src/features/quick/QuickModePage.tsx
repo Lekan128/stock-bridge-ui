@@ -1,3 +1,4 @@
+import { usePendingStock } from '@/features/outbox/useOutbox'
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { Delete, Search, X } from 'lucide-react'
 import { createPortal } from 'react-dom'
@@ -367,7 +368,12 @@ function AmountStep({
   const base = toBaseQuantity(quantity, option)
   const summary = formatEnteredAndBase(quantity, option, base, stockText)
   const wholeOnly = isCountedInWholeUnits(product.unitOfMeasure, options)
-  const difference = mode === 'count' && typed !== '' ? exactBaseQuantity(quantity, option) - product.quantityOnHand : null
+  // What the app says is on hand counts this phone's own changes not yet folded into the figure (the
+  // list shows them as "−3 kg waiting"): a count right after a sale must compare against the stock
+  // after that sale, or the difference it shows is off by exactly that sale.
+  const pending = usePendingStock(product.id)
+  const appSays = product.quantityOnHand + pending.delta
+  const difference = mode === 'count' && typed !== '' ? exactBaseQuantity(quantity, option) - appSays : null
 
   function problem(): string | null {
     if (typed === '') return 'Type how many.'
@@ -448,7 +454,7 @@ function AmountStep({
         <div className="min-w-0">
           <p className="truncate text-lg font-semibold">{product.name}</p>
           <p className="text-sm text-neutral-500">
-            On hand {formatNumber(product.quantityOnHand)} {stockUnitWord(symbol, product.quantityOnHand)}
+            On hand {formatNumber(appSays)} {stockUnitWord(symbol, appSays)}
           </p>
         </div>
         <button type="button" onClick={onBack} className="h-11 shrink-0 rounded-md px-3 text-base font-medium text-primary-700 hover:bg-primary-50">
