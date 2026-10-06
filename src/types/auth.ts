@@ -45,6 +45,13 @@ export interface SuperAdminUser {
   username: string
 }
 
+/** Which account an emailed reset link is for (`POST /api/auth/password-reset/check`). */
+export interface PasswordResetAccount {
+  companyName: string
+  clientIdentifier: string
+  login: string
+}
+
 export interface TenantLoginResponse {
   tokens: AuthTokens
   user: TenantUser
