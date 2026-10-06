@@ -27,7 +27,7 @@ const dotStyles: Record<StatusTimelineState, string> = {
 const labelStyles: Record<StatusTimelineState, string> = {
   complete: 'text-neutral-900',
   current: 'text-primary-700',
-  upcoming: 'text-neutral-400',
+  upcoming: 'text-neutral-500',
   cancelled: 'text-danger-700',
 }
 

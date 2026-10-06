@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { useCategories } from '@/features/storefront/hooks/useCategories'
 import { topLevelCategories } from '@/features/storefront/types'
 import { useClickOutside } from '@/hooks/useClickOutside'
+import { marketplacePaths } from '@/routes/marketplacePaths'
 
 /**
  * The catalog's category entry point.
@@ -40,7 +41,7 @@ export function StorefrontCategoryMenu({ className = '' }: { className?: string 
       >
         <LayoutGrid className="h-4 w-4" aria-hidden="true" />
         Categories
-        <ChevronDown className={`h-3.5 w-3.5 text-neutral-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`h-3.5 w-3.5 text-neutral-500 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
@@ -49,7 +50,7 @@ export function StorefrontCategoryMenu({ className = '' }: { className?: string 
           className="absolute left-0 z-50 mt-1 max-h-80 w-64 overflow-y-auto rounded-lg border border-neutral-200 bg-white py-1 shadow-lg"
         >
           <Link
-            to="/"
+            to={marketplacePaths.home}
             role="menuitem"
             onClick={() => setOpen(false)}
             className="block px-3 py-2 text-sm font-medium text-primary-600 hover:bg-neutral-50"
@@ -62,20 +63,20 @@ export function StorefrontCategoryMenu({ className = '' }: { className?: string 
             return (
               <div key={category.id}>
                 <Link
-                  to={`/?categoryId=${category.id}`}
+                  to={marketplacePaths.category(category.id)}
                   role="menuitem"
                   onClick={() => setOpen(false)}
                   className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50"
                 >
                   <span className="truncate">{category.name}</span>
                   {category.productCount !== undefined && (
-                    <span className="shrink-0 text-xs text-neutral-400">{category.productCount}</span>
+                    <span className="shrink-0 text-xs text-neutral-500">{category.productCount}</span>
                   )}
                 </Link>
                 {children.map((child) => (
                   <Link
                     key={child.id}
-                    to={`/?categoryId=${child.id}`}
+                    to={marketplacePaths.category(child.id)}
                     role="menuitem"
                     onClick={() => setOpen(false)}
                     className="block py-1.5 pl-7 pr-3 text-sm text-neutral-500 hover:bg-neutral-50 hover:text-neutral-700"

@@ -239,7 +239,7 @@ export function MarketplaceAnalyticsPage() {
               five empty charts as a page that failed to load. */}
           {summary.data?.current.orderCount === 0 && (
             <p className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-neutral-300 bg-white px-4 py-6 text-center text-sm text-neutral-500">
-              <LineChart className="h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
+              <LineChart className="h-4 w-4 shrink-0 text-neutral-500" aria-hidden="true" />
               ProcurePal sold nothing in {rangeLabel}. Try a wider date range.
             </p>
           )}

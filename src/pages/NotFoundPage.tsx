@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { buttonClassName } from '@/components/Button'
 import { EmptyState } from '@/components/EmptyState'
+import { marketplacePaths } from '@/routes/marketplacePaths'
 
 /**
  * Rendered inside whichever layout the bad path fell through to — storefront chrome for public
@@ -20,7 +21,7 @@ export function NotFoundPage() {
         description="That link doesn't lead anywhere — it may have moved, or the address may be mistyped."
         action={
           <>
-            <Link to="/" className={buttonClassName('primary')}>
+            <Link to={marketplacePaths.home} className={buttonClassName('primary')}>
               Go to the marketplace
             </Link>
             {isAuthenticated && (

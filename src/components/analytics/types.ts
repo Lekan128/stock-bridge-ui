@@ -5,6 +5,12 @@ export interface AnalyticsSummary {
   totalUnitsOut: number
   lowStockProductCount: number
   activeProductCount: number
+  /** `quantityOnHand <= 0`, active only. Independent of `lowStockProductCount` — a product with no
+   *  alert threshold set can be out of stock without ever counting as "low". */
+  outOfStockProductCount: number
+  /** `activeProductCount` minus every product counted in `lowStockProductCount` or
+   *  `outOfStockProductCount` — the count this dashboard had no figure for before. */
+  wellStockedProductCount: number
 }
 
 export type Granularity = 'day' | 'week' | 'month'

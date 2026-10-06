@@ -30,7 +30,7 @@ export function PlatformOwnerNotBootstrappedState({ message, onRetry }: Platform
       role="status"
       className="flex flex-col items-center justify-center rounded-lg border border-dashed border-neutral-300 bg-white px-6 py-14 text-center"
     >
-      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-neutral-100 text-neutral-400">
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-neutral-100 text-neutral-500">
         <ServerCog className="h-6 w-6" aria-hidden="true" />
       </div>
 

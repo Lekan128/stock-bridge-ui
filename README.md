@@ -57,6 +57,51 @@ deployed backend's URL before building — it's baked into the build output, not
 `npm run preview` serves that `dist/` build locally, useful for a final sanity check before
 deploying.
 
+### Two pages: the app and the landing page
+
+The build makes two HTML entries (LANDING_PAGE_PLAN.md, step 2):
+
+- **`index.html`** is the app: the workspace, the marketplace (`/marketplace/…`) and every unknown
+  path's fallback. The service worker caches it for offline use.
+- **`landing.html`** is the Procurepaddy home page at `/`: its own small bundle
+  (`src/marketing/`), rendered to real HTML at build time by `scripts/prerender.mjs` so search
+  engines read it without running JavaScript. The same step writes `sitemap.xml` and `robots.txt`.
+
+Netlify serves `landing.html` at `/` and moves the marketplace's old addresses (`/product/…`,
+`/cart`, `/checkout/return?…`) to `/marketplace` with their query strings (`public/_redirects`).
+`npm run dev` and `npm run preview` route the same way.
+
+With `VITE_FOUNDING_OFFER=true` the home page is the full founding-offer page (step 3): static HTML
+with small interactive islands (`src/marketing/islands/`: the setup form, the live counts, the hero
+receipt, the sticky phone button), calling the API's public `/api/public/founding-offer` and
+`/api/public/setup-requests`. Staging builds it; production keeps the early-access page until the
+owners switch it on, and the build refuses that until `src/marketing/founders.ts` is filled in.
+`/founding` (`founding.html`) is the same offer with no navigation, for ads and outreach: always
+noindex and canonical to `/`; with the offer off it redirects to `/`. After "Book my setup", sign-up
+needs only a password (`/signup?setup=…&business=…&whatsapp=…`), the owner logs in with their
+WhatsApp number, and super admins answer the request from `/admin/setup-requests` (step 4). An
+owner's dashboard then shows the setup checklist with "Send us your list" (`src/features/onboarding/`);
+the team loads the list from inside the shop as Procurepaddy support and follows each shop's first
+week at `/admin/first-week` (step 5).
+
+**The other marketing pages** (steps 6 and 7): pricing, the demo, about, two comparisons, five
+`/for/` trade pages, two free tools and the guides. Each is listed in `src/marketing/paths.ts`
+(which the preview server and the service worker read too), defined in
+`src/marketing/pages/registry.tsx`, and prerendered to `dist/<path>.html` with its own head, a
+sitemap entry and a Netlify rule (written into `dist/_redirects`). Guides live in
+`src/marketing/guides/`; a new one needs its slug in `paths.ts` and an entry in `guides/index.ts`.
+Real shops' results go in `src/marketing/proof.ts`, only with their written permission.
+
+- `scripts/lead-magnets/build.py` (Python 3 + openpyxl) rebuilds the two free downloads in
+  `public/downloads/` from the API's import template (`scripts/lead-magnets/import-template.xlsx`,
+  saved from `GET /api/products/template`).
+- `scripts/demo/record.mjs` re-records the demo video (`public/marketing/demo.webm`, its poster and
+  `src/marketing/demo-chapters.json`) against a running API and preview.
+`VITE_POSTHOG_KEY` (and optionally `VITE_POSTHOG_HOST`) turns on the funnel events. Build settings
+for the landing page, all optional: `SITE_URL` (canonical origin, default `https://procurepaddy.com`), `SITE_NOINDEX=true`
+(staging and previews set it), `GOOGLE_SITE_VERIFICATION` and `BING_SITE_VERIFICATION` (the
+search consoles' HTML-tag codes).
+
 Hosted builds run this same command on Netlify — `main` for production, `staging` for the
 staging branch deploy, each built against its own `VITE_API_BASE_URL`. See
 [`DEPLOYMENT.md`](./DEPLOYMENT.md).

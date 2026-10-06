@@ -3,23 +3,38 @@
 @import '@fontsource/inter/500.css';
 @import '@fontsource/inter/600.css';
 @import '@fontsource/inter/700.css';
+/* The workspace face (D4, B1 spike): one variable file carries every weight AND Plex's own
+   condensed widths (font-stretch 75–100%), so dense tables need no second family. */
+@import '@fontsource-variable/ibm-plex-sans/standard.css';
 
 @theme {
+  /* Inter stays for the storefront and sign-in; the /app workspace switches to Plex below. */
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-workspace: 'IBM Plex Sans Variable', 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
 
-  /* Primary — deep navy/indigo blue. Brand base is primary-600. */
-  --color-primary-50: #eef2fa;
-  --color-primary-100: #d9e2f5;
-  --color-primary-200: #b3c5eb;
-  --color-primary-300: #8ca8e0;
-  --color-primary-400: #5f82cc;
-  --color-primary-500: #3d5fae;
-  --color-primary-600: #1e3a8a;
-  --color-primary-700: #172f6e;
-  --color-primary-800: #112353;
-  --color-primary-900: #0b1836;
+  /* The one main action on a screen (Track B: Stock in, Add product, Create, Submit): the brand
+     navy (D5, decided 2026-10-05). Hover lifts it a step towards the brand blue. */
+  --color-action: var(--color-primary-900);
+  --color-action-hover: var(--color-primary-800);
 
-  /* Accent — emerald green. Brand base is accent-600. */
+  /* "Lifted paper": the one shadow, for sheets and panels only (plan §2). */
+  --shadow-paper: 0 1px 2px rgb(23 26 33 / 0.06), 0 12px 32px -8px rgb(23 26 33 / 0.22);
+
+  /* Primary — the Procurepaddy blues as one ramp (D5): the brand's pale #D6E8FF is 100, its bright
+     #3B82F6 is 500, its navy #08205B is 900. Navy is the brand and the action; bright blue is for
+     focus, selection and chart marks (3.7:1 on white — never text); 600 and darker carry text. */
+  --color-primary-50: #eff5ff;
+  --color-primary-100: #d6e8ff;
+  --color-primary-200: #b6d3ff;
+  --color-primary-300: #8bb7fc;
+  --color-primary-400: #5e99f8;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #1f56d1;
+  --color-primary-700: #183fa0;
+  --color-primary-800: #112e7a;
+  --color-primary-900: #08205b;
+
+  /* Accent — emerald green: success and good news, not brand. Base is accent-600. */
   --color-accent-50: #ecfdf5;
   --color-accent-100: #d1fae5;
   --color-accent-200: #a7f3d0;
@@ -40,8 +55,8 @@
   --color-neutral-500: #6b7280;
   --color-neutral-600: #4b5563;
   --color-neutral-700: #374151;
-  --color-neutral-800: #232833;
-  --color-neutral-900: #171a21;
+  --color-neutral-800: #272f3c; /* the brand's slate */
+  --color-neutral-900: #171b24;
 
   /* Warning / amber — low-stock alerts. */
   --color-warning-50: #fffbeb;
@@ -75,6 +90,48 @@
 
   /* Subtle entrance for auth cards/toasts — never blocks interactivity. */
   --animate-fade-slide-up: fade-slide-up 350ms cubic-bezier(0.16, 1, 0.3, 1) both;
+
+  /* Plan §2 motion: 150–200 ms, transform and opacity only, ease-out, in three places only. */
+  --animate-sheet-up: sheet-up 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-panel-in: panel-in 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-stamp-land: stamp-land 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes stamp-land {
+  from {
+    opacity: 0;
+    transform: scale(1.25) rotate(-2deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(-2deg);
+  }
+}
+
+/* Plex's condensed cut, from the same variable file: dense tables and quantity columns (plan §2),
+   so more fits on a phone row. Harmless outside the workspace — Inter has no width axis. */
+@utility font-narrow {
+  font-stretch: 85%;
 }
 
 @keyframes fade-slide-up {
@@ -89,7 +146,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .animate-fade-slide-up {
+  .animate-fade-slide-up,
+  .animate-sheet-up,
+  .animate-panel-in,
+  .animate-stamp-land {
     animation: none;
   }
 }
@@ -97,5 +157,28 @@
 @layer base {
   body {
     @apply bg-neutral-50 text-neutral-900 font-sans antialiased;
+  }
+
+  /* Set on <html> by AppLayout while the workspace is open (so dialogs portaled to <body> get the
+     workspace face too), and by landing.html for the Procurepaddy home page. */
+  html[data-surface='workspace'],
+  html[data-surface='marketing'] {
+    --font-sans: var(--font-workspace);
+  }
+}
+
+/* The stock count sheet prints on its own: the page around it is for the screen
+   (src/marketing/pages/ToolPages.tsx). */
+@media print {
+  html[data-page='count-sheet'] body * {
+    visibility: hidden;
+  }
+  html[data-page='count-sheet'] .count-sheet,
+  html[data-page='count-sheet'] .count-sheet * {
+    visibility: visible;
+  }
+  html[data-page='count-sheet'] .count-sheet {
+    position: absolute;
+    inset: 0 0 auto 0;
   }
 }

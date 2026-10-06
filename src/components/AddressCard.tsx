@@ -49,7 +49,7 @@ function AddressBody({ address }: { address: AddressCardAddress }) {
       </div>
       <p className="mt-1 text-sm text-neutral-700">{address.contactName}</p>
       <p className="mt-1 flex items-start gap-1.5 text-sm text-neutral-600">
-        <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-neutral-400" aria-hidden="true" />
+        <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-neutral-500" aria-hidden="true" />
         <span>
           {address.addressLine1}
           {address.addressLine2 ? `, ${address.addressLine2}` : ''}, {address.city}, {address.state}
@@ -57,7 +57,7 @@ function AddressBody({ address }: { address: AddressCardAddress }) {
         </span>
       </p>
       <p className="mt-1 flex items-center gap-1.5 text-sm text-neutral-600">
-        <Phone className="h-3.5 w-3.5 shrink-0 text-neutral-400" aria-hidden="true" />
+        <Phone className="h-3.5 w-3.5 shrink-0 text-neutral-500" aria-hidden="true" />
         {address.contactPhone}
       </p>
       {address.deliveryNotes && (

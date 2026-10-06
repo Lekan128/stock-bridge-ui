@@ -13,6 +13,7 @@ import { useCart } from '@/features/cart/hooks/useCart'
 import { groupCartBySeller } from '@/features/cart/types'
 import { useMarketplaceSettings } from '@/features/storefront/hooks/useMarketplaceSettings'
 import { formatNaira, formatNairaWhole } from '@/utils/money'
+import { marketplacePaths } from '@/routes/marketplacePaths'
 
 /**
  * The cart — route `/cart`. Public: an anonymous visitor may build a cart before signing up, and
@@ -89,7 +90,7 @@ export function CartPage() {
           title="Your cart is empty"
           description="Everything you add here is priced wholesale and lands in your inventory as incoming stock once the order is placed."
           action={
-            <Link to="/" className={buttonClassName('primary')}>
+            <Link to={marketplacePaths.home} className={buttonClassName('primary')}>
               Browse the catalog
             </Link>
           }
@@ -172,7 +173,7 @@ export function CartPage() {
                     ) : group.platformOwner ? (
                       <BadgeCheck className="h-5 w-5 shrink-0 text-primary-600" aria-hidden="true" />
                     ) : (
-                      <Store className="h-5 w-5 shrink-0 text-neutral-400" aria-hidden="true" />
+                      <Store className="h-5 w-5 shrink-0 text-neutral-500" aria-hidden="true" />
                     )}
                     <p className="truncate text-sm font-semibold text-neutral-900">
                       <span className="font-normal text-neutral-500">Sold by </span>
@@ -182,7 +183,7 @@ export function CartPage() {
                   {/* Goods only. The delivery fee for this group is the server's call — it depends
                       on the free-delivery threshold — and appears on the checkout summary. */}
                   <p className="text-sm text-neutral-600">
-                    <span className="text-neutral-400">Items </span>
+                    <span className="text-neutral-500">Items </span>
                     <span className="font-medium text-neutral-900">{formatNaira(group.subtotal)}</span>
                   </p>
                 </header>
@@ -210,7 +211,7 @@ export function CartPage() {
           )}
 
           <Link
-            to="/"
+            to={marketplacePaths.home}
             className="mt-4 inline-flex items-center gap-1.5 rounded text-sm font-medium text-primary-600 hover:text-primary-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
           >
             Continue shopping
@@ -250,7 +251,7 @@ export function CartPage() {
 
             <div className="mt-4">
               {canCheckout ? (
-                <Link to="/checkout" className={`${buttonClassName('primary')} w-full`}>
+                <Link to={marketplacePaths.checkout} className={`${buttonClassName('primary')} w-full`}>
                   Proceed to checkout
                   <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </Link>

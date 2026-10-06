@@ -215,6 +215,16 @@ export function pluraliseUnitNoun(noun: string, quantity: number): string {
 }
 
 /**
+ * A stock unit as it reads after a figure: `(96, "Piece")` → `"pieces"`, `(1, "Piece")` →
+ * `"piece"`, `(1000, "kg")` → `"kg"`. The unit list's symbol for a counted unit is its capitalised
+ * label ("Piece"), which after a number read as a code — "96 Piece" (found in the B1 spike).
+ */
+export function stockUnitWord(symbol: string, quantity: number): string {
+  const word = /^[A-Z][a-z]/.test(symbol) ? symbol.charAt(0).toLowerCase() + symbol.slice(1) : symbol
+  return pluraliseUnitNoun(word, quantity)
+}
+
+/**
  * A quantity that carries its unit — `UNIT_UX_CONTRACT.md` §7.2's non-negotiable, and the rule
  * `utils/units.ts` stated for the marketplace surfaces and the inventory surfaces then ignored
  * (plan §3's P2: the product page's 3xl headline stock figure had no unit on it at all).
@@ -225,7 +235,11 @@ export function pluraliseUnitNoun(noun: string, quantity: number): string {
  * {@link formatQuantityInUnit} which does that for you.
  */
 export function formatQuantity(quantity: number, unitLabel: string | null | undefined): string {
-  const noun = unitLabel?.trim() || UNIT_COPY.NO_UNIT_LABEL
+  const label = unitLabel?.trim() || UNIT_COPY.NO_UNIT_LABEL
+  // A counted unit's label is one capitalised word ("Piece", "Bottle"); after a number it reads as
+  // a code ("5 Pieces"), so it is lower-cased first. Symbols ("kg", "L") and phrases ("Bag of 50 kg")
+  // are left exactly as they are.
+  const noun = /^[A-Z][a-z]+$/.test(label) ? label.toLowerCase() : label
   return `${formatNumber(quantity)} ${pluraliseUnitNoun(noun, quantity)}`
 }
 

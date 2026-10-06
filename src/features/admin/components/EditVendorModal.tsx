@@ -240,7 +240,7 @@ export function EditVendorModal({ vendorId, submitting, onCancel, onConfirm }: E
           <div className="border-t border-neutral-100 pt-4">
             <h3 className="text-sm font-semibold text-neutral-900">Payout &amp; registration</h3>
             <p className="mt-0.5 text-xs text-neutral-500">
-              All optional. Where Procure Paddy pays this vendor out, and their CAC number. Never
+              All optional. Where ProcurePal pays this vendor out, and their CAC number. Never
               shown to buyers.
             </p>
             <div className="mt-3 flex flex-col gap-4">

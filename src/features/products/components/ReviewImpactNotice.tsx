@@ -80,7 +80,7 @@ export function ReviewImpactNotice({ mode }: ReviewImpactNoticeProps) {
           <ul className="mt-1.5 flex flex-col gap-0.5 text-xs text-neutral-700">
             {IDENTITY_FIELD_LABELS.map((label) => (
               <li key={label} className="flex gap-1.5">
-                <span aria-hidden="true" className="text-neutral-400">
+                <span aria-hidden="true" className="text-neutral-500">
                   •
                 </span>
                 {label}
@@ -99,7 +99,7 @@ export function ReviewImpactNotice({ mode }: ReviewImpactNoticeProps) {
           <ul className="mt-1.5 flex flex-col gap-0.5 text-xs text-neutral-700">
             {IMMEDIATE_FIELD_LABELS.map((label) => (
               <li key={label} className="flex gap-1.5">
-                <span aria-hidden="true" className="text-neutral-400">
+                <span aria-hidden="true" className="text-neutral-500">
                   •
                 </span>
                 {label}

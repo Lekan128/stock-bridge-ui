@@ -109,7 +109,7 @@ export function AdminVendorsPage() {
             Vendors
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-neutral-600">
-            Third-party businesses selling on the marketplace. Procure Paddy's own catalogue is
+            Third-party businesses selling on the marketplace. ProcurePal's own catalogue is
             managed under Tenants, not here.
           </p>
         </div>
@@ -192,7 +192,7 @@ export function AdminVendorsPage() {
                       <span>{vendor.productCount} products</span>
                     </div>
 
-                    <p className="mt-2 text-xs text-neutral-400">
+                    <p className="mt-2 text-xs text-neutral-500">
                       Created {formatDateTime(vendor.createdAt)}
                     </p>
                   </div>

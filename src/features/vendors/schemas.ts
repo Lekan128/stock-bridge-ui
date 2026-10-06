@@ -37,7 +37,7 @@ export const vendorFormSchema = z.object({
   addressLine1: z.string().trim().max(255, 'Must be 255 characters or fewer'),
   addressLine2: z.string().trim().max(255, 'Must be 255 characters or fewer'),
   city: z.string().trim().max(100, 'Must be 100 characters or fewer'),
-  // Optional here where the delivery-address form requires it: ProcurePaddy has to deliver to an
+  // Optional here where the delivery-address form requires it: ProcurePal has to deliver to an
   // address, but nobody has to know where their diesel supplier's office is. When it *is* given it
   // must be a real state — the server checks the same list.
   state: z

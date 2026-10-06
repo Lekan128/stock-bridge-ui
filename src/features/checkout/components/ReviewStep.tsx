@@ -74,7 +74,7 @@ export function ReviewStep({
               <p className="text-sm font-medium text-neutral-900">{address.label}</p>
               <p className="mt-0.5 text-sm text-neutral-700">{address.contactName}</p>
               <p className="mt-0.5 flex items-start gap-1.5 text-sm text-neutral-600">
-                <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-neutral-400" aria-hidden="true" />
+                <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-neutral-500" aria-hidden="true" />
                 {address.lines}
               </p>
               <p className="mt-0.5 text-sm text-neutral-600">{address.contactPhone}</p>
@@ -150,7 +150,7 @@ export function ReviewStep({
             placeholder="e.g. PO-4821. Please deliver before 3pm on Thursday."
             className="mt-2 w-full rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100"
           />
-          <p className="mt-1 text-right text-xs text-neutral-400">
+          <p className="mt-1 text-right text-xs text-neutral-500">
             {note.length}/{NOTE_MAX}
           </p>
         </div>

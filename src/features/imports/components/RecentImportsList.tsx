@@ -14,6 +14,8 @@ import { formatWhen, summariseOutcome } from '@/features/imports/formatters'
 import { useRecentImports } from '@/features/imports/hooks/useRecentImports'
 import type { ImportKind, ImportSessionSummary, UndoBlockedResponse } from '@/features/imports/types'
 import { isAppError } from '@/types/api'
+import { useQueryClient } from '@tanstack/react-query'
+import { invalidateInventory } from '@/data/inventoryCache'
 
 export interface RecentImportsListProps {
   kind?: ImportKind
@@ -42,6 +44,7 @@ function destinationFor(entry: ImportSessionSummary): { to: string; label: strin
 }
 
 export function RecentImportsList({ kind, bare = false }: RecentImportsListProps) {
+  const queryClient = useQueryClient()
   const { items, loading, error, refetch } = useRecentImports(kind)
   const { showToast } = useToast()
   const [pendingUndo, setPendingUndo] = useState<ImportSessionSummary | null>(null)
@@ -53,6 +56,7 @@ export function RecentImportsList({ kind, bare = false }: RecentImportsListProps
     setUndoing(true)
     try {
       await importsApi.undo(pendingUndo.id)
+      void invalidateInventory(queryClient)
       showToast(copy.result.undoneToast, 'success')
       setBlocked(null)
       setPendingUndo(null)
@@ -112,7 +116,7 @@ export function RecentImportsList({ kind, bare = false }: RecentImportsListProps
             <li key={entry.id} className="flex flex-col gap-2 px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
                 <div className="flex min-w-0 items-center gap-3">
-                  <FileSpreadsheet className="h-5 w-5 shrink-0 text-neutral-400" aria-hidden="true" />
+                  <FileSpreadsheet className="h-5 w-5 shrink-0 text-neutral-500" aria-hidden="true" />
                   <div className="min-w-0">
                     <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-neutral-900">
                       <span className="truncate">{entry.originalFilename}</span>

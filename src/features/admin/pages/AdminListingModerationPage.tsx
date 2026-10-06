@@ -242,7 +242,7 @@ export function AdminListingModerationPage() {
                       </p>
                     )}
 
-                    <p className="mt-2 text-xs text-neutral-400">
+                    <p className="mt-2 text-xs text-neutral-500">
                       Submitted {formatDateTime(product.createdAt)}
                       {product.reviewedAt && ` · last reviewed ${formatDateTime(product.reviewedAt)}`}
                     </p>

@@ -145,7 +145,7 @@ export function ResetCatalogModal({ client, onClose, onSuccess }: ResetCatalogMo
                 {preview.blockers.map((blocker) => (
                   <li key={blocker.productId} className="flex justify-between gap-3 border-b border-neutral-100 py-1">
                     <span>
-                      {blocker.productName} <span className="text-neutral-400">({blocker.sku})</span>
+                      {blocker.productName} <span className="text-neutral-500">({blocker.sku})</span>
                     </span>
                     <span className="shrink-0 text-neutral-500">
                       {blocker.orderLines} order {blocker.orderLines === 1 ? 'line' : 'lines'}

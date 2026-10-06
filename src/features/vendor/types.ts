@@ -205,7 +205,7 @@ export interface VendorCataloguePage {
 
 /**
  * The five ledger kinds. Signed FROM THE VENDOR'S POINT OF VIEW throughout: a positive
- * amount means ProcurePaddy owes them more.
+ * amount means ProcurePal owes them more.
  *
  * That convention is why `amount` can be added up as-is and why the running balance
  * works — nothing on this screen flips a sign, and nothing should. Rendering an unsigned
@@ -253,7 +253,7 @@ export interface VendorStatementMovements {
   commission: number
   /** Both reversal kinds netted. Usually negative; a commission-only correction is positive. */
   reversals: number
-  /** Negative. Money that actually left ProcurePaddy's bank. */
+  /** Negative. Money that actually left ProcurePal's bank. */
   payouts: number
   netMovement: number
 }
@@ -288,7 +288,7 @@ export interface VendorEscrowPosition {
   pendingProjectedCommission: number
   pendingNet: number
   pendingOrderCount: number
-  /** What ProcurePaddy owes right now. Same number as `closingBalance`. Can be negative after a refund. */
+  /** What ProcurePal owes right now. Same number as `closingBalance`. Can be negative after a refund. */
   heldBalance: number
   /**
    * Confirmed by the buyer — so it IS owed and IS inside `heldBalance` — but still inside its

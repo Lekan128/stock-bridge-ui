@@ -17,6 +17,7 @@ import { useMarketplaceSettings } from '@/features/storefront/hooks/useMarketpla
 import { useProductDetail } from '@/features/storefront/hooks/useProductDetail'
 import { formatNaira, formatNairaWhole } from '@/utils/money'
 import { formatQuantity } from '@/utils/units'
+import { marketplacePaths } from '@/routes/marketplacePaths'
 
 /**
  * Public product detail — route `/product/:idOrSlug`.
@@ -55,7 +56,7 @@ export function StorefrontProductDetailPage() {
     await addItem(product.id, quantity, product)
     setPending(null)
     if (mode === 'buy') {
-      navigate('/checkout')
+      navigate(marketplacePaths.checkout)
       return
     }
     setJustAdded(true)
@@ -78,7 +79,7 @@ export function StorefrontProductDetailPage() {
           title="This product is no longer listed"
           description="ProcurePal may have delisted it, or the link may be out of date. The rest of the catalog is still here."
           action={
-            <Link to="/" className={buttonClassName('primary')}>
+            <Link to={marketplacePaths.home} className={buttonClassName('primary')}>
               Browse the catalog
             </Link>
           }
@@ -95,7 +96,7 @@ export function StorefrontProductDetailPage() {
           message={error}
           onRetry={refetch}
           action={
-            <Link to="/" className={buttonClassName('secondary')}>
+            <Link to={marketplacePaths.home} className={buttonClassName('secondary')}>
               Back to the catalog
             </Link>
           }
@@ -114,7 +115,7 @@ export function StorefrontProductDetailPage() {
         items={[
           { label: 'Marketplace', to: '/' },
           ...(product.categoryId && product.categoryName
-            ? [{ label: product.categoryName, to: `/?categoryId=${product.categoryId}` }]
+            ? [{ label: product.categoryName, to: marketplacePaths.category(product.categoryId) }]
             : []),
           { label: product.name },
         ]}
@@ -132,7 +133,7 @@ export function StorefrontProductDetailPage() {
 
         <div className="min-w-0">
           {product.brand && (
-            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400">{product.brand}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{product.brand}</p>
           )}
           <h1 className="mt-1 text-xl font-bold leading-tight text-neutral-900 sm:text-2xl">{product.name}</h1>
 
@@ -149,7 +150,7 @@ export function StorefrontProductDetailPage() {
               <Badge variant="danger">Out of stock</Badge>
             )}
             {product.categoryName && <Badge variant="neutral">{product.categoryName}</Badge>}
-            <span className="text-xs text-neutral-400">SKU {product.sku}</span>
+            <span className="text-xs text-neutral-500">SKU {product.sku}</span>
           </div>
 
           <ProductPriceTag
@@ -260,7 +261,7 @@ export function StorefrontProductDetailPage() {
               {justAdded && (
                 <p aria-live="polite" className="mt-2 text-sm text-accent-700">
                   {formatQuantity(quantity, product.unitOfMeasure)} added.{' '}
-                  <Link to="/cart" className="font-medium underline underline-offset-2">
+                  <Link to={marketplacePaths.cart} className="font-medium underline underline-offset-2">
                     View cart
                   </Link>
                 </p>
@@ -277,7 +278,7 @@ export function StorefrontProductDetailPage() {
                   : 'ProcurePal is restocking this line. It stays listed so you can find it again.'}
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Link to="/" className={buttonClassName('secondary')}>
+                <Link to={marketplacePaths.home} className={buttonClassName('secondary')}>
                   <Store className="h-4 w-4" aria-hidden="true" />
                   Browse alternatives
                 </Link>

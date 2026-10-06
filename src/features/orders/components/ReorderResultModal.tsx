@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Button, buttonClassName } from '@/components/Button'
 import { Modal } from '@/components/Modal'
 import type { ReorderResult } from '@/features/orders/types'
+import { marketplacePaths } from '@/routes/marketplacePaths'
 
 export interface ReorderResultModalProps {
   result: ReorderResult
@@ -31,7 +32,7 @@ export function ReorderResultModal({ result, onClose }: ReorderResultModalProps)
             Keep browsing
           </Button>
           {result.addedCount > 0 && (
-            <Link to="/cart" className={buttonClassName('primary')}>
+            <Link to={marketplacePaths.cart} className={buttonClassName('primary')}>
               Go to cart
             </Link>
           )}

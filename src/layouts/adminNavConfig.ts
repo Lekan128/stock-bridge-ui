@@ -1,4 +1,4 @@
-import { BarChart3, Building2, ClipboardList, Coins, Hourglass, Store, UserCog, type LucideIcon } from 'lucide-react'
+import { BarChart3, Building2, CalendarCheck, ClipboardList, Coins, Hourglass, PhoneIncoming, Store, UserCog, type LucideIcon } from 'lucide-react'
 
 export interface AdminNavItem {
   path: string
@@ -7,6 +7,11 @@ export interface AdminNavItem {
 }
 
 export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
+  // First, because it is the one queue with a clock on it: every Procurepaddy setup request is
+  // owed a WhatsApp reply within 5 minutes in staffed hours (LANDING_PAGE_PLAN.md, rule 5).
+  { path: '/admin/setup-requests', label: 'Setup Requests', icon: PhoneIncoming },
+  // Then what happens after the reply: each new shop's first week (step 5).
+  { path: '/admin/first-week', label: 'First Week', icon: CalendarCheck },
   { path: '/admin/tenants', label: 'Tenants', icon: Building2 },
   // ProcurePal's own staff accounts. Not gated on anything: super admin is a single flat role,
   // and the screen handles the "ProcurePal was never bootstrapped" case itself rather than

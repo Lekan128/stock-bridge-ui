@@ -39,8 +39,8 @@ export function EmptyVendorsState({ canManage, filtered, onAdd, onClearFilters }
       title="No suppliers yet"
       description={
         canManage
-          ? 'Sellers you buy from on the ProcurePaddy marketplace are added here automatically after your first order. Add the suppliers you deal with off-platform — the local miller, the diesel supplier — yourself.'
-          : 'Sellers your company buys from on the ProcurePaddy marketplace are added here automatically after the first order. Ask a colleague in procurement to add the suppliers you deal with off-platform.'
+          ? 'Sellers you buy from on the ProcurePal marketplace are added here automatically after your first order. Add the suppliers you deal with off-platform — the local miller, the diesel supplier — yourself.'
+          : 'Sellers your company buys from on the ProcurePal marketplace are added here automatically after the first order. Ask a colleague in procurement to add the suppliers you deal with off-platform.'
       }
       action={canManage ? <Button onClick={onAdd}>Add your first supplier</Button> : undefined}
     />

@@ -285,7 +285,7 @@ export function ProductSkuSettingsPage() {
 
           <div className="rounded-md bg-neutral-50 px-3 py-2 text-sm text-neutral-600">
             Example: <span className="font-mono font-medium text-neutral-900">{renderExample(pattern) || '—'}</span>
-            <span className="ml-1 text-xs text-neutral-400">(illustration — the real next SKU depends on how many products you already have)</span>
+            <span className="ml-1 text-xs text-neutral-500">(illustration — the real next SKU depends on how many products you already have)</span>
           </div>
 
           <FormError message={formError} />

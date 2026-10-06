@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Search, X } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { marketplacePaths } from '@/routes/marketplacePaths'
 
 export interface StorefrontSearchInputProps {
   /** Called after a submit — lets the mobile drawer close itself. */
@@ -31,7 +32,7 @@ export function StorefrontSearchInput({ onSubmitted, autoFocus = false, classNam
   function submit(next: string) {
     const trimmed = next.trim()
     // Dropping the param entirely (rather than `?q=`) keeps the "browse everything" URL clean.
-    navigate(trimmed ? `/?q=${encodeURIComponent(trimmed)}` : '/')
+    navigate(trimmed ? marketplacePaths.search(trimmed) : marketplacePaths.home)
     onSubmitted?.()
   }
 
@@ -47,7 +48,7 @@ export function StorefrontSearchInput({ onSubmitted, autoFocus = false, classNam
       <label htmlFor="storefront-search" className="sr-only">
         Search the ProcurePal catalog
       </label>
-      <Search className="pointer-events-none absolute left-3 h-4 w-4 text-neutral-400" aria-hidden="true" />
+      <Search className="pointer-events-none absolute left-3 h-4 w-4 text-neutral-500" aria-hidden="true" />
       <input
         id="storefront-search"
         type="search"
@@ -65,14 +66,14 @@ export function StorefrontSearchInput({ onSubmitted, autoFocus = false, classNam
             submit('')
           }}
           aria-label="Clear search"
-          className="absolute right-[4.75rem] rounded p-1 text-neutral-400 hover:text-neutral-600"
+          className="absolute right-[4.75rem] rounded p-1 text-neutral-500 hover:text-neutral-600"
         >
           <X className="h-3.5 w-3.5" />
         </button>
       )}
       <button
         type="submit"
-        className="absolute right-1 rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-1"
+        className="absolute right-1 rounded-md bg-primary-900 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-1"
       >
         Search
       </button>

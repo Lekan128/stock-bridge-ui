@@ -16,7 +16,7 @@ export function DeliverySummary({ delivery }: { delivery: ImportDeliveryDetails 
 
   return (
     <p className="flex items-center gap-2 text-sm text-neutral-600">
-      <Truck className="h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
+      <Truck className="h-4 w-4 shrink-0 text-neutral-500" aria-hidden="true" />
       <span>{parts.join(' · ')}</span>
     </p>
   )

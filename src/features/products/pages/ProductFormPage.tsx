@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, ArrowLeft, Clock, Lock, Ruler, Tag, Truck, Zap } from 'lucide-react'
 import { useForm } from 'react-hook-form'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
 import { Button } from '@/components/Button'
@@ -14,6 +14,7 @@ import { CategoryField } from '@/features/products/categories/CategoryField'
 import type { CompanyCategory } from '@/features/products/categories/types'
 import { useCompanyCategories } from '@/features/products/categories/useCompanyCategories'
 import { ImageUploadField } from '@/features/products/components/ImageUploadField'
+import { ErrorState } from '@/components/ErrorState'
 import { ProductFormSkeleton } from '@/features/products/components/ProductFormSkeleton'
 import { RequestUnitOfMeasureModal } from '@/features/products/components/RequestUnitOfMeasureModal'
 import { ReviewImpactDialog } from '@/features/products/components/ReviewImpactDialog'
@@ -56,8 +57,14 @@ import {
   unitOptionsForProduct,
 } from '@/features/products/unitSet'
 import { vendorCatalogueApi } from '@/features/vendor/api/vendorCatalogueApi'
+import { SupplierField } from '@/features/vendors/components/SupplierField'
 import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
 import { isAppError } from '@/types/api'
+import { useQueryClient } from '@tanstack/react-query'
+import { invalidateInventory, syncProductIntoCache } from '@/data/inventoryCache'
+import { DraftNote } from '@/features/drafts/DraftNote'
+import { useDraft } from '@/features/drafts/useDraft'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 
 const KNOWN_FIELDS = new Set<keyof ProductFormValues>([
   'name',
@@ -197,6 +204,13 @@ const IDENTITY_FIELDS: { field: keyof ProductFormValues & keyof Product; label: 
  * purchase; everywhere else, cost is something to look at (the detail page's Overview tab), not
  * something to edit here.
  */
+/** What the new-product form keeps on the phone between visits (A5). */
+interface ProductDraft {
+  values: ProductFormValues
+  containsText: string
+  skuUnlocked: boolean
+}
+
 export function ProductFormPage() {
   const { id } = useParams<{ id: string }>()
   const isEdit = !!id
@@ -209,10 +223,18 @@ export function ProductFormPage() {
   const location = useLocation() as { state?: { name?: string } }
   const { showToast } = useToast()
   const { user, isVendor } = useAuth()
-  const { product, loading: loadingProduct } = useProduct(id)
+  // Fresh from the server, never a cached copy: this fills the form, and saving a cached copy
+  // could write another phone's newer edits back to old values. Offline it shows the error.
+  const { product, loading: loadingProduct, error: productError, refetch: refetchProduct } = useProduct(id, {
+    requireFresh: true,
+  })
+  const queryClient = useQueryClient()
   // Gated on VIEW_VENDORS rather than fetched unconditionally: the picker is optional, and asking
   // for a list the caller is not allowed to read would be a 403 in everyone's network tab.
   const canViewVendors = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.VIEW_VENDORS)
+  // Gates "+ Add new supplier" within the picker below — separate from VIEW_VENDORS, same split
+  // `VendorListPage` makes for its own add/edit affordances.
+  const canManageVendors = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_VENDORS)
   /**
    * Whether this tenant has automatic SKU generation on (`product_sku_settings.enabled`).
    * Defaults to `false` while `useProductSkuSettings` is still loading — the same
@@ -225,7 +247,7 @@ export function ProductFormPage() {
   // See the SKU field's render below — the escape hatch for a locked, auto-generated SKU.
   const canOverrideSku = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.PRODUCT_SKU_OVERRIDE)
   const [skuUnlocked, setSkuUnlocked] = useState(false)
-  const { vendors: vendorOptions } = useVendorOptions(canViewVendors)
+  const { vendors: vendorOptions, upsert: addVendor } = useVendorOptions(canViewVendors)
   // The route already requires MANAGE_PRODUCTS; checked again here only so "+ New category" never
   // appears for someone the server would refuse, should the route guard ever loosen.
   const tenantPermissions = user?.type === 'tenant' ? user.permissions : []
@@ -262,6 +284,7 @@ export function ProductFormPage() {
     setError,
     setValue,
     watch,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<ProductFormValues>({
     // A fresh schema on every render, not a memoised one: react-hook-form reads `resolver` at
@@ -402,9 +425,72 @@ export function ProductFormPage() {
    * can disagree with the two it feeds.
    */
   const [containsText, setContainsText] = useState('')
+
+  /**
+   * A new product's typing, kept on the phone (A5). Create only: editing is online-only, and a
+   * draft of an edit could later overwrite another phone's changes. The photo is not kept — a file
+   * picked from the device cannot be stored with the draft — and the restore note says so.
+   */
+  const online = useOnlineStatus()
+  const draft = useDraft<ProductDraft>('product:new', !isEdit)
+  const [restoredDraft, setRestoredDraft] = useState(false)
+  /** A draft for a different product than the name just typed into search: offered, not applied. */
+  const [offeredDraft, setOfferedDraft] = useState<ProductDraft | null>(null)
+  const [formVersion, setFormVersion] = useState(0)
+  /** Only the person's own typing starts a draft — not the name carried over from search. */
+  const typedSomething = useRef(false)
+
+  function applyDraft(saved: ProductDraft) {
+    typedSomething.current = true
+    reset(saved.values)
+    setContainsText(saved.containsText)
+    setSkuUnlocked(saved.skuUnlocked)
+    setRestoredDraft(true)
+    setOfferedDraft(null)
+  }
+
+  const { initial: initialDraft, save: saveDraftNow } = draft
+  useEffect(() => {
+    if (!initialDraft) return
+    const nameFromSearch = (location.state?.name as string | undefined)?.trim()
+    if (nameFromSearch && nameFromSearch.toLowerCase() !== initialDraft.value.values.name.trim().toLowerCase()) {
+      setOfferedDraft(initialDraft.value)
+    } else {
+      applyDraft(initialDraft.value)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialDraft])
+
+  useEffect(() => {
+    const subscription = watch((_values, { type }) => {
+      if (type === 'change') typedSomething.current = true
+      setFormVersion((version) => version + 1)
+    })
+    return () => subscription.unsubscribe()
+  }, [watch])
+
+  useEffect(() => {
+    if (isEdit || initialDraft === undefined || offeredDraft || !typedSomething.current) return
+    const values = getValues()
+    if (!values.name?.trim() && !containsText.trim()) return
+    saveDraftNow({ values, containsText, skuUnlocked })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formVersion, containsText, skuUnlocked, initialDraft, offeredDraft])
+
+  function discardDraft() {
+    void draft.clear()
+    typedSomething.current = false
+    setRestoredDraft(false)
+    setOfferedDraft(null)
+    reset({ ...productFormDefaults(), name: location.state?.name ?? '' })
+    setContainsText('')
+    setSkuUnlocked(false)
+  }
+
   const [containsError, setContainsError] = useState<string | null>(null)
 
   const onContainsChange = (next: string) => {
+    typedSomething.current = true
     setContainsText(next)
     if (!next.trim()) {
       setContainsError(null)
@@ -525,7 +611,7 @@ export function ProductFormPage() {
    * server's own rule and produces an attributed error. Degrade toward the user's freedom, not
    * away from it.
    */
-  const { data: stockHistory } = useStockHistory(isEdit ? id : undefined, 0)
+  const { data: stockHistory } = useStockHistory(isEdit ? id : undefined, 0, { requireFresh: true })
   const stockUnitLocked = isEdit && (stockHistory?.totalElements ?? 0) > 0
 
   function handleImageFileSelect(selected: File | null) {
@@ -694,6 +780,10 @@ export function ProductFormPage() {
       const detailsWarning = isVendor && brandChanged(values) ? await saveBrand(saved.id, values) : null
 
       setPendingValues(null)
+      // The saved product replaces any cached copy, and everything stock-related is refreshed: a
+      // new product with opening stock changes the list, the low-stock count and the dashboard.
+      syncProductIntoCache(queryClient, saved)
+      void invalidateInventory(queryClient)
 
       if (detailsWarning) {
         showToast(`Product saved, ${detailsWarning}`, 'error')
@@ -709,6 +799,8 @@ export function ProductFormPage() {
       } else {
         showToast(isEdit ? 'Product updated.' : 'Product created.', 'success')
       }
+      // A draft that was only offered belongs to a different product: it stays for later.
+      if (!isEdit && !offeredDraft) await draft.finish()
       navigate(`/app/products/${saved.id}`)
     } catch (err) {
       setPendingValues(null)
@@ -798,6 +890,20 @@ export function ProductFormPage() {
     return <ProductFormSkeleton />
   }
 
+  // An edit form with no product behind it must never render: every field would be blank, and
+  // saving it would write those blanks over the real product. This used to happen whenever the
+  // load failed (a dropped connection, a deleted product); it is also what offline looks like
+  // now that this form only ever fills from fresh data.
+  if (isEdit && !product) {
+    return (
+      <ErrorState
+        title="Couldn't open this product for editing"
+        message={productError ?? 'This product could not be loaded.'}
+        onRetry={refetchProduct}
+      />
+    )
+  }
+
   const categoryField = canViewCategories ? (
     <CategoryField
       value={watch('categoryId')}
@@ -826,6 +932,33 @@ export function ProductFormPage() {
       </div>
 
       {isVendor && <ReviewImpactNotice mode={isEdit ? 'edit' : 'create'} />}
+
+      {!isEdit && offeredDraft && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-700">
+          <span className="flex-1">
+            You have an unsent draft for <span className="font-medium">{offeredDraft.values.name || 'a product'}</span>.
+          </span>
+          <Button variant="secondary" type="button" onClick={() => applyDraft(offeredDraft)}>
+            Open the draft
+          </Button>
+          <button
+            type="button"
+            onClick={discardDraft}
+            className="rounded-sm px-1 font-medium text-neutral-700 underline underline-offset-2 hover:bg-neutral-100"
+          >
+            Discard it
+          </button>
+        </div>
+      )}
+
+      {!isEdit && !offeredDraft && (
+        <DraftNote
+          savedAt={draft.savedAt}
+          restored={restoredDraft}
+          onDiscard={discardDraft}
+          caveat="Add the photo again if it had one."
+        />
+      )}
 
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-5">
         {/* -------------------------------------------------------------- Product image */}
@@ -894,7 +1027,7 @@ export function ProductFormPage() {
             </div>
             <input type="hidden" {...register('sku')} />
             <div className="flex items-center gap-2 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2">
-              <Lock className="h-3.5 w-3.5 shrink-0 text-neutral-400" aria-hidden="true" />
+              <Lock className="h-3.5 w-3.5 shrink-0 text-neutral-500" aria-hidden="true" />
               {/* Edit mode shows the product's real, already-saved sku (registered above via
                   reset()); create mode shows the client-rendered preview — see
                   `previewSkuDisplay` — which updates as the name field changes with no server
@@ -1024,7 +1157,7 @@ export function ProductFormPage() {
                       label so §1's vocabulary lock still holds and the field is still findable by
                       the name used everywhere else; the question rides underneath it. */}
                   {UNIT_COPY.STOCK_UNIT}{' '}
-                  {!stockUnitLocked && <span className="font-normal text-neutral-400">(optional)</span>}
+                  {!stockUnitLocked && <span className="font-normal text-neutral-500">(optional)</span>}
                 </label>
                 <button
                   type="button"
@@ -1043,7 +1176,7 @@ export function ProductFormPage() {
                       that cannot change. The hidden input keeps react-hook-form's value intact. */}
                   <input type="hidden" {...register('unitOfMeasure')} />
                   <div className="flex flex-wrap items-center gap-2 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2">
-                    <Lock className="h-3.5 w-3.5 shrink-0 text-neutral-400" aria-hidden="true" />
+                    <Lock className="h-3.5 w-3.5 shrink-0 text-neutral-500" aria-hidden="true" />
                     <span className="text-sm font-medium text-neutral-700">
                       {baseOptions.find((option) => option.code === watchedStockUnitCode)?.label ||
                         watchedStockUnitCode ||
@@ -1097,7 +1230,7 @@ export function ProductFormPage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="packagingUnit" className="mb-1.5 block text-sm font-medium text-neutral-700">
-                  {UNIT_COPY.PACK} <span className="font-normal text-neutral-400">(optional)</span>
+                  {UNIT_COPY.PACK} <span className="font-normal text-neutral-500">(optional)</span>
                 </label>
                 <select
                   id="packagingUnit"
@@ -1263,7 +1396,7 @@ export function ProductFormPage() {
               <div>
                 <h2 className="text-sm font-semibold text-neutral-900">
                   First {UNIT_COPY.SUPPLIER.toLowerCase()}{' '}
-                  <span className="font-normal text-neutral-400">(optional)</span>
+                  <span className="font-normal text-neutral-500">(optional)</span>
                 </h2>
                 <p className="text-xs text-neutral-500">
                   Who you're buying this from, what it cost, and how much arrived — this becomes the product's
@@ -1272,30 +1405,20 @@ export function ProductFormPage() {
               </div>
             </div>
 
-            <div>
-              <label htmlFor="initialVendorId" className="mb-1.5 block text-sm font-medium text-neutral-700">
-                {UNIT_COPY.SUPPLIER}
-              </label>
-              <select
-                id="initialVendorId"
-                className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
-                {...register('initialVendorId')}
-              >
-                <option value="">No {UNIT_COPY.SUPPLIER.toLowerCase()} yet</option>
-                {vendorOptions.map((vendor) => (
-                  <option key={vendor.id} value={vendor.id}>
-                    {vendor.name}
-                    {/* The kind is spelled out in the option text because a <select> cannot carry
-                        a badge, and "which of these is an actual ProcurePaddy seller" is the same
-                        question the directory list answers with one. */}
-                    {vendor.kind === 'VERIFIED' ? ' (ProcurePaddy seller)' : ''}
-                  </option>
-                ))}
-              </select>
-              {errors.initialVendorId?.message && (
-                <p className="mt-1.5 text-xs text-danger-600">{errors.initialVendorId.message}</p>
-              )}
-            </div>
+            {/* `SupplierField` (`UX_CONSISTENCY_DESIGN_PLAN.md`, Pattern A) — "+ Add new supplier"
+                opens `VendorFormModal` over this screen rather than navigating to /app/vendors, so
+                everything typed into the rest of this product form survives the round trip. */}
+            <SupplierField
+              id="initialVendorId"
+              label={UNIT_COPY.SUPPLIER}
+              placeholderLabel={`No ${UNIT_COPY.SUPPLIER.toLowerCase()} yet`}
+              value={watch('initialVendorId') ?? ''}
+              onChange={(vendorId) => setValue('initialVendorId', vendorId, { shouldDirty: true, shouldValidate: true })}
+              vendors={vendorOptions}
+              canCreate={canManageVendors}
+              onCreated={addVendor}
+              error={errors.initialVendorId?.message}
+            />
 
             {/* The two halves of the opening delivery, and they are deliberately counted in
                 DIFFERENT units — `UNIT_UX_CONTRACT.md` §9.1 and §9.2 pulling in opposite
@@ -1337,13 +1460,6 @@ export function ProductFormPage() {
                 {...register('initialVendorQuantity')}
               />
             </div>
-
-            <p className="text-xs text-neutral-500">
-              <Link to="/app/vendors" className="font-medium text-primary-600 hover:underline">
-                Manage your {UNIT_COPY.SUPPLIERS.toLowerCase()}
-              </Link>
-              .
-            </p>
           </div>
         )}
 
@@ -1375,13 +1491,30 @@ export function ProductFormPage() {
         <FormError message={formError} />
 
         <div className="flex justify-end gap-2">
-          <Button variant="secondary" type="button" onClick={() => navigate(-1)}>
+          <Button
+            variant="secondary"
+            type="button"
+            onClick={async () => {
+              // Cancel means "not this product": its draft goes too. The back arrow keeps it.
+              // Awaited: going back can leave the page entirely (the form was opened directly),
+              // and an unfinished delete would bring the draft back next time.
+              if (!isEdit) await draft.clear()
+              navigate(-1)
+            }}
+          >
             Cancel
           </Button>
-          <Button type="submit" loading={isSubmitting}>
-            {isEdit ? 'Save changes' : 'Create product'}
+          {/* Creating a product needs the server (its SKU, its duplicate checks), so offline the
+              draft waits and the button says so (A5). */}
+          <Button type="submit" variant="action" loading={isSubmitting} disabled={!isEdit && !online}>
+            {isEdit ? 'Save changes' : online ? 'Create product' : 'Create when online'}
           </Button>
         </div>
+        {!isEdit && !online && (
+          <p className="text-right text-xs text-neutral-500">
+            You're offline. This product is saved on this phone; create it once you're connected.
+          </p>
+        )}
       </form>
 
       <ReviewImpactDialog

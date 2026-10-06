@@ -13,7 +13,7 @@ export interface AddVendorModalProps {
 }
 
 /**
- * Adding a vendor ProcurePaddy recruited offline, with no application behind it.
+ * Adding a vendor ProcurePal recruited offline, with no application behind it.
  *
  * <h2>Why the email is optional here and required on the public form</h2>
  * This is the single reason the `clients` CHECK was narrowed to cover COMPANY only. A business
@@ -224,7 +224,7 @@ export function AddVendorModal({ open, submitting, onCancel, onConfirm }: AddVen
         <div className="border-t border-neutral-100 pt-4">
           <h3 className="text-sm font-semibold text-neutral-900">Payout &amp; registration</h3>
           <p className="mt-0.5 text-xs text-neutral-500">
-            All optional. Where Procure Paddy pays this vendor out, and their CAC number. Never
+            All optional. Where ProcurePal pays this vendor out, and their CAC number. Never
             shown to buyers.
           </p>
           <div className="mt-3 flex flex-col gap-4">

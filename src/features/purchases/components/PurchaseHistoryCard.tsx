@@ -38,7 +38,7 @@ export function PurchaseHistoryCard({
             </Link>
           ) : (
             <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-neutral-900">
-              <PackagePlus className="h-4 w-4 text-neutral-400" aria-hidden="true" />
+              <PackagePlus className="h-4 w-4 text-neutral-500" aria-hidden="true" />
               Manual stock-in
             </span>
           )}

@@ -14,6 +14,8 @@ import { UndoBlockedPanel } from '@/features/imports/components/UndoBlockedPanel
 import { copy } from '@/features/imports/copy'
 import type { ImportResult, UndoBlockedResponse } from '@/features/imports/types'
 import { isAppError } from '@/types/api'
+import { useQueryClient } from '@tanstack/react-query'
+import { invalidateInventory } from '@/data/inventoryCache'
 
 /**
  * Step 4 (spec §9.5) — what happened, and the way back.
@@ -27,6 +29,7 @@ import { isAppError } from '@/types/api'
  * deleting ledger rows, which would defeat the traceability the whole model exists for.
  */
 export function ImportResultPage() {
+  const queryClient = useQueryClient()
   const { sessionId } = useParams<{ sessionId: string }>()
   const { user } = useAuth()
   const canRecordStock = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_INVENTORY)
@@ -85,6 +88,7 @@ export function ImportResultPage() {
     setBlocked(null)
     try {
       const undone = await importsApi.undo(sessionId)
+      void invalidateInventory(queryClient)
       setResult(undone)
       showToast(copy.result.undoneToast, 'success')
       setUndoOpen(false)

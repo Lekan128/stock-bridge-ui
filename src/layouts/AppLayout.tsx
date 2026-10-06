@@ -1,12 +1,36 @@
-import { useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import { EmailVerificationBanner } from '@/features/profile/components/EmailVerificationBanner'
 import { Sidebar } from '@/layouts/Sidebar'
 import { Topbar } from '@/layouts/Topbar'
+import { SupportSessionBanner } from '@/features/onboarding/SupportSessionBanner'
+import { IosInstallHint } from '@/pwa/IosInstallHint'
+import { startServiceWorker } from '@/pwa/serviceWorker'
+import { UpdatePrompt } from '@/pwa/UpdatePrompt'
+
+// B1 spike only: absent from a normal production build (see designPreviewConfig.ts).
+const DesignPreviewChip =
+  import.meta.env.DEV || import.meta.env.VITE_DESIGN_PREVIEW === 'true'
+    ? lazy(() => import('@/features/designPreview/DesignPreviewChip').then((m) => ({ default: m.DesignPreviewChip })))
+    : null
 
 export function AppLayout() {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+
+  // The workspace is where the offline shell is installed — see `pwa/serviceWorker.ts` for why
+  // the storefront never installs it.
+  useEffect(() => {
+    startServiceWorker({ install: true })
+  }, [])
+
+  // The workspace's own typeface (D4), on <html> so dialogs portaled to <body> share it.
+  useEffect(() => {
+    document.documentElement.dataset.surface = 'workspace'
+    return () => {
+      delete document.documentElement.dataset.surface
+    }
+  }, [])
 
   return (
     <div className="flex h-screen overflow-hidden bg-neutral-50">
@@ -24,7 +48,9 @@ export function AppLayout() {
           route is open. It renders null for verified users, so this costs an unaffected user
           nothing. Its own shrink-0 keeps it from being squeezed by the scroll area beneath it.
         */}
+        <SupportSessionBanner />
         <EmailVerificationBanner />
+        <IosInstallHint />
         {/* data-scroll-container: this is the actual scroll region in this layout (the window
             itself never scrolls, since the root is h-screen overflow-hidden) - ScrollToTop
             targets it by that attribute on every navigation. */}
@@ -32,6 +58,12 @@ export function AppLayout() {
           <Outlet />
         </main>
       </div>
+      <UpdatePrompt />
+      {DesignPreviewChip && (
+        <Suspense fallback={null}>
+          <DesignPreviewChip />
+        </Suspense>
+      )}
     </div>
   )
 }

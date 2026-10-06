@@ -20,6 +20,7 @@ import { paymentHandoff } from '@/features/checkout/paymentHandoff'
 import { toAddressPayload, type AddressFormValues } from '@/features/checkout/schemas'
 import type { Order, PlaceOrderPayload, UnavailableLine } from '@/features/checkout/types'
 import { isAppError } from '@/types/api'
+import { marketplacePaths } from '@/routes/marketplacePaths'
 
 const STEPS = [
   { id: 'delivery', label: 'Delivery' },
@@ -180,7 +181,7 @@ export function CheckoutPage() {
       } else {
         showToast(isAppError(err) ? err.message : 'We could not open the payment page.', 'error')
       }
-      navigate(`/order-confirmation/${order.id}`)
+      navigate(marketplacePaths.orderConfirmation(order.id))
     }
   }
 
@@ -207,7 +208,7 @@ export function CheckoutPage() {
       if (newAddress?.saveAddress) refetchAddresses()
 
       if (paymentMethod === 'PAY_ON_DELIVERY') {
-        navigate(`/order-confirmation/${order.id}`)
+        navigate(marketplacePaths.orderConfirmation(order.id))
         return
       }
       await startOnlinePayment(order)
@@ -253,7 +254,7 @@ export function CheckoutPage() {
           title="There is nothing to check out"
           description="Your cart is empty, so there is no order to place. Add a few products and come back."
           action={
-            <Link to="/" className={buttonClassName('primary')}>
+            <Link to={marketplacePaths.home} className={buttonClassName('primary')}>
               Browse the catalog
             </Link>
           }
@@ -346,7 +347,7 @@ export function CheckoutPage() {
             title="Some items are no longer available"
             message="Your cart contains items ProcurePal can no longer supply. Remove them before placing this order."
             action={
-              <Link to="/cart" className={buttonClassName('secondary')}>
+              <Link to={marketplacePaths.cart} className={buttonClassName('secondary')}>
                 Go to cart
               </Link>
             }
@@ -355,7 +356,7 @@ export function CheckoutPage() {
       )}
 
       <div className="mt-6 lg:hidden">
-        <Button variant="secondary" onClick={() => navigate('/cart')} className="w-full">
+        <Button variant="secondary" onClick={() => navigate(marketplacePaths.cart)} className="w-full">
           Back to cart
         </Button>
       </div>

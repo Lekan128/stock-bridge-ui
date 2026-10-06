@@ -448,3 +448,19 @@ export const stockAdjustmentSchema = z.object({
 })
 
 export type StockAdjustmentFormValues = z.infer<typeof stockAdjustmentSchema>
+
+/**
+ * A stock count (A4): what is on the shelf right now, in the stock unit. The note is optional —
+ * a count explains itself ("Stock count" in the history) where an arbitrary correction needed a
+ * reason.
+ */
+export const stockCountSchema = z.object({
+  countedQuantity: z
+    .string()
+    .trim()
+    .min(1, 'Enter how much is on the shelf')
+    .refine((v) => v.length === 0 || isNonNegativeInteger(v), 'Enter a whole number, 0 or greater'),
+  note: z.string().trim().max(1000, 'Must be 1000 characters or fewer'),
+})
+
+export type StockCountFormValues = z.infer<typeof stockCountSchema>

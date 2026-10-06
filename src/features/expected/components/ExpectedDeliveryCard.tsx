@@ -32,7 +32,7 @@ export function ExpectedDeliveryCard({ expected, onCancel }: ExpectedDeliveryCar
   return (
     <li
       className={`flex flex-col gap-3 rounded-lg border bg-white p-4 ${
-        overdue ? 'border-warning-200 border-l-4 border-l-warning-500' : 'border-neutral-200'
+        overdue ? 'border-warning-300' : 'border-neutral-200'
       }`}
     >
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">

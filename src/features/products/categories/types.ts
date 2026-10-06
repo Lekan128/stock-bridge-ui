@@ -2,7 +2,7 @@
  * One of a company's own product groups ("Grains", "Drinks") — `/api/company-categories`.
  *
  * Not the marketplace category a seller's listing is filed under (`features/storefront`,
- * `features/marketplace`): those belong to ProcurePaddy and are the same for everyone, while these
+ * `features/marketplace`): those belong to ProcurePal and are the same for everyone, while these
  * belong to one company and are only ever seen by it.
  */
 export interface CompanyCategory {

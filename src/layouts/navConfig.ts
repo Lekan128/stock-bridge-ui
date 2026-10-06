@@ -18,6 +18,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { PERMISSIONS, type Permission } from '@/auth/permissions'
+import { marketplacePaths } from '@/routes/marketplacePaths'
 
 export interface NavItem {
   path: string
@@ -120,7 +121,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       // No permission gate: the storefront is public, so hiding the way to it would only
       // strand a user who is allowed to look at it anyway.
-      { path: '/', label: 'Marketplace', icon: Store, leavesWorkspace: true },
+      { path: marketplacePaths.home, label: 'Marketplace', icon: Store, leavesWorkspace: true },
       { path: '/app/orders', label: 'My Orders', icon: ReceiptText, requiredPermission: PERMISSIONS.VIEW_ORDERS },
       {
         path: '/app/addresses',
@@ -196,7 +197,7 @@ export const NAV_GROUPS: NavGroup[] = [
       // listings render, most obviously), so hiding the buyer nav must not take the shop
       // itself with it. ProcurePal already has this link under Procurement and does not need
       // a second one.
-      { path: '/', label: 'Storefront', icon: Store, leavesWorkspace: true, hideFromPlatformOwner: true },
+      { path: marketplacePaths.home, label: 'Storefront', icon: Store, leavesWorkspace: true, hideFromPlatformOwner: true },
     ],
   },
   {

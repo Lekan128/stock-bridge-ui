@@ -21,7 +21,7 @@ export function ComingSoonPanel({ title, description, owner }: ComingSoonPanelPr
       </div>
       <h1 className="mt-4 text-lg font-semibold text-neutral-900">{title}</h1>
       <p className="mt-1 max-w-md text-sm text-neutral-500">{description}</p>
-      {owner && <p className="mt-4 text-xs font-medium uppercase tracking-wide text-neutral-400">{owner}</p>}
+      {owner && <p className="mt-4 text-xs font-medium uppercase tracking-wide text-neutral-500">{owner}</p>}
     </div>
   )
 }

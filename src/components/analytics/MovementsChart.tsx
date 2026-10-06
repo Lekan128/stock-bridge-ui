@@ -12,6 +12,8 @@ export interface MovementsChartProps {
   loading: boolean
   error: string | null
   granularity: Granularity
+  /** Off where the page draws its own legend with the totals (the dashboard, C5). */
+  showLegend?: boolean
 }
 
 interface TooltipPayloadEntry {
@@ -49,7 +51,7 @@ function MovementsTooltip({
   )
 }
 
-export function MovementsChart({ data, loading, error, granularity }: MovementsChartProps) {
+export function MovementsChart({ data, loading, error, granularity, showLegend = true }: MovementsChartProps) {
   const isMobile = useMediaQuery('(max-width: 639px)')
 
   const tickInterval = useMemo(() => {
@@ -88,7 +90,7 @@ export function MovementsChart({ data, loading, error, granularity }: MovementsC
           width={isMobile ? 48 : 64}
         />
         <Tooltip content={<MovementsTooltip granularity={granularity} />} />
-        <Legend wrapperStyle={{ fontSize: 13 }} iconType="square" />
+        {showLegend && <Legend wrapperStyle={{ fontSize: 13 }} iconType="square" />}
         <Area
           type="monotone"
           dataKey="inValue"

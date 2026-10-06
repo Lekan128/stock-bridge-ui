@@ -6,6 +6,7 @@ import type { CartItem } from '@/features/cart/types'
 import { ProductImage } from '@/features/products/components/ProductImage'
 import { formatNaira } from '@/utils/money'
 import { formatPerUnit, formatQuantity } from '@/utils/units'
+import { marketplacePaths } from '@/routes/marketplacePaths'
 
 export interface CartLineRowProps {
   item: CartItem
@@ -30,7 +31,7 @@ export function CartLineRow({ item, onQuantityChange, onRemove, disabled = false
   const moq = item.minOrderQuantity ?? 1
   const unavailable = !item.available
   const shortStock = item.available && item.quantityOnHand > 0 && item.quantity > item.quantityOnHand
-  const linkTarget = `/product/${item.slug || item.productId}`
+  const linkTarget = marketplacePaths.product(item.slug || item.productId)
 
   return (
     <li className={`flex gap-3 py-4 sm:gap-4 ${unavailable ? 'opacity-75' : ''}`}>
@@ -71,7 +72,7 @@ export function CartLineRow({ item, onQuantityChange, onRemove, disabled = false
               {item.productSku ? ` · ${item.productSku}` : ''}
             </p>
             {item.addedByUsername && (
-              <p className="mt-1 flex items-center gap-1 text-xs text-neutral-400">
+              <p className="mt-1 flex items-center gap-1 text-xs text-neutral-500">
                 <UserRound className="h-3 w-3" aria-hidden="true" />
                 Added by {item.addedByUsername}
               </p>
@@ -83,7 +84,7 @@ export function CartLineRow({ item, onQuantityChange, onRemove, disabled = false
             onClick={() => onRemove(item.productId)}
             disabled={disabled}
             aria-label={`Remove ${item.productName} from cart`}
-            className="shrink-0 rounded-md p-1.5 text-neutral-400 transition-colors hover:bg-danger-50 hover:text-danger-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-500 disabled:cursor-not-allowed disabled:opacity-50"
+            className="shrink-0 rounded-md p-1.5 text-neutral-500 transition-colors hover:bg-danger-50 hover:text-danger-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Trash2 className="h-4 w-4" aria-hidden="true" />
           </button>

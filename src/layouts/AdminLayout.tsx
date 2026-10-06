@@ -4,10 +4,8 @@ import { Logo } from '@/components/Logo'
 import { ADMIN_NAV_ITEMS } from '@/layouts/adminNavConfig'
 
 const sidebarLinkClassName = (isActive: boolean) =>
-  `flex items-center gap-3 rounded-md border-l-2 px-3 py-2.5 text-sm font-medium transition-colors ${
-    isActive
-      ? 'border-accent-600 bg-neutral-50 text-neutral-900'
-      : 'border-transparent text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900'
+  `flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
+    isActive ? 'bg-primary-50 text-primary-800' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'
   }`
 
 const tabLinkClassName = (isActive: boolean) =>
@@ -28,8 +26,7 @@ export function AdminLayout() {
     <div className="flex min-h-screen flex-col bg-neutral-50">
       <header className="flex items-center justify-between border-b border-primary-800 bg-primary-900 px-6 py-3 text-white">
         <div className="flex items-center gap-3">
-          <Logo size={28} variant="icon" />
-          <span className="font-semibold">Procure Paddy</span>
+          <Logo size={22} tone="inverse" />
           <span className="rounded-md bg-primary-700 px-2 py-0.5 text-xs font-medium uppercase tracking-wide">
             Super Admin
           </span>

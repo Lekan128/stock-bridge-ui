@@ -4,6 +4,7 @@ import { ProductImage } from '@/features/products/components/ProductImage'
 import type { Order } from '@/features/orders/types'
 import { formatNaira } from '@/utils/money'
 import { formatPerUnit, formatQuantity } from '@/utils/units'
+import { marketplacePaths } from '@/routes/marketplacePaths'
 
 export interface OrderItemsListProps {
   order: Order
@@ -36,7 +37,7 @@ export function OrderItemsList({ order, showsIncoming }: OrderItemsListProps) {
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                 <Link
-                  to={`/product/${item.productId}`}
+                  to={marketplacePaths.product(item.productId)}
                   className="text-sm font-medium text-neutral-900 hover:text-primary-700 hover:underline"
                 >
                   {item.productName}

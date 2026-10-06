@@ -111,7 +111,7 @@ export function VendorStatementPage() {
         <div>
           <h1 className="text-2xl font-semibold text-neutral-900">Statement</h1>
           <p className="text-sm text-neutral-500">
-            What you earned, what ProcurePaddy charged, and what you will be paid.
+            What you earned, what ProcurePal charged, and what you will be paid.
           </p>
         </div>
         {/* print:hidden on the whole control cluster: a printed statement should not carry
@@ -151,7 +151,7 @@ export function VendorStatementPage() {
           description={
             <>
               {data.sellerName} sells on its own marketplace, so there is no commission to charge and no
-              payout to make — ProcurePaddy cannot owe itself money. Sales figures for this account live
+              payout to make — ProcurePal cannot owe itself money. Sales figures for this account live
               on <span className="font-medium">My sales</span>.
             </>
           }
@@ -208,7 +208,7 @@ export function VendorStatementPage() {
           {data.escrow.maturingTranches.length > 0 && (
             <section className="rounded-lg border border-neutral-200 bg-white p-5">
               <div className="flex items-start gap-3">
-                <Lock size={16} className="mt-0.5 shrink-0 text-neutral-400" aria-hidden />
+                <Lock size={16} className="mt-0.5 shrink-0 text-neutral-500" aria-hidden />
                 <div className="flex-1">
                   <h2 className="text-base font-semibold text-neutral-900">
                     Money clearing right now
@@ -364,7 +364,7 @@ export function VendorStatementPage() {
             </section>
           )}
 
-          <p className="text-xs text-neutral-400">
+          <p className="text-xs text-neutral-500">
             Generated {dateTimeFormatter.format(new Date(data.generatedAt))} · {data.sellerName} · {data.currency}
           </p>
         </div>
@@ -450,7 +450,7 @@ function StatementRow({ line }: { line: VendorStatementLine }) {
       <td className="px-5 py-3">
         <span className="font-medium text-neutral-900">{LINE_LABELS[line.type]}</span>
         {line.productName && <p className="text-xs text-neutral-500">{line.productName}</p>}
-        {line.memo && <p className="text-xs text-neutral-400">{line.memo}</p>}
+        {line.memo && <p className="text-xs text-neutral-500">{line.memo}</p>}
       </td>
       <td className="whitespace-nowrap px-5 py-3 text-neutral-600">{line.orderNumber ?? '—'}</td>
       {/* The check-it-yourself column. Only commission lines have working to show; everything

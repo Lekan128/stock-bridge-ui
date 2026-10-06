@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en-NG" data-surface="marketing">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- ?v=2: the logo changed (Brand refresh), and browsers keep a favicon for months by its
+         address; a new address makes every browser fetch the new one. Bump it on the next change. -->
+    <link rel="icon" href="/favicon.ico?v=2" sizes="48x48" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png?v=2" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png" />
+    <meta name="theme-color" content="#08205B" />
+    <!--marketing-head-->
+  </head>
+  <body>
+    <!-- The Procurepaddy landing page (LANDING_PAGE_PLAN.md). Prerendered at build time by
+         scripts/prerender.mjs; Netlify serves it at / (public/_redirects). -->
+    <div id="root"><!--marketing-html--></div>
+    <script type="module" src="/src/marketing/main.tsx"></script>
+  </body>
+</html>

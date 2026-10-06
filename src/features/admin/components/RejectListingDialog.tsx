@@ -63,7 +63,7 @@ export function RejectListingDialog({ product, submitting, onCancel, onConfirm }
         {[
           'The product images are too low quality to list.',
           'The description does not match the product name.',
-          'This product cannot be sold on ProcurePaddy.',
+          'This product cannot be sold on ProcurePal.',
           'The price looks like an error — please confirm it.',
         ].map((suggestion) => (
           <button
@@ -89,7 +89,7 @@ export function RejectListingDialog({ product, submitting, onCancel, onConfirm }
         placeholder="Tell the seller what to fix…"
         className="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
       />
-      <p className="mt-1 text-xs text-neutral-400">
+      <p className="mt-1 text-xs text-neutral-500">
         {trimmed.length === 0 ? 'A reason is required.' : `${reason.length} / ${MAX_REASON}`}
       </p>
     </Modal>

@@ -1,8 +1,9 @@
-import { createContext, useCallback, useEffect, useState, type ReactNode } from 'react'
+import { createContext, type ReactNode } from 'react'
 import { useAuth } from '@/auth/useAuth'
+import { queryKeys } from '@/data/queryKeys'
+import { useApiQuery } from '@/data/useApiQuery'
 import { productsApi } from '@/features/products/api/productsApi'
 import type { Product } from '@/features/products/types'
-import { isAppError } from '@/types/api'
 
 // Polling MVP: re-fetches on an interval plus on-demand via refetch() after stock
 // mutations. A future enhancement could replace this with a push/websocket channel.
@@ -19,63 +20,31 @@ export interface LowStockAlertsContextValue {
 
 export const LowStockAlertsContext = createContext<LowStockAlertsContextValue | null>(null)
 
+const NO_ALERTS: Product[] = []
+
 export function LowStockAlertsProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth()
-  const [alerts, setAlerts] = useState<Product[]>([])
-  const [loading, setLoading] = useState(false)
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [reloadToken, setReloadToken] = useState(0)
+  // Cached like every other inventory read (A2): the bell and the Low Stock card show the last
+  // known list at once, offline included. Polls every few minutes while the tab is visible
+  // (TanStack pauses intervals in a hidden tab), catches up when the tab is shown again, and
+  // refetches on reconnect.
+  const result = useApiQuery<Product[]>({
+    queryKey: queryKeys.products.lowStock,
+    queryFn: () => productsApi.lowStock(),
+    fallbackError: 'Could not load low-stock alerts.',
+    enabled: isAuthenticated,
+    refetchInterval: POLL_INTERVAL_MS,
+    refetchOnWindowFocus: true,
+  })
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      setAlerts([])
-      setHasLoadedOnce(false)
-      setError(null)
-      return
-    }
-
-    let cancelled = false
-
-    function load() {
-      setLoading(true)
-      productsApi
-        .lowStock()
-        .then((data) => {
-          if (!cancelled) {
-            setAlerts(data)
-            setError(null)
-          }
-        })
-        .catch((err: unknown) => {
-          if (!cancelled) setError(isAppError(err) ? err.message : 'Could not load low-stock alerts.')
-        })
-        .finally(() => {
-          if (!cancelled) {
-            setLoading(false)
-            setHasLoadedOnce(true)
-          }
-        })
-    }
-
-    load()
-    const intervalId = setInterval(load, POLL_INTERVAL_MS)
-
-    return () => {
-      cancelled = true
-      clearInterval(intervalId)
-    }
-  }, [isAuthenticated, reloadToken])
-
-  const refetch = useCallback(() => setReloadToken((t) => t + 1), [])
-
+  const alerts = isAuthenticated ? (result.data ?? NO_ALERTS) : NO_ALERTS
   const value: LowStockAlertsContextValue = {
     alerts,
     count: alerts.length,
-    loading,
-    hasLoadedOnce,
-    error,
-    refetch,
+    loading: result.fetching,
+    hasLoadedOnce: result.data !== undefined || result.error != null,
+    error: result.error,
+    refetch: result.refetch,
   }
 
   return <LowStockAlertsContext.Provider value={value}>{children}</LowStockAlertsContext.Provider>

@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { queryKeys } from '@/data/queryKeys'
+import { useApiQuery } from '@/data/useApiQuery'
 import { vendorsApi } from '@/features/vendors/api/vendorsApi'
 import type { CompanyVendorDetail } from '@/features/vendors/types'
-import { isAppError } from '@/types/api'
 
 /**
  * One vendor's detail: the row, the live seller behind it, spend to date and the products supplied
@@ -10,35 +10,12 @@ import { isAppError } from '@/types/api'
  * Purchase history is deliberately not in here. It is paginated and it is its own screen.
  */
 export function useVendor(id: string | undefined) {
-  const [detail, setDetail] = useState<CompanyVendorDetail | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [reloadToken, setReloadToken] = useState(0)
+  const result = useApiQuery<CompanyVendorDetail>({
+    queryKey: queryKeys.vendors.detail(id),
+    queryFn: () => vendorsApi.get(id as string),
+    fallbackError: 'Could not load this vendor.',
+    enabled: id != null,
+  })
 
-  useEffect(() => {
-    if (!id) return
-    let cancelled = false
-    setLoading(true)
-    setError(null)
-
-    vendorsApi
-      .get(id)
-      .then((response) => {
-        if (!cancelled) setDetail(response)
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(isAppError(err) ? err.message : 'Could not load this vendor.')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [id, reloadToken])
-
-  const refetch = useCallback(() => setReloadToken((t) => t + 1), [])
-
-  return { detail, loading, error, refetch }
+  return { detail: result.data ?? null, loading: result.loading, error: result.error, refetch: result.refetch }
 }

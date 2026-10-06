@@ -13,6 +13,7 @@ import { OrderTable } from '@/features/orders/components/OrderTable'
 import { useAwaitingReceiptCount } from '@/features/orders/hooks/useAwaitingReceiptCount'
 import { useOrders } from '@/features/orders/hooks/useOrders'
 import { useRetryPayment } from '@/features/orders/hooks/useRetryPayment'
+import { marketplacePaths } from '@/routes/marketplacePaths'
 
 const PAGE_SIZE = 20
 
@@ -80,7 +81,7 @@ export function OrderListPage() {
             Everything your company has bought from ProcurePal, and where each order has got to.
           </p>
         </div>
-        <Link to="/" className={buttonClassName('secondary')}>
+        <Link to={marketplacePaths.home} className={buttonClassName('secondary')}>
           Browse catalog
         </Link>
       </div>
@@ -101,7 +102,7 @@ export function OrderListPage() {
           message={error}
           onRetry={refetch}
           action={
-            <Link to="/" className={buttonClassName('secondary')}>
+            <Link to={marketplacePaths.home} className={buttonClassName('secondary')}>
               Browse the catalog
             </Link>
           }

@@ -1,6 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useCallback } from 'react'
+import { queryKeys } from '@/data/queryKeys'
+import { useApiQuery } from '@/data/useApiQuery'
 import { vendorsApi } from '@/features/vendors/api/vendorsApi'
 import type { CompanyVendor } from '@/features/vendors/types'
+
+const NO_VENDORS: CompanyVendor[] = []
+
+function byName(a: CompanyVendor, b: CompanyVendor): number {
+  return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+}
 
 /**
  * The company's active vendors, flattened for a `<select>` on the product form.
@@ -18,36 +26,28 @@ import type { CompanyVendor } from '@/features/vendors/types'
  * A failure is deliberately swallowed into an empty list rather than surfaced. This is one
  * optional field on somebody else's form: a vendor directory that will not load must not stop a
  * product being saved.
+ *
+ * `upsert` applies a supplier the caller just created (via `SupplierField`'s "+ Add new supplier")
+ * so it is selectable immediately, without waiting on a second fetch of the whole 200-row list —
+ * the same shape `useCompanyCategories` already gives the category picker.
  */
 export function useVendorOptions(enabled: boolean) {
-  const [vendors, setVendors] = useState<CompanyVendor[]>([])
-  const [loading, setLoading] = useState(enabled)
+  const result = useApiQuery<CompanyVendor[]>({
+    queryKey: queryKeys.vendors.options,
+    queryFn: () => vendorsApi.list({ page: 0, size: 200 }).then((response) => response.content),
+    fallbackError: 'Could not load your suppliers.',
+    enabled,
+  })
+  const { setData } = result
 
-  useEffect(() => {
-    if (!enabled) {
-      setVendors([])
-      setLoading(false)
-      return
-    }
-    let cancelled = false
-    setLoading(true)
+  const upsert = useCallback(
+    (vendor: CompanyVendor) => {
+      setData((current) => [...(current ?? []).filter((entry) => entry.id !== vendor.id), vendor].sort(byName))
+    },
+    [setData],
+  )
 
-    vendorsApi
-      .list({ page: 0, size: 200 })
-      .then((response) => {
-        if (!cancelled) setVendors(response.content)
-      })
-      .catch(() => {
-        if (!cancelled) setVendors([])
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [enabled])
-
-  return { vendors, loading }
+  // A failed load still reads as "no suppliers" here, as before: the pickers that use this offer
+  // "+ Add new supplier" either way.
+  return { vendors: enabled ? (result.data ?? NO_VENDORS) : NO_VENDORS, loading: result.loading, upsert }
 }

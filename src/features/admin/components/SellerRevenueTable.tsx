@@ -40,7 +40,7 @@ function naturalAscending(field: SellerRevenueSort): boolean {
  */
 function GrowthCell({ entry }: { entry: SellerRevenueEntry }) {
   if (entry.previousRevenue === 0 && entry.revenue === 0) {
-    return <span className="inline-flex items-center gap-1 text-xs text-neutral-400"><Minus className="h-3.5 w-3.5" aria-hidden="true" />No sales</span>
+    return <span className="inline-flex items-center gap-1 text-xs text-neutral-500"><Minus className="h-3.5 w-3.5" aria-hidden="true" />No sales</span>
   }
   if (entry.revenueGrowthRate == null) {
     return (
@@ -158,7 +158,7 @@ export function SellerRevenueTable({ entries, sort, ascending, onSortChange }: S
             </td>
             <td className="border-b border-neutral-100 px-4 py-2.5 text-right tabular-nums text-neutral-700">
               <span title={formatNaira(entry.revenue)}>{formatCompactCurrency(entry.revenue)}</span>
-              <span className="ml-1.5 text-xs text-neutral-400">{formatShare(entry.revenueShare)}</span>
+              <span className="ml-1.5 text-xs text-neutral-500">{formatShare(entry.revenueShare)}</span>
             </td>
             <td className="border-b border-neutral-100 px-4 py-2.5 text-right">
               <GrowthCell entry={entry} />
