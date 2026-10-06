@@ -27,6 +27,7 @@ export function LoginPage() {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -99,12 +100,17 @@ export function LoginPage() {
           error={errors.username?.message}
           {...register('username')}
         />
-        <PasswordField
-          label="Password"
-          autoComplete="current-password"
-          error={errors.password?.message}
-          {...register('password')}
-        />
+        <div className="flex flex-col gap-1.5">
+          <PasswordField
+            label="Password"
+            autoComplete="current-password"
+            error={errors.password?.message}
+            {...register('password')}
+          />
+          <Link to={forgotPasswordLink(watch('username'))} className="self-end text-sm text-primary-600 hover:underline">
+            Forgot password?
+          </Link>
+        </div>
         <FormError message={formError} />
         <Button type="submit" loading={isSubmitting} className="w-full">
           Log in
@@ -112,4 +118,10 @@ export function LoginPage() {
       </form>
     </AuthCard>
   )
+}
+
+/** Carries the login across when it is an email, so nobody types it twice (PASSWORD_RESET_PLAN.md). */
+function forgotPasswordLink(login: string | undefined): string {
+  const value = login?.trim() ?? ''
+  return value.includes('@') ? `/forgot-password?email=${encodeURIComponent(value)}` : '/forgot-password'
 }

@@ -13,7 +13,7 @@ type Phase = 'missing-token' | 'verifying' | 'verified' | 'rejected' | 'unreacha
 
 /** The server's own copy is always preferred; these only cover the cases it never answers. */
 const NO_TOKEN_MESSAGE =
-  'This confirmation link is incomplete — it has no token in it, which usually means an email client cut the address short. Open the link from your email again, or sign in and ask for a new one.'
+  'This confirmation link is incomplete — it has no token in it, which usually means an email client cut the address short. Open the link from your email again, or log in and ask for a new one.'
 const UNREACHABLE_MESSAGE =
   'We could not reach ProcurePal to confirm your address. Your link has not been used up — check your connection and try again.'
 
@@ -128,7 +128,7 @@ export function VerifyEmailPage() {
 
         {phase === 'rejected' && (
           <p className="mx-auto mt-2 max-w-md text-sm text-neutral-500">
-            Confirmation links are single-use and expire. Signing in and asking for a fresh one always works — and
+            Confirmation links are single-use and expire. Logging in and asking for a fresh one always works — and
             if you already confirmed this address, you are done and nothing is wrong.
           </p>
         )}
@@ -153,7 +153,7 @@ export function VerifyEmailPage() {
               </>
             ) : (
               <Link to="/login" className={buttonClassName('primary')}>
-                Sign in
+                Log in
               </Link>
             )}
 
