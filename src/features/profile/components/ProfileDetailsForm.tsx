@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useState } from 'react'
+import { useContext, useState } from 'react'
 import { useForm, type UseFormSetError } from 'react-hook-form'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
@@ -12,7 +12,8 @@ import {
   toUpdateProfilePayload,
   type ProfileDetailsFormValues,
 } from '@/features/profile/schemas'
-import type { Profile } from '@/features/profile/types'
+import { EmailVerificationContext } from '@/features/profile/context/EmailVerificationContext'
+import { verifiableEmailAddress, type Profile } from '@/features/profile/types'
 import { isAppError } from '@/types/api'
 
 export interface ProfileDetailsFormProps {
@@ -44,6 +45,8 @@ function applyBackendErrors(message: string, setError: UseFormSetError<ProfileDe
 
 export function ProfileDetailsForm({ profile, onUpdated }: ProfileDetailsFormProps) {
   const { showToast } = useToast()
+  // Optional: the shell banner's state, refreshed when the address changes so it shows the new one.
+  const verification = useContext(EmailVerificationContext)
   const [formError, setFormError] = useState<string | null>(null)
 
   const {
@@ -64,7 +67,16 @@ export function ProfileDetailsForm({ profile, onUpdated }: ProfileDetailsFormPro
       const updated = await profileApi.update(toUpdateProfilePayload(values))
       onUpdated(updated)
       reset(profileDetailsDefaults(updated))
-      showToast('Profile updated.', 'success')
+      // A new address gets its confirmation link automatically (the server sends it with the
+      // save), so say where to look instead of leaving the user to find a resend button.
+      const before = verifiableEmailAddress(profile)
+      const after = verifiableEmailAddress(updated)
+      if (after && after.toLowerCase() !== before?.toLowerCase() && !updated.emailVerified) {
+        showToast(`Profile updated. Check ${after} for a link to confirm it.`, 'success')
+        verification?.refresh()
+      } else {
+        showToast('Profile updated.', 'success')
+      }
     } catch (err) {
       if (isAppError(err) && err.status === 400) {
         setFormError(applyBackendErrors(err.message, setError))

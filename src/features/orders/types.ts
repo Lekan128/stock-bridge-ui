@@ -117,6 +117,12 @@ export interface Order {
   deliveredAt?: string
   receivedAt?: string
   cancelledAt?: string
+  /**
+   * When an unpaid (`PENDING_PAYMENT`) order is cancelled automatically. Absent for every other
+   * status. Shown up front instead of emailing a reminder — the buyer sees the deadline, nobody
+   * is mailed about it afterwards.
+   */
+  paymentDueBy?: string
   createdAt: string
   updatedAt: string
 }
@@ -137,6 +143,8 @@ export interface OrderSummary {
   deliveryState?: string
   customer?: OrderCustomer
   placedAt?: string
+  /** See `Order.paymentDueBy`. */
+  paymentDueBy?: string
   createdAt: string
 }
 

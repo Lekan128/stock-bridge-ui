@@ -87,6 +87,12 @@ export interface CheckoutQuote {
    * order then refuses.
    */
   sellerGroups: CheckoutSellerGroup[]
+  /**
+   * The signed-in user has not confirmed their email, so they cannot place orders or pay. The
+   * matching sentence is already first in `blockers`; this flag lets checkout offer a "resend the
+   * link" button rather than just the sentence.
+   */
+  emailVerificationRequired?: boolean
 }
 
 /**
@@ -225,6 +231,12 @@ export interface Order {
   deliveredAt?: string
   receivedAt?: string
   cancelledAt?: string
+  /**
+   * When an unpaid (`PENDING_PAYMENT`) order is cancelled automatically. Absent for every other
+   * status. Shown up front instead of emailing a reminder — the buyer sees the deadline, nobody
+   * is mailed about it afterwards.
+   */
+  paymentDueBy?: string
   createdAt: string
   updatedAt: string
 }
