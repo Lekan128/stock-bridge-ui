@@ -25,6 +25,7 @@ import { useOrder } from '@/features/checkout/hooks/useOrder'
 import { paymentHandoff } from '@/features/checkout/paymentHandoff'
 import { ProductImage } from '@/features/products/components/ProductImage'
 import { useMarketplaceSettings } from '@/features/storefront/hooks/useMarketplaceSettings'
+import { PaymentDeadlineNote } from '@/features/orders/components/PaymentDeadlineNote'
 import { isAppError } from '@/types/api'
 import { formatNaira } from '@/utils/money'
 import { formatPerUnit, formatQuantity } from '@/utils/units'
@@ -177,6 +178,7 @@ export function OrderConfirmationPage() {
                   ? `Each seller has their part of your basket and will confirm shortly. Everything you need is on this page and in your orders list — nothing else to do for now.`
                   : 'ProcurePal has your order and will confirm it shortly. Everything you need is on this page and in your orders list — nothing else to do for now.'}
             </p>
+            {awaitingPayment && <PaymentDeadlineNote paymentDueBy={order.paymentDueBy} className="mt-2" />}
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <span className="rounded-md border border-neutral-200 bg-white px-2 py-1 font-mono text-xs font-medium text-neutral-700">
                 {order.orderNumber}

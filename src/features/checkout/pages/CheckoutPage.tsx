@@ -17,6 +17,7 @@ import { checkoutApi } from '@/features/checkout/api/checkoutApi'
 import { useCheckoutQuote } from '@/features/checkout/hooks/useCheckoutQuote'
 import { useDeliveryAddresses } from '@/features/checkout/hooks/useDeliveryAddresses'
 import { paymentHandoff } from '@/features/checkout/paymentHandoff'
+import { VerifyEmailToOrderNotice } from '@/features/profile/components/VerifyEmailToOrderNotice'
 import { toAddressPayload, type AddressFormValues } from '@/features/checkout/schemas'
 import type { Order, PlaceOrderPayload, UnavailableLine } from '@/features/checkout/types'
 import { isAppError } from '@/types/api'
@@ -273,6 +274,10 @@ export function CheckoutPage() {
         onStepClick={(index) => setStepIndex(index)}
         className="mt-5"
       />
+
+      {/* Before the steps, not at the end of them: no address or payment choice can clear this
+          blocker, so it is unkind to let someone fill all three steps before saying so. */}
+      {quote?.emailVerificationRequired && <VerifyEmailToOrderNotice className="mt-5" />}
 
       {quoteError && (
         <ErrorState
