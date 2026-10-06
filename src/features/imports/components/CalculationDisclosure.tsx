@@ -48,7 +48,7 @@ export function CalculationDisclosure({ sentence, className = '' }: CalculationD
         aria-expanded={open}
         aria-label={copy.review.calculationToggle(open)}
         className={`inline-flex items-center justify-center rounded-full p-0.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${
-          open ? 'bg-neutral-200 text-neutral-700' : 'text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600'
+          open ? 'bg-neutral-200 text-neutral-700' : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-600'
         }`}
       >
         <Info className="h-3.5 w-3.5" aria-hidden="true" />

@@ -2,7 +2,10 @@ import { Lock } from 'lucide-react'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
 import { DashboardAnalytics } from '@/features/dashboard/components/DashboardAnalytics'
-import { LowStockSummaryCard } from '@/features/products/components/LowStockSummaryCard'
+import { useCatalogList, useCatalogState } from '@/features/catalog/useCatalog'
+import { NeedsYouToday } from '@/features/dashboard/components/NeedsYouToday'
+import { StockHealth } from '@/features/dashboard/components/StockHealth'
+import { SetupChecklist } from '@/features/onboarding/SetupChecklist'
 import { VendorDashboardPage } from '@/features/vendor/pages/VendorDashboardPage'
 
 /**
@@ -36,34 +39,58 @@ export function DashboardPage() {
     return <VendorDashboardPage />
   }
 
-  if (canViewAnalytics) {
-    return <DashboardAnalytics />
-  }
+  return <BuyerToday canViewAnalytics={canViewAnalytics} canViewProducts={canViewProducts} permissions={permissions} />
+}
+
+/**
+ * The buying company's home, as "today" rather than a grid of stat cards (C5): how the stock
+ * stands, what needs someone's hands, then how stock has moved. Health and the to-do list read the
+ * device copy, so they answer offline; the charts say when their figures were true.
+ */
+function BuyerToday({
+  canViewAnalytics,
+  canViewProducts,
+  permissions,
+}: {
+  canViewAnalytics: boolean
+  canViewProducts: boolean
+  permissions: string[]
+}) {
+  const catalog = useCatalogState()
+  const onDevice = catalog.phase === 'ready'
+  const list = useCatalogList(
+    { search: '', status: 'active', categoryId: '', stockStatus: 'all', sort: { field: 'name', direction: 'asc' } },
+    canViewProducts && onDevice,
+  )
+  const counts = onDevice && list.ready ? list.counts : null
+  const today = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold text-neutral-900">Dashboard</h1>
-        <p className="text-sm text-neutral-500">An overview of what needs your attention.</p>
+        <p className="text-sm text-neutral-500">{today}</p>
       </div>
+
+      <SetupChecklist />
+
+      {canViewProducts && <StockHealth counts={counts} />}
 
       {canViewProducts && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <LowStockSummaryCard />
-        </div>
+        <NeedsYouToday
+          canStockIn={permissions.includes(PERMISSIONS.STOCK_IN)}
+          canReceive={permissions.includes(PERMISSIONS.MANAGE_INVENTORY)}
+        />
       )}
 
-      <div className="flex items-start gap-3 rounded-lg border border-neutral-200 bg-white p-5">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-neutral-500">
-          <Lock className="h-4 w-4" />
-        </div>
-        <div>
-          <p className="text-sm font-medium text-neutral-900">Analytics not available</p>
-          <p className="text-sm text-neutral-500">
-            You don't have access to analytics. Ask an administrator to grant you the analytics permission.
-          </p>
-        </div>
-      </div>
+      {canViewAnalytics ? (
+        <DashboardAnalytics />
+      ) : (
+        <p className="flex items-center gap-2 text-sm text-neutral-500">
+          <Lock className="h-4 w-4" aria-hidden="true" />
+          Movement charts need the analytics permission — ask an administrator if you need them.
+        </p>
+      )}
     </div>
   )
 }

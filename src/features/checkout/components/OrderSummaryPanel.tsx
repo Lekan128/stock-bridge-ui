@@ -7,6 +7,7 @@ import type { CheckoutQuote } from '@/features/checkout/types'
 import { ProductImage } from '@/features/products/components/ProductImage'
 import { formatNaira } from '@/utils/money'
 import { formatQuantity } from '@/utils/units'
+import { marketplacePaths } from '@/routes/marketplacePaths'
 
 export interface OrderSummaryPanelProps {
   quote: CheckoutQuote | null
@@ -124,7 +125,7 @@ export function OrderSummaryPanel({ quote, items, loading, refreshing }: OrderSu
           <div className="flex items-center justify-between">
             <dt className="text-neutral-600">
               Subtotal
-              <span className="text-neutral-400"> ({quote.itemCount} units)</span>
+              <span className="text-neutral-500"> ({quote.itemCount} units)</span>
             </dt>
             <dd className="font-medium text-neutral-900">{formatNaira(quote.subtotal)}</dd>
           </div>
@@ -142,7 +143,7 @@ export function OrderSummaryPanel({ quote, items, loading, refreshing }: OrderSu
               {formatNaira(quote.total)}
             </dd>
           </div>
-          {refreshing && <p className="text-xs text-neutral-400">Recalculating for the selected address…</p>}
+          {refreshing && <p className="text-xs text-neutral-500">Recalculating for the selected address…</p>}
         </dl>
       ) : null}
 
@@ -157,7 +158,7 @@ export function OrderSummaryPanel({ quote, items, loading, refreshing }: OrderSu
       </div>
 
       <Link
-        to="/cart"
+        to={marketplacePaths.cart}
         className="mt-3 inline-block rounded text-xs font-medium text-primary-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
       >
         Edit cart

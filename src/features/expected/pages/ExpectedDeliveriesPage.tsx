@@ -123,7 +123,7 @@ export function ExpectedDeliveriesPage() {
       </div>
 
       {loading && (
-        <div className="flex flex-col gap-3" aria-busy="true" aria-label={copy.common.loading}>
+        <div role="status" className="flex flex-col gap-3" aria-busy="true" aria-label={copy.common.loading}>
           {[0, 1, 2].map((index) => (
             <Skeleton key={index} className="h-32 w-full" />
           ))}

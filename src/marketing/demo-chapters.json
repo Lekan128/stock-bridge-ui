@@ -1,0 +1,65 @@
+{
+  "durationSeconds": 55,
+  "chapters": [
+    {
+      "at": 0,
+      "title": "Start",
+      "caption": "A real recording of the app on a phone, in a demo shop: Mama Tee Stores, and Amaka, its storekeeper."
+    },
+    {
+      "at": 7,
+      "title": "The stock",
+      "caption": "Amaka’s phone: every product in the shop, how much is left, and what is running low."
+    },
+    {
+      "at": 12,
+      "title": "A delivery",
+      "caption": "A delivery arrives: 2 bags of rice. Quick mode: find it, tap the amount."
+    },
+    {
+      "at": 16,
+      "title": "Bags and kilos",
+      "caption": "Recorded and sent. 2 bags is 100 kg: the app does the sum."
+    },
+    {
+      "at": 20,
+      "title": "No network",
+      "caption": "Now the network drops. A customer buys 3 kg of rice. Amaka records it anyway."
+    },
+    {
+      "at": 24,
+      "title": "Saved on the phone",
+      "caption": "Saved on the phone, marked RECORDED. Nothing is lost, and there is nothing to retype."
+    },
+    {
+      "at": 28,
+      "title": "Back online",
+      "caption": "Back online: it sends itself, exactly once. RECORDED turns SYNCED."
+    },
+    {
+      "at": 31,
+      "title": "Up to date",
+      "caption": "The stock list is right: 497 kg of rice."
+    },
+    {
+      "at": 34,
+      "title": "A count",
+      "caption": "Count the shelf. The app expects 497 kg of rice; Amaka finds 487."
+    },
+    {
+      "at": 38,
+      "title": "What is missing",
+      "caption": "10 kg is missing, shown straight away, while people still remember what happened."
+    },
+    {
+      "at": 45,
+      "title": "Who did what",
+      "caption": "The owner’s phone: every change carries a name and a time. Amaka’s delivery, sale and count."
+    },
+    {
+      "at": 50,
+      "title": "Get started",
+      "caption": "Send us your product list and we load it within 24 hours."
+    }
+  ]
+}

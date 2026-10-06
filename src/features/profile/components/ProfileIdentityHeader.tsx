@@ -3,6 +3,7 @@ import { RoleBadge } from '@/features/users/components/RoleBadge'
 import { UserStatusBadge } from '@/features/users/components/UserStatusBadge'
 import { formatFullName } from '@/features/users/formatters'
 import type { Profile } from '@/features/profile/types'
+import { avatarInitials } from '@/utils/whatsappNumber'
 
 /** Same two-character idiom as the topbar avatar, but prefers real name initials when we have them. */
 function getInitials(profile: Profile): string {
@@ -11,7 +12,7 @@ function getInitials(profile: Profile): string {
   if (first && last) return `${first[0]}${last[0]}`.toUpperCase()
   const single = first || last
   if (single) return single.slice(0, 2).toUpperCase()
-  return profile.username.slice(0, 2).toUpperCase()
+  return avatarInitials(profile.username, profile.clientName)
 }
 
 export function ProfileIdentityHeader({ profile }: { profile: Profile }) {

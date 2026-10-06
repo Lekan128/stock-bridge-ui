@@ -28,6 +28,7 @@ import { useMarketplaceSettings } from '@/features/storefront/hooks/useMarketpla
 import { isAppError } from '@/types/api'
 import { formatNaira } from '@/utils/money'
 import { formatPerUnit, formatQuantity } from '@/utils/units'
+import { marketplacePaths } from '@/routes/marketplacePaths'
 
 function formatDateTime(value?: string): string {
   if (!value) return '—'
@@ -232,7 +233,7 @@ export function OrderConfirmationPage() {
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-neutral-900">
                     {entry.seller?.name ?? 'Unknown seller'}
-                    {entry.current && <span className="ml-2 text-xs font-normal text-neutral-400">(this page)</span>}
+                    {entry.current && <span className="ml-2 text-xs font-normal text-neutral-500">(this page)</span>}
                   </p>
                   <p className="font-mono text-xs text-neutral-500">{entry.orderNumber}</p>
                 </div>
@@ -240,7 +241,7 @@ export function OrderConfirmationPage() {
                   <span className="text-sm font-semibold text-neutral-900">{formatNaira(entry.total)}</span>
                   {!entry.current && (
                     <Link
-                      to={`/order-confirmation/${entry.id}`}
+                      to={marketplacePaths.orderConfirmation(entry.id)}
                       className="rounded text-sm font-medium text-primary-600 hover:text-primary-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                     >
                       View
@@ -312,7 +313,7 @@ export function OrderConfirmationPage() {
           <p className="mt-2 text-sm font-medium text-neutral-900">{delivery.label ?? 'Delivery address'}</p>
           <p className="mt-0.5 text-sm text-neutral-700">{delivery.contactName}</p>
           <p className="mt-0.5 flex items-start gap-1.5 text-sm text-neutral-600">
-            <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-neutral-400" aria-hidden="true" />
+            <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-neutral-500" aria-hidden="true" />
             <span>
               {addressLines}
               {delivery.landmark ? ` (near ${delivery.landmark})` : ''}
@@ -320,7 +321,7 @@ export function OrderConfirmationPage() {
           </p>
           {delivery.contactPhone && (
             <p className="mt-0.5 flex items-center gap-1.5 text-sm text-neutral-600">
-              <Phone className="h-3.5 w-3.5 shrink-0 text-neutral-400" aria-hidden="true" />
+              <Phone className="h-3.5 w-3.5 shrink-0 text-neutral-500" aria-hidden="true" />
               {delivery.contactPhone}
             </p>
           )}
@@ -419,7 +420,7 @@ export function OrderConfirmationPage() {
           Track this order
           <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </Link>
-        <Link to="/" className={buttonClassName('secondary')}>
+        <Link to={marketplacePaths.home} className={buttonClassName('secondary')}>
           Continue shopping
         </Link>
       </div>

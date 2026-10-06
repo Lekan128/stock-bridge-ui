@@ -7,10 +7,12 @@ import { useAuth } from '@/auth/useAuth'
 import { AuthCard } from '@/components/AuthCard'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
+import { PasswordField } from '@/components/PasswordField'
 import { TextField } from '@/components/TextField'
 import { isAppError } from '@/types/api'
 import { DEFAULT_AUTHENTICATED_PATH, readRedirectParam, sanitizeRedirect } from '@/utils/redirectTarget'
 import { authStorage } from '@/utils/storage'
+import { marketplacePaths } from '@/routes/marketplacePaths'
 
 interface LocationState {
   from?: { pathname: string }
@@ -49,7 +51,7 @@ export function LoginPage() {
       navigate(redirectTo, { replace: true })
     } catch (err) {
       if (isAppError(err) && err.status === 401) {
-        setFormError('Invalid Company ID, username, or password.')
+        setFormError('That Company ID, login or password is not right. Check them and try again.')
       } else if (isAppError(err)) {
         setFormError(err.message)
       } else {
@@ -60,6 +62,7 @@ export function LoginPage() {
 
   return (
     <AuthCard
+      showcase
       title="Log in"
       footer={
         <div className="flex flex-col gap-2">
@@ -70,7 +73,7 @@ export function LoginPage() {
             </Link>
           </span>
           {/* Login sits outside the storefront chrome, so it needs its own way back. */}
-          <Link to="/" className="text-xs text-neutral-500 hover:text-neutral-700 hover:underline">
+          <Link to={marketplacePaths.home} className="text-xs text-neutral-500 hover:text-neutral-700 hover:underline">
             Browse the ProcurePal marketplace
           </Link>
         </div>
@@ -79,20 +82,25 @@ export function LoginPage() {
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
         <TextField
           label="Company ID"
-          hint="The short identifier your company was given at signup."
+          hint="The short ID your company was given at sign-up, like mama-tee-stores."
           autoComplete="organization"
+          autoCapitalize="none"
+          spellCheck={false}
           error={errors.clientIdentifier?.message}
           {...register('clientIdentifier')}
         />
+        {/* Owners log in with the phone number or email they signed up with; staff with the
+            username they were given. The API accepts the number however it is typed. */}
         <TextField
-          label="Username"
+          label="Phone, email or username"
           autoComplete="username"
+          autoCapitalize="none"
+          spellCheck={false}
           error={errors.username?.message}
           {...register('username')}
         />
-        <TextField
+        <PasswordField
           label="Password"
-          type="password"
           autoComplete="current-password"
           error={errors.password?.message}
           {...register('password')}

@@ -1,5 +1,5 @@
 import axios, { type AxiosError } from 'axios'
-import type { AppError, AppFieldError } from '@/types/api'
+import { isAppError, type AppError, type AppFieldError } from '@/types/api'
 import type { AuthTokens } from '@/types/auth'
 
 declare module 'axios' {
@@ -63,13 +63,50 @@ function normalizeError(error: AxiosError): AppError {
   return retryAfterSeconds === undefined ? normalized : { ...normalized, retryAfterSeconds }
 }
 
-function normalizeErrorBody(error: AxiosError): AppError {
-  if (!error.response) {
-    return { status: 0, message: 'Network error. Please check your connection and try again.' }
-  }
+/**
+ * No response at all. Three different situations, worded differently because the reader can do
+ * something different about each: turn data back on, wait for the server, or just try again.
+ * `navigator.onLine === false` is reliable when it says offline; when it says online it only means
+ * "some network interface is up", which is why the default is "couldn't reach", not "offline".
+ */
+/** What a request that never got an answer says — and how `ErrorState` knows to stay calm (U8). */
+export const NETWORK_MESSAGES = {
+  offline: "You're offline. Check your connection and try again.",
+  timeout: 'The server took too long to answer. Check your connection and try again.',
+  unreachable: "Couldn't reach Procurepaddy. Check your connection and try again.",
+} as const
 
-  const status = error.response.status
-  const data = error.response.data as Record<string, unknown> | undefined
+export function isNetworkMessage(message: string | null | undefined): boolean {
+  return message != null && (Object.values(NETWORK_MESSAGES) as string[]).includes(message)
+}
+
+function networkError(error: AxiosError): AppError {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return { status: 0, kind: 'offline', message: NETWORK_MESSAGES.offline }
+  }
+  if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+    return {
+      status: 0,
+      kind: 'timeout',
+      message: NETWORK_MESSAGES.timeout,
+    }
+  }
+  return {
+    status: 0,
+    kind: 'unreachable',
+    message: NETWORK_MESSAGES.unreachable,
+  }
+}
+
+function normalizeErrorBody(error: AxiosError): AppError {
+  if (!error.response) return networkError(error)
+
+  const kind = error.response.status >= 500 ? 'server' : 'client'
+  return { ...normalizeResponseBody(error.response.status, error.response.data), kind }
+}
+
+function normalizeResponseBody(status: number, responseData: unknown): AppError {
+  const data = responseData as Record<string, unknown> | undefined
 
   // Bulk-upload validation failures respond with a raw ProductRowError[] body
   // (not wrapped in an object) so the frontend can render it directly.
@@ -145,14 +182,36 @@ export function createApiClient({ refreshPath, loginRedirectPath, getRefreshToke
     authFailureHandler = handler
   }
 
-  instance.interceptors.request.use((config) => {
-    if (!config.public && accessToken) {
+  let refreshPromise: Promise<string> | null = null
+
+  instance.interceptors.request.use(async (config) => {
+    if (config.public) return config
+    // The workspace opens from the remembered session while its token is still being fetched
+    // (AuthProvider), so a screen's first requests can start before there is one. They wait for
+    // it rather than going out bare, being refused, and asking for another.
+    if (!accessToken && refreshPromise) {
+      await refreshPromise.catch(() => {
+        // No token after all: the request goes without one, and its 401 is handled below.
+      })
+    }
+    if (accessToken) {
       config.headers.set('Authorization', `Bearer ${accessToken}`)
     }
     return config
   })
 
-  let refreshPromise: Promise<string> | null = null
+  /**
+   * Single-flight token refresh, shared by the 401 interceptor below and by the auth provider
+   * (bootstrap, and resuming a session once the network is back). Sharing it is not a nicety: the
+   * API rotates refresh tokens, so two refreshes racing with the same token would have the loser
+   * refused — and a refused refresh logs the user out.
+   */
+  function refreshSession(): Promise<string> {
+    refreshPromise ??= refreshAccessToken().finally(() => {
+      refreshPromise = null
+    })
+    return refreshPromise
+  }
 
   async function refreshAccessToken(): Promise<string> {
     const refreshToken = getRefreshToken()
@@ -185,13 +244,15 @@ export function createApiClient({ refreshPath, loginRedirectPath, getRefreshToke
       if (status === 401 && config && !config.public && !config._retry) {
         config._retry = true
         try {
-          refreshPromise ??= refreshAccessToken().finally(() => {
-            refreshPromise = null
-          })
-          const newToken = await refreshPromise
+          const newToken = await refreshSession()
           config.headers.set('Authorization', `Bearer ${newToken}`)
           return instance(config)
-        } catch {
+        } catch (refreshError) {
+          // Only a refusal ends the session. A refresh that never got an answer — the signal
+          // dropped between the 401 and the refresh, or the server is waking up — says nothing
+          // about whether the session is valid, and logging out over it threw away a working
+          // login every time a phone walked into a dead spot with an expired access token.
+          if (isTransientRefreshFailure(refreshError)) return Promise.reject(refreshError)
           handleAuthFailure()
           return Promise.reject(normalizeError(error))
         }
@@ -201,5 +262,15 @@ export function createApiClient({ refreshPath, loginRedirectPath, getRefreshToke
     },
   )
 
-  return { api: instance, setAccessToken, getAccessToken, setAuthFailureHandler }
+  return { api: instance, setAccessToken, getAccessToken, setAuthFailureHandler, refreshSession }
+}
+
+/**
+ * Whether a failed refresh might succeed if simply tried again later: no answer at all (offline,
+ * unreachable, timed out) or a server error. Everything else — 400/401/403, or no refresh token
+ * on this device — is a definite "this session is over".
+ */
+export function isTransientRefreshFailure(error: unknown): boolean {
+  if (!isAppError(error)) return false
+  return error.status === 0 || error.status >= 500
 }

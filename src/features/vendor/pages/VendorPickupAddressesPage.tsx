@@ -134,7 +134,7 @@ export function VendorPickupAddressesPage() {
               // (a tinted rail) as well as with a badge — a lone badge in a grid of six is easy
               // to scan past.
               className={`overflow-hidden rounded-lg bg-white ${
-                address.isDefault ? 'border-l-4 border-l-primary-600' : ''
+                address.isDefault ? '' : ''
               }`}
             >
               <AddressCard
@@ -147,7 +147,7 @@ export function VendorPickupAddressesPage() {
                         type="button"
                         onClick={() => setFormTarget(address)}
                         aria-label={`Edit ${address.label}`}
-                        className="rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                        className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                       >
                         <Pencil className="h-4 w-4" />
                       </button>
@@ -155,7 +155,7 @@ export function VendorPickupAddressesPage() {
                         type="button"
                         onClick={() => setDeleteTarget(address)}
                         aria-label={`Remove ${address.label}`}
-                        className="rounded-md p-1.5 text-neutral-400 hover:bg-danger-50 hover:text-danger-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-500"
+                        className="rounded-md p-1.5 text-neutral-500 hover:bg-danger-50 hover:text-danger-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-500"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -167,7 +167,7 @@ export function VendorPickupAddressesPage() {
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-neutral-100 px-4 py-2.5 text-xs text-neutral-500">
                   {address.branchName && (
                     <span className="inline-flex items-center gap-1.5">
-                      <Building2 className="h-3.5 w-3.5 text-neutral-400" aria-hidden="true" />
+                      <Building2 className="h-3.5 w-3.5 text-neutral-500" aria-hidden="true" />
                       {address.branchName}
                     </span>
                   )}

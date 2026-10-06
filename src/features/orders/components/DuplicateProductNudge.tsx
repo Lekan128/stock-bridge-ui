@@ -214,7 +214,7 @@ export function DuplicateProductNudge({ itemName, itemUnitOfMeasure, candidates,
           same as, or add it as new.
         </p>
         <div className="relative mt-2">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
           <input
             type="search"
             autoFocus

@@ -220,7 +220,7 @@ export function MarketplaceProductsPage() {
               </label>
               <div className="relative">
                 <Search
-                  className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-neutral-400"
+                  className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-neutral-500"
                   aria-hidden="true"
                 />
                 <input

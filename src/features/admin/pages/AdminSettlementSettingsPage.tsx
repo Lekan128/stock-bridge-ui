@@ -130,7 +130,7 @@ export function AdminSettlementSettingsPage() {
          ------------------------------------------------------------------ */}
       <section className="rounded-lg border border-neutral-200 bg-white p-5">
         <div className="flex items-start gap-3">
-          <Hourglass size={18} className="mt-0.5 shrink-0 text-neutral-400" aria-hidden />
+          <Hourglass size={18} className="mt-0.5 shrink-0 text-neutral-500" aria-hidden />
           <div className="flex-1">
             <h2 className="text-base font-semibold text-neutral-900">Escrow hold</h2>
             <p className="mt-1 text-sm text-neutral-600">
@@ -191,7 +191,7 @@ export function AdminSettlementSettingsPage() {
          ------------------------------------------------------------------ */}
       <section className="rounded-lg border border-neutral-200 bg-white">
         <div className="flex items-center gap-2 border-b border-neutral-100 px-5 py-4">
-          <History size={16} className="text-neutral-400" aria-hidden />
+          <History size={16} className="text-neutral-500" aria-hidden />
           <div>
             <h2 className="text-base font-semibold text-neutral-900">Change history</h2>
             <p className="text-sm text-neutral-500">

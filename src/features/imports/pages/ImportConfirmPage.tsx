@@ -10,6 +10,8 @@ import { copy } from '@/features/imports/copy'
 import { useImportSession } from '@/features/imports/hooks/useImportSession'
 import type { CommitPreview } from '@/features/imports/types'
 import { isAppError } from '@/types/api'
+import { useQueryClient } from '@tanstack/react-query'
+import { invalidateInventory } from '@/data/inventoryCache'
 
 /**
  * Step 3 (spec §9.4) — read-only prose, not a form to refill.
@@ -26,6 +28,7 @@ import { isAppError } from '@/types/api'
  * that afterwards.
  */
 export function ImportConfirmPage() {
+  const queryClient = useQueryClient()
   const { sessionId } = useParams<{ sessionId: string }>()
   const navigate = useNavigate()
   const { session } = useImportSession(sessionId)
@@ -66,6 +69,8 @@ export function ImportConfirmPage() {
     setCommitError(null)
     try {
       const result = await importsApi.commit(sessionId)
+      // Many products' stock just changed at once; refresh everything stock-related.
+      void invalidateInventory(queryClient)
       navigate(`/app/products/import/${sessionId}/result`, { replace: true, state: { result } })
     } catch (err: unknown) {
       setCommitError(isAppError(err) ? err.message : copy.confirm.failed)

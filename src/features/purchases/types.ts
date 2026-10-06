@@ -11,7 +11,7 @@ import type { OrderStatus } from '@/constants/orderStatus'
 /**
  * Which of the two ledgers an entry came from.
  *
- * MARKETPLACE_ORDER — a placed order against a ProcurePaddy seller. `orderNumber`, `status` and
+ * MARKETPLACE_ORDER — a placed order against a ProcurePal seller. `orderNumber`, `status` and
  * `paymentStatus` are only ever set on these.
  *
  * MANUAL_STOCK_IN — a delivery entered by hand against a supplier, on or off platform. This is

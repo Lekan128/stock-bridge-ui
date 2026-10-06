@@ -1,5 +1,9 @@
 import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider } from '@/auth/AuthContext'
+import { QueryProvider } from '@/data/QueryProvider'
+import { CatalogProvider } from '@/features/catalog/CatalogProvider'
+import { DraftsProvider } from '@/features/drafts/DraftsProvider'
+import { OutboxProvider } from '@/features/outbox/OutboxProvider'
 import { SuperAdminAuthProvider } from '@/auth/SuperAdminAuthContext'
 import { ToastProvider } from '@/components/ToastContext'
 import { CartProvider } from '@/features/cart/context/CartContext'
@@ -16,6 +20,16 @@ function App() {
     <BrowserRouter>
       <ToastProvider>
         <AuthProvider>
+          {/* Inside AuthProvider: the cache's on-device copy belongs to the signed-in user and is
+              wiped when they sign out. Above everything that reads inventory, including the
+              low-stock alerts the topbar bell shows. */}
+          <QueryProvider>
+          {/* The on-device catalogue (A3). Same lifetime as the cache above: the signed-in user's. */}
+          <CatalogProvider>
+          {/* Stock recorded on this phone and not yet sent (A4). Survives the session ending. */}
+          <OutboxProvider>
+          {/* Half-filled delivery and new-product forms (A5). Kept when the session ends, like the outbox. */}
+          <DraftsProvider>
           <SuperAdminAuthProvider>
             <LowStockAlertsProvider>
               <CartProvider>
@@ -33,6 +47,10 @@ function App() {
               </CartProvider>
             </LowStockAlertsProvider>
           </SuperAdminAuthProvider>
+          </DraftsProvider>
+          </OutboxProvider>
+          </CatalogProvider>
+          </QueryProvider>
         </AuthProvider>
       </ToastProvider>
     </BrowserRouter>

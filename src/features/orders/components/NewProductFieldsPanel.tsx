@@ -126,7 +126,7 @@ export function NewProductFieldsPanel({ buyerProductId, onLoaded, onChange }: Ne
             </div>
             {skuLocked ? (
               <div className="flex items-center gap-2 rounded-md border border-neutral-200 bg-neutral-100 px-2.5 py-1.5">
-                <Lock className="h-3.5 w-3.5 shrink-0 text-neutral-400" aria-hidden="true" />
+                <Lock className="h-3.5 w-3.5 shrink-0 text-neutral-500" aria-hidden="true" />
                 <span className="text-sm font-medium text-neutral-700">{fields.sku}</span>
               </div>
             ) : (

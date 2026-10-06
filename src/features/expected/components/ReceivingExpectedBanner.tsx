@@ -25,7 +25,7 @@ export interface ReceivingExpectedBannerProps {
 export function ReceivingExpectedBanner({ expected, loading, error }: ReceivingExpectedBannerProps) {
   if (loading) {
     return (
-      <div aria-busy="true" aria-label={expectedCopy.receive.loading}>
+      <div role="status" aria-busy="true" aria-label={expectedCopy.receive.loading}>
         <Skeleton className="h-20 w-full" />
       </div>
     )

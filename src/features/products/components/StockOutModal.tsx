@@ -4,7 +4,7 @@ import { AlertTriangle, ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import { stockApi, type ProductLot, type StockOutResponse } from '@/features/products/api/stockApi'
 import { UnitToggle } from '@/features/products/components/UnitToggle'
@@ -29,12 +29,18 @@ import {
   toBaseQuantity,
   unitOptionsForProduct,
 } from '@/features/products/unitSet'
+import { StockReceipt } from '@/features/products/components/StockReceipt'
+import { submitStockWrite } from '@/features/outbox/outboxStore'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
 
 export interface StockOutModalProps {
   product: Product
   onClose: () => void
   onSuccess: (result: StockOutResponse) => void
+  /** Saved on this phone instead of sent (A4) — the server could not be reached. */
+  /** Saved on this phone instead of sent (A4); gets the waiting write's id, for Undo (B2). */
+  onQueued?: (opId: string) => void
 }
 
 interface AllocationRow {
@@ -42,6 +48,38 @@ interface AllocationRow {
   inMovementId: string
   /** **Base units**, like everything else about a lot. See {@link StockOutModal}'s javadoc. */
   quantity: string
+  /**
+   * Filled in by "Add a line" and not typed in since: it follows the quantity above. It was filled
+   * once and then left alone, so changing the quantity (or switching 1 basket to 2 g) left a line
+   * asking for the old amount and a "must add up" error the user never caused. Typing an amount
+   * makes the line the user's own.
+   */
+  auto: boolean
+}
+
+/**
+ * Shares what is still needed across the lines that follow the quantity, oldest line first, each
+ * up to what its delivery has left. Lines the user typed come off the total first. Returns the
+ * same array when nothing changes, so it is safe to run on every change.
+ */
+function followQuantity(
+  rows: AllocationRow[],
+  baseQuantity: number,
+  remainingFor: (inMovementId: string) => number | undefined,
+): AllocationRow[] {
+  if (!rows.some((row) => row.auto)) return rows
+  let outstanding = Math.max(0, baseQuantity - rows.filter((row) => !row.auto).reduce((sum, row) => sum + (Number(row.quantity) || 0), 0))
+  let changed = false
+  const next = rows.map((row) => {
+    if (!row.auto) return row
+    const take = Math.max(0, Math.min(outstanding, remainingFor(row.inMovementId) ?? outstanding))
+    outstanding -= take
+    const quantity = take > 0 ? String(take) : ''
+    if (quantity === row.quantity) return row
+    changed = true
+    return { ...row, quantity }
+  })
+  return changed ? next : rows
 }
 
 let rowKeySeq = 0
@@ -115,10 +153,11 @@ function newRowKey(): string {
  * with the same FIFO suggestion"</em>, and because an empty row on a screen whose whole problem
  * was guessing is a strange thing to hand someone.
  */
-export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProps) {
+export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOutModalProps) {
   const { options: unitOfMeasureOptions } = useUnitOfMeasureOptions()
 
   const [choosingLots, setChoosingLots] = useState(false)
+  const [noteOpen, setNoteOpen] = useState(false)
   /** The selected option's `label`, or `null` for "not chosen yet" — not its `code`, per
    *  `UnitToggle`'s own doc comment (a code can repeat once a vendor has more than one pack). Same
    *  self-healing resolution as `StockInModal`'s, for the same reason: an option list that arrives
@@ -133,6 +172,9 @@ export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProp
   // not buried in a sentence.
   const [oversellInfo, setOversellInfo] = useState<{ available: number; requested: number } | null>(null)
   const [result, setResult] = useState<StockOutResponse | null>(null)
+  const [queued, setQueued] = useState(false)
+  const [queuedOpId, setQueuedOpId] = useState<string | null>(null)
+  const online = useOnlineStatus()
   const [allocationRows, setAllocationRows] = useState<AllocationRow[]>([])
   const [openLots, setOpenLots] = useState<ProductLot[]>([])
   const [loadingLots, setLoadingLots] = useState(false)
@@ -250,12 +292,25 @@ export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProp
 
   const lotById = new Map(openLots.map((lot) => [lot.inMovementId, lot]))
 
+  const remainingFor = (inMovementId: string) => lotById.get(inMovementId)?.remaining
+
   function removeAllocationRow(key: string) {
-    setAllocationRows((rows) => rows.filter((r) => r.key !== key))
+    setAllocationRows((rows) => followQuantity(rows.filter((r) => r.key !== key), baseQuantity, remainingFor))
   }
   function updateAllocationRow(key: string, patch: Partial<AllocationRow>) {
-    setAllocationRows((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)))
+    setAllocationRows((rows) =>
+      followQuantity(
+        rows.map((r) => (r.key === key ? { ...r, ...patch } : r)),
+        baseQuantity,
+        remainingFor,
+      ),
+    )
   }
+
+  // The quantity, its unit or the deliveries on file changed: the lines that follow it follow.
+  useEffect(() => {
+    setAllocationRows((rows) => followQuantity(rows, baseQuantity, (id) => openLots.find((lot) => lot.inMovementId === id)?.remaining))
+  }, [baseQuantity, openLots])
 
   /**
    * Odoo's "Add a line", pre-filled with the FIFO suggestion: the oldest open lot not already on
@@ -276,6 +331,7 @@ export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProp
           key: newRowKey(),
           inMovementId: suggestion?.inMovementId ?? '',
           quantity: suggestedQuantity > 0 ? String(suggestedQuantity) : '',
+          auto: suggestion != null,
         },
       ]
     })
@@ -307,7 +363,9 @@ export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProp
     const lot = lotById.get(row.inMovementId)
     return lot != null && Number(row.quantity) > lot.remaining
   })
-  const allocationRequirement = `Allocated amounts must add up to ${formatQuantity(baseQuantity, stockUnitText)}.`
+  /** What is wrong and what to do about it, in one sentence (it was "Allocated 5 g so far.
+   *  Allocated amounts must add up to 2 g." — true, and no help). */
+  const allocationRequirement = `These deliveries add up to ${formatQuantity(allocationTotal ?? 0, stockUnitText)}, but you're taking out ${formatQuantity(baseQuantity, stockUnitText)}. Change the quantity or an amount so they match.`
 
   async function submit() {
     setSubmitError(null)
@@ -323,6 +381,8 @@ export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProp
       return
     }
     setSubmitting(true)
+    // The receipt lands at once, stamped RECORDED, and turns SYNCED when the server has it (C3).
+    setStep('receipt')
     try {
       const payload: StockOutPayload = {
         quantity: quantityNumber,
@@ -330,10 +390,24 @@ export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProp
         allocations: builtAllocations,
         note: getValues('note') || undefined,
       }
-      const res = await stockApi.stockOut(product.id, payload)
-      setResult(res)
-      setStep('receipt')
+      // Through the outbox (A4) — see StockInModal. Choosing deliveries needs the server's current
+      // lots, so a sale with chosen deliveries is never queued; the outbox refuses it offline.
+      const outcome = await submitStockWrite({
+        kind: 'STOCK_OUT',
+        productId: product.id,
+        productName: product.name,
+        summary: quantityBothWays,
+        payload,
+        baseDelta: -baseQuantity,
+      })
+      if (outcome.status === 'sent') setResult(outcome.response as StockOutResponse)
+      else {
+        setQueued(true)
+        setQueuedOpId(outcome.op.id)
+      }
     } catch (err) {
+      // Refused now (oversold, invalid): back to the form, where the reason is shown.
+      setStep('form')
       if (isAppError(err) && err.availableQuantity != null && err.requestedQuantity != null) {
         setOversellInfo({ available: err.availableQuantity, requested: err.requestedQuantity })
       } else {
@@ -356,25 +430,32 @@ export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProp
    */
   const quantityBothWays =
     formatEnteredAndBase(quantityNumber, selectedOption, baseQuantity, stockUnitText)
+  const noteText = (watch('note') ?? '').trim()
+  const showNote = noteOpen || noteText !== '' || Boolean(errors.note)
 
   return (
-    <Modal
+    <Sheet
       open
       onClose={onClose}
       size={choosingLots ? 'xl' : 'md'}
-      title={step === 'form' ? 'Stock out' : 'Stock out recorded'}
+      title={step === 'form' ? 'Stock out' : queued ? 'Saved on this phone' : result ? 'Stock out recorded' : 'Recording stock out'}
       footer={
         step === 'form' ? (
           <>
             <Button variant="secondary" onClick={onClose}>
               Cancel
             </Button>
-            <Button onClick={handleSubmit(() => void submit())} loading={submitting} disabled={roundsToZero}>
+            <Button variant="action" onClick={handleSubmit(() => void submit())} loading={submitting} disabled={roundsToZero}>
               Confirm
             </Button>
           </>
         ) : (
-          <Button onClick={() => result && onSuccess(result)}>Done</Button>
+          <Button
+            onClick={() => (result ? onSuccess(result) : queuedOpId && onQueued?.(queuedOpId))}
+            disabled={!result && !queued}
+          >
+            Done
+          </Button>
         )
       }
     >
@@ -393,6 +474,7 @@ export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProp
               <div className="flex-1">
                 <TextField
                   label="Quantity"
+                  data-autofocus
                   // `decimal`, not `numeric`: §9.1 accepts decimals and a phone keypad without a
                   // decimal point makes "half a bag" untypeable on the device most of these
                   // entries are made on.
@@ -430,6 +512,9 @@ export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProp
             )}
           </div>
 
+          {/* Choosing deliveries needs the server's current lots, so offline (A4) it is not
+              offered: the sale is saved on this phone and the oldest deliveries are used. */}
+          {online ? (
           <div>
             <button
               type="button"
@@ -442,8 +527,14 @@ export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProp
               Choose which deliveries this comes from
             </button>
           </div>
+          ) : (
+            <p className="text-xs text-neutral-500">
+              You're offline: the oldest deliveries will be used. Choosing which deliveries this comes from needs a
+              connection.
+            </p>
+          )}
 
-          {choosingLots && (
+          {choosingLots && online && (
             <div id="stock-out-lots" className="flex flex-col gap-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span id="stock-out-lots-heading" className="text-sm font-medium text-neutral-700">
@@ -463,7 +554,7 @@ export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProp
               {loadingLots ? (
                 <p className="text-sm text-neutral-500">Loading deliveries…</p>
               ) : allocationRows.length === 0 ? (
-                <p className="text-sm text-neutral-400">
+                <p className="text-sm text-neutral-500">
                   {openLots.length === 0 && !lotsError
                     ? 'No open deliveries on file — the server will work out where this comes from.'
                     : 'No lines yet — the oldest deliveries will be used first.'}
@@ -523,7 +614,7 @@ export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProp
                               aria-invalid={overdrawn || undefined}
                               aria-describedby={lot ? `${qtyInputId}-hint` : undefined}
                               value={row.quantity}
-                              onChange={(e) => updateAllocationRow(row.key, { quantity: e.target.value })}
+                              onChange={(e) => updateAllocationRow(row.key, { quantity: e.target.value, auto: false })}
                               className={`w-full rounded-md border px-2 py-1.5 text-sm text-neutral-900 focus:ring-2 focus:outline-none ${
                                 overdrawn
                                   ? 'border-danger-300 focus:border-danger-500 focus:ring-danger-100'
@@ -536,7 +627,7 @@ export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProp
                               type="button"
                               onClick={() => removeAllocationRow(row.key)}
                               aria-label={`Remove delivery ${index + 1}`}
-                              className="rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-danger-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                              className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-danger-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                             >
                               <Trash2 className="h-4 w-4" aria-hidden="true" />
                             </button>
@@ -559,24 +650,35 @@ export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProp
 
               {allocationMismatch && (
                 <p role="alert" className="text-xs text-danger-600">
-                  Allocated {formatQuantity(allocationTotal ?? 0, stockUnitText)} so far. {allocationRequirement}
+                  {allocationRequirement}
                 </p>
               )}
             </div>
           )}
 
-          <div>
-            <label htmlFor="stock-out-note" className="mb-1.5 block text-sm font-medium text-neutral-700">
-              Note
-            </label>
-            <textarea
-              id="stock-out-note"
-              rows={2}
-              className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
-              {...register('note')}
-            />
-            {errors.note?.message && <p className="mt-1.5 text-xs text-danger-600">{errors.note.message}</p>}
-          </div>
+          {/* The note is optional, so it waits behind one line (C3) unless there is one already. */}
+          {showNote ? (
+            <div>
+              <label htmlFor="stock-out-note" className="mb-1.5 block text-sm font-medium text-neutral-700">
+                Note <span className="font-normal text-neutral-500">(optional)</span>
+              </label>
+              <textarea
+                id="stock-out-note"
+                rows={2}
+                className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
+                {...register('note')}
+              />
+              {errors.note?.message && <p className="mt-1.5 text-xs text-danger-600">{errors.note.message}</p>}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setNoteOpen(true)}
+              className="self-start rounded-sm text-sm font-medium text-primary-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+            >
+              Add a note
+            </button>
+          )}
 
           {/* A 409 oversell gets its own card — the two numbers (available vs. requested) are
               the actionable content of this error, and burying them in FormError's one-line
@@ -600,40 +702,41 @@ export function StockOutModal({ product, onClose, onSuccess }: StockOutModalProp
         </form>
       )}
 
-      {step === 'receipt' && result && (
-        <div className="flex flex-col gap-4">
-          <div className="rounded-lg border border-accent-200 bg-accent-50 p-4">
-            <p className="text-sm font-semibold text-accent-800">Recorded</p>
-            <p className="mt-1 text-sm text-accent-700">
-              {quantityBothWays} of {product.name} removed.
-            </p>
-          </div>
-
-          {result.breakdown && result.breakdown.length > 0 ? (
-            <div>
-              <p className="mb-1.5 text-sm font-medium text-neutral-700">Where it came from</p>
-              <ul className="divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
-                {result.breakdown.map((line) => (
-                  <li key={line.inMovementId} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm">
-                    {/* The server's own label when it sent one, so this names the delivery with
-                        the same phrase the picker did. The fallback is what this composed before
-                        the label existed — kept because the API omits null fields and an older
-                        response must still render. */}
-                    <span className="text-neutral-700">
-                      {line.label ?? `${line.companyVendorName}’s ${formatDateTime(line.inMovementCreatedAt)} delivery`}
-                    </span>
-                    <span className="font-medium text-neutral-900">{formatQuantity(line.quantity, stockUnitText)}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : (
-            <p className="text-sm text-neutral-500">
-              New {UNIT_COPY.ON_HAND.toLowerCase()}: {formatQuantity(result.product.quantityOnHand, stockUnitText)}.
-            </p>
-          )}
-        </div>
+      {step === 'receipt' && (
+        <StockReceipt
+          state={result ? 'synced' : queued ? 'recorded' : 'sending'}
+          kind="Stock out"
+          id={result?.movement?.id ?? queuedOpId}
+          lines={[
+            { label: 'Product', value: product.name },
+            { label: 'Taken out', value: quantityBothWays },
+            ...(noteText ? [{ label: 'Note', value: noteText }] : []),
+          ]}
+        >
+          {result &&
+            (result.breakdown && result.breakdown.length > 0 ? (
+              <div>
+                <p className="mb-1.5 text-sm font-medium text-neutral-700">Where it came from</p>
+                <ul className="divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
+                  {result.breakdown.map((line) => (
+                    <li key={line.inMovementId} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm">
+                      {/* The server's own label when it sent one, so this names the delivery with
+                          the same phrase the picker did; the fallback is for an older response. */}
+                      <span className="text-neutral-700">
+                        {line.label ?? `${line.companyVendorName}’s ${formatDateTime(line.inMovementCreatedAt)} delivery`}
+                      </span>
+                      <span className="font-medium text-neutral-900">{formatQuantity(line.quantity, stockUnitText)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <p className="text-sm text-neutral-500">
+                New {UNIT_COPY.ON_HAND.toLowerCase()}: {formatQuantity(result.product.quantityOnHand, stockUnitText)}.
+              </p>
+            ))}
+        </StockReceipt>
       )}
-    </Modal>
+    </Sheet>
   )
 }

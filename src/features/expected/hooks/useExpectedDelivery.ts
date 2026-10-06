@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { queryKeys } from '@/data/queryKeys'
+import { useApiQuery } from '@/data/useApiQuery'
 import { expectedApi } from '@/features/expected/api/expectedApi'
 import { expectedCopy } from '@/features/expected/copy'
 import type { ExpectedDelivery } from '@/features/expected/types'
-import { isAppError } from '@/types/api'
 
 /**
  * One expected delivery, or nothing at all when `id` is absent.
@@ -16,37 +16,12 @@ import { isAppError } from '@/types/api'
  * front of them still has stock to record.
  */
 export function useExpectedDelivery(id: string | null) {
-  const [expected, setExpected] = useState<ExpectedDelivery | null>(null)
-  const [loading, setLoading] = useState(id != null)
-  const [error, setError] = useState<string | null>(null)
+  const result = useApiQuery<ExpectedDelivery>({
+    queryKey: queryKeys.expected.detail(id),
+    queryFn: () => expectedApi.get(id as string),
+    fallbackError: expectedCopy.receive.loadFailed,
+    enabled: id != null,
+  })
 
-  useEffect(() => {
-    if (id == null) {
-      setExpected(null)
-      setLoading(false)
-      setError(null)
-      return
-    }
-    let cancelled = false
-    setLoading(true)
-    setError(null)
-
-    expectedApi
-      .get(id)
-      .then((response) => {
-        if (!cancelled) setExpected(response)
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(isAppError(err) ? err.message : expectedCopy.receive.loadFailed)
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [id])
-
-  return { expected, loading, error }
+  return { expected: result.data ?? null, loading: result.loading, error: result.error }
 }

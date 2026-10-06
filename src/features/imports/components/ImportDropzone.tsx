@@ -150,7 +150,7 @@ export function ImportDropzone({
             : 'border-neutral-300 bg-white hover:border-primary-400 hover:bg-neutral-50'
         }`}
       >
-        <Upload className={`h-6 w-6 ${dragging ? 'text-primary-600' : 'text-neutral-400'}`} aria-hidden="true" />
+        <Upload className={`h-6 w-6 ${dragging ? 'text-primary-600' : 'text-neutral-500'}`} aria-hidden="true" />
         <span className="text-sm font-medium text-neutral-900">
           {dragging ? copy.upload.dropzoneActive : copy.upload.dropzoneHeading}
         </span>

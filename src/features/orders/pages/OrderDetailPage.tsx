@@ -26,6 +26,7 @@ import { invalidateIncomingStock } from '@/features/orders/incomingStock'
 import type { Order, ReorderResult } from '@/features/orders/types'
 import { isAppError } from '@/types/api'
 import { formatNaira } from '@/utils/money'
+import { OverflowMenu } from '@/components/OverflowMenu'
 
 function TotalsRow({ label, value, emphasis = false }: { label: string; value: string; emphasis?: boolean }) {
   return (
@@ -153,10 +154,12 @@ export function OrderDetailPage() {
               Reorder
             </Button>
           )}
+          {/* In "⋯", behind CancelOrderModal (B2): a destructive action never sits on a header. */}
           {order.canCancel && (
-            <Button variant="danger" onClick={() => setShowCancel(true)}>
-              Cancel order
-            </Button>
+            <OverflowMenu
+              label="More actions for this order"
+              items={[{ label: 'Cancel order', tone: 'danger', onSelect: () => setShowCancel(true) }]}
+            />
           )}
         </div>
       </div>

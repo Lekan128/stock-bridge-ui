@@ -101,15 +101,55 @@ export interface StockOutResponse extends StockMutationResponse {
   breakdown?: LabelledStockOutBreakdownLine[]
 }
 
+function idempotent(idempotencyKey: string | undefined) {
+  return idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : undefined
+}
+
 export const stockApi = {
-  stockIn: (productId: string, payload: StockInRequestPayload) =>
-    api.post<StockMutationResponse>(`/api/products/${productId}/stock/stock-in`, payload).then((r) => r.data),
+  /**
+   * The writes take an optional `idempotencyKey` — the outbox (A4) sends each write's own id. With one, the
+   * API records the write at most once however many times it is sent — the retry after a lost
+   * response is answered with the stored result instead of a second ledger row.
+   */
+  stockIn: (productId: string, payload: StockInRequestPayload, idempotencyKey?: string) =>
+    api
+      .post<StockMutationResponse>(`/api/products/${productId}/stock/stock-in`, payload, idempotent(idempotencyKey))
+      .then((r) => r.data),
 
-  stockOut: (productId: string, payload: StockOutPayload) =>
-    api.post<StockOutResponse>(`/api/products/${productId}/stock/stock-out`, payload).then((r) => r.data),
+  stockOut: (productId: string, payload: StockOutPayload, idempotencyKey?: string) =>
+    api
+      .post<StockOutResponse>(`/api/products/${productId}/stock/stock-out`, payload, idempotent(idempotencyKey))
+      .then((r) => r.data),
 
-  adjust: (productId: string, payload: StockAdjustmentPayload) =>
-    api.post<StockMutationResponse>(`/api/products/${productId}/stock/adjustment`, payload).then((r) => r.data),
+  /**
+   * A stock count (A4): what is on the shelf, and when it was counted. Replaces adjust's "set it
+   * to N": a count arriving late from an offline phone is carried forward by sales recorded after
+   * it instead of erasing them. A response with no `movement` means a newer count had already been
+   * recorded, and nothing changed.
+   */
+  count: (
+    productId: string,
+    payload: { countedQuantity: number; countedAt?: string; note?: string },
+    idempotencyKey?: string,
+  ) =>
+    api
+      .post<StockMutationResponse>(`/api/products/${productId}/stock/count`, payload, idempotent(idempotencyKey))
+      .then((r) => r.data),
+
+  /**
+   * Undo (B2, decision D8): void a write made moments ago, as if it had never been made. Only by
+   * the person who made it, within two minutes, while it is still the product's latest write — a
+   * 409 says why otherwise. The response's `product` is the restored figure; it has no `movement`.
+   */
+  voidWrite: (productId: string, movementId: string) =>
+    api
+      .post<StockMutationResponse>(`/api/products/${productId}/stock/movements/${movementId}/void`)
+      .then((r) => r.data),
+
+  adjust: (productId: string, payload: StockAdjustmentPayload, idempotencyKey?: string) =>
+    api
+      .post<StockMutationResponse>(`/api/products/${productId}/stock/adjustment`, payload, idempotent(idempotencyKey))
+      .then((r) => r.data),
 
   history: (productId: string, page: number, size = 10) =>
     api

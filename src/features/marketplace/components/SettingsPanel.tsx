@@ -141,7 +141,7 @@ export function SettingsPanel({ settings, setSettings, loading, error, refetch }
       <form onSubmit={handleSubmit((values) => setPending(values))} noValidate className="flex flex-col gap-4">
         <section className="rounded-lg border border-neutral-200 bg-white p-4">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-neutral-900">
-            <Truck className="h-4 w-4 text-neutral-400" aria-hidden="true" />
+            <Truck className="h-4 w-4 text-neutral-500" aria-hidden="true" />
             Delivery and order value
           </h3>
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
@@ -174,7 +174,7 @@ export function SettingsPanel({ settings, setSettings, loading, error, refetch }
 
         <section className="rounded-lg border border-neutral-200 bg-white p-4">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-neutral-900">
-            <Wallet className="h-4 w-4 text-neutral-400" aria-hidden="true" />
+            <Wallet className="h-4 w-4 text-neutral-500" aria-hidden="true" />
             Pay on delivery
           </h3>
           <label className="mt-4 flex items-start gap-2.5">
@@ -209,7 +209,7 @@ export function SettingsPanel({ settings, setSettings, loading, error, refetch }
 
         <section className="rounded-lg border border-neutral-200 bg-white p-4">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-neutral-900">
-            <Megaphone className="h-4 w-4 text-neutral-400" aria-hidden="true" />
+            <Megaphone className="h-4 w-4 text-neutral-500" aria-hidden="true" />
             Support contact
           </h3>
           <p className="mt-1 text-xs text-neutral-500">Shown in the storefront footer and on order pages.</p>

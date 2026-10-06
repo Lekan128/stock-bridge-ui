@@ -159,7 +159,7 @@ export function ApproveVendorDialog({
         {/* Not a nicety. Nothing in the product will ever tell the vendor this password, so if the
             reviewer does not pass it on, nobody can. */}
         <p className="rounded-md bg-warning-50 px-3 py-2 text-xs text-warning-800">
-          We will not email this password — no email in Procure Paddy ever contains one. Give it to
+          We will not email this password — no email in Procurepaddy ever contains one. Give it to
           the vendor yourself, and tell them to change it from their profile after signing in.
         </p>
 
@@ -178,7 +178,7 @@ export function ApproveVendorDialog({
 
         <div>
           <label htmlFor="approve-review-note" className="mb-1.5 block text-sm font-medium text-neutral-700">
-            Note <span className="font-normal text-neutral-400">(optional)</span>
+            Note <span className="font-normal text-neutral-500">(optional)</span>
           </label>
           <textarea
             id="approve-review-note"
@@ -191,7 +191,7 @@ export function ApproveVendorDialog({
           />
           {/* Kept on the record for "why did we take this one on", and quoted to the applicant,
               so it should read as something they may see. */}
-          <p className="mt-1 text-xs text-neutral-400">
+          <p className="mt-1 text-xs text-neutral-500">
             Stored on the application and included in the approval email.
           </p>
         </div>

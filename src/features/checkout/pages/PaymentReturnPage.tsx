@@ -11,6 +11,7 @@ import type { PaymentProviderStatus } from '@/features/checkout/types'
 import { useMarketplaceSettings } from '@/features/storefront/hooks/useMarketplaceSettings'
 import { isAppError } from '@/types/api'
 import { formatNaira } from '@/utils/money'
+import { marketplacePaths } from '@/routes/marketplacePaths'
 
 /**
  * Monnify's own redirect parameter names, in the order we prefer them. This is the only thing
@@ -119,7 +120,7 @@ export function PaymentReturnPage() {
   useEffect(() => {
     if (verification?.status !== 'PAID' || !verification.orderId) return
     paymentHandoff.clear()
-    const timer = setTimeout(() => navigate(`/order-confirmation/${verification.orderId}`, { replace: true }), 1200)
+    const timer = setTimeout(() => navigate(marketplacePaths.orderConfirmation(verification.orderId), { replace: true }), 1200)
     return () => clearTimeout(timer)
   }, [verification?.status, verification?.orderId, navigate])
 
@@ -138,10 +139,10 @@ export function PaymentReturnPage() {
       const status = isAppError(err) ? err.status : 0
       if (status === 409) {
         showToast('This order has already been paid for.', 'info')
-        navigate(`/order-confirmation/${orderId}`, { replace: true })
+        navigate(marketplacePaths.orderConfirmation(orderId), { replace: true })
       } else if (status === 503) {
         showToast('Online payment is unavailable right now. Your order is still open.', 'error')
-        navigate(`/order-confirmation/${orderId}`, { replace: true })
+        navigate(marketplacePaths.orderConfirmation(orderId), { replace: true })
       } else {
         showToast(isAppError(err) ? err.message : 'We could not start a new payment. Please try again.', 'error')
       }
@@ -154,7 +155,7 @@ export function PaymentReturnPage() {
     return (
       <div className="mx-auto max-w-2xl px-4 py-16 sm:px-6 lg:px-8">
         <div className="rounded-lg border border-neutral-200 bg-white p-6 text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-neutral-100 text-neutral-400">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-neutral-100 text-neutral-500">
             <HelpCircle className="h-6 w-6" aria-hidden="true" />
           </div>
           <h1 className="mt-4 text-lg font-semibold text-neutral-900">No payment to confirm</h1>
@@ -166,7 +167,7 @@ export function PaymentReturnPage() {
             <Link to="/app/orders" className={buttonClassName('primary')}>
               View your orders
             </Link>
-            <Link to="/" className={buttonClassName('secondary')}>
+            <Link to={marketplacePaths.home} className={buttonClassName('secondary')}>
               Back to the catalog
             </Link>
           </div>
@@ -282,12 +283,12 @@ export function PaymentReturnPage() {
         )}
 
         {orderId && (
-          <Link to={`/order-confirmation/${orderId}`} className={buttonClassName('secondary')}>
+          <Link to={marketplacePaths.orderConfirmation(orderId)} className={buttonClassName('secondary')}>
             View your order
           </Link>
         )}
 
-        <Link to="/" className={buttonClassName('secondary')}>
+        <Link to={marketplacePaths.home} className={buttonClassName('secondary')}>
           Back to the catalog
         </Link>
       </div>

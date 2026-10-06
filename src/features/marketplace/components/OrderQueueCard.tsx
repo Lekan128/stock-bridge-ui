@@ -19,7 +19,7 @@ export function OrderQueueCard({ order }: { order: AdminOrderSummary }) {
     <Link
       to={`/app/marketplace/orders/${order.id}`}
       className={`flex flex-col gap-2 rounded-lg border bg-white p-3 shadow-sm transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none ${
-        isNew ? 'border-warning-200 border-l-4 border-l-warning-500' : 'border-neutral-200'
+        isNew ? 'border-warning-300' : 'border-neutral-200'
       }`}
     >
       <div className="flex items-start justify-between gap-3">

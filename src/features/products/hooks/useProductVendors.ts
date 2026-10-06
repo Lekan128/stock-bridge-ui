@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, type SetStateAction } from 'react'
+import { queryKeys } from '@/data/queryKeys'
+import { useApiQuery } from '@/data/useApiQuery'
 import { productVendorsApi } from '@/features/products/api/productVendorsApi'
 import type { ProductVendor } from '@/features/products/vendors/types'
-import { isAppError } from '@/types/api'
+
+const NO_VENDORS: ProductVendor[] = []
 
 /**
  * A product's vendor lines — the Vendors tab's one round trip. Same `data/loading/error/refetch`
@@ -13,35 +16,23 @@ import { isAppError } from '@/types/api'
  * today) — not distinguished from "still loading" beyond the `loading` flag itself.
  */
 export function useProductVendors(productId: string | undefined) {
-  const [data, setData] = useState<ProductVendor[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [reloadToken, setReloadToken] = useState(0)
+  const result = useApiQuery<ProductVendor[]>({
+    queryKey: queryKeys.products.vendors(productId),
+    queryFn: () => productVendorsApi.list(productId as string),
+    fallbackError: 'Could not load suppliers for this product.',
+    enabled: productId != null,
+  })
+  const data = result.data ?? NO_VENDORS
+  const { setData: setCached } = result
 
-  useEffect(() => {
-    if (!productId) return
-    let cancelled = false
-    setLoading(true)
-    setError(null)
+  // Same contract as the `useState` setter it replaces, including the updater form the tab uses
+  // for its optimistic preferred-vendor swap.
+  const setData = useCallback(
+    (action: SetStateAction<ProductVendor[]>) => {
+      setCached((current) => (typeof action === 'function' ? action(current ?? NO_VENDORS) : action))
+    },
+    [setCached],
+  )
 
-    productVendorsApi
-      .list(productId)
-      .then((response) => {
-        if (!cancelled) setData(response)
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(isAppError(err) ? err.message : 'Could not load suppliers for this product.')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [productId, reloadToken])
-
-  const refetch = useCallback(() => setReloadToken((t) => t + 1), [])
-
-  return { data, setData, loading, error, refetch }
+  return { data, setData, loading: result.loading, error: result.error, refetch: result.refetch }
 }

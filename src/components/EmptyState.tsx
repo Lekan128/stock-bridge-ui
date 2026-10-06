@@ -2,12 +2,12 @@ import type { ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 
 export interface EmptyStateProps {
-  /** Optional lucide icon rendered in a tinted circle. */
+  /** Optional lucide icon, set small beside the title. */
   icon?: LucideIcon
   title: string
   /** One or two sentences: say what is missing and what the reader can do about it. */
   description?: ReactNode
-  /** Buttons/links. Pass `buttonClassName()` on a <Link> so it matches Button visually. */
+  /** Buttons/links — the next thing to do. Pass `buttonClassName()` on a <Link> to match Button. */
   action?: ReactNode
   /**
    * `neutral` for "nothing here yet", `positive` for a *good* empty result (no low stock,
@@ -17,29 +17,23 @@ export interface EmptyStateProps {
   className?: string
 }
 
-const toneClasses: Record<NonNullable<EmptyStateProps['tone']>, string> = {
-  neutral: 'bg-neutral-100 text-neutral-400',
-  positive: 'bg-accent-100 text-accent-600',
-}
-
 /**
- * The generic designed empty state, modelled on EmptyProductsState so every list in the app —
- * catalog, cart, orders, addresses, fulfilment queue — reads the same. The UX bar forbids a bare
- * "No results" line, so this is what every list renders when it has nothing to show.
+ * What every list shows when it has nothing to show (B2, v2). Left-aligned and set like the rest
+ * of the page — a title, what is missing and what to do next as a sentence, then the action —
+ * rather than a dashed box with an icon in a circle centred in it (plan §1.3: both on Impeccable's
+ * list of template tells).
  */
 export function EmptyState({ icon: Icon, title, description, action, tone = 'neutral', className = '' }: EmptyStateProps) {
   return (
-    <div
-      className={`flex flex-col items-center justify-center rounded-lg border border-dashed border-neutral-300 bg-white px-6 py-16 text-center ${className}`}
-    >
-      {Icon && (
-        <div className={`flex h-12 w-12 items-center justify-center rounded-full ${toneClasses[tone]}`}>
-          <Icon className="h-6 w-6" aria-hidden="true" />
-        </div>
-      )}
-      <h2 className={`text-base font-semibold text-neutral-900 ${Icon ? 'mt-4' : ''}`}>{title}</h2>
-      {description && <p className="mt-1 max-w-sm text-sm text-neutral-500">{description}</p>}
-      {action && <div className="mt-5 flex flex-wrap items-center justify-center gap-2">{action}</div>}
+    <div className={`flex flex-col items-start gap-2 rounded-lg border border-neutral-200 bg-white px-5 py-8 text-left sm:px-8 ${className}`}>
+      <h2 className="flex items-center gap-2 text-base font-semibold text-neutral-900">
+        {Icon && (
+          <Icon className={`h-5 w-5 shrink-0 ${tone === 'positive' ? 'text-accent-600' : 'text-neutral-500'}`} aria-hidden="true" />
+        )}
+        {title}
+      </h2>
+      {description && <div className="max-w-prose text-sm text-neutral-600">{description}</div>}
+      {action && <div className="mt-3 flex flex-wrap items-center gap-2">{action}</div>}
     </div>
   )
 }

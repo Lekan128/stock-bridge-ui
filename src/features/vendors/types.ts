@@ -11,7 +11,7 @@
  */
 
 /**
- * VERIFIED — created automatically when the company bought from a ProcurePaddy seller. The company
+ * VERIFIED — created automatically when the company bought from a ProcurePal seller. The company
  * may remove it from their directory but may **not** edit what it says: it asserts a fact about
  * the platform, not a note the company wrote. The server answers 409 to an edit.
  *
@@ -42,8 +42,8 @@ export interface CompanyVendor {
    * How *this company* pays this supplier, and the registration number they hold for them. All
    * four optional.
    *
-   * ⚠️ Never the seller's own banking details. A VERIFIED row points at a ProcurePaddy seller
-   * that has its own bank account on file — the one ProcurePaddy pays *them* out to — and these
+   * ⚠️ Never the seller's own banking details. A VERIFIED row points at a ProcurePal seller
+   * that has its own bank account on file — the one ProcurePal pays *them* out to — and these
    * fields are deliberately not sourced from it: our banking relationship with a seller is not
    * the buyer's to see. In practice these are filled in on EXTERNAL suppliers, since that is
    * where an off-platform payment actually happens, and a VERIFIED row is not editable anyway.

@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { notificationsApi } from '@/features/notifications/api/notificationsApi'
 import type { ServerNotification } from '@/features/notifications/types'
+import { canPollNow, onPollingResumable } from '@/hooks/useOnlineStatus'
 
 export interface ServerNotificationsState {
   notifications: ServerNotification[]
@@ -106,18 +107,27 @@ function load(): Promise<void> {
 
 let subscriberCount = 0
 let timer: ReturnType<typeof setInterval> | null = null
+let stopResumeListener: (() => void) | null = null
+
+/** A tick skipped while offline or hidden — see `canPollNow`; the resume listener catches up. */
+function poll(): void {
+  if (canPollNow()) void load()
+}
 
 function startPolling(): void {
   if (timer !== null) return
-  void load()
+  poll()
   // TODO(future): this polls. When ProcurePal has dispatch riders, order events should be
   // pushed (FCM/SMS/WhatsApp) to ProcurePal staff and the assigned rider instead.
-  timer = setInterval(() => void load(), POLL_INTERVAL_MS)
+  timer = setInterval(poll, POLL_INTERVAL_MS)
+  stopResumeListener = onPollingResumable(poll)
 }
 
 function stopPolling(): void {
   if (timer !== null) clearInterval(timer)
   timer = null
+  stopResumeListener?.()
+  stopResumeListener = null
 }
 
 function reset(): void {

@@ -69,7 +69,7 @@ export function CancelOrderModal({ order, onClose, onSuccess }: CancelOrderModal
 
       <div className="mt-4">
         <label htmlFor="cancel-reason" className="mb-1.5 block text-sm font-medium text-neutral-700">
-          Why are you cancelling? <span className="font-normal text-neutral-400">(optional)</span>
+          Why are you cancelling? <span className="font-normal text-neutral-500">(optional)</span>
         </label>
         <textarea
           id="cancel-reason"

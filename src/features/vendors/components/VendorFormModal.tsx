@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import { NIGERIAN_STATES } from '@/constants/nigerianStates'
 import { vendorsApi } from '@/features/vendors/api/vendorsApi'
@@ -92,7 +92,7 @@ export function VendorFormModal({ vendor, onClose, onSaved }: VendorFormModalPro
   }
 
   return (
-    <Modal
+    <Sheet
       open
       onClose={onClose}
       title={isEdit ? 'Edit supplier' : 'Add supplier'}
@@ -110,7 +110,7 @@ export function VendorFormModal({ vendor, onClose, onSaved }: VendorFormModalPro
     >
       <form id="vendor-form" onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
         <p className="rounded-md bg-neutral-50 px-3 py-2 text-sm text-neutral-600">
-          For suppliers you deal with outside ProcurePaddy. Sellers you buy from on the marketplace are
+          For suppliers you deal with outside ProcurePal. Sellers you buy from on the marketplace are
           added to this directory automatically.
         </p>
 
@@ -156,7 +156,7 @@ export function VendorFormModal({ vendor, onClose, onSaved }: VendorFormModalPro
           <TextField label="City" placeholder="Optional" error={errors.city?.message} {...register('city')} />
           <div>
             <label htmlFor="state" className="mb-1.5 block text-sm font-medium text-neutral-700">
-              State <span className="font-normal text-neutral-400">(optional)</span>
+              State <span className="font-normal text-neutral-500">(optional)</span>
             </label>
             {/* A select rather than free text, and validated server-side against the same list —
                 for the reason the address form gives: a select is a convenience, not a guarantee. */}
@@ -192,7 +192,7 @@ export function VendorFormModal({ vendor, onClose, onSaved }: VendorFormModalPro
             Every field here is optional; a supplier with none is an ordinary directory entry. */}
         <fieldset className="rounded-md border border-neutral-200 p-4">
           <legend className="px-1.5 text-sm font-medium text-neutral-700">
-            Payment &amp; registration <span className="font-normal text-neutral-400">(optional)</span>
+            Payment &amp; registration <span className="font-normal text-neutral-500">(optional)</span>
           </legend>
 
           <div className="flex flex-col gap-4">
@@ -240,7 +240,7 @@ export function VendorFormModal({ vendor, onClose, onSaved }: VendorFormModalPro
 
         <div>
           <label htmlFor="notes" className="mb-1.5 block text-sm font-medium text-neutral-700">
-            Notes <span className="font-normal text-neutral-400">(optional)</span>
+            Notes <span className="font-normal text-neutral-500">(optional)</span>
           </label>
           <textarea
             id="notes"
@@ -260,6 +260,6 @@ export function VendorFormModal({ vendor, onClose, onSaved }: VendorFormModalPro
 
         <FormError message={formError} />
       </form>
-    </Modal>
+    </Sheet>
   )
 }

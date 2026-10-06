@@ -2,12 +2,25 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- ?v=2: the logo changed (Brand refresh), and browsers keep a favicon for months by its
+         address; a new address makes every browser fetch the new one. Bump it on the next change. -->
+    <link rel="icon" href="/favicon.ico?v=2" sizes="48x48" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png?v=2" />
     <!-- viewport-fit=cover: the delivery screen's sticky bar pads itself with
          env(safe-area-inset-bottom), which is 0 without it, so the button would sit
          under a phone's home indicator. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>Procure Paddy</title>
+    <title>Procurepaddy</title>
+    <!-- Installed-app chrome (INVENTORY_OFFLINE_AND_CHARACTER_PLAN.md, A1). The manifest link is
+         injected by vite-plugin-pwa at build time. iOS ignores the manifest's icons and reads
+         these instead, and needs an opaque icon or it fills the transparency with black. -->
+    <meta name="theme-color" content="#08205B" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Procurepaddy" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   </head>
   <body>
     <div id="root"></div>

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Button, buttonClassName } from '@/components/Button'
 import { EmptyState } from '@/components/EmptyState'
 import { ORDER_STATUS_LABELS, type OrderStatus } from '@/constants/orderStatus'
+import { marketplacePaths } from '@/routes/marketplacePaths'
 
 export interface EmptyOrdersStateProps {
   /** The active status filter, or undefined when the list is genuinely unfiltered. */
@@ -37,7 +38,7 @@ export function EmptyOrdersState({ status, onClearFilter }: EmptyOrdersStateProp
       title="No orders yet"
       description="When your company buys from ProcurePal, the order appears here — and the goods appear in your inventory as incoming stock until you confirm you have received them."
       action={
-        <Link to="/" className={buttonClassName('primary')}>
+        <Link to={marketplacePaths.home} className={buttonClassName('primary')}>
           Browse the catalog
         </Link>
       }

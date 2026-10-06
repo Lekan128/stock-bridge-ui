@@ -63,7 +63,7 @@ export function OrderQueueTable({ orders }: OrderQueueTableProps) {
             <tr
               key={order.id}
               className={`border-b border-neutral-100 last:border-b-0 hover:bg-neutral-50 ${
-                isNew ? 'border-l-4 border-l-warning-500 bg-warning-50/40' : ''
+                isNew ? 'bg-warning-50/40' : ''
               }`}
             >
               <td className="px-4 py-3">

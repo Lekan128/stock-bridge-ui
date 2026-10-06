@@ -66,7 +66,7 @@ export function CategoryStrip({ categories, loading, activeCategoryId, onSelect 
               >
                 {category.name}
                 {category.productCount !== undefined && (
-                  <span className={active ? 'text-primary-200' : 'text-neutral-400'}>({category.productCount})</span>
+                  <span className={active ? 'text-primary-200' : 'text-neutral-500'}>({category.productCount})</span>
                 )}
                 <ChevronRight className="h-3.5 w-3.5 opacity-60" aria-hidden="true" />
               </button>

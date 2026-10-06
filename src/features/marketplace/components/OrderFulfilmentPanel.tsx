@@ -55,7 +55,7 @@ export function OrderFulfilmentPanel({ order, onSelectAction, onSettlePayment, s
 
       {buyerConfirmsNext && (
         <p className="mt-4 flex items-start gap-2 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-neutral-600">
-          <Lock className="mt-0.5 h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
+          <Lock className="mt-0.5 h-4 w-4 shrink-0 text-neutral-500" aria-hidden="true" />
           <span>
             The customer marks this <strong className="font-medium text-neutral-800">received</strong> themselves — that
             is what moves the goods into their inventory, so ProcurePal cannot do it for them.
@@ -65,7 +65,7 @@ export function OrderFulfilmentPanel({ order, onSelectAction, onSettlePayment, s
 
       {actions.length === 0 && !buyerConfirmsNext && (
         <p className="mt-4 flex items-start gap-2 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-neutral-600">
-          <CircleCheckBig className="mt-0.5 h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
+          <CircleCheckBig className="mt-0.5 h-4 w-4 shrink-0 text-neutral-500" aria-hidden="true" />
           <span>
             {order.status === 'CANCELLED'
               ? 'This order was cancelled — there is nothing left to fulfil.'

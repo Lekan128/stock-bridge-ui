@@ -13,7 +13,7 @@ export function ProductImage({ src, alt, className = '', iconClassName = 'h-6 w-
 
   if (!src || failed) {
     return (
-      <div className={`flex items-center justify-center bg-neutral-100 text-neutral-400 ${className}`}>
+      <div className={`flex items-center justify-center bg-neutral-100 text-neutral-500 ${className}`}>
         <Package className={iconClassName} aria-hidden="true" />
         <span className="sr-only">No image</span>
       </div>

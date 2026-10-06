@@ -3,14 +3,16 @@ import { ArrowRight, PackageCheck, Truck } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { OrderStatusBadge } from '@/components/OrderStatusBadge'
 import type { ResolvedIncoming } from '@/features/orders/incomingStock'
-import { LowStockBadge } from '@/features/products/components/LowStockBadge'
+import { StockBar } from '@/features/products/components/StockBar'
+import { StockFigure } from '@/features/products/components/StockFigure'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
-import type { Product } from '@/features/products/types'
+import type { Product, StockMovement } from '@/features/products/types'
 import {
   formatNumber,
   formatQuantity,
   formatQuantityEcho,
   packRemainderPhrase,
+  stockUnitWord,
   unitNoun,
 } from '@/features/products/unitCopy'
 import {
@@ -18,6 +20,7 @@ import {
   fromBaseQuantity,
   packRemainder,
   productsOwnUnits,
+  resolveUnitSymbol,
   stockUnitLabel,
   unitOptionsForProduct,
 } from '@/features/products/unitSet'
@@ -25,8 +28,38 @@ import {
 export interface StockBreakdownPanelProps {
   product: Product
   incoming: ResolvedIncoming
-  /** Stock In / Stock Out / Adjust, rendered by the page when the user may manage inventory. */
+  /** Stock in / Stock out / Count, rendered by the page; shown here from a laptop up (a phone has its own bar). */
   actions?: ReactNode
+  /** The newest movement, for "Received 400 kg from Alaba Depot · today 10:42". */
+  lastMovement?: StockMovement | null
+}
+
+/** "today 10:42", "yesterday 18:05", "Tue 09:30", "3 Oct" — close enough to place it, no further. */
+function shortWhen(iso: string): string {
+  const when = new Date(iso)
+  const now = new Date()
+  const time = when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  const days = Math.round((new Date(now.toDateString()).getTime() - new Date(when.toDateString()).getTime()) / 86_400_000)
+  if (days === 0) return `today ${time}`
+  if (days === 1) return `yesterday ${time}`
+  if (days > 1 && days < 7) return `${when.toLocaleDateString(undefined, { weekday: 'short' })} ${time}`
+  return when.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+}
+
+/** The last thing that happened to this stock, as a sentence. */
+function lastMovementLine(movement: StockMovement, unit: string): string {
+  const quantity = Math.abs(movement.quantity)
+  const amount = `${formatNumber(quantity)} ${stockUnitWord(unit, quantity)}`
+  const when = shortWhen(movement.occurredAt ?? movement.createdAt)
+  if (movement.movementType === 'IN') {
+    return `Received ${amount}${movement.companyVendorName ? ` from ${movement.companyVendorName}` : ''} · ${when}`
+  }
+  if (movement.movementType === 'OUT') {
+    return `${amount} went out${movement.note ? ` · ${movement.note}` : ''} · ${when}`
+  }
+  return movement.quantity === 0
+    ? `Counted, no change · ${when}`
+    : `Counted: ${movement.quantity > 0 ? '+' : '−'}${amount} · ${when}`
 }
 
 /**
@@ -54,7 +87,7 @@ export interface StockBreakdownPanelProps {
  * treatment, and it is why the caption line above stays plain prose: the unit belongs to the
  * number, not to the heading.
  */
-export function StockBreakdownPanel({ product, incoming, actions }: StockBreakdownPanelProps) {
+export function StockBreakdownPanel({ product, incoming, actions, lastMovement }: StockBreakdownPanelProps) {
   const { options: unitOfMeasureOptions } = useUnitOfMeasureOptions()
   const hasIncoming = incoming.quantity > 0
 
@@ -64,6 +97,8 @@ export function StockBreakdownPanel({ product, incoming, actions }: StockBreakdo
   // single-entry set), which is at least honest about being unitless.
   const productUnits = unitOptionsForProduct(product, unitOfMeasureOptions)
   const unitLabel = stockUnitLabel(productUnits)
+  // The symbol the unit list gives the stock unit ("kg", "Piece"), for the hero figure and bar.
+  const unitSymbol = resolveUnitSymbol(product.unitOfMeasure, unitOfMeasureOptions)
 
   /**
    * "1,600 kg" also stated as "= 20 bags", once per pack this product is configured with.
@@ -115,66 +150,80 @@ export function StockBreakdownPanel({ product, incoming, actions }: StockBreakdo
         <div className="grid flex-1 grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <p className="text-sm text-neutral-500">On hand — usable now</p>
-            <div className="mt-1 flex flex-wrap items-baseline gap-x-1.5 gap-y-2">
-              <span
-                className={`text-3xl font-semibold ${product.quantityOnHand > 0 ? 'text-neutral-900' : 'text-neutral-400'}`}
-              >
-                {formatNumber(product.quantityOnHand)}
-              </span>
-              <span className="text-base font-medium text-neutral-500">{unitLabel}</span>
-              {product.isLowStock && (
-                <span className="self-center">
-                  <LowStockBadge />
-                </span>
-              )}
+            {/* The hero figure (plan §2: "the number is the hero"), the same component as every
+                list row, at its largest (B2). The stock-unit figure stays the headline: it is the
+                auditable number. Under it, the packs it is bought and sold in — the default pack in
+                mixed form ("2 bags + 20 kg"), then any pack it divides into evenly — because nobody
+                counts 1,600 kg of rice, they count 20 bags. */}
+            <div className="mt-2">
+              <StockFigure
+                quantity={product.quantityOnHand}
+                unit={unitSymbol}
+                size="lg"
+                productId={product.id}
+                pack={
+                  onHandInPacks || packEquivalents.length > 0
+                    ? [onHandInPacks && `= ${onHandInPacks}`, ...packEquivalents.map((line) => line.text)]
+                        .filter(Boolean)
+                        .join(' · ')
+                    : null
+                }
+              />
             </div>
-            {/* The same figure in the packs this product is actually bought and sold in.
-                Storage stays in the stock unit — a pack size that changes must never silently
-                rewrite what is on the shelf — but nobody counts 1,600 kg of rice, they count 20
-                bags, and making them divide in their head is how a stock screen stops being read.
-                Odoo and NetSuite both hold stock in the base unit and let packagings ride on top;
-                this is that, shown rather than left to arithmetic.
-
-                The default pack leads, in mixed form, because it is the one reading that is
-                always available — the whole-pack equivalents beside it appear only when the
-                balance happens to divide evenly. The stock-unit figure stays the headline above
-                both: it is the auditable number, and these are the way it is spoken. */}
-            {(onHandInPacks || packEquivalents.length > 0) && (
-              <p className="mt-1 text-sm text-neutral-600">
-                {onHandInPacks && <span className="font-medium text-neutral-700">= {onHandInPacks}</span>}
-                {packEquivalents.map((line, index) => (
-                  <span key={line.code}>
-                    {(onHandInPacks || index > 0) && <span className="text-neutral-300"> · </span>}
-                    {line.text}
-                  </span>
-                ))}
-              </p>
+            {product.lowStockThreshold != null && product.lowStockThreshold > 0 && (
+              <div className="mt-3 flex flex-col gap-1">
+                <StockBar
+                  quantity={product.quantityOnHand}
+                  threshold={product.lowStockThreshold}
+                  low={product.isLowStock}
+                  unit={unitSymbol}
+                  size="hero"
+                />
+                <p className="text-xs tabular-nums text-neutral-500" aria-hidden="true">
+                  Alert at {formatNumber(product.lowStockThreshold)} {stockUnitWord(unitSymbol, product.lowStockThreshold)}
+                </p>
+              </div>
             )}
             <p className="mt-1 text-xs text-neutral-500">Available to pick, sell or use today.</p>
           </div>
 
-          <div className={hasIncoming ? 'rounded-md border border-warning-200 bg-warning-50 p-3' : ''}>
-            <p className={`flex items-center gap-1.5 text-sm ${hasIncoming ? 'text-warning-800' : 'text-neutral-500'}`}>
-              <Truck className="h-3.5 w-3.5" aria-hidden="true" />
-              Incoming — pending delivery
-            </p>
-            <div className="mt-1 flex flex-wrap items-baseline gap-x-1.5">
-              <span className={`text-3xl font-semibold ${hasIncoming ? 'text-warning-700' : 'text-neutral-300'}`}>
-                {formatNumber(incoming.quantity)}
-              </span>
-              <span className={`text-base font-medium ${hasIncoming ? 'text-warning-800' : 'text-neutral-300'}`}>
-                {unitLabel}
-              </span>
-            </div>
-            <p className={`mt-1 text-xs ${hasIncoming ? 'text-warning-800' : 'text-neutral-400'}`}>
-              {hasIncoming
-                ? 'Bought from ProcurePal and paid for, but not yet received. Not usable and not counted above.'
-                : 'Nothing on its way from ProcurePal right now.'}
-            </p>
-          </div>
+          {/* The quieter facts beside the figure (C2): what is on the way, what is promised, and the
+              last thing that happened. Each only when there is something to say — a big grey
+              "0 kg incoming" on every product was noise. Never added into the figure. */}
+          {(hasIncoming || (product.expectedQuantity ?? 0) > 0 || lastMovement) && (
+          <dl className="flex flex-col gap-3 text-sm sm:border-l sm:border-neutral-100 sm:pl-5">
+            {hasIncoming && (
+              <div>
+                <dt className="flex items-center gap-1.5 text-warning-800">
+                  <Truck className="h-3.5 w-3.5" aria-hidden="true" />
+                  Incoming — bought, not yet received
+                </dt>
+                <dd className="mt-0.5 font-semibold tabular-nums text-warning-900">
+                  {formatNumber(incoming.quantity)} {stockUnitWord(unitSymbol, incoming.quantity)} on the way
+                </dd>
+              </div>
+            )}
+            {product.expectedQuantity != null && product.expectedQuantity > 0 && (
+              <div>
+                <dt className="text-neutral-500">Expected from a supplier</dt>
+                <dd className="mt-0.5 font-medium tabular-nums text-neutral-800">
+                  {formatNumber(product.expectedQuantity)} {stockUnitWord(unitSymbol, product.expectedQuantity)}
+                </dd>
+              </div>
+            )}
+            {lastMovement && (
+              <div>
+                <dt className="text-neutral-500">Last movement</dt>
+                <dd className="mt-0.5 text-neutral-800" data-last-movement>
+                  {lastMovementLine(lastMovement, unitSymbol)}
+                </dd>
+              </div>
+            )}
+          </dl>
+          )}
         </div>
 
-        {actions && <div className="flex flex-wrap gap-2 sm:shrink-0">{actions}</div>}
+        {actions && <div className="hidden flex-wrap gap-2 sm:shrink-0 md:flex">{actions}</div>}
       </div>
 
       {hasIncoming && (
