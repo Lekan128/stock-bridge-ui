@@ -262,6 +262,19 @@ const VendorApplicationPage = lazy(() =>
     default: m.VendorApplicationPage,
   })),
 )
+// The founding setup queue (LANDING_PAGE_PLAN.md, step 4): every landing-page setup request,
+// answered on WhatsApp within 5 minutes.
+const AdminSetupRequestsPage = lazy(() =>
+  import('@/features/admin/setupRequests/AdminSetupRequestsPage').then((m) => ({
+    default: m.AdminSetupRequestsPage,
+  })),
+)
+// Every new shop's first week (step 5): activation, and the WhatsApp message that is due.
+const AdminFirstWeekPage = lazy(() =>
+  import('@/features/admin/firstWeek/AdminFirstWeekPage').then((m) => ({
+    default: m.AdminFirstWeekPage,
+  })),
+)
 const AdminVendorWaitlistPage = lazy(() =>
   import('@/pages/AdminVendorWaitlistPage').then((m) => ({
     default: m.AdminVendorWaitlistPage,
@@ -941,6 +954,10 @@ export function AppRoutes() {
         >
           <Route index element={<Navigate to="tenants" replace />} />
           <Route path="tenants" element={<AdminTenantsPage />} />
+          {/* Procurepaddy's setup requests: shops that booked a founding setup on the landing
+              page, waiting for a WhatsApp reply. Speed to lead is the whole point of the screen. */}
+          <Route path="setup-requests" element={<AdminSetupRequestsPage />} />
+          <Route path="first-week" element={<AdminFirstWeekPage />} />
           <Route path="tenants/:id" element={<AdminTenantDetailPage />} />
           {/* ProcurePal's own staff accounts — the one tenant a super admin may write. Every
             other tenant's users are read-only, on the Users section of the tenant detail page,

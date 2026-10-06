@@ -20,12 +20,13 @@ const ssr = `${root}dist-ssr/`
 const siteUrl = (process.env.SITE_URL || 'https://procurepaddy.com').replace(/\/$/, '')
 const noindex = process.env.SITE_NOINDEX === 'true'
 
-const { renderHome, SITEMAP_PATHS } = await import(pathToFileURL(`${ssr}entry-server.js`).href)
-const { html, head, foundingOffer, hasFounders } = renderHome({
+const { renderHome, renderFounding, SITEMAP_PATHS } = await import(pathToFileURL(`${ssr}entry-server.js`).href)
+const headOptions = {
   siteUrl,
   googleVerification: process.env.GOOGLE_SITE_VERIFICATION,
   bingVerification: process.env.BING_SITE_VERIFICATION,
-})
+}
+const { html, head, foundingOffer, hasFounders } = renderHome(headOptions)
 
 // Conversion rule 8: a real face and name before the offer goes live. A staging or preview build
 // (noindex) may show the page without them; production may not.
@@ -47,6 +48,20 @@ const fontPreload = plex ? `<link rel="preload" href="/assets/${plex}" as="font"
 writeFileSync(
   `${dist}landing.html`,
   template.replace('<!--marketing-head-->', robotsMeta + fontPreload + head).replace('<!--marketing-html-->', html),
+)
+
+// /founding (conversion rule 6): the offer with no navigation, for ads and outreach. Never indexed,
+// whatever the build: it is the home page's offer again, and canonical to it. With the offer off
+// there is nothing to show, so it sends visitors to the home page.
+const founding = renderFounding(headOptions)
+const neverIndex = '<meta name="robots" content="noindex, follow" />\n    '
+writeFileSync(
+  `${dist}founding.html`,
+  founding
+    ? template
+        .replace('<!--marketing-head-->', (noindex ? robotsMeta : neverIndex) + fontPreload + founding.head)
+        .replace('<!--marketing-html-->', founding.html)
+    : `<!doctype html><html lang="en-NG"><head><meta charset="utf-8" /><meta name="robots" content="noindex" /><link rel="canonical" href="${siteUrl}/" /><meta http-equiv="refresh" content="0; url=/" /><title>Procurepaddy</title></head><body><a href="/">Procurepaddy</a></body></html>\n`,
 )
 
 const today = new Date().toISOString().slice(0, 10)
@@ -81,5 +96,5 @@ Sitemap: ${siteUrl}/sitemap.xml
 
 rmSync(ssr, { recursive: true, force: true })
 console.log(
-  `prerendered / (${foundingOffer ? 'founding offer' : 'early access'}) for ${siteUrl}${noindex ? ' (noindex)' : ''}; wrote sitemap.xml and robots.txt`,
+  `prerendered / (${foundingOffer ? 'founding offer' : 'early access'}) and /founding${founding ? '' : ' (redirect)'} for ${siteUrl}${noindex ? ' (noindex)' : ''}; wrote sitemap.xml and robots.txt`,
 )

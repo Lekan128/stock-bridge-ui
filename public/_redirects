@@ -8,6 +8,11 @@
 # (the app shell) would otherwise shadow it at /.
 /  /landing.html  200!
 
+# The founding offer with no navigation, for ads and outreach (LANDING_PAGE_PLAN.md, rule 6).
+# Prerendered too; noindex and canonical to /.
+/founding   /founding.html  200!
+/founding/  /founding.html  200!
+
 # The marketplace's old addresses. Query strings pass through, which Monnify's return relies on.
 /product/*             /marketplace/product/:splat             301
 /seller/*              /marketplace/seller/:splat              301

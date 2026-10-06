@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom'
 import { EmailVerificationBanner } from '@/features/profile/components/EmailVerificationBanner'
 import { Sidebar } from '@/layouts/Sidebar'
 import { Topbar } from '@/layouts/Topbar'
+import { SupportSessionBanner } from '@/features/onboarding/SupportSessionBanner'
 import { IosInstallHint } from '@/pwa/IosInstallHint'
 import { startServiceWorker } from '@/pwa/serviceWorker'
 import { UpdatePrompt } from '@/pwa/UpdatePrompt'
@@ -47,6 +48,7 @@ export function AppLayout() {
           route is open. It renders null for verified users, so this costs an unaffected user
           nothing. Its own shrink-0 keeps it from being squeezed by the scroll area beneath it.
         */}
+        <SupportSessionBanner />
         <EmailVerificationBanner />
         <IosInstallHint />
         {/* data-scroll-container: this is the actual scroll region in this layout (the window

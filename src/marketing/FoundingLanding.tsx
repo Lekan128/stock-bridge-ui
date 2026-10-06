@@ -83,7 +83,13 @@ const COMPARISON: [string, string, string, string][] = [
   ['Cost', '₦200–₦500', 'Free with Office', 'Free for 12 months, then ₦5,000/month'],
 ]
 
-export function FoundingLanding() {
+/**
+ * @param variant `home` is `/`. `founding` is `/founding`, for ads and outreach (conversion rule 6):
+ *   the same offer with no way out but the button. No navigation, no logo link home, no Business
+ *   line, and a footer with only Log in and WhatsApp. Its requests are counted as source `founding`.
+ */
+export function FoundingLanding({ variant = 'home' }: { variant?: 'home' | 'founding' }) {
+  const focused = variant === 'founding'
   return (
     <div className="bg-white text-neutral-900">
       <a
@@ -95,16 +101,24 @@ export function FoundingLanding() {
 
       <header className="px-4 sm:px-6">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 py-5">
-        <a href="/" aria-label="Procurepaddy home">
+        {focused ? (
           <Logo size={26} />
-        </a>
+        ) : (
+          <a href="/" aria-label="Procurepaddy home">
+            <Logo size={26} />
+          </a>
+        )}
         <nav aria-label="Main" className="flex items-center gap-1 text-sm">
-          <a href="#how" className="hidden rounded-md px-3 py-2 font-medium text-neutral-700 hover:bg-neutral-100 md:inline">
-            How it works
-          </a>
-          <a href="#faq" className="hidden rounded-md px-3 py-2 font-medium text-neutral-700 hover:bg-neutral-100 md:inline">
-            FAQ
-          </a>
+          {!focused && (
+            <>
+              <a href="#how" className="hidden rounded-md px-3 py-2 font-medium text-neutral-700 hover:bg-neutral-100 md:inline">
+                How it works
+              </a>
+              <a href="#faq" className="hidden rounded-md px-3 py-2 font-medium text-neutral-700 hover:bg-neutral-100 md:inline">
+                FAQ
+              </a>
+            </>
+          )}
           <Island name="account">
             <AccountLink />
           </Island>
@@ -441,27 +455,33 @@ export function FoundingLanding() {
           </div>
         </section>
 
-        <div className="px-4 py-10 sm:px-6">
-          <p className="mx-auto max-w-6xl text-neutral-700">
-            Running a large warehouse or a distribution business?{' '}
-            <a
-              href={`${WHATSAPP_URL}?text=${encodeURIComponent('Hello Procurepaddy, I would like to talk about Procurepaddy Business.')}`}
-              className="font-semibold text-primary-700 hover:underline"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Talk to us about Procurepaddy Business
-            </a>
-          </p>
-        </div>
+        {!focused && (
+          <div className="px-4 py-10 sm:px-6">
+            <p className="mx-auto max-w-6xl text-neutral-700">
+              Running a large warehouse or a distribution business?{' '}
+              <a
+                href={`${WHATSAPP_URL}?text=${encodeURIComponent('Hello Procurepaddy, I would like to talk about Procurepaddy Business.')}`}
+                className="font-semibold text-primary-700 hover:underline"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Talk to us about Procurepaddy Business
+              </a>
+            </p>
+          </div>
+        )}
       </main>
 
       <footer className="border-t border-neutral-200 px-4 py-10 pb-28 sm:px-6 sm:pb-10">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-6 text-sm text-neutral-600">
           <Logo size={20} />
           <nav aria-label="Footer" className="flex flex-wrap gap-x-6 gap-y-2">
-            <a href="#how" className="hover:text-neutral-900 hover:underline">How it works</a>
-            <a href="#faq" className="hover:text-neutral-900 hover:underline">FAQ</a>
+            {!focused && (
+              <>
+                <a href="#how" className="hover:text-neutral-900 hover:underline">How it works</a>
+                <a href="#faq" className="hover:text-neutral-900 hover:underline">FAQ</a>
+              </>
+            )}
             <a href="/login" className="hover:text-neutral-900 hover:underline">Log in</a>
             <a href={WHATSAPP_URL} className="hover:text-neutral-900 hover:underline" target="_blank" rel="noreferrer">
               WhatsApp {WHATSAPP_NUMBER}
@@ -474,8 +494,8 @@ export function FoundingLanding() {
       <Island name="sticky">
         <StickyCta />
       </Island>
-      <Island name="setup">
-        <SetupDialog />
+      <Island name="setup" props={focused ? { source: 'founding' } : undefined}>
+        <SetupDialog source={focused ? 'founding' : 'landing'} />
       </Island>
     </div>
   )

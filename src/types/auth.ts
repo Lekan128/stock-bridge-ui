@@ -68,8 +68,15 @@ export interface SuperAdminLoginRequest {
 
 export interface ClientSignupRequest {
   name: string
+  /** Optional: generated from the name when absent, and never refused for being taken. */
   clientIdentifier?: string
-  adminEmail: string
+  /** Optional since the landing page's step 4. When present, the owner logs in with it. */
+  adminEmail?: string
   password: string
-  confirmPassword: string
+  /** Optional: the form shows the password instead of asking for it twice. */
+  confirmPassword?: string
+  /** The shop's WhatsApp number. Required without an email, and then the owner logs in with it. */
+  phone?: string
+  /** The landing page's setup request this signup follows (`/signup?setup=`). */
+  setupRequestId?: string
 }

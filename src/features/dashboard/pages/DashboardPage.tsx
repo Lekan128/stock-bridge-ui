@@ -5,6 +5,7 @@ import { DashboardAnalytics } from '@/features/dashboard/components/DashboardAna
 import { useCatalogList, useCatalogState } from '@/features/catalog/useCatalog'
 import { NeedsYouToday } from '@/features/dashboard/components/NeedsYouToday'
 import { StockHealth } from '@/features/dashboard/components/StockHealth'
+import { SetupChecklist } from '@/features/onboarding/SetupChecklist'
 import { VendorDashboardPage } from '@/features/vendor/pages/VendorDashboardPage'
 
 /**
@@ -70,6 +71,8 @@ function BuyerToday({
         <h1 className="text-2xl font-semibold text-neutral-900">Dashboard</h1>
         <p className="text-sm text-neutral-500">{today}</p>
       </div>
+
+      <SetupChecklist />
 
       {canViewProducts && <StockHealth counts={counts} />}
 

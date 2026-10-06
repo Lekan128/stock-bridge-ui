@@ -76,6 +76,13 @@ with small interactive islands (`src/marketing/islands/`: the setup form, the li
 receipt, the sticky phone button), calling the API's public `/api/public/founding-offer` and
 `/api/public/setup-requests`. Staging builds it; production keeps the early-access page until the
 owners switch it on, and the build refuses that until `src/marketing/founders.ts` is filled in.
+`/founding` (`founding.html`) is the same offer with no navigation, for ads and outreach: always
+noindex and canonical to `/`; with the offer off it redirects to `/`. After "Book my setup", sign-up
+needs only a password (`/signup?setup=…&business=…&whatsapp=…`), the owner logs in with their
+WhatsApp number, and super admins answer the request from `/admin/setup-requests` (step 4). An
+owner's dashboard then shows the setup checklist with "Send us your list" (`src/features/onboarding/`);
+the team loads the list from inside the shop as Procurepaddy support and follows each shop's first
+week at `/admin/first-week` (step 5).
 `VITE_POSTHOG_KEY` (and optionally `VITE_POSTHOG_HOST`) turns on the funnel events. Build settings
 for the landing page, all optional: `SITE_URL` (canonical origin, default `https://procurepaddy.com`), `SITE_NOINDEX=true`
 (staging and previews set it), `GOOGLE_SITE_VERIFICATION` and `BING_SITE_VERIFICATION` (the

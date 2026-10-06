@@ -48,7 +48,12 @@ export function SetupDialog({ source = 'landing' }: { source?: 'landing' | 'foun
   }
 
   const signupHref = booked
-    ? `/signup?${new URLSearchParams({ setup: booked.id, business: booked.businessName, whatsapp: booked.whatsapp })}`
+    ? `/signup?${new URLSearchParams({
+        setup: booked.id,
+        business: booked.businessName,
+        whatsapp: booked.whatsapp,
+        ...(booked.founding ? { offer: 'founding' } : {}),
+      })}`
     : '/signup'
 
   return (

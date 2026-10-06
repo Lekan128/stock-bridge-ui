@@ -2,7 +2,7 @@ import { createContext, useEffect, useMemo, useState, type ReactNode } from 'rea
 import { authApi } from '@/api/authApi'
 import { refreshSession, setAccessToken, setAuthFailureHandler } from '@/api/client'
 import { isTransientRefreshFailure } from '@/api/createApiClient'
-import type { ClientSignupRequest, ClientType, TenantLoginRequest, TenantUser } from '@/types/auth'
+import type { ClientSignupRequest, ClientType, TenantLoginRequest, TenantLoginResponse, TenantUser } from '@/types/auth'
 import { decodeJwtPayload, type TenantAccessTokenClaims } from '@/utils/jwt'
 import { authStorage } from '@/utils/storage'
 
@@ -57,6 +57,11 @@ export interface AuthContextValue {
   isBootstrapping: boolean
   loginTenant: (payload: TenantLoginRequest) => Promise<void>
   signup: (payload: ClientSignupRequest) => Promise<TenantUser>
+  /**
+   * Takes a session the API issued some other way: a super admin opening a shop's workspace as
+   * Procurepaddy support (LANDING_PAGE_PLAN.md, step 5). Same as a login, without the form.
+   */
+  adoptTenantSession: (response: TenantLoginResponse) => void
   logout: () => Promise<void>
 }
 
@@ -216,6 +221,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return tenantUser
   }
 
+  function adoptTenantSession(response: TenantLoginResponse) {
+    applyTenantSession(response.tokens.accessToken, response.tokens.refreshToken, response.user)
+  }
+
   function applyTenantSession(accessToken: string, refreshToken: string, tenantUser: TenantUser) {
     setAccessToken(accessToken)
     authStorage.setRefreshToken(refreshToken)
@@ -266,6 +275,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isBootstrapping,
       loginTenant,
       signup,
+      adoptTenantSession,
       logout,
     }),
     [user, client, isBootstrapping],

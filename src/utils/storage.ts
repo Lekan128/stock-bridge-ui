@@ -155,6 +155,48 @@ export const installHintStorage = {
   },
 }
 
+const WELCOME_KEY = 'pp.welcome.v1'
+
+/** What the first screen after sign-up tells a new owner: how they and their staff log in. */
+export interface StoredWelcome {
+  clientIdentifier: string
+  username: string
+  /** Came from a landing-page setup request: the team is loading their products. */
+  fromSetup: boolean
+}
+
+/**
+ * The welcome card on the dashboard after sign-up (LANDING_PAGE_PLAN.md §4: "Your Company ID is
+ * mama-tee-stores; you'll use it to log in staff"). Kept until the owner dismisses it, on this
+ * device only: it is a reminder, and the Company ID is also in Settings.
+ */
+export const welcomeStorage = {
+  get: (): StoredWelcome | null => {
+    try {
+      const raw = localStorage.getItem(WELCOME_KEY)
+      return raw ? (JSON.parse(raw) as StoredWelcome) : null
+    } catch {
+      return null
+    }
+  },
+
+  set: (welcome: StoredWelcome): void => {
+    try {
+      localStorage.setItem(WELCOME_KEY, JSON.stringify(welcome))
+    } catch {
+      // Private browsing / quota: no welcome card, and nothing else is affected.
+    }
+  },
+
+  clear: (): void => {
+    try {
+      localStorage.removeItem(WELCOME_KEY)
+    } catch {
+      // Nothing to do.
+    }
+  },
+}
+
 /** A line in the anonymous cart. Only ids and quantities — never prices, which go stale. */
 export interface StoredCartLine {
   productId: string

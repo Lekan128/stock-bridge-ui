@@ -21,4 +21,18 @@ export function renderHome(options: HeadOptions): { html: string; head: string; 
   }
 }
 
+/**
+ * `/founding`: the same offer with no way out but the button, for ads and outreach (conversion
+ * rule 6). Canonical to `/` and always noindex (the prerender adds that), so it never competes with
+ * the home page in search. Null while the founding offer is off: the prerender then sends
+ * `/founding` to `/`.
+ */
+export function renderFounding(options: HeadOptions): { html: string; head: string } | null {
+  if (!FOUNDING_OFFER) return null
+  return {
+    html: renderToString(<StrictMode><FoundingLanding variant="founding" /></StrictMode>),
+    head: headTags(HOME_FOUNDING, options),
+  }
+}
+
 export { SITEMAP_PATHS }

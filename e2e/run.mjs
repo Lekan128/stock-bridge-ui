@@ -12,6 +12,7 @@ const SUITES = [
   'urgent-fixes',
   'pwa-shell',
   'landing',
+  'first-week',
   'lost-refresh',
   'data-layer',
   'catalog',

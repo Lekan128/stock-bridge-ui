@@ -9,10 +9,8 @@ import { deleteAllDrafts } from '@/features/drafts/draftStore'
 import { useDraftCount } from '@/features/drafts/useDraft'
 import { stopOutbox } from '@/features/outbox/outboxStore'
 import { useOutboxState } from '@/features/outbox/useOutbox'
+import { avatarInitials, displayUsername } from '@/utils/whatsappNumber'
 
-function getInitials(username: string) {
-  return username.slice(0, 2).toUpperCase()
-}
 
 const itemClassName =
   'flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50'
@@ -69,9 +67,9 @@ export function UserMenu() {
         aria-label="Account menu"
       >
         <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-600 text-xs font-semibold text-white">
-          {getInitials(user.username)}
+          {avatarInitials(user.username, client?.name ?? client?.identifier)}
         </span>
-        <span className="hidden text-sm font-medium text-neutral-700 sm:block">{user.username}</span>
+        <span className="hidden text-sm font-medium text-neutral-700 sm:block">{displayUsername(user.username)}</span>
         <ChevronDown className="hidden h-4 w-4 text-neutral-500 sm:block" />
       </button>
       {open && (

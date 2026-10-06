@@ -1,7 +1,6 @@
 import { StrictMode, type ComponentType } from 'react'
 import { createRoot, hydrateRoot } from 'react-dom/client'
 import '@/index.css'
-import { EarlyAccessLanding } from '@/marketing/EarlyAccessLanding'
 import { track } from '@/marketing/analytics'
 import { FOUNDING_OFFER } from '@/marketing/config'
 import { AccountLink } from '@/marketing/islands/AccountLink'
@@ -40,8 +39,11 @@ if (FOUNDING_OFFER) {
     window.dispatchEvent(new Event(OPEN_SETUP_EVENT))
   })
   track('landing_viewed', { page: location.pathname })
-} else if (root.hasChildNodes()) {
-  hydrateRoot(root, <StrictMode><EarlyAccessLanding /></StrictMode>)
 } else {
-  createRoot(root).render(<StrictMode><EarlyAccessLanding /></StrictMode>)
+  // Loaded only in this branch, so the founding page never downloads it (or the logo and contour
+  // artwork it brings): the founding page's JavaScript is at its 70 KB budget.
+  void import('@/marketing/EarlyAccessLanding').then(({ EarlyAccessLanding }) => {
+    if (root.hasChildNodes()) hydrateRoot(root, <StrictMode><EarlyAccessLanding /></StrictMode>)
+    else createRoot(root).render(<StrictMode><EarlyAccessLanding /></StrictMode>)
+  })
 }

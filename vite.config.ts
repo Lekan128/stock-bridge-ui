@@ -14,7 +14,9 @@ const LEGACY_MARKETPLACE = /^\/(product\/|seller\/|cart$|checkout(\/|$)|order-co
  * (index.html) for everything else.
  */
 function routeLikeNetlify(): Plugin {
-  const route: Connect.NextHandleFunction = (req, res, next) => {
+  // /founding is prerendered into founding.html at build time; the dev server has only the
+  // unrendered landing page, which renders the same thing client-side.
+  const route = (foundingPage: string): Connect.NextHandleFunction => (req, res, next) => {
     const url = new URL(req.url ?? '/', 'http://localhost')
     const moveTo = (location: string) => {
       res.statusCode = 301
@@ -24,6 +26,8 @@ function routeLikeNetlify(): Plugin {
     if (url.pathname === '/') {
       if (url.searchParams.has('q') || url.searchParams.has('categoryId')) return moveTo(`/marketplace${url.search}`)
       req.url = `/landing.html${url.search}`
+    } else if (url.pathname === '/founding' || url.pathname === '/founding/') {
+      req.url = `${foundingPage}${url.search}`
     } else if (LEGACY_MARKETPLACE.test(url.pathname)) {
       return moveTo(`/marketplace${url.pathname}${url.search}`)
     }
@@ -31,8 +35,8 @@ function routeLikeNetlify(): Plugin {
   }
   return {
     name: 'route-like-netlify',
-    configureServer: (server) => void server.middlewares.use(route),
-    configurePreviewServer: (server) => void server.middlewares.use(route),
+    configureServer: (server) => void server.middlewares.use(route('/landing.html')),
+    configurePreviewServer: (server) => void server.middlewares.use(route('/founding.html')),
   }
 }
 
@@ -41,7 +45,19 @@ export default defineConfig(({ isSsrBuild }) => ({
   // Two pages: the app (index.html, also every unknown path's fallback) and the prerendered landing
   // page (landing.html, served at /). The SSR build (`--ssr src/marketing/entry-server.tsx`) brings
   // its own input.
-  build: isSsrBuild ? {} : { rollupOptions: { input: { app: 'index.html', landing: 'landing.html' } } },
+  build: isSsrBuild
+    ? {}
+    : {
+        rollupOptions: {
+          input: { app: 'index.html', landing: 'landing.html' },
+          output: {
+            // React in a chunk of its own. Otherwise the bundler puts it in one chunk with every
+            // other module the two pages share (the logo's path data, app components), and the
+            // landing page downloads all of it to hydrate a few small islands (its 70 KB budget).
+            manualChunks: (id: string) => (/node_modules\/(react|react-dom|scheduler)\//.test(id) ? 'react' : undefined),
+          },
+        },
+      },
   plugins: [
     react(),
     tailwindcss(),
@@ -92,7 +108,7 @@ export default defineConfig(({ isSsrBuild }) => ({
           'assets/ibm-plex-sans-latin-standard-normal-*.woff2',
         ],
         // The landing page isn't the app and needn't be held offline.
-        globIgnores: ['landing.html', 'icons/og-*.png'],
+        globIgnores: ['landing.html', 'founding.html', 'icons/og-*.png'],
         // The precache answers a directory URL with its index file, and checks that BEFORE the
         // denylist below: `/` came back as the precached app shell, not the landing page. Naming
         // the landing page (deliberately not precached) sends `/` to the network instead.
@@ -100,8 +116,9 @@ export default defineConfig(({ isSsrBuild }) => ({
         // Every in-app navigation, including a cold start with no network, gets the app shell.
         navigateFallback: '/index.html',
         // ...except the marketing pages, which come from the network so they are the real,
-        // prerendered page: `/` (with or without a query string) for now; step 7's pages join it.
-        navigateFallbackDenylist: [/^\/(\?.*)?$/],
+        // prerendered page: `/` and `/founding` (with or without a query string) for now; step 7's
+        // pages join them.
+        navigateFallbackDenylist: [/^\/(\?.*)?$/, /^\/founding\/?(\?.*)?$/],
         // The recharts chunk is ~370 kB; the default 2 MiB cap is fine, but keep headroom so a
         // larger chunk fails the build loudly instead of silently dropping out of the precache.
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,

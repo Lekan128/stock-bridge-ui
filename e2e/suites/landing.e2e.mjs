@@ -1,8 +1,11 @@
-// The Procurepaddy landing page (LANDING_PAGE_PLAN.md, steps 2 and 3), against the production
+// The Procurepaddy landing page (LANDING_PAGE_PLAN.md, steps 2 to 4), against the production
 // preview (4173, whose routing mirrors public/_redirects) and the real API (8081). The page is built
 // two ways, so this suite builds and checks both: first with the founding offer on (as staging would
 // build it), then the early-access page production serves until the offer is switched on. It leaves
 // the early-access build in place.
+//
+// Step 4 is the funnel after the button: the shop that booked a setup only sets a password, logs in
+// with its WhatsApp number, and the team's queue shows the request until somebody replies.
 import { chromium } from 'playwright'
 import { execSync } from 'node:child_process'
 import { gzipSync } from 'node:zlib'
@@ -15,11 +18,20 @@ const UI_DIR = fileURLToPath(new URL('../../', import.meta.url))
 const build = (env = {}) =>
   execSync('npm run build', { cwd: UI_DIR, env: { ...process.env, VITE_API_BASE_URL: API, ...env }, stdio: 'ignore' })
 const psql = (sql) => execSync(psqlCommand, { input: sql }).toString().trim()
-const landingScriptBytes = async () => {
-  const html = await fetch(`${UI}/`).then((r) => r.text())
-  const scripts = [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+\.js)"/g)].map((m) => m[1])
+// Every script the page actually loads, including ones it imports on demand, gzipped.
+const landingScriptBytes = async (path = '/') => {
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  const scripts = new Set()
+  page.on('request', (request) => {
+    const url = new URL(request.url())
+    if (url.origin === UI && url.pathname.endsWith('.js')) scripts.add(url.pathname)
+  })
+  await page.goto(`${UI}${path}`)
+  await page.waitForLoadState('networkidle')
+  await context.close()
   let total = 0
-  for (const src of new Set(scripts)) total += gzipSync(Buffer.from(await fetch(`${UI}${src}`).then((r) => r.arrayBuffer()))).length
+  for (const src of scripts) total += gzipSync(Buffer.from(await fetch(`${UI}${src}`).then((r) => r.arrayBuffer()))).length
   return total
 }
 
@@ -50,7 +62,13 @@ function assert(cond, msg) {
 
 // ===================================================================== the founding offer (step 3)
 build({ VITE_FOUNDING_OFFER: 'true', SITE_NOINDEX: 'true' })
-const testNumber = `0803${Math.floor(1_000_000 + Math.random() * 8_999_999)}`
+const randomNumber = (prefix) => `${prefix}${Math.floor(1_000_000 + Math.random() * 8_999_999)}`
+const testNumber = randomNumber('0803')
+const foundingNumber = randomNumber('0806')
+const e164 = (local) => `+234${local.slice(1)}`
+const run = randomUUID().slice(0, 6)
+const PASSWORD = 'correct-horse-battery-staple'
+let signupHref = null
 
 await check('founding: the offer page is real HTML, with the FAQ marked up and every button a link that works without JavaScript', async () => {
   const html = await fetch(`${UI}/`).then((r) => r.text())
@@ -92,7 +110,7 @@ await check('founding: a button opens two fields; a wrong number is explained; a
   await dialog.waitFor()
   const fields = await dialog.locator('input:not([name="website"])').count()
   assert(fields === 2, `${fields} fields`)
-  await dialog.getByLabel('Business name').fill('E2E Landing Stores')
+  await dialog.getByLabel('Business name').fill(`E2E Landing Stores ${run}`)
   await dialog.getByLabel('WhatsApp number').fill('12345')
   await dialog.getByRole('button', { name: 'Book my setup' }).tap()
   await dialog.getByRole('alert').getByText('Enter a Nigerian mobile number, like 0803 123 4567.').waitFor()
@@ -103,8 +121,9 @@ await check('founding: a button opens two fields; a wrong number is explained; a
   await booked.getByText(/booked for the week of|founding places are taken/).waitFor()
   const next = await booked.getByRole('link', { name: 'Create your password' }).getAttribute('href')
   assert(next.startsWith('/signup?setup='), next)
+  signupHref = next
   const stored = psql(`SELECT business_name || '|' || whatsapp FROM setup_requests WHERE whatsapp = '+234${testNumber.slice(1)}';`)
-  assert(stored === `E2E Landing Stores|+234${testNumber.slice(1)}`, `stored: ${stored}`)
+  assert(stored === `E2E Landing Stores ${run}|+234${testNumber.slice(1)}`, `stored: ${stored}`)
   await page.screenshot({ path: SHOTS + '3-booked.png' })
   await context.close()
 })
@@ -147,7 +166,123 @@ await check('founding: axe finds nothing at phone or laptop size (WCAG 2.2 AA), 
   }
 })
 
-psql(`DELETE FROM setup_requests WHERE whatsapp = '+234${testNumber.slice(1)}';`)
+
+// ===================================================================== capture, then sign up (step 4)
+await check('/founding is the offer with no way out but the button: no navigation, never indexed, canonical to /', async () => {
+  const html = await fetch(`${UI}/founding`).then((r) => r.text())
+  assert(/<h1[^>]*>Know exactly what/.test(html), 'not the offer page')
+  assert(html.includes('<meta name="robots" content="noindex'), 'not noindex')
+  assert(/<link rel="canonical" href="https?:\/\/[^"]+\/"/.test(html), 'canonical is not /')
+  assert(!html.includes('aria-label="Procurepaddy home"'), 'the logo links home')
+  assert(!html.includes('href="#faq"'), 'the header or footer still has navigation')
+  assert(!html.includes('Talk to us about Procurepaddy Business'), 'the Business line is a second offer')
+  assert(html.includes('href="/login"'), 'Log in should stay')
+
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+  const page = await context.newPage()
+  await page.goto(`${UI}/founding`)
+  await page.locator('[data-island="setup"] dialog').waitFor({ state: 'attached' })
+  await page.locator('[data-cta="hero"]').tap()
+  const dialog = page.getByRole('dialog', { name: 'Get your free setup' })
+  await dialog.getByLabel('Business name').fill(`E2E Founding Ad ${run}`)
+  await dialog.getByLabel('WhatsApp number').fill(foundingNumber)
+  await dialog.getByRole('button', { name: 'Book my setup' }).tap()
+  await page.getByRole('dialog', { name: "You're booked in." }).waitFor()
+  const source = psql(`SELECT source FROM setup_requests WHERE whatsapp = '${e164(foundingNumber)}';`)
+  assert(source === 'founding', `source: ${source}`)
+  await page.screenshot({ path: SHOTS + '4-founding.png', fullPage: true })
+  await context.close()
+})
+
+await check('the booked shop only sets a password; its Company ID is made for it; it logs in with its number', async () => {
+  assert(signupHref, 'no sign-up link from the booking check')
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+  const page = await context.newPage()
+  await page.goto(`${UI}${signupHref}`)
+  await page.getByRole('heading', { name: 'Create your password' }).waitFor()
+  assert((await page.getByLabel('Business name').inputValue()) === `E2E Landing Stores ${run}`, 'business name not filled in')
+  assert((await page.getByLabel('WhatsApp number').inputValue()) === testNumber, 'number not filled in')
+  await page.getByText(`e2e-landing-stores-${run}`).waitFor()
+  await page.getByText('We load your products within 24 hours').waitFor()
+  assert((await page.locator('input[type="password"]').count()) === 1, 'asked for the password twice')
+  await page.getByLabel('Password').fill(PASSWORD)
+  await page.getByRole('button', { name: 'Show' }).tap()
+  assert((await page.getByLabel('Password').getAttribute('type')) === 'text', 'Show did not show the password')
+  await page.screenshot({ path: SHOTS + '5-signup.png', fullPage: true })
+  await page.getByRole('button', { name: 'Create my account' }).tap()
+
+  const checklist = page.getByRole('region', { name: 'Set up your shop' })
+  await checklist.waitFor({ timeout: 15000 })
+  const companyId = (await checklist.locator('.font-mono').first().textContent()).trim()
+  assert(companyId === `e2e-landing-stores-${run}`, `company id ${companyId}`)
+  await checklist.getByText(`0803 ${testNumber.slice(4, 7)} ${testNumber.slice(7)}`).waitFor()
+  await checklist.getByRole('button', { name: 'Send us your list' }).waitFor()
+  await page.screenshot({ path: SHOTS + '6-welcome.png', fullPage: true })
+
+  const linked = psql(
+    `SELECT c.slug FROM setup_requests r JOIN clients c ON c.id = r.client_id WHERE r.whatsapp = '${e164(testNumber)}';`,
+  )
+  assert(linked === companyId, `the setup request is not linked to the account: "${linked}"`)
+  await context.close()
+
+  // A fresh phone: Company ID, the number as people type it, the password.
+  const fresh = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+  const login = await fresh.newPage()
+  await login.goto(`${UI}/login`)
+  await login.getByLabel('Company ID').fill(companyId)
+  await login.getByLabel('Phone, email or username').fill(`0803 ${testNumber.slice(4, 7)} ${testNumber.slice(7)}`)
+  await login.getByLabel('Password').fill(PASSWORD)
+  await login.getByRole('button', { name: 'Log in' }).tap()
+  await login.waitForURL(/\/app/)
+  await fresh.close()
+})
+
+await check('the team’s queue shows each request until somebody replies, and the reply opens WhatsApp with the message typed', async () => {
+  const admin = `e2e-admin-${run}`
+  psql(
+    `INSERT INTO super_admins (username, password_hash) SELECT '${admin}', u.password_hash FROM users u JOIN clients c ON c.id = u.client_id WHERE c.slug = 'e2e-landing-stores-${run}' LIMIT 1;`,
+  )
+  try {
+    const context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
+    await context.route('https://wa.me/**', (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '<p>WhatsApp</p>' }))
+    const page = await context.newPage()
+    await page.goto(`${UI}/admin/login`)
+    await page.getByLabel('Username').fill(admin)
+    await page.getByLabel('Password').fill(PASSWORD)
+    await page.getByRole('button', { name: /Log in|Sign in/ }).click()
+    await page.getByRole('link', { name: 'Setup Requests' }).click()
+    await page.getByRole('heading', { name: 'Setup requests' }).waitFor()
+
+    const row = page.getByRole('listitem').filter({ hasText: `E2E Founding Ad ${run}` })
+    await row.waitFor()
+    await row.getByText(/Waiting|Overdue/).first().waitFor()
+    await row.getByText('/founding (ads, outreach)').waitFor()
+    assert(/\(\d+\) Setup requests/.test(await page.title()), `the tab does not show the waiting count: ${await page.title()}`)
+    await page.screenshot({ path: SHOTS + '7-queue.png', fullPage: true })
+
+    const [chat] = await Promise.all([context.waitForEvent('page'), row.getByRole('link', { name: 'Reply on WhatsApp' }).click()])
+    await chat.waitForURL(/wa\.me/)
+    const chatUrl = decodeURIComponent(chat.url())
+    assert(chatUrl.startsWith(`https://wa.me/${e164(foundingNumber).slice(1)}?text=Hello E2E Founding Ad ${run}, this is Procurepaddy.`), chatUrl)
+    await chat.close()
+
+    await page.getByRole('button', { name: /^In progress/ }).click()
+    const moved = page.getByRole('listitem').filter({ hasText: `E2E Founding Ad ${run}` })
+    await moved.waitFor()
+    assert((await moved.getByLabel(/^Status of/).inputValue()) === 'CONTACTED', 'not marked contacted')
+    const contacted = psql(`SELECT contacted_at IS NOT NULL FROM setup_requests WHERE whatsapp = '${e164(foundingNumber)}';`)
+    assert(contacted === 't', 'contacted_at not stamped')
+
+    // The account the other shop created shows on its row.
+    await page.getByRole('button', { name: /^All/ }).click()
+    await page.getByRole('listitem').filter({ hasText: `E2E Landing Stores ${run}` }).getByRole('link', { name: `Account: e2e-landing-stores-${run}` }).waitFor()
+    await context.close()
+  } finally {
+    psql(`DELETE FROM super_admins WHERE username = '${admin}';`)
+  }
+})
+
+psql(`DELETE FROM setup_requests WHERE whatsapp IN ('${e164(testNumber)}', '${e164(foundingNumber)}');`)
 
 // ===================================================================== early access (step 2)
 build()

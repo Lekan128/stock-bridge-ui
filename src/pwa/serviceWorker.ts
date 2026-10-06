@@ -172,6 +172,12 @@ if (typeof window !== 'undefined') {
     setState({ canInstall: true })
   })
   window.addEventListener('appinstalled', () => {
+    // The setup checklist's "Put Procurepaddy on your phone" (features/onboarding).
+    try {
+      localStorage.setItem('pp.installed', '1')
+    } catch {
+      // Only a convenience for the checklist.
+    }
     installPrompt = null
     setState({ canInstall: false })
   })
