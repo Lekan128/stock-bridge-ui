@@ -15,6 +15,7 @@ const SUITES = [
   'first-week',
   'seo-pages',
   'lost-refresh',
+  'password-reset',
   'data-layer',
   'catalog',
   'outbox',

@@ -18,7 +18,9 @@ import { MARKETPLACE_BASE } from '@/routes/marketplacePaths'
 
 // Eager: log in and sign up, the landing page's two doors. They are the first paint for someone
 // arriving from it, so they must not wait on a second network round trip.
+import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage'
 import { LoginPage } from '@/pages/LoginPage'
+import { ResetPasswordPage } from '@/pages/ResetPasswordPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { SignupPage } from '@/pages/SignupPage'
 // Eager for the same reason: `/verify-email` is an entry point clicked from an
@@ -505,6 +507,19 @@ export function AppRoutes() {
             </RedirectIfAuthenticated>
           }
         />
+        {/* Self-service password reset (PASSWORD_RESET_PLAN.md). Asking for a link sits with log in:
+          someone signed in changes their password in Profile instead. The page the email links to
+          does NOT redirect a signed-in user away, because they must still be able to use a link
+          they asked for. */}
+        <Route
+          path="/forgot-password"
+          element={
+            <RedirectIfAuthenticated>
+              <ForgotPasswordPage />
+            </RedirectIfAuthenticated>
+          }
+        />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         {/* Applying to sell. Deliberately NOT wrapped in RedirectIfAuthenticated, unlike the two
           above: those create or resume a session, so bouncing a signed-in user away from them is
           right. This creates no account at all — it adds a business to a waitlist a super admin

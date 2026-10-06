@@ -44,3 +44,17 @@ export const signupSchema = z.object({
 })
 
 export type SignupFormValues = z.infer<typeof signupSchema>
+
+/** Self-service password reset, step 1 (PASSWORD_RESET_PLAN.md): the email to send the link to. */
+export const forgotPasswordSchema = z.object({
+  email: z.string().trim().min(1, 'Enter your email address').email('Enter a valid email address'),
+})
+
+export type ForgotPasswordFormValues = z.infer<typeof forgotPasswordSchema>
+
+/** Step 2: the new password. The same 8-character rule and wording as sign-up. */
+export const resetPasswordSchema = z.object({
+  newPassword: z.string().min(8, 'Use at least 8 characters'),
+})
+
+export type ResetPasswordFormValues = z.infer<typeof resetPasswordSchema>
