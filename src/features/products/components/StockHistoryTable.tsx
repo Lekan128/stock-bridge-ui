@@ -125,9 +125,14 @@ export function StockHistoryTable({
           <li key={movement.id} className="flex items-start justify-between gap-3 px-4 py-3">
             <div className="min-w-0">
               <p className="text-sm font-medium text-neutral-900">
-                {movementLabels[movement.movementType]}
+                {labelOf(movement)}
                 {movement.outReason && <span className="font-normal text-neutral-600"> · {outReasonLabel(movement.outReason)}</span>}
               </p>
+              {movement.saleAmount != null && (
+                <p className="mt-0.5 text-xs tabular-nums text-neutral-700">
+                  {movement.correctsMovementId ? 'Added' : 'Sold for'} {formatCurrency(movement.saleAmount)}
+                </p>
+              )}
               {movement.note && <p className="mt-0.5 truncate text-xs text-neutral-600">{movement.note}</p>}
               <p className="mt-0.5 text-xs tabular-nums text-neutral-500">
                 {who(movement)} · {when(movement)}
@@ -199,7 +204,7 @@ export function StockHistoryTable({
               <tr key={movement.id}>
                 <td className="border-b border-neutral-100 px-4 py-2.5">
                   <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <Badge variant={movementVariants[movement.movementType]}>{movementLabels[movement.movementType]}</Badge>
+                    <Badge variant={movementVariants[movement.movementType]}>{labelOf(movement)}</Badge>
                     {/* Why it went out, when somebody said (API V46) - plain text beside the badge, not
                         a second badge: one signal for the kind of movement, words for the reason. */}
                     {movement.outReason && <span className="text-sm text-neutral-600">{outReasonLabel(movement.outReason)}</span>}
@@ -222,7 +227,13 @@ export function StockHistoryTable({
                   )}
                 </td>
                 <td className="max-w-xs truncate border-b border-neutral-100 px-4 py-2.5 text-neutral-600">
-                  {movement.note || '—'}
+                  {movement.saleAmount != null && (
+                    <span className="tabular-nums text-neutral-800">
+                      {movement.correctsMovementId ? 'Added' : 'Sold for'} {formatCurrency(movement.saleAmount)}
+                      {movement.note ? ' · ' : ''}
+                    </span>
+                  )}
+                  {movement.note || (movement.saleAmount == null ? '—' : '')}
                 </td>
                 <td className="border-b border-neutral-100 px-4 py-2.5 text-neutral-600">{who(movement)}</td>
                 <td className="border-b border-neutral-100 px-4 py-2.5 whitespace-nowrap text-neutral-600">{when(movement)}</td>
@@ -234,4 +245,14 @@ export function StockHistoryTable({
       {data && <Pagination page={page} totalPages={data.totalPages} onPageChange={onPageChange} />}
     </div>
   )
+}
+
+/**
+ * What the row was, in words (`SELLING_PRICE_PLAN.md` §6.6): a sale's later fixes are adjustments in
+ * the ledger, but to a person they are "Sale cancelled" and "Price added".
+ */
+function labelOf(movement: StockMovement): string {
+  if (movement.reversesMovementId) return 'Sale cancelled'
+  if (movement.correctsMovementId) return 'Price added'
+  return movementLabels[movement.movementType]
 }

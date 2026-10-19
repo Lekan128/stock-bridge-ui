@@ -55,4 +55,14 @@ export interface StockMovementSummary {
    * somebody is trying to explain, so it is reported.
    */
   adjustmentCount: number
+  /**
+   * What sales in range went for, as the Sales report counts it (`SELLING_PRICE_PLAN.md` §6.9).
+   * Absent where it doesn't apply - selling off, a supplier filter, a non-sale reason.
+   */
+  salesAmount?: number
+  /** Sale lines in range still without a price; absent with `salesAmount`. */
+  unpricedSaleCount?: number
+  /** Every other stock-out - used, spoilt, sent away - at what the stock cost. */
+  otherOutCost: number
+  otherOutCount: number
 }

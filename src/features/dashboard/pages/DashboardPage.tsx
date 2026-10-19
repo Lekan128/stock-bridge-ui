@@ -5,6 +5,8 @@ import { DashboardAnalytics } from '@/features/dashboard/components/DashboardAna
 import { useCatalogList, useCatalogState } from '@/features/catalog/useCatalog'
 import { NeedsYouToday } from '@/features/dashboard/components/NeedsYouToday'
 import { StockHealth } from '@/features/dashboard/components/StockHealth'
+import { SalesTodayFigure } from '@/features/selling/sales/SalesTodayFigure'
+import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { SetupChecklist } from '@/features/onboarding/SetupChecklist'
 import { VendorDashboardPage } from '@/features/vendor/pages/VendorDashboardPage'
 
@@ -56,6 +58,7 @@ function BuyerToday({
   canViewProducts: boolean
   permissions: string[]
 }) {
+  const { recordsSales } = useSellingPolicy()
   const catalog = useCatalogState()
   const onDevice = catalog.phase === 'ready'
   const list = useCatalogList(
@@ -73,6 +76,9 @@ function BuyerToday({
       </div>
 
       <SetupChecklist />
+
+      {/* The one primary figure, for a company that sells (§6.10) - above stock health. */}
+      {canViewAnalytics && recordsSales && <SalesTodayFigure />}
 
       {canViewProducts && <StockHealth counts={counts} />}
 

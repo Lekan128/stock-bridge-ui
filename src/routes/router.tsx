@@ -140,6 +140,11 @@ const RecordSalePage = lazy(() =>
     default: m.RecordSalePage,
   })),
 )
+const SalesPage = lazy(() =>
+  import('@/features/selling/sales/SalesPage').then((m) => ({
+    default: m.SalesPage,
+  })),
+)
 // What has been ordered from a supplier off the platform and not received yet (task 3.1). Two
 // chunks, like the import screens: the list is read by anyone who can see products, while the
 // screen that writes one down is reached far less often and by fewer people.
@@ -651,6 +656,14 @@ export function AppRoutes() {
             element={
               <RequirePermission permission={PERMISSIONS.STOCK_OUT}>
                 <RecordSalePage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="sales"
+            element={
+              <RequirePermission permission={PERMISSIONS.VIEW_ANALYTICS}>
+                <SalesPage />
               </RequirePermission>
             }
           />

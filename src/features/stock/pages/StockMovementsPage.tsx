@@ -17,6 +17,7 @@ import type { MovementType, OutReason } from '@/features/products/types'
 import { useStockMovementReport } from '@/features/stock/hooks/useStockMovementReport'
 import { NO_REASON_LABEL, OUT_REASONS, outReasonLabel } from '@/features/stock/outReasons'
 import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
+import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 
 const PAGE_SIZE = 25
 
@@ -94,6 +95,7 @@ export function StockMovementsPage() {
   const [reasonFilter, setReasonFilter] = useState<'' | 'NONE' | OutReason>('')
   const [page, setPage] = useState(0)
   const reasonApplies = direction === 'OUT'
+  const { recordsSales, requiresSellingPrice } = useSellingPolicy()
 
   const { vendors } = useVendorOptions(canViewVendors)
 
@@ -139,12 +141,23 @@ export function StockMovementsPage() {
             subtitle={`${formatNumber(summary.inMovementCount)} deliveries · ${rangeLabel}`}
             icon={PackagePlus}
           />
-          <StatCard
-            label="Stock out value"
-            value={formatCurrency(summary.outValue)}
-            subtitle={`${formatNumber(summary.outMovementCount)} issues · ${rangeLabel}`}
-            icon={PackageMinus}
-          />
+          {/* §6.9: with selling on, the card keeps its place and splits in two - what sales went
+              for, and every other stock-out at what it cost. The two add up to the figure. */}
+          {recordsSales && summary.salesAmount != null ? (
+            <StatCard
+              label="Stock out value"
+              value={formatCurrency(summary.salesAmount + summary.otherOutCost)}
+              subtitle={`${formatCurrency(summary.salesAmount)} sales · ${formatCurrency(summary.otherOutCost)} other stock out`}
+              icon={PackageMinus}
+            />
+          ) : (
+            <StatCard
+              label="Stock out value"
+              value={formatCurrency(summary.outValue)}
+              subtitle={`${formatNumber(summary.outMovementCount)} issues · ${rangeLabel}`}
+              icon={PackageMinus}
+            />
+          )}
           <StatCard
             label="Units in"
             value={formatNumber(summary.inQuantity)}
@@ -163,7 +176,11 @@ export function StockMovementsPage() {
       {/* The one thing that makes the two numbers above reconcilable. Without it, a large "units
           in" against a smaller "stock in value" reads as a bug rather than as deliveries whose
           price nobody recorded. Shown only when there is actually a gap to explain. */}
-      {summary && (summary.unpricedInCount > 0 || summary.unpricedOutCount > 0 || summary.adjustmentCount > 0) && (
+      {summary &&
+        (summary.unpricedInCount > 0 ||
+          (requiresSellingPrice && summary.unpricedOutCount > 0) ||
+          (summary.unpricedSaleCount ?? 0) > 0 ||
+          summary.adjustmentCount > 0) && (
         <p className="rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-neutral-600">
           {summary.unpricedInCount > 0 && (
             <>
@@ -171,13 +188,31 @@ export function StockMovementsPage() {
               so their units are counted but their value is not.{' '}
             </>
           )}
-          {summary.unpricedOutCount > 0 && (
+          {/* A stock-out with no price is ordinary - used, spoilt, sent away - so only a sale's
+              missing price is a gap worth saying (a marketplace seller's every stock-out is one). */}
+          {requiresSellingPrice && summary.unpricedOutCount > 0 && (
             <>{formatNumber(summary.unpricedOutCount)} stock-outs have no price recorded. </>
+          )}
+          {!requiresSellingPrice && (summary.unpricedSaleCount ?? 0) > 0 && (
+            <>
+              {formatNumber(summary.unpricedSaleCount ?? 0)} {summary.unpricedSaleCount === 1 ? 'sale has' : 'sales have'} no price.{' '}
+            </>
           )}
           {summary.adjustmentCount > 0 && (
             <>
-              {formatNumber(summary.adjustmentCount)} adjustments are listed but counted in neither
-              total — a stock-take correction is not a purchase or a sale.
+              {recordsSales ? (
+                // A cancelled sale and a price added later are adjustments too - and already in the
+                // sales figure above - so the stock-take explanation alone would be wrong for them.
+                <>
+                  {formatNumber(summary.adjustmentCount)} adjustments (counts, and fixes to sales) are listed but not
+                  counted as stock in or out.
+                </>
+              ) : (
+                <>
+                  {formatNumber(summary.adjustmentCount)} adjustments are listed but counted in neither
+                  total — a stock-take correction is not a purchase or a sale.
+                </>
+              )}
             </>
           )}
         </p>

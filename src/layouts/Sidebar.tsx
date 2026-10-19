@@ -3,6 +3,7 @@ import { Link, NavLink } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { Logo } from '@/components/Logo'
 import { NAV_GROUPS, type NavGroup, type NavItem } from '@/layouts/navConfig'
+import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 
 export interface SidebarProps {
   collapsed: boolean
@@ -21,6 +22,7 @@ const itemClassName = (isActive: boolean) =>
 export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onCloseMobile }: SidebarProps) {
   const { user, client, isPlatformOwner, isVendor, isSeller } = useAuth()
   const permissions = user?.type === 'tenant' ? user.permissions : []
+  const { recordsSales } = useSellingPolicy()
 
   // Two independent kinds of filter, and they are not interchangeable.
   //
@@ -39,6 +41,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onCloseMobile
       ...group,
       items: group.items
         .filter((item) => !item.hideFromPlatformOwner || !isPlatformOwner)
+        .filter((item) => !item.recordsSalesOnly || recordsSales)
         .filter((item) => !item.requiredPermission || permissions.includes(item.requiredPermission)),
     }))
     .filter((group) => group.items.length > 0)

@@ -444,6 +444,12 @@ export interface StockMovement {
   enteredUnitPrice?: number | null
   /** Why a stock-out happened (API V46). Absent on every other row, and on a stock-out with no reason given. */
   outReason?: OutReason
+  /** What a sale line went for, exactly as charged (API V45). Absent for anything else. */
+  saleAmount?: number
+  /** The sale line this row cancels (a sale cancelled later puts the stock back). */
+  reversesMovementId?: string
+  /** The sale line this row adds a price to (no stock moves). */
+  correctsMovementId?: string
 }
 
 export interface CheaperVendorHint {

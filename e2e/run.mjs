@@ -30,6 +30,7 @@ const SUITES = [
   'selling',
   'sales',
   'price-sheets',
+  'sales-report',
   'dashboard',
   'chaos',
   'metrics',

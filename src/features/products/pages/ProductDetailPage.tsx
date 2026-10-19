@@ -33,6 +33,7 @@ import { buildPackOption } from '@/features/products/unitSet'
 import { VendorsTab } from '@/features/products/vendors/components/VendorsTab'
 import { isAppError } from '@/types/api'
 import { PriceHistory } from '@/features/selling/components/PriceHistory'
+import { SoldThisMonth } from '@/features/selling/sales/SoldThisMonth'
 import { perStockUnitEcho, sellingPriceText } from '@/features/selling/priceText'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { OverflowMenu, type OverflowMenuItem } from '@/components/OverflowMenu'
@@ -299,6 +300,8 @@ export function ProductDetailPage() {
         lastMovement={lastMovement}
         sellingPrice={showsSellingPrice ? sellingPriceText(product, stockUnitText, packOption) : null}
       />
+
+      <SoldThisMonth productId={product.id} stockUnit={stockUnitText} />
 
       <div role="tablist" aria-label="Product detail" className="flex gap-1 border-b border-neutral-200">
         {DETAIL_TABS.map((option) => {
