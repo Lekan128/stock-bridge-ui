@@ -94,7 +94,8 @@ export function PriceQuestionPanel({ question, columnName, onAnswer }: PriceQues
       </div>
       {question.kind === 'PRICE_MEANING' && !question.options.includes('SELLING') && !question.sellingOn && (
         <p className="text-xs text-neutral-600">
-          If it's what you sell for, leave it out: your company doesn't record sales. Your owner can turn that on.
+          If it's what you sell for, leave it out: your company doesn't record sales.
+          {question.sellingAvailable !== false && ' Your owner can turn that on.'}
         </p>
       )}
       {error && (

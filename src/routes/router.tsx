@@ -283,6 +283,11 @@ const AdminSetupRequestsPage = lazy(() =>
   })),
 )
 // Every new shop's first week (step 5): activation, and the WhatsApp message that is due.
+const AdminSellingHealthPage = lazy(() =>
+  import('@/features/admin/selling/AdminSellingHealthPage').then((m) => ({
+    default: m.AdminSellingHealthPage,
+  })),
+)
 const AdminFirstWeekPage = lazy(() =>
   import('@/features/admin/firstWeek/AdminFirstWeekPage').then((m) => ({
     default: m.AdminFirstWeekPage,
@@ -996,6 +1001,7 @@ export function AppRoutes() {
         >
           <Route index element={<Navigate to="tenants" replace />} />
           <Route path="tenants" element={<AdminTenantsPage />} />
+          <Route path="selling" element={<AdminSellingHealthPage />} />
           {/* Procurepaddy's setup requests: shops that booked a founding setup on the landing
               page, waiting for a WhatsApp reply. Speed to lead is the whole point of the screen. */}
           <Route path="setup-requests" element={<AdminSetupRequestsPage />} />

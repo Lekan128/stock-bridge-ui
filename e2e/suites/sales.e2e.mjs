@@ -298,6 +298,27 @@ await check('quick mode Sell: big targets, a stamp per sale, and "Your sales tod
   await page.screenshot({ path: SHOTS + '4-quick-sell.png' })
 })
 
+await check('lab baseline (§9): a three-item scanned sale in quick mode, on a phone-speed CPU, well under 10 s', async () => {
+  // The target is for the field, with a real scanner and a real customer; this is the floor the app
+  // itself sets, so the field number can be read against it.
+  await page.goto(`${UI}/app/quick?mode=sell`)
+  await page.getByRole('heading', { name: 'Quick mode' }).waitFor()
+  await search().waitFor()
+  const cdp = await context.newCDPSession(page)
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 })
+  const started = Date.now()
+  for (const product of [rice, soap, salt]) {
+    await scan(product)
+    await line(product).waitFor()
+  }
+  await page.getByRole('button', { name: /^Record sale/ }).click()
+  await page.getByText(/^Sale · 3 items/).waitFor()
+  const ms = Date.now() - started
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 })
+  console.log(`    three-item sale, scanned, CPU 4× slower: ${(ms / 1000).toFixed(1)} s`)
+  assert(ms < 10_000, `took ${ms} ms`)
+})
+
 await check('staff are told once that sales are recorded now; the owner who turned it on is not', async () => {
   assert((await page.goto(`${UI}/app/products`), await page.getByText('Your company now records sales.').count()) === 0, 'owner told')
   const role = (await api('/api/roles', { token, method: 'POST', body: { name: `Cashier ${unique}`, permissionCodes: ['VIEW_PRODUCTS', 'STOCK_OUT'] } })).json

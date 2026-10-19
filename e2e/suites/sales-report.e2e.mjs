@@ -3,7 +3,8 @@
 // leak filters, Add price and Cancel sale on a sale, export - and the same sales on the dashboard, the
 // Movements card and the product page. Production preview (4173) + real API (8081).
 import { chromium } from 'playwright'
-import { API, UI, launchOptions, shotsPrefix } from '../config.mjs'
+import { API, UI, launchOptions, psqlCommand, shotsPrefix } from '../config.mjs'
+import { execSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { createRequire } from 'node:module'
 
@@ -63,7 +64,7 @@ async function company(label, selling) {
   ).json
   const token = signup.tokens.accessToken
   if (selling) await api('/api/company/selling', { token, method: 'PUT', body: { sellsStock: true, source: 'OWNER' } })
-  return { unique, token, refreshToken: signup.tokens.refreshToken }
+  return { unique, token, refreshToken: signup.tokens.refreshToken, slug: signup.user.clientIdentifier, name: `E2E Report ${label} ${unique}` }
 }
 async function product(shop, name, price, cost, categoryId) {
   const form = new FormData()
@@ -243,6 +244,29 @@ await check('a company that does not sell has no Sales page in its nav', async (
   await pg.getByRole('heading', { name: 'Inventory', level: 1 }).waitFor()
   await pg.waitForTimeout(1000)
   assert((await pg.getByRole('link', { name: 'Sales', exact: true }).count()) === 0, 'Sales in the nav')
+  await ctx.close()
+})
+
+await check('Admin → Selling Health shows the shop, its figures against the targets, and that this is the pilot or open', async () => {
+  const admin = `e2e-admin-${shop.unique}`
+  execSync(psqlCommand, {
+    input: `INSERT INTO super_admins (username, password_hash) SELECT '${admin}', u.password_hash FROM users u JOIN clients c ON c.id = u.client_id WHERE c.slug = '${shop.slug}' LIMIT 1;`,
+  })
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } })
+  const pg = await ctx.newPage()
+  await pg.goto(`${UI}/admin/login`)
+  await pg.getByLabel('Username').fill(admin)
+  await pg.getByLabel('Password').fill(PASSWORD)
+  await pg.getByRole('button', { name: 'Log in' }).click()
+  await pg.getByRole('link', { name: 'Selling Health' }).click()
+  await pg.getByRole('heading', { name: 'Selling health', level: 1 }).waitFor()
+  await pg.getByText('Sales with a price when recorded').waitFor()
+  // Five lines recorded today, one cancelled; every remaining line priced (one added later).
+  const row = pg.getByRole('row').filter({ hasText: shop.name })
+  await row.waitFor({ timeout: 20000 })
+  await row.getByText('100%').first().waitFor()
+  await pg.screenshot({ path: SHOTS + '5-admin-health.png', fullPage: true })
+  await axeClean(pg, 'admin selling health')
   await ctx.close()
 })
 

@@ -1,4 +1,4 @@
-import { BarChart3, Building2, CalendarCheck, ClipboardList, Coins, Hourglass, PhoneIncoming, Store, UserCog, type LucideIcon } from 'lucide-react'
+import { BarChart3, Building2, CalendarCheck, ClipboardList, Coins, Hourglass, PhoneIncoming, ShoppingBag, Store, UserCog, type LucideIcon } from 'lucide-react'
 
 export interface AdminNavItem {
   path: string
@@ -13,6 +13,9 @@ export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
   // Then what happens after the reply: each new shop's first week (step 5).
   { path: '/admin/first-week', label: 'First Week', icon: CalendarCheck },
   { path: '/admin/tenants', label: 'Tenants', icon: Building2 },
+  // The selling rollout's scoreboard (SELLING_PRICE_PLAN.md §9, Phase 7) - beside Tenants, where a
+  // shop is enrolled in the pilot by turning selling on for it.
+  { path: '/admin/selling', label: 'Selling Health', icon: ShoppingBag },
   // ProcurePal's own staff accounts. Not gated on anything: super admin is a single flat role,
   // and the screen handles the "ProcurePal was never bootstrapped" case itself rather than
   // vanishing from the nav, which would leave nowhere to find out why.

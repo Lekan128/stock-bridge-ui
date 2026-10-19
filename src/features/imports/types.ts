@@ -316,6 +316,8 @@ export interface PriceQuestion {
   canTurnOnSelling: boolean
   /** Whether Continue waits for an answer. */
   blocking: boolean
+  /** Whether the company could turn selling on at all (false before launch, outside the pilot). */
+  sellingAvailable?: boolean
 }
 
 /** What the upload screen asked once for a whole delivery. Each value fills the rows that leave it blank. */
