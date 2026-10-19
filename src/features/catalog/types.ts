@@ -21,6 +21,9 @@ export interface CatalogRow {
   packagingSize?: number | null
   hasMultiplePacks: boolean
   unitPrice?: number | null
+  /** The selling price as typed and its unit ("5,000" per "CARTON"), API V47 - for pre-filling a sale offline. */
+  unitPriceEntered?: number | null
+  unitPriceEnteredUnit?: string | null
   quantityOnHand: number
   incomingQuantity: number
   expectedQuantity?: number | null
@@ -47,6 +50,9 @@ export interface ChangesPage {
   hasMore: boolean
 }
 
+/** The Inventory list's selling-price filter. */
+export type PriceFilter = 'all' | 'has' | 'none'
+
 export type CatalogSortField = 'name' | 'sku' | 'unitPrice' | 'quantityOnHand' | 'active'
 
 /** The Inventory list's filters, as the worker answers them. */
@@ -55,6 +61,8 @@ export interface CatalogQuery {
   status: 'all' | 'active' | 'inactive'
   categoryId: string
   stockStatus: StockStatusFilter | 'all'
+  /** "Has a price" / "No selling price" (`SELLING_PRICE_PLAN.md` §6.5). Absent is both. */
+  price?: PriceFilter
   sort: { field: CatalogSortField; direction: 'asc' | 'desc' }
   offset: number
   limit: number
@@ -66,6 +74,8 @@ export interface CatalogQueryResult {
   total: number
   /** Per stock chip, under every OTHER filter — what each chip would show if picked. */
   counts: { all: number; OK: number; LOW: number; OUT: number }
+  /** Per price filter, under every OTHER filter - the census beside it. */
+  priceCounts: { has: number; none: number }
   /** Across the whole catalogue: stock bought and not yet received. */
   incoming: { units: number; productCount: number }
   catalogSize: number

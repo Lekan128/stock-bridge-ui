@@ -39,6 +39,9 @@ import { useProducts } from '@/features/products/hooks/useProducts'
 import type { Product, ProductStatusFilter, StockStatusFilter } from '@/features/products/types'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
+import type { PriceFilter } from '@/features/catalog/types'
+import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
+import { StockWorthLine } from '@/features/selling/components/StockWorthLine'
 import { downloadBlob } from '@/utils/downloadBlob'
 
 function isStockStatusFilter(value: string | null): value is StockStatusFilter {
@@ -73,6 +76,8 @@ interface ListState {
   statusFilter: ProductStatusFilter
   categoryFilter: string
   stockLevelFilter: StockLevelFilter
+  /** `?price=has|none` - the selling-price census (`SELLING_PRICE_PLAN.md` §6.5). */
+  priceFilter: PriceFilter
   sort: ProductSort
   page: number
 }
@@ -87,6 +92,7 @@ function readListState(params: URLSearchParams): ListState {
     statusFilter: status === 'all' || status === 'inactive' ? status : 'active',
     categoryFilter: params.get('category') ?? '',
     stockLevelFilter: isStockStatusFilter(stockStatus) ? stockStatus : 'all',
+    priceFilter: params.get('price') === 'has' ? 'has' : params.get('price') === 'none' ? 'none' : 'all',
     sort: SORT_FIELDS.includes(sortField as ProductSortField)
       ? { field: sortField as ProductSortField, direction: sortDirection === 'desc' ? 'desc' : 'asc' }
       : DEFAULT_SORT,
@@ -110,8 +116,11 @@ export function ProductListPage() {
   const canStockIn = permissions.includes(PERMISSIONS.STOCK_IN)
   const canStockOut = permissions.includes(PERMISSIONS.STOCK_OUT)
   const [searchParams, setSearchParams] = useSearchParams()
-  const { search: committedSearch, statusFilter, categoryFilter, stockLevelFilter, sort, page } =
+  const { search: committedSearch, statusFilter, categoryFilter, stockLevelFilter, priceFilter: requestedPriceFilter, sort, page } =
     readListState(searchParams)
+  // Only where a selling price exists at all - for anyone else the filter is ignored, not obeyed.
+  const { showsSellingPrice } = useSellingPolicy()
+  const priceFilter: PriceFilter = showsSellingPrice ? requestedPriceFilter : 'all'
   // What is in the box right now; the URL only takes it once typing pauses.
   const [search, setSearch] = useState(committedSearch)
   const [manageCategoriesOpen, setManageCategoriesOpen] = useState(false)
@@ -166,7 +175,7 @@ export function ProductListPage() {
 
   const online = useOnlineStatus()
   const catalogList = useCatalogList(
-    { search: committedSearch, status: statusFilter, categoryId: categoryFilter, stockStatus: stockLevelFilter, sort },
+    { search: committedSearch, status: statusFilter, categoryId: categoryFilter, stockStatus: stockLevelFilter, price: priceFilter, sort },
     onDevice,
   )
   const [renderedProducts, setRenderedProducts] = useState<Product[]>([])
@@ -177,6 +186,7 @@ export function ProductListPage() {
       active: statusFilter === 'all' ? undefined : statusFilter === 'active',
       categoryId: categoryFilter || undefined,
       stockStatus: stockLevelFilter === 'all' ? undefined : stockLevelFilter,
+      hasSellingPrice: priceFilter === 'all' ? undefined : priceFilter === 'has',
       page,
       size: PAGE_SIZE,
       sort: `${sort.field},${sort.direction}`,
@@ -325,6 +335,10 @@ export function ProductListPage() {
     updateListState({ category: categoryId })
   }
 
+  function handlePriceFilterChange(value: PriceFilter) {
+    updateListState({ price: value === 'all' ? null : value })
+  }
+
   function handleStockLevelFilterChange(value: StockLevelFilter) {
     updateListState({ stockStatus: value === 'all' ? null : value })
   }
@@ -408,7 +422,14 @@ export function ProductListPage() {
     categories: categoryList.categories,
     categoryFilter,
     onCategoryFilterChange: handleCategoryFilterChange,
-    onClearFilters: () => updateListState({ status: null, category: null }),
+    ...(showsSellingPrice
+      ? {
+          priceFilter,
+          onPriceFilterChange: handlePriceFilterChange,
+          priceCounts: onDevice && catalogList.ready ? catalogList.priceCounts : undefined,
+        }
+      : {}),
+    onClearFilters: () => updateListState({ status: null, category: null, price: null }),
     canManageProducts,
     canRecordDelivery: permissions.includes(PERMISSIONS.MANAGE_INVENTORY),
     onQuickMode: canStockIn || canStockOut || permissions.includes(PERMISSIONS.MANAGE_INVENTORY) ? () => navigate('/app/quick') : undefined,
@@ -453,6 +474,8 @@ export function ProductListPage() {
       )}
 
       <InventoryBar ref={searchRef} {...barProps} />
+
+      <StockWorthLine />
 
       <AttentionLine items={attention} />
 

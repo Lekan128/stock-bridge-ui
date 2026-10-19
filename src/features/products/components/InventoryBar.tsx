@@ -4,6 +4,7 @@ import { Button } from '@/components/Button'
 import { OverflowMenu, type OverflowMenuItem } from '@/components/OverflowMenu'
 import type { CompanyCategory } from '@/features/products/categories/types'
 import type { ProductStatusFilter, StockStatusFilter } from '@/features/products/types'
+import type { PriceFilter } from '@/features/catalog/types'
 import { useClickOutside } from '@/hooks/useClickOutside'
 
 export type StockLevelFilter = 'all' | StockStatusFilter
@@ -22,6 +23,14 @@ export interface InventoryBarProps {
   onCategoryFilterChange: (categoryId: string) => void
   /** Back to the default view (active products, every category) in one step. */
   onClearFilters: () => void
+  /**
+   * The selling-price census (`SELLING_PRICE_PLAN.md` §6.5) - present only where products have a
+   * selling price at all. Neutral words on purpose: a restaurant's gas will never have a price, and
+   * "No price yet" would nag it forever.
+   */
+  priceFilter?: PriceFilter
+  onPriceFilterChange?: (value: PriceFilter) => void
+  priceCounts?: { has: number; none: number }
   canManageProducts: boolean
   canRecordDelivery: boolean
   /** Quick mode (C4): receive, issue or count one item after another. */
@@ -41,6 +50,12 @@ const STOCK_CHIPS: { value: StockLevelFilter; label: string }[] = [
   { value: 'OK', label: 'Well stocked' },
   { value: 'LOW', label: 'Low' },
   { value: 'OUT', label: 'Out' },
+]
+
+const PRICE_OPTIONS: { value: PriceFilter; label: string }[] = [
+  { value: 'all', label: 'Any' },
+  { value: 'has', label: 'Has a price' },
+  { value: 'none', label: 'No selling price' },
 ]
 
 const STATUS_OPTIONS: { value: ProductStatusFilter; label: string }[] = [
@@ -177,6 +192,9 @@ function FiltersPopover({
   categoryFilter,
   onCategoryFilterChange,
   onClearFilters,
+  priceFilter,
+  onPriceFilterChange,
+  priceCounts,
 }: InventoryBarProps) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -195,7 +213,7 @@ function FiltersPopover({
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [open])
   // Active is the default view, so only a departure from it counts as a filter.
-  const applied = (statusFilter !== 'active' ? 1 : 0) + (categoryFilter ? 1 : 0)
+  const applied = (statusFilter !== 'active' ? 1 : 0) + (categoryFilter ? 1 : 0) + (priceFilter && priceFilter !== 'all' ? 1 : 0)
   const categoryName = categories.find((category) => category.id === categoryFilter)?.name
 
   return (
@@ -239,6 +257,29 @@ function FiltersPopover({
               ))}
             </div>
           </fieldset>
+          {priceFilter && onPriceFilterChange && (
+            <fieldset className="flex flex-col gap-2">
+              <legend className="mb-1 text-xs font-semibold tracking-wider text-neutral-500 uppercase">Selling price</legend>
+              <div className="flex flex-col gap-0.5">
+                {PRICE_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    aria-pressed={priceFilter === option.value}
+                    onClick={() => onPriceFilterChange(option.value)}
+                    className={`flex items-center justify-between rounded-sm px-3 py-1.5 text-left text-sm font-medium ${
+                      priceFilter === option.value ? 'bg-neutral-100 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-50'
+                    }`}
+                  >
+                    {option.label}
+                    {priceCounts && option.value !== 'all' && (
+                      <span className="tabular-nums text-neutral-500">{priceCounts[option.value].toLocaleString()}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+          )}
           {categories.length > 0 && (
             <div className="flex flex-col gap-1.5">
               <label htmlFor="product-category-filter" className="text-xs font-semibold tracking-wider text-neutral-500 uppercase">

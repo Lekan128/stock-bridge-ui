@@ -327,6 +327,8 @@ export function toProduct(row: CatalogRow): Product {
     sku: row.sku,
     description: null,
     unitPrice: row.unitPrice ?? null,
+    unitPriceEntered: row.unitPriceEntered ?? undefined,
+    unitPriceEnteredUnit: row.unitPriceEnteredUnit ?? undefined,
     quantityOnHand: row.quantityOnHand,
     costPrice: null,
     incomingQuantity: row.incomingQuantity,

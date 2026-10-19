@@ -6,6 +6,7 @@ import { CompanyDetailsForm } from '@/features/company/components/CompanyDetails
 import { CompanyDetailsReadOnly } from '@/features/company/components/CompanyDetailsReadOnly'
 import { CompanySkeleton } from '@/features/company/components/CompanySkeleton'
 import { useCompany } from '@/features/company/hooks/useCompany'
+import { SellingSettingsSection } from '@/features/selling/components/SellingSettingsSection'
 
 /**
  * Open to every authenticated tenant user, matching GET /api/company, which carries no
@@ -44,12 +45,13 @@ export function CompanySettingsPage() {
 
       {!loading && !error && company && (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2">
+          <div className="flex flex-col gap-6 lg:col-span-2">
             {canEdit ? (
               <CompanyDetailsForm company={company} onUpdated={setCompany} />
             ) : (
               <CompanyDetailsReadOnly company={company} />
             )}
+            <SellingSettingsSection />
           </div>
           <CompanyAccountFacts company={company} />
         </div>
