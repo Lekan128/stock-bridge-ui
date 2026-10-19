@@ -65,6 +65,7 @@ import { invalidateInventory, syncProductIntoCache } from '@/data/inventoryCache
 import { DraftNote } from '@/features/drafts/DraftNote'
 import { useDraft } from '@/features/drafts/useDraft'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
+import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 
 const KNOWN_FIELDS = new Set<keyof ProductFormValues>([
   'name',
@@ -223,6 +224,7 @@ export function ProductFormPage() {
   const location = useLocation() as { state?: { name?: string } }
   const { showToast } = useToast()
   const { user, isVendor } = useAuth()
+  const { showsSellingPrice, requiresSellingPrice } = useSellingPolicy()
   // Fresh from the server, never a cached copy: this fills the form, and saving a cached copy
   // could write another phone's newer edits back to old values. Offline it shows the error.
   const { product, loading: loadingProduct, error: productError, refetch: refetchProduct } = useProduct(id, {
@@ -845,7 +847,7 @@ export function ProductFormPage() {
    * own `UnitPriceRequiredException`, which is why the message matches it exactly.
    */
   async function onSubmit(values: ProductFormValues) {
-    if (isVendor && values.unitPrice.trim().length === 0) {
+    if (requiresSellingPrice && values.unitPrice.trim().length === 0) {
       setError('unitPrice', { message: UNIT_PRICE_REQUIRED_MESSAGE })
       return
     }
@@ -1320,22 +1322,29 @@ export function ProductFormPage() {
         </div>
 
         {/* -------------------------------------------------------------- Pricing */}
-        {/* Vendor-only, and only Unit price now — the marketplace selling price, required for a
-            vendor (enforced in `onSubmit`, mirroring the server's UnitPriceRequiredException).
+        {/* Sellers only (a vendor, or ProcurePal — `useSellingPolicy`), and only Unit price now — the
+            marketplace selling price, required for a seller (enforced in `onSubmit`, mirroring the
+            server's UnitPriceRequiredException). It used to be gated on `isVendor`, which left
+            ProcurePal with no price field and a save the server refused for want of one.
             There is no standalone "Cost price" field anywhere on this form any more: a product's
             cost is a server-computed weighted average of actual purchases (see
             MULTI_VENDOR_INVENTORY_DESIGN.md §5.3), never a value typed here. A buying company's
             only price entry point is the "First supplier" block's `initialVendorCost` below, for
             its opening purchase — so a non-vendor has nothing left to show in this section, and
             it is not rendered for them at all. */}
-        {isVendor && (
+        {showsSellingPrice && (
           <>
             <div className="mt-2 flex items-center gap-2 border-b border-neutral-200 pb-2">
               <Zap className="h-4 w-4 shrink-0 text-accent-600" aria-hidden="true" />
               <div>
                 <h2 className="text-sm font-semibold text-neutral-900">Pricing</h2>
+                {/* The vendor line is about review: a price change never sends a listing back.
+                    ProcurePal is never reviewed and not every product of its is listed, so it gets
+                    the line that is true for it instead. */}
                 <p className="text-xs text-neutral-500">
-                  This goes live straight away. Your listing stays on the storefront.
+                  {isVendor
+                    ? 'This goes live straight away. Your listing stays on the storefront.'
+                    : 'Buyers pay this once the product is listed on the storefront.'}
                 </p>
               </div>
             </div>
