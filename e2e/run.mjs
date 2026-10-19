@@ -28,6 +28,7 @@ const SUITES = [
   'quick',
   'reasons',
   'selling',
+  'sales',
   'dashboard',
   'chaos',
   'metrics',

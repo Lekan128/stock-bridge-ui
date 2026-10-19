@@ -505,6 +505,10 @@ export interface StockOutPayload {
    * quantity as typed, so a carton at 5,000 is 5,000. A price with no reason is a sale (API V46).
    */
   unitPrice?: number
+  /** The sale this line belongs to (API V46) - made on the phone when the sale starts. */
+  saleId?: string
+  /** What the whole line went for, when a total was typed rather than a price each - kept exactly. */
+  lineTotal?: number
 }
 
 // `ProductVendor` / `ProductVendorPriceTier` (GET /api/products/{productId}/vendors) live in

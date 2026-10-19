@@ -36,3 +36,14 @@ export interface LegacyPriceRow {
   packagingUnit?: string
   packagingSize?: number
 }
+
+/**
+ * A person's own sales over a range (`GET /api/sales/mine/summary`) - the till total. The API sends
+ * nothing about cost on this one, so no field for it here either.
+ */
+export interface MySalesTotals {
+  saleCount: number
+  lineCount: number
+  salesAmount: number
+  unpricedLineCount: number
+}

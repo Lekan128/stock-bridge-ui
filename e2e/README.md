@@ -72,6 +72,7 @@ Screenshots — the ones suites take on purpose, and one per page whenever a che
 | `quick` | Quick mode: scan, keypad, stamp, offline, Undo. |
 | `reasons` | The optional stock-out reason: no extra clicks when unused, the sheet chip and its open list (axe), offline, quick mode's sticky reason, the movements filter. |
 | `selling` | The selling switch (and that "off" looks exactly as before), the first-week answer, the Sold offer, prices typed per carton through form, page, history and list, the price filter, the old-price review; axe on the new screens. |
+| `sales` | Record a sale: a scanner running a basket, a price changed at the till, one sale id for every line, Undo sale, the unpriced confirm, the basket kept through a reload, a five-item offline sale landing whole, an oversold line refused (online) or in CHECK naming its sale (offline); product-page Sell, quick mode's Sell and till total (no cost in it), the one-time word to staff; axe throughout. |
 | `dashboard` | Stock health, Needs you today, the chart, offline. |
 | `chaos` | Zero lost writes with the tab killed; a lost reply recorded once; two phones counting and selling; a permission removed while offline. |
 | `metrics` | Taps to record a stock-in, time to first product row cold and warm (targets in the plan). |

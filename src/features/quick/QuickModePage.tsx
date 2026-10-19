@@ -1,5 +1,5 @@
 import { usePendingStock } from '@/features/outbox/useOutbox'
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import { Delete, Search, X } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -7,13 +7,11 @@ import { useAuth } from '@/auth/useAuth'
 import { PERMISSIONS } from '@/auth/permissions'
 import { Stamp, type StampKind } from '@/components/Stamp'
 import { useDialogBehaviour } from '@/components/useDialogBehaviour'
-import { useCatalogList, useCatalogState } from '@/features/catalog/useCatalog'
 import { discardOp, getOutboxState, isInFlight, submitStockWrite } from '@/features/outbox/outboxStore'
 import { useOutboxState } from '@/features/outbox/useOutbox'
 import { stockApi } from '@/features/products/api/stockApi'
 import { StockFigure } from '@/features/products/components/StockFigure'
 import { useProductVendors } from '@/features/products/hooks/useProductVendors'
-import { useProducts } from '@/features/products/hooks/useProducts'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import type { OutReason, Product, UnitOption } from '@/features/products/types'
 import {
@@ -38,15 +36,23 @@ import {
   unitOptionsForProduct,
 } from '@/features/products/unitSet'
 import { OUT_REASONS, outReasonLabel } from '@/features/stock/outReasons'
+import { useProductFinder } from '@/features/catalog/useProductFinder'
+import { formatMoney } from '@/features/selling/money'
+import { MySalesToday } from '@/features/selling/sale/MySalesToday'
+import { SaleBasketEditor } from '@/features/selling/sale/SaleBasketEditor'
+import { undoSale, useSaleBasket, type RecordedSale } from '@/features/selling/sale/useSaleBasket'
+import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { SyncPill } from '@/features/sync/SyncPill'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
 
-type Mode = 'in' | 'out' | 'count'
+type Mode = 'sell' | 'in' | 'out' | 'count'
 
 // The same names as everywhere else in the app (it said Receive and Issue, warehouse words a
 // shopkeeper had to guess at), each with one line saying what it does — Count most of all.
 const MODES: { value: Mode; label: string; verb: string; meaning: string }[] = [
+  // Only where the company records sales (useSellingPolicy) - and first there: it is the till.
+  { value: 'sell', label: 'Sell', verb: 'Sold', meaning: 'Scan what the customer is buying, then record the sale in one go.' },
   { value: 'in', label: 'Stock in', verb: 'Stock in', meaning: 'Goods coming in, like a delivery or a return. Adds them to your stock.' },
   { value: 'out', label: 'Stock out', verb: 'Stock out', meaning: 'Goods going out: sold, used or sent away. Takes them off your stock.' },
   {
@@ -56,8 +62,11 @@ const MODES: { value: Mode; label: string; verb: string; meaning: string }[] = [
     meaning: "Count what's on the shelf. The app's figure is corrected to match, and the difference goes into the history.",
   },
 ]
+/** Where sales are recorded, Stock out is for everything else - and says so (§6.3). */
+const OUT_MEANING_WHEN_SELLING = 'Goods going out without a sale: used, spoilt or sent away. For a customer, use Sell.'
 /** The Record button says what it will do: "Stock in 2 bags (100 kg)". */
-const ACTION: Record<Mode, string> = { in: 'Stock in', out: 'Stock out', count: 'Record count:' }
+const ACTION: Record<Exclude<Mode, 'sell'>, string> = { in: 'Stock in', out: 'Stock out', count: 'Record count:' }
+const GRID_COLS = ['', 'grid-cols-1', 'grid-cols-2', 'grid-cols-3', 'grid-cols-4']
 
 /** One write made in this session, and where it stands. */
 interface SessionEntry {
@@ -69,6 +78,8 @@ interface SessionEntry {
   /** Sent at once: the movement, for Undo. Saved on the phone: the outbox write. */
   movementId?: string
   opId?: string
+  /** A sale: its lines, each sent or waiting, undone together. */
+  sale?: RecordedSale
   undone?: boolean
 }
 
@@ -90,7 +101,9 @@ export function QuickModePage() {
   const [params, setParams] = useSearchParams()
   const { user } = useAuth()
   const permissions = user?.type === 'tenant' ? user.permissions : []
+  const { recordsSales } = useSellingPolicy()
   const allowed: Record<Mode, boolean> = {
+    sell: recordsSales && permissions.includes(PERMISSIONS.STOCK_OUT),
     in: permissions.includes(PERMISSIONS.STOCK_IN),
     out: permissions.includes(PERMISSIONS.STOCK_OUT),
     count: permissions.includes(PERMISSIONS.MANAGE_INVENTORY),
@@ -109,6 +122,9 @@ export function QuickModePage() {
    */
   const [outReason, setOutReason] = useState<OutReason | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
+  // Held here, not in the Sell step, so the basket (a draft on the phone) outlives the stamp.
+  const basket = useSaleBasket()
+  const [salesRecorded, setSalesRecorded] = useState(0)
   const rootRef = useRef<HTMLDivElement>(null)
 
   // A full screen over the workspace, so it behaves as a dialog does (Phase H accessibility): the
@@ -117,7 +133,7 @@ export function QuickModePage() {
   // then quick mode itself. A scanner never sends Escape, so a scan is never interrupted by it.
   useDialogBehaviour(rootRef, true, () => {
     const active = document.activeElement
-    if (active instanceof HTMLInputElement && active.id === 'quick-search' && active.value !== '') return
+    if (active instanceof HTMLInputElement && (active.id === 'quick-search' || active.id === 'sale-search') && active.value !== '') return
     if (product) {
       setProduct(null)
       return
@@ -130,10 +146,28 @@ export function QuickModePage() {
     setProduct(null)
   }
 
+  function saleRecorded(sale: RecordedSale) {
+    const kept = sale.lines.filter((line) => line.status !== 'refused')
+    setSalesRecorded((n) => n + 1)
+    if (kept.length === 0) return // all refused: they are still in the basket, saying why
+    const items = `${kept.length} ${kept.length === 1 ? 'item' : 'items'}`
+    recorded(
+      {
+        key: sale.saleId,
+        mode: 'sell',
+        productId: '',
+        productName: sale.label,
+        summary: `${items} · ${formatMoney(sale.total)}`,
+        sale,
+      },
+      kept.every((line) => line.status === 'sent') ? 'synced' : 'recorded',
+    )
+  }
+
   function recorded(entry: SessionEntry, kind: StampKind) {
     setSession((current) => [entry, ...current])
     setProduct(null)
-    setFlash({ kind, text: `${entry.summary} · ${entry.productName}` })
+    setFlash({ kind, text: entry.sale ? `Sale · ${entry.summary}` : `${entry.summary} · ${entry.productName}` })
     window.setTimeout(() => {
       setFlash(null)
       searchRef.current?.focus()
@@ -171,7 +205,7 @@ export function QuickModePage() {
             role="group"
             aria-label="What are you doing?"
             aria-describedby="quick-mode-meaning"
-            className="grid grid-cols-3 gap-1 rounded-lg bg-neutral-100 p-1"
+            className={`grid ${GRID_COLS[MODES.filter((m) => allowed[m.value]).length]} gap-1 rounded-lg bg-neutral-100 p-1`}
           >
             {MODES.filter((m) => allowed[m.value]).map((m) => (
               <button
@@ -188,13 +222,18 @@ export function QuickModePage() {
             ))}
           </div>
           <p id="quick-mode-meaning" className="text-sm text-neutral-600">
-            {MODES.find((m) => m.value === mode)?.meaning}
+            {mode === 'out' && allowed.sell ? OUT_MEANING_WHEN_SELLING : MODES.find((m) => m.value === mode)?.meaning}
           </p>
+          {mode === 'sell' && <MySalesToday refreshKey={salesRecorded} />}
           {mode === 'out' && <QuickReason value={outReason} onChange={setOutReason} />}
         </div>
 
         {flash ? (
-          <StampFlash kind={flash.kind} text={flash.text} />
+          <StampFlash kind={flash.kind} text={flash.text} next={mode === 'sell' ? 'Next customer…' : 'Next item…'} />
+        ) : mode === 'sell' ? (
+          <div className="flex flex-col gap-4">
+            <SaleBasketEditor basket={basket} onRecorded={saleRecorded} />
+          </div>
         ) : product ? (
           <AmountStep
             key={`${product.id}-${mode}`}
@@ -219,66 +258,11 @@ export function QuickModePage() {
 
 function FindStep({ inputRef, onPick }: { inputRef: RefObject<HTMLInputElement | null>; onPick: (product: Product) => void }) {
   const [term, setTerm] = useState('')
-  const catalog = useCatalogState()
-  const onDevice = catalog.phase === 'ready'
-  const search = term.trim()
-  const list = useCatalogList(
-    { search, status: 'active', categoryId: '', stockStatus: 'all', sort: { field: 'name', direction: 'asc' } },
-    onDevice && search !== '',
-  )
-  const server = useProducts({ search: search || undefined, active: true, size: 8, page: 0, sort: 'name,asc' }, { enabled: !onDevice && search !== '' })
-  const { loadRange } = list
-  useEffect(() => {
-    if (onDevice && search) loadRange(0, 7)
-  }, [onDevice, search, loadRange])
-
-  const results: Product[] = useMemo(() => {
-    if (!search) return []
-    if (onDevice) {
-      const rows: Product[] = []
-      for (let i = 0; i < Math.min(8, list.total); i++) {
-        const row = list.rowAt(i)
-        if (row) rows.push(row)
-      }
-      return rows
-    }
-    return server.data?.content ?? []
-  }, [search, onDevice, list, server.data])
+  const { search, results, onEnter } = useProductFinder(term, onPick)
 
   useEffect(() => {
     inputRef.current?.focus()
   }, [inputRef])
-
-  /**
-   * Enter: a scanner's code, or a search with one obvious answer. A scanner types the code and
-   * presses Enter in the same instant — before the search has answered — so an early Enter waits
-   * for the answer to the term it was pressed on, then picks.
-   */
-  const [enterOn, setEnterOn] = useState<string | null>(null)
-  const answered = onDevice ? list.ready : !server.loading
-  function pickFromEnter(): boolean {
-    const exact = results.find((p) => p.sku.toLowerCase() === search.toLowerCase())
-    if (exact) {
-      onPick(exact)
-      return true
-    }
-    if (results.length === 1) {
-      onPick(results[0])
-      return true
-    }
-    return false
-  }
-  useEffect(() => {
-    if (enterOn == null || enterOn !== search) return
-    // Picked, or more than one match (the person taps the right one): either way, done waiting.
-    if (pickFromEnter() || (answered && results.length > 1)) setEnterOn(null)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enterOn, search, results, answered])
-  useEffect(() => {
-    if (enterOn == null) return
-    const timer = window.setTimeout(() => setEnterOn(null), 3000)
-    return () => window.clearTimeout(timer)
-  }, [enterOn])
 
   return (
     <div className="flex flex-col gap-3">
@@ -298,7 +282,7 @@ function FindStep({ inputRef, onPick }: { inputRef: RefObject<HTMLInputElement |
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
               event.preventDefault()
-              if (!pickFromEnter()) setEnterOn(search)
+              onEnter()
             }
           }}
           placeholder="Scan, or type a name or code"
@@ -348,7 +332,7 @@ function AmountStep({
   onBack,
   onRecorded,
 }: {
-  mode: Mode
+  mode: Exclude<Mode, 'sell'>
   product: Product
   /** The session's stock-out reason, or null for none given. */
   reason: OutReason | null
@@ -635,14 +619,14 @@ function QuickReason({ value, onChange }: { value: OutReason | null; onChange: (
 
 // -------------------------------------------------------------------------------------- stamp
 
-function StampFlash({ kind, text }: { kind: StampKind; text: string }) {
+function StampFlash({ kind, text, next }: { kind: StampKind; text: string; next: string }) {
   return (
     <div role="status" className="flex flex-col items-center gap-4 rounded-lg border-2 border-neutral-200 px-4 py-10 text-center">
       <div className="scale-150">
         <Stamp kind={kind} land />
       </div>
       <p className="text-lg font-semibold tabular-nums">{text}</p>
-      <p className="text-sm text-neutral-500">{kind === 'synced' ? 'Recorded.' : 'Saved on this phone.'} Next item…</p>
+      <p className="text-sm text-neutral-500">{kind === 'synced' ? 'Recorded.' : 'Saved on this phone.'} {next}</p>
     </div>
   )
 }
@@ -654,7 +638,19 @@ function SessionList({ entries, onUndone }: { entries: SessionEntry[]; onUndone:
   const [error, setError] = useState<string | null>(null)
   if (entries.length === 0) return null
 
+  function opStamp(opId: string | undefined, movementId: string | undefined): StampKind {
+    if (movementId) return 'synced'
+    const waiting = ops.find((op) => op.id === opId)
+    if (waiting) return waiting.status === 'needs_attention' ? 'check' : 'recorded'
+    return recentlySent.some((op) => op.id === opId) ? 'synced' : 'recorded'
+  }
+
   function stampFor(entry: SessionEntry): StampKind {
+    if (entry.sale) {
+      // The sale as a whole: CHECK if any line needs looking at, RECORDED while any waits.
+      const stamps = entry.sale.lines.filter((l) => l.status !== 'refused').map((l) => opStamp(l.opId, l.movementId))
+      return stamps.includes('check') ? 'check' : stamps.includes('recorded') ? 'recorded' : 'synced'
+    }
     if (entry.movementId) return 'synced'
     const waiting = ops.find((op) => op.id === entry.opId)
     if (waiting) return waiting.status === 'needs_attention' ? 'check' : 'recorded'
@@ -664,7 +660,10 @@ function SessionList({ entries, onUndone }: { entries: SessionEntry[]; onUndone:
   async function undo(entry: SessionEntry) {
     setError(null)
     try {
-      if (entry.movementId) {
+      if (entry.sale) {
+        const problems = await undoSale(entry.sale)
+        if (problems.length > 0) throw new Error(`Some of it couldn't be undone. ${problems.join(' ')}`)
+      } else if (entry.movementId) {
         await stockApi.voidWrite(entry.productId, entry.movementId)
       } else if (entry.opId) {
         if (isInFlight(entry.opId) || !getOutboxState().ops.some((op) => op.id === entry.opId)) {

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { ArrowLeft, Minus, Pencil, Plus } from 'lucide-react'
+import { ArrowLeft, Minus, Pencil, Plus, ShoppingBag } from 'lucide-react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { PERMISSIONS } from '@/auth/permissions'
@@ -175,7 +175,7 @@ export function ProductDetailPage() {
   const pending = ops.filter((op) => op.productId === id)
 
   // Before the early returns below: a hook must run on every render.
-  const { showsSellingPrice } = useSellingPolicy()
+  const { showsSellingPrice, recordsSales } = useSellingPolicy()
   if (loading) return <ProductDetailSkeleton />
 
   if (error || !product) {
@@ -211,11 +211,21 @@ export function ProductDetailPage() {
   const costPricePackEcho = formatPackCostEcho(product.costPrice, packOption)
 
   // Stock in / out / count: inside the hero from a laptop up, in a bar pinned to the bottom on a phone.
+  // Sell (§6.1) opens Record a sale with this product as the first line. It is the screen's action
+  // when the product has a price - a priced product is one that is sold - and Stock in steps back.
+  const canSell = recordsSales && canStockOut
+  const sellLeads = canSell && product.unitPrice != null
   const stockButtons =
     canStockIn || canStockOut || canManageInventory ? (
       <>
+        {canSell && (
+          <Button variant={sellLeads ? 'action' : 'secondary'} onClick={() => navigate(`/app/sell?product=${product.id}`)}>
+            <ShoppingBag className="h-4 w-4" aria-hidden="true" />
+            Sell
+          </Button>
+        )}
         {canStockIn && (
-          <Button variant="action" onClick={() => stockActions.open('in', product)}>
+          <Button variant={sellLeads ? 'secondary' : 'action'} onClick={() => stockActions.open('in', product)}>
             <Plus className="h-4 w-4" aria-hidden="true" />
             Stock in
           </Button>

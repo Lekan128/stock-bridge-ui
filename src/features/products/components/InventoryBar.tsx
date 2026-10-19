@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useId, useRef, useState } from 'react'
-import { CalendarClock, Download, Plus, Search, Settings, SlidersHorizontal, Tags, Truck, Upload, Zap } from 'lucide-react'
+import { CalendarClock, Download, Plus, Search, Settings, ShoppingBag, SlidersHorizontal, Tags, Truck, Upload, Zap } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { OverflowMenu, type OverflowMenuItem } from '@/components/OverflowMenu'
 import type { CompanyCategory } from '@/features/products/categories/types'
@@ -38,6 +38,11 @@ export interface InventoryBarProps {
   onAddProduct: () => void
   onBulkUpload: () => void
   onRecordDelivery: () => void
+  /**
+   * Record a sale (§6.1) - present when the company records sales and this person may. It is then
+   * the screen's action, the thing done all day; Record a delivery steps back to secondary.
+   */
+  onRecordSale?: () => void
   onExpectedDeliveries: () => void
   onExport: () => void
   onSkuSettings: () => void
@@ -158,25 +163,41 @@ export const InventoryBar = forwardRef<HTMLInputElement, InventoryBarProps>(func
  * secondary. For someone who manages products but doesn't receive stock, Add product is the action.
  */
 export function InventoryActions(props: InventoryBarProps & { compact?: boolean }) {
-  const { canRecordDelivery, canManageProducts, onRecordDelivery, onAddProduct, compact = false } = props
+  const { canRecordDelivery, canManageProducts, onRecordDelivery, onRecordSale, onAddProduct, compact = false } = props
+  const selling = onRecordSale != null
+  // One action-coloured button: Record a sale, else Record a delivery, else Add product.
+  const productIsAction = !selling && !canRecordDelivery
+  const iconOnly = (others: boolean) => compact && others
   return (
     <>
+      {selling && (
+        <Button variant="action" onClick={onRecordSale} className={compact ? 'flex-1' : 'whitespace-nowrap'}>
+          <ShoppingBag className="h-4 w-4" aria-hidden="true" />
+          Record a sale
+        </Button>
+      )}
       {canRecordDelivery && (
-        <Button variant="action" onClick={onRecordDelivery} className={compact ? 'flex-1' : 'whitespace-nowrap'}>
+        <Button
+          variant={selling ? 'secondary' : 'action'}
+          onClick={onRecordDelivery}
+          title="Record a delivery"
+          aria-label={iconOnly(selling) ? 'Record a delivery' : undefined}
+          className={compact ? (selling ? '' : 'flex-1') : 'whitespace-nowrap'}
+        >
           <Truck className="h-4 w-4" aria-hidden="true" />
-          Record a delivery
+          {iconOnly(selling) ? null : selling && !compact ? <span className="hidden xl:inline">Record a delivery</span> : 'Record a delivery'}
         </Button>
       )}
       {canManageProducts && (
         <Button
-          variant={canRecordDelivery ? 'secondary' : 'action'}
+          variant={productIsAction ? 'action' : 'secondary'}
           onClick={onAddProduct}
           title="Add product"
-          className={compact ? (canRecordDelivery ? '' : 'flex-1') : 'whitespace-nowrap'}
-          aria-label={compact && !canRecordDelivery ? undefined : 'Add product'}
+          className={compact ? (productIsAction ? 'flex-1' : '') : 'whitespace-nowrap'}
+          aria-label={compact && productIsAction ? undefined : 'Add product'}
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
-          {compact && canRecordDelivery ? null : compact ? 'Add product' : <span className="hidden 2xl:inline">Add product</span>}
+          {iconOnly(!productIsAction) ? null : compact ? 'Add product' : <span className="hidden 2xl:inline">Add product</span>}
         </Button>
       )}
       <OverflowMenu label="More inventory actions" items={inventoryMenuItems(props)} />

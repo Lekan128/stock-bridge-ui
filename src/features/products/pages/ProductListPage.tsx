@@ -40,6 +40,7 @@ import type { Product, ProductStatusFilter, StockStatusFilter } from '@/features
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import type { PriceFilter } from '@/features/catalog/types'
+import { SellingStaffNotice } from '@/features/selling/components/SellingStaffNotice'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { StockWorthLine } from '@/features/selling/components/StockWorthLine'
 import { downloadBlob } from '@/utils/downloadBlob'
@@ -119,7 +120,7 @@ export function ProductListPage() {
   const { search: committedSearch, statusFilter, categoryFilter, stockLevelFilter, priceFilter: requestedPriceFilter, sort, page } =
     readListState(searchParams)
   // Only where a selling price exists at all - for anyone else the filter is ignored, not obeyed.
-  const { showsSellingPrice } = useSellingPolicy()
+  const { showsSellingPrice, recordsSales } = useSellingPolicy()
   const priceFilter: PriceFilter = showsSellingPrice ? requestedPriceFilter : 'all'
   // What is in the box right now; the URL only takes it once typing pauses.
   const [search, setSearch] = useState(committedSearch)
@@ -436,6 +437,7 @@ export function ProductListPage() {
     onAddProduct: () => setAddProductOpen(true),
     onBulkUpload: () => navigate('/app/products/import'),
     onRecordDelivery: () => navigate('/app/products/receive'),
+    onRecordSale: recordsSales && canStockOut ? () => navigate('/app/sell') : undefined,
     onExpectedDeliveries: () => navigate('/app/products/expected'),
     onExport: () => void handleExport(),
     onSkuSettings: () => navigate('/app/products/sku-settings'),
@@ -461,6 +463,8 @@ export function ProductListPage() {
       </div>
 
       <SavedDataNote showing={showingSaved} updatedAt={updatedAt} subject="stock levels" onRetry={retryRefresh} />
+
+      <SellingStaffNotice />
 
       {/* The first full download, on a catalogue big enough for it to take a moment. Smaller ones
           finish before this could be read. */}
