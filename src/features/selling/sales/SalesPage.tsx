@@ -24,6 +24,7 @@ const TABS: { value: SalesGrouping; label: string }[] = [
   { value: 'product', label: 'By product' },
   { value: 'day', label: 'By day' },
   { value: 'user', label: 'By person' },
+  { value: 'category', label: 'By category' },
 ]
 
 /** The three an owner checks for leaks (§6.11), each with how many there are. */
@@ -299,7 +300,7 @@ function SaleRow({ row, withDate, onOpen }: { row: SalesReportRow; withDate: boo
 }
 
 function BreakdownTable({ report, tab }: { report: SalesReport; tab: SalesGrouping }) {
-  const first = tab === 'product' ? 'Product' : tab === 'day' ? 'Day' : 'Person'
+  const first = tab === 'product' ? 'Product' : tab === 'day' ? 'Day' : tab === 'category' ? 'Category' : 'Person'
   return (
     <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
       <table className="w-full min-w-[36rem] text-sm">
@@ -317,7 +318,9 @@ function BreakdownTable({ report, tab }: { report: SalesReport; tab: SalesGroupi
           {report.rows.map((row) => (
             <tr key={row.key ?? row.label}>
               <th scope="row" className="px-4 py-2.5 text-left font-medium text-neutral-900">
-                {tab === 'day' && row.label ? dayLabel(row.label) : (row.label ?? 'Not recorded')}
+                {tab === 'day' && row.label
+                  ? dayLabel(row.label)
+                  : (row.label ?? (tab === 'category' ? 'No category' : 'Not recorded'))}
               </th>
               <td className="px-4 py-2.5 text-right tabular-nums text-neutral-700">
                 {tab === 'product'

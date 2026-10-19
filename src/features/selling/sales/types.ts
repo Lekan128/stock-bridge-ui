@@ -4,7 +4,7 @@
  * tested with `== null`.
  */
 
-export type SalesGrouping = 'sale' | 'product' | 'day' | 'user'
+export type SalesGrouping = 'sale' | 'product' | 'day' | 'user' | 'category'
 
 /** The leak filters, and the two "Fix these" lists. One at a time. */
 export type SalesFilter = 'belowUsualPrice' | 'belowCost' | 'cancelled' | 'unpriced' | 'noCost'
@@ -28,7 +28,7 @@ export interface SalesTotals {
 }
 
 export interface SalesReportRow {
-  /** Sale id, product id, ISO day, user id; absent for a sale with no person. */
+  /** Sale id, product id, ISO day, user id, category id; absent for no person or no category. */
   key?: string
   /** The product, the person, the day; for a sale, who recorded it. */
   label?: string

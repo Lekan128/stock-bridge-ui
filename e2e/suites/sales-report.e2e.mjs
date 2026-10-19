@@ -65,9 +65,9 @@ async function company(label, selling) {
   if (selling) await api('/api/company/selling', { token, method: 'PUT', body: { sellsStock: true, source: 'OWNER' } })
   return { unique, token, refreshToken: signup.tokens.refreshToken }
 }
-async function product(shop, name, price, cost) {
+async function product(shop, name, price, cost, categoryId) {
   const form = new FormData()
-  form.append('product', new Blob([JSON.stringify({ name, sku: `SR-${name.replace(/\W+/g, '')}-${shop.unique}`, unitOfMeasure: 'PIECE', ...(price ? { unitPrice: price } : {}) })], { type: 'application/json' }))
+  form.append('product', new Blob([JSON.stringify({ name, sku: `SR-${name.replace(/\W+/g, '')}-${shop.unique}`, unitOfMeasure: 'PIECE', ...(price ? { unitPrice: price } : {}), ...(categoryId ? { categoryId } : {}) })], { type: 'application/json' }))
   const created = (await api('/api/products', { token: shop.token, method: 'POST', body: form })).json
   await api(`/api/products/${created.id}/stock/stock-in`, { token: shop.token, method: 'POST', body: { quantity: 100, unitPrice: cost } })
   return created
@@ -90,8 +90,9 @@ async function sell(shop, saleId, item, quantity, unitPrice) {
 //   Used:   1 soap (not a sale), at its cost .........   200 other stock out
 // Sales 7,250 · 4 sales · profit 1,950; profit leaves out 1 sale (no price).
 const shop = await company('On', true)
-const rice = await product(shop, 'Rice (sr)', 2000, 1500)
-const soap = await product(shop, 'Soap (sr)', 350, 200)
+const groceries = (await api('/api/company-categories', { token: shop.token, method: 'POST', body: { name: `Groceries ${shop.unique}` } })).json
+const rice = await product(shop, 'Rice (sr)', 2000, 1500, groceries.id)
+const soap = await product(shop, 'Soap (sr)', 350, 200, groceries.id)
 const oil = await product(shop, 'Oil (sr)', null, 1000)
 const s1 = randomUUID()
 await sell(shop, s1, rice, 2, 2000)
@@ -141,6 +142,21 @@ await check('By product: the footer is the server\'s, and equals the rows above 
   assert(sum === 7250 && footer === 7250, `rows ${sum}, footer ${footer}`)
   await page.screenshot({ path: SHOTS + '2-by-product.png' })
   await axeClean(page, 'by product')
+  await page.getByRole('tab', { name: 'Sales', exact: true }).click()
+})
+
+await check('By category: Groceries holds rice and soap, oil has none, and the footer equals the rows', async () => {
+  await page.getByRole('tab', { name: 'By category' }).click()
+  const table = page.locator('table')
+  await table.getByRole('rowheader', { name: groceries.name }).waitFor()
+  await table.getByRole('rowheader', { name: 'No category' }).waitFor()
+  const sales = await table.locator('tbody tr').evaluateAll((rows) =>
+    rows.map((row) => Number(row.querySelectorAll('td')[1].textContent.replace(/[^\d.]/g, ''))))
+  // Groceries: 4,350 + 900 + 2,000; no category: oil, still unpriced.
+  assert(JSON.stringify(sales) === JSON.stringify([7250, 0]), `rows ${JSON.stringify(sales)}`)
+  const footer = Number((await table.locator('tfoot td').nth(1).textContent()).replace(/[^\d.]/g, ''))
+  assert(footer === 7250, `footer ${footer}`)
+  await axeClean(page, 'by category')
   await page.getByRole('tab', { name: 'Sales', exact: true }).click()
 })
 
