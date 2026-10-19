@@ -27,6 +27,7 @@ const SUITES = [
   'sheets',
   'quick',
   'reasons',
+  'selling',
   'dashboard',
   'chaos',
   'metrics',

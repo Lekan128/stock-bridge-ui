@@ -690,27 +690,6 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
           {/* Open, the reasons take the place of "Add a reason", above "Add a note" - not below it,
               where they would read as belonging to the note. */}
           <OutReasonChooser value={reason} onChange={setReason} open={reasonOpen} onOpenChange={setReasonOpen} />
-          {/* Sold, by a company that does not record sales: the one place selling is offered in
-              context (§5.2). Sold, by one that does: what it went for, pre-filled and editable. */}
-          {reason === 'SALE' && !recordsSales && !reasonOpen && <SellingOffer />}
-          {selling && !reasonOpen && (
-            <div>
-              <TextField
-                label={`Price each (₦ per ${unitNoun(selectedOption)}, optional)`}
-                inputMode="decimal"
-                value={salePriceText}
-                onChange={(event) => setSalePriceTyped(event.target.value)}
-              />
-              {salePrice != null && Number.isFinite(salePrice) && quantityNumber > 0 && (
-                <p className="mt-1.5 text-sm font-medium tabular-nums text-neutral-900">
-                  {formatMoney(salePrice * quantityNumber)}
-                  {usualPriceInUnit != null && Math.abs(salePrice - usualPriceInUnit) >= 0.005 && (
-                    <span className="ml-2 text-xs font-normal text-neutral-500">usual {formatMoney(usualPriceInUnit)}</span>
-                  )}
-                </p>
-              )}
-            </div>
-          )}
           {(!reasonOpen || !showNote) && (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
               <OutReasonLink value={reason} onChange={setReason} open={reasonOpen} onOpenChange={setReasonOpen} />
@@ -727,6 +706,28 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
                 >
                   Add a note
                 </button>
+              )}
+            </div>
+          )}
+          {/* Sold, by a company that does not record sales: the one place selling is offered in
+              context (§5.2). Sold, by one that does: what it went for, pre-filled and editable. */}
+          {reason === 'SALE' && !recordsSales && !reasonOpen && <SellingOffer />}
+          {selling && !reasonOpen && (
+            <div>
+              <TextField
+                id="stock-out-sale-price"
+                label={`Price each (₦ per ${unitNoun(selectedOption)}, optional)`}
+                inputMode="decimal"
+                value={salePriceText}
+                onChange={(event) => setSalePriceTyped(event.target.value)}
+              />
+              {salePrice != null && Number.isFinite(salePrice) && quantityNumber > 0 && (
+                <p className="mt-1.5 text-sm font-medium tabular-nums text-neutral-900">
+                  {formatMoney(salePrice * quantityNumber)}
+                  {usualPriceInUnit != null && Math.abs(salePrice - usualPriceInUnit) >= 0.005 && (
+                    <span className="ml-2 text-xs font-normal text-neutral-500">usual {formatMoney(usualPriceInUnit)}</span>
+                  )}
+                </p>
               )}
             </div>
           )}

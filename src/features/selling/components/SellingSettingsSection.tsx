@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
@@ -23,7 +23,13 @@ export function SellingSettingsSection() {
   const { user } = useAuth()
   const { showToast } = useToast()
   const online = useOnlineStatus()
-  const { data: settings, setData } = useSellingSettings()
+  const { data: settings, setData, refetch } = useSellingSettings()
+  // The settings screen always reads the switch afresh, rather than trusting the minute-old copy
+  // every other screen shares: this is where the owner checks what is true.
+  useEffect(() => {
+    refetch()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [reviewOpen, setReviewOpen] = useState(false)

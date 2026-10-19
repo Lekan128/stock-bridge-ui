@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/Button'
 import { Sheet } from '@/components/Sheet'
 import { useToast } from '@/components/useToast'
-import { formatCurrency } from '@/components/analytics/formatters'
+import { formatMoney } from '@/features/selling/money'
 import { sellingApi } from '@/features/selling/sellingApi'
 import type { LegacyPriceRow, SellingSettings } from '@/features/selling/types'
 import { isAppError } from '@/types/api'
@@ -128,12 +128,12 @@ export function LegacyPriceReviewSheet({ total, onClose, onUpdated }: LegacyPric
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium text-neutral-900">{row.name}</span>
                     <span className="block text-xs text-neutral-500">
-                      {row.costPrice != null ? `Costs ${formatCurrency(row.costPrice)}` : 'No cost recorded'}
+                      {row.costPrice != null ? `Costs ${formatMoney(row.costPrice)}` : 'No cost recorded'}
                       {looksLikeCost && ' · same as its cost'}
                     </span>
                   </span>
                   <span className="shrink-0 text-sm font-medium tabular-nums text-neutral-900">
-                    {formatCurrency(row.legacyUnitPrice)}
+                    {formatMoney(row.legacyUnitPrice)}
                   </span>
                 </label>
               </li>
