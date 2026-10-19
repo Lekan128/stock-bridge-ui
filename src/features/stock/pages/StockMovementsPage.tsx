@@ -13,8 +13,9 @@ import { StatCard } from '@/components/analytics/StatCard'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
 import { formatDateTime } from '@/features/marketplace/formatters'
-import type { MovementType } from '@/features/products/types'
+import type { MovementType, OutReason } from '@/features/products/types'
 import { useStockMovementReport } from '@/features/stock/hooks/useStockMovementReport'
+import { NO_REASON_LABEL, OUT_REASONS, outReasonLabel } from '@/features/stock/outReasons'
 import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
 
 const PAGE_SIZE = 25
@@ -89,7 +90,10 @@ export function StockMovementsPage() {
     return requested === 'IN' || requested === 'OUT' || requested === 'ADJUSTMENT' ? requested : 'all'
   })
   const [companyVendorId, setCompanyVendorId] = useState('')
+  /** '' any reason, 'NONE' no reason given, else one reason. Only asked once "Stock out" is chosen. */
+  const [reasonFilter, setReasonFilter] = useState<'' | 'NONE' | OutReason>('')
   const [page, setPage] = useState(0)
+  const reasonApplies = direction === 'OUT'
 
   const { vendors } = useVendorOptions(canViewVendors)
 
@@ -98,6 +102,8 @@ export function StockMovementsPage() {
     to: toApiDateTime(range.to),
     movementType: direction === 'all' ? undefined : direction,
     companyVendorId: companyVendorId || undefined,
+    outReason: reasonApplies && reasonFilter && reasonFilter !== 'NONE' ? reasonFilter : undefined,
+    noReason: reasonApplies && reasonFilter === 'NONE' ? true : undefined,
     page,
     size: PAGE_SIZE,
   })
@@ -196,6 +202,30 @@ export function StockMovementsPage() {
           </select>
         </div>
 
+        {/* Only once "Stock out" is chosen: a reason is a fact about stock-outs, and offering it
+            beside "Everything" would be a filter that quietly hides every delivery. */}
+        {reasonApplies && (
+          <div>
+            <label htmlFor="reason" className="mb-1.5 block text-sm font-medium text-neutral-700">
+              Reason
+            </label>
+            <select
+              id="reason"
+              value={reasonFilter}
+              onChange={(event) => applyFilter(() => setReasonFilter(event.target.value as '' | 'NONE' | OutReason))}
+              className="rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            >
+              <option value="">Any reason</option>
+              {OUT_REASONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+              <option value="NONE">{NO_REASON_LABEL}</option>
+            </select>
+          </div>
+        )}
+
         {/* Hidden rather than disabled for a user without VIEW_VENDORS: the options would be a
             request they are not allowed to make, and an empty picker looks broken. */}
         {canViewVendors && (
@@ -289,6 +319,10 @@ export function StockMovementsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <Badge variant={badge.variant}>{badge.label}</Badge>
+                        {/* Why it went out, under the badge rather than in a ninth column. */}
+                        {movement.outReason && (
+                          <span className="mt-1 block text-xs text-neutral-600">{outReasonLabel(movement.outReason)}</span>
+                        )}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-neutral-900">
                         {formatNumber(movement.quantity)}

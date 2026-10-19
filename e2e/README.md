@@ -70,6 +70,7 @@ Screenshots — the ones suites take on purpose, and one per page whenever a che
 | `product` | The product page, its ledger, pending rows. |
 | `sheets` | Stock in / out / count sheets and the receipt. |
 | `quick` | Quick mode: scan, keypad, stamp, offline, Undo. |
+| `reasons` | The optional stock-out reason: no extra clicks when unused, the sheet chip and its open list (axe), offline, quick mode's sticky reason, the movements filter. |
 | `dashboard` | Stock health, Needs you today, the chart, offline. |
 | `chaos` | Zero lost writes with the tab killed; a lost reply recorded once; two phones counting and selling; a permission removed while offline. |
 | `metrics` | Taps to record a stock-in, time to first product row cold and warm (targets in the plan). |

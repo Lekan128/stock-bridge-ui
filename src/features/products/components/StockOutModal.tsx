@@ -11,7 +11,7 @@ import { UnitToggle } from '@/features/products/components/UnitToggle'
 import { formatDateTime } from '@/features/products/formatters'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import { stockOutSchema, type StockOutFormValues } from '@/features/products/schemas'
-import type { Product, StockOutPayload } from '@/features/products/types'
+import type { OutReason, Product, StockOutPayload } from '@/features/products/types'
 import {
   UNIT_COPY,
   formatEnteredAndBase,
@@ -30,6 +30,8 @@ import {
   unitOptionsForProduct,
 } from '@/features/products/unitSet'
 import { StockReceipt } from '@/features/products/components/StockReceipt'
+import { OutReasonChooser, OutReasonLink } from '@/features/stock/components/OutReasonField'
+import { outReasonLabel } from '@/features/stock/outReasons'
 import { submitStockWrite } from '@/features/outbox/outboxStore'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
@@ -158,6 +160,9 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
 
   const [choosingLots, setChoosingLots] = useState(false)
   const [noteOpen, setNoteOpen] = useState(false)
+  /** Optional, and null until somebody picks one - never defaulted (`SELLING_PRICE_PLAN.md` §6.3). */
+  const [reason, setReason] = useState<OutReason | null>(null)
+  const [reasonOpen, setReasonOpen] = useState(false)
   /** The selected option's `label`, or `null` for "not chosen yet" — not its `code`, per
    *  `UnitToggle`'s own doc comment (a code can repeat once a vendor has more than one pack). Same
    *  self-healing resolution as `StockInModal`'s, for the same reason: an option list that arrives
@@ -389,6 +394,7 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
         unit: selectedOption.code || undefined,
         allocations: builtAllocations,
         note: getValues('note') || undefined,
+        reason: reason ?? undefined,
       }
       // Through the outbox (A4) — see StockInModal. Choosing deliveries needs the server's current
       // lots, so a sale with chosen deliveries is never queued; the outbox refuses it offline.
@@ -396,7 +402,7 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
         kind: 'STOCK_OUT',
         productId: product.id,
         productName: product.name,
-        summary: quantityBothWays,
+        summary: reason ? `${quantityBothWays} · ${outReasonLabel(reason)}` : quantityBothWays,
         payload,
         baseDelta: -baseQuantity,
       })
@@ -656,8 +662,33 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
             </div>
           )}
 
-          {/* The note is optional, so it waits behind one line (C3) unless there is one already. */}
-          {showNote ? (
+          {/* The reason and the note are both optional, so both wait behind one quiet line each (C3,
+              SELLING_PRICE_PLAN.md §6.3) - side by side while closed, so the sheet is no longer and
+              asks for nothing more than it did. */}
+          {/* Open, the reasons take the place of "Add a reason", above "Add a note" - not below it,
+              where they would read as belonging to the note. */}
+          <OutReasonChooser value={reason} onChange={setReason} open={reasonOpen} onOpenChange={setReasonOpen} />
+          {(!reasonOpen || !showNote) && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <OutReasonLink value={reason} onChange={setReason} open={reasonOpen} onOpenChange={setReasonOpen} />
+              {!reasonOpen && reason == null && !showNote && (
+                <span aria-hidden="true" className="text-neutral-300">
+                  ·
+                </span>
+              )}
+              {!showNote && (
+                <button
+                  type="button"
+                  onClick={() => setNoteOpen(true)}
+                  className="self-start rounded-sm text-sm font-medium text-primary-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                >
+                  Add a note
+                </button>
+              )}
+            </div>
+          )}
+
+          {showNote && (
             <div>
               <label htmlFor="stock-out-note" className="mb-1.5 block text-sm font-medium text-neutral-700">
                 Note <span className="font-normal text-neutral-500">(optional)</span>
@@ -670,14 +701,6 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
               />
               {errors.note?.message && <p className="mt-1.5 text-xs text-danger-600">{errors.note.message}</p>}
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setNoteOpen(true)}
-              className="self-start rounded-sm text-sm font-medium text-primary-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-            >
-              Add a note
-            </button>
           )}
 
           {/* A 409 oversell gets its own card — the two numbers (available vs. requested) are
@@ -710,6 +733,7 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
           lines={[
             { label: 'Product', value: product.name },
             { label: 'Taken out', value: quantityBothWays },
+            ...(reason ? [{ label: 'Reason', value: outReasonLabel(reason) }] : []),
             ...(noteText ? [{ label: 'Note', value: noteText }] : []),
           ]}
         >

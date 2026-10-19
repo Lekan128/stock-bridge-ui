@@ -1,4 +1,4 @@
-import type { MovementType } from '@/features/products/types'
+import type { MovementType, OutReason } from '@/features/products/types'
 
 /**
  * The stock in/out report — `GET /api/stock/movements` and its `/summary` sibling.
@@ -18,6 +18,10 @@ export interface StockMovementReportParams {
   movementType?: MovementType
   productId?: string
   companyVendorId?: string
+  /** Only stock-outs with this reason (API V46). */
+  outReason?: OutReason
+  /** Only stock-outs with no reason given. */
+  noReason?: boolean
   page?: number
   size?: number
   /** Spring Data sort, e.g. `occurredAt,desc`. Defaults server-side to newest-occurring first. */

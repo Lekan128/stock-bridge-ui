@@ -26,6 +26,7 @@ const SUITES = [
   'product',
   'sheets',
   'quick',
+  'reasons',
   'dashboard',
   'chaos',
   'metrics',

@@ -425,6 +425,8 @@ export interface StockMovement {
   enteredUnit?: string
   enteredQuantity?: number | null
   enteredUnitPrice?: number | null
+  /** Why a stock-out happened (API V46). Absent on every other row, and on a stock-out with no reason given. */
+  outReason?: OutReason
 }
 
 export interface CheaperVendorHint {
@@ -466,12 +468,21 @@ export interface StockInPayload {
   note?: string
 }
 
+/**
+ * Why a stock-out happened (API V46, `SELLING_PRICE_PLAN.md` §4.3). Optional everywhere: absent is
+ * "No reason given", and nothing on this side ever picks one for the person. Labels live in
+ * `features/stock/outReasons.ts`.
+ */
+export type OutReason = 'SALE' | 'USED' | 'DAMAGED' | 'EXPIRED' | 'LOST' | 'RETURNED_TO_SUPPLIER' | 'OTHER'
+
 export interface StockOutPayload {
   quantity: number
   unit?: string
   /** Omitted (simple path) = server computes FIFO. Present = manual per-lot override. */
   allocations?: { inMovementId: string; quantity: number }[]
   note?: string
+  /** Why it went out. Omitted when nobody said - never defaulted to "Used". */
+  reason?: OutReason
 }
 
 // `ProductVendor` / `ProductVendorPriceTier` (GET /api/products/{productId}/vendors) live in

@@ -15,7 +15,7 @@ import { StockFigure } from '@/features/products/components/StockFigure'
 import { useProductVendors } from '@/features/products/hooks/useProductVendors'
 import { useProducts } from '@/features/products/hooks/useProducts'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
-import type { Product, UnitOption } from '@/features/products/types'
+import type { OutReason, Product, UnitOption } from '@/features/products/types'
 import {
   formatEnteredAndBase,
   formatNumber,
@@ -37,6 +37,7 @@ import {
   toBaseQuantity,
   unitOptionsForProduct,
 } from '@/features/products/unitSet'
+import { OUT_REASONS, outReasonLabel } from '@/features/stock/outReasons'
 import { SyncPill } from '@/features/sync/SyncPill'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
@@ -100,6 +101,13 @@ export function QuickModePage() {
   const [product, setProduct] = useState<Product | null>(null)
   const [flash, setFlash] = useState<{ kind: StampKind; text: string } | null>(null)
   const [session, setSession] = useState<SessionEntry[]>([])
+  /**
+   * The stock-out reason, sticky for this visit to quick mode (`SELLING_PRICE_PLAN.md` §6.3):
+   * throwing out twelve expired items is one choice, not twelve. Optional and never defaulted, and it
+   * goes when quick mode closes - a reason left over from yesterday would label today's items wrong.
+   * Every stamp repeats it, so it is never forgotten that it is on.
+   */
+  const [outReason, setOutReason] = useState<OutReason | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
 
@@ -182,6 +190,7 @@ export function QuickModePage() {
           <p id="quick-mode-meaning" className="text-sm text-neutral-600">
             {MODES.find((m) => m.value === mode)?.meaning}
           </p>
+          {mode === 'out' && <QuickReason value={outReason} onChange={setOutReason} />}
         </div>
 
         {flash ? (
@@ -191,6 +200,7 @@ export function QuickModePage() {
             key={`${product.id}-${mode}`}
             mode={mode}
             product={product}
+            reason={mode === 'out' ? outReason : null}
             onBack={() => setProduct(null)}
             onRecorded={recorded}
           />
@@ -334,11 +344,14 @@ function FoundRow({ product, onPick }: { product: Product; onPick: (product: Pro
 function AmountStep({
   mode,
   product,
+  reason,
   onBack,
   onRecorded,
 }: {
   mode: Mode
   product: Product
+  /** The session's stock-out reason, or null for none given. */
+  reason: OutReason | null
   onBack: () => void
   onRecorded: (entry: SessionEntry, kind: StampKind) => void
 }) {
@@ -366,7 +379,9 @@ function AmountStep({
 
   const quantity = typed === '' || typed === '.' ? 0 : Number(typed)
   const base = toBaseQuantity(quantity, option)
-  const summary = formatEnteredAndBase(quantity, option, base, stockText)
+  const amountText = formatEnteredAndBase(quantity, option, base, stockText)
+  // The reason rides on the summary, so the stamp, the session list and the outbox all repeat it.
+  const summary = reason ? `${amountText} · ${outReasonLabel(reason)}` : amountText
   const wholeOnly = isCountedInWholeUnits(product.unitOfMeasure, options)
   // What the app says is on hand counts this phone's own changes not yet folded into the figure (the
   // list shows them as "−3 kg waiting"): a count right after a sale must compare against the stock
@@ -429,7 +444,7 @@ function AmountStep({
                 productId: product.id,
                 productName: product.name,
                 summary,
-                payload: { quantity, unit: option.code || undefined },
+                payload: { quantity, unit: option.code || undefined, reason: reason ?? undefined },
                 baseDelta: -base,
               })
       const entry: SessionEntry = {
@@ -504,7 +519,7 @@ function AmountStep({
           <span className="text-5xl font-semibold">{typed || '0'}</span>
           <span className="text-xl text-neutral-500">{pluraliseUnitNoun(unitNoun(option), quantity || 2)}</span>
         </p>
-        {quantity > 0 && !option.isStockUnit && <p className="mt-1 text-base text-neutral-600">{summary}</p>}
+        {quantity > 0 && !option.isStockUnit && <p className="mt-1 text-base text-neutral-600">{amountText}</p>}
         {difference != null && (
           <div className="mt-2 flex items-baseline gap-2">
             {difference === 0 ? (
@@ -555,6 +570,65 @@ function AmountStep({
         {saving ? 'Recording…' : typed ? `${ACTION[mode]} ${summary}` : 'Record'}
       </button>
       {!online && <p className="text-center text-sm text-neutral-600">Offline: it's saved on this phone and sent when you're back.</p>}
+    </div>
+  )
+}
+
+// ------------------------------------------------------------------------------------- reason
+
+/**
+ * Quick mode's stock-out reason: "Add a reason", or "Reason: Expired ✕" - big enough for a glove.
+ * Open, the reasons are a two-column grid of buttons; one tap picks and closes.
+ */
+function QuickReason({ value, onChange }: { value: OutReason | null; onChange: (reason: OutReason | null) => void }) {
+  const [open, setOpen] = useState(false)
+  if (open) {
+    return (
+      <div role="group" aria-label="Why is it going out?" className="flex flex-col gap-2">
+        <div className="grid grid-cols-2 gap-2">
+          {OUT_REASONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={value === option.value}
+              onClick={() => {
+                onChange(option.value)
+                setOpen(false)
+              }}
+              className={`h-12 rounded-md border-2 px-2 text-base font-medium ${
+                value === option.value ? 'border-primary-600 bg-primary-50 text-primary-800' : 'border-neutral-200 text-neutral-700'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <button type="button" onClick={() => setOpen(false)} className="h-11 min-w-11 self-start rounded-md px-2 text-base font-medium text-primary-700">
+          Close
+        </button>
+      </div>
+    )
+  }
+  if (value == null) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="h-11 min-w-11 self-start rounded-md px-2 text-base font-medium text-primary-700 hover:bg-primary-50">
+        Add a reason
+      </button>
+    )
+  }
+  return (
+    <div className="flex items-center gap-1 self-start rounded-full border-2 border-primary-200 bg-primary-50 pl-3">
+      <button type="button" onClick={() => setOpen(true)} className="h-11 text-base font-medium text-primary-800">
+        Reason: {outReasonLabel(value)}
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange(null)}
+        aria-label="Remove the reason"
+        className="flex h-11 w-11 items-center justify-center rounded-full text-primary-800 hover:bg-primary-100"
+      >
+        <X className="h-5 w-5" aria-hidden="true" />
+      </button>
     </div>
   )
 }
