@@ -4,6 +4,7 @@ import { PERMISSIONS, type Permission } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
 import { RecentImportsList } from '@/features/imports/components/RecentImportsList'
 import { copy } from '@/features/imports/copy'
+import { PriceSheetLink } from '@/features/selling/components/PriceSheetLink'
 import type { ImportKind } from '@/features/imports/types'
 
 /**
@@ -72,6 +73,11 @@ export function ImportChooserPage() {
                 </span>
               </Link>
               {/* Beside the card, not inside it: a link inside a link is not valid HTML. */}
+              {kind === 'PRODUCT_CATALOG' && (
+                <PriceSheetLink lead="Pricing what you have?" className="px-1 text-sm text-neutral-600">
+                  Download a price sheet
+                </PriceSheetLink>
+              )}
               {kind === 'STOCK_IN' && (
                 <p className="px-1 text-sm text-neutral-600">
                   {copy.chooser.quickEntry}{' '}

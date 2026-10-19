@@ -11,6 +11,7 @@ import { importsApi } from '@/features/imports/api/importsApi'
 import { CleanFileSummary } from '@/features/imports/components/CleanFileSummary'
 import { CleanRowList } from '@/features/imports/components/CleanRowList'
 import { ColumnMappingPanel } from '@/features/imports/components/ColumnMappingPanel'
+import { PriceQuestionPanel } from '@/features/imports/components/PriceQuestionPanel'
 import { DeliverySummary } from '@/features/imports/components/DeliverySummary'
 import { DiscardPacksDialog } from '@/features/imports/components/DiscardPacksDialog'
 import { ImportReviewSkeleton } from '@/features/imports/components/ImportSkeletons'
@@ -29,6 +30,9 @@ import type { ImportLinkedPack } from '@/features/imports/types'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { Pagination } from '@/components/Pagination'
 import { isAppError } from '@/types/api'
+import { queryClient } from '@/data/queryClient'
+import { SELLING_SETTINGS_KEY } from '@/features/selling/useSellingSettings'
+import type { PriceAnswer } from '@/features/imports/types'
 
 /**
  * Step 2 — this screen is the whole feature (spec §9.3).
@@ -173,6 +177,22 @@ export function ImportReviewPage() {
     }
   }
 
+  /** The sheet's price question answered; the file is read again with the column where it belongs. */
+  async function handlePriceAnswer(answer: PriceAnswer) {
+    if (!sessionId || !session) return
+    const turningSellingOn = answer === 'SELLING' && !session.priceQuestion?.sellingOn
+    try {
+      apply(await importsApi.answerPriceQuestion(sessionId, answer))
+    } catch (err: unknown) {
+      throw new Error(isAppError(err) ? err.message : "Couldn't save that. Try again.")
+    }
+    refetchRows()
+    if (turningSellingOn) {
+      void queryClient.invalidateQueries({ queryKey: SELLING_SETTINGS_KEY })
+      showToast('Selling is on. These prices will be kept.', 'success')
+    }
+  }
+
   /**
    * Looks up what discarding would take with it (MULTI_PACK_PER_VENDOR_DESIGN.md §6a's confirmed
    * packs, which persist independently of this session) before opening the confirm dialog, so it
@@ -215,7 +235,9 @@ export function ImportReviewPage() {
   const unresolvedCount = session.unresolvedValues.filter((value) => value.resolution == null).length
   const isClean =
     !session.needsMapping && session.errorCount === 0 && session.warningCount === 0 && unresolvedCount === 0
-  const canContinue = session.errorCount === 0 && !session.needsMapping
+  // An unanswered "is Price what you pay or sell for?" holds the file, as the server does.
+  const priceQuestionOpen = session.priceQuestion?.blocking === true
+  const canContinue = session.errorCount === 0 && !session.needsMapping && !priceQuestionOpen
   // The stock sheet's Ref is how the server recognises a row; it means nothing on screen.
   const displayableFields = session.fields.filter((field) => !HIDDEN_FIELD_KEYS.includes(field.key))
   const fields = showAllColumns ? displayableFields : visibleFields(displayableFields, rows)
@@ -342,11 +364,21 @@ export function ImportReviewPage() {
           />
         )}
 
+        {session.priceQuestion != null && !session.needsMapping && (
+          <PriceQuestionPanel
+            question={session.priceQuestion}
+            columnName={columnNameOf(session.priceQuestion.header)}
+            onAnswer={handlePriceAnswer}
+          />
+        )}
+
         <DeliverySummary delivery={session.delivery} />
 
         {!session.needsMapping && (
           <>
-            {isClean ? (
+            {/* With the price question open, "all rows look good" would contradict it: the rows are
+                read again once it is answered. */}
+            {isClean && priceQuestionOpen ? null : isClean ? (
               <>
                 <CleanFileSummary
                   session={session}
@@ -413,7 +445,9 @@ export function ImportReviewPage() {
               {!canContinue && (
                 <p role="status" className="flex items-center gap-1.5 text-sm text-danger-700">
                   <TriangleAlert className="h-4 w-4" aria-hidden="true" />
-                  {copy.review.continueBlocked(session.errorCount)}
+                  {priceQuestionOpen && session.errorCount === 0
+                    ? 'Answer the question about your price column above, then carry on.'
+                    : copy.review.continueBlocked(session.errorCount)}
                 </p>
               )}
 
@@ -472,4 +506,10 @@ export function ImportReviewPage() {
       )}
     </ImportStepFrame>
   )
+}
+
+/** "unit_price" → "Unit price": the column as a person would say it. */
+function columnNameOf(header: string): string {
+  const words = header.replace(/_/g, ' ').trim()
+  return words.charAt(0).toUpperCase() + words.slice(1)
 }

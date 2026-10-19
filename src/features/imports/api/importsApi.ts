@@ -15,6 +15,7 @@ import type {
   ImportSession,
   ImportSessionSummary,
   PasteInput,
+  PriceAnswer,
   Page,
   DeliveryDetailsInput,
   StockInFilter,
@@ -51,6 +52,7 @@ interface ImportsBackend {
   skipRow(id: string, rowId: string, skipped: boolean): Promise<ImportRow>
   patchMapping(id: string, columnMapping: Record<string, string | null>): Promise<ImportSession>
   resolveValue(id: string, body: ValueMappingRequest): Promise<ImportSession>
+  answerPriceQuestion(id: string, answer: PriceAnswer): Promise<ImportSession>
   preview(id: string): Promise<CommitPreview>
   commit(id: string): Promise<ImportResult>
   result(id: string): Promise<ImportResult>
@@ -200,6 +202,10 @@ const realBackend: ImportsBackend = {
 
   resolveValue(id, body) {
     return api.patch<ImportSession>(`${BASE}/${id}/value-mappings`, body).then((r) => r.data)
+  },
+
+  answerPriceQuestion(id, answer) {
+    return api.post<ImportSession>(`${BASE}/${id}/price-question`, { answer }).then((r) => r.data)
   },
 
   preview(id) {
@@ -383,6 +389,11 @@ export const importsApi = {
   /** PATCH /api/imports/{id}/value-mappings — one decision, every matching row revalidated. */
   resolveValue(id: string, body: ValueMappingRequest): Promise<ImportSession> {
     return backend.resolveValue(id, body)
+  },
+
+  /** POST /api/imports/{id}/price-question — "is Price what you pay or sell for?", then revalidates. */
+  answerPriceQuestion(id: string, answer: PriceAnswer): Promise<ImportSession> {
+    return backend.answerPriceQuestion(id, answer)
   },
 
   /** GET /api/imports/{id}/preview */

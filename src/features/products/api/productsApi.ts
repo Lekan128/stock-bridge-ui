@@ -58,6 +58,9 @@ export const productsApi = {
 
   export: () => api.get('/api/products/export', { responseType: 'blob' }).then((r) => r.data as Blob),
 
+  /** "Add prices in a sheet" (`SELLING_PRICE_PLAN.md` §6.8): the products with no selling price, to fill in. */
+  exportPrices: () => api.get('/api/products/export/prices', { responseType: 'blob' }).then((r) => r.data as Blob),
+
   bulkUpload: (file: File) => {
     const formData = new FormData()
     formData.append('file', file)

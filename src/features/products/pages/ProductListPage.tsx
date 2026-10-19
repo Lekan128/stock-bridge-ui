@@ -40,6 +40,7 @@ import type { Product, ProductStatusFilter, StockStatusFilter } from '@/features
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import type { PriceFilter } from '@/features/catalog/types'
+import { PriceSheetLink } from '@/features/selling/components/PriceSheetLink'
 import { SellingStaffNotice } from '@/features/selling/components/SellingStaffNotice'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { StockWorthLine } from '@/features/selling/components/StockWorthLine'
@@ -480,6 +481,8 @@ export function ProductListPage() {
       <InventoryBar ref={searchRef} {...barProps} />
 
       <StockWorthLine />
+
+      {priceFilter === 'none' && <PriceSheetLink lead="Pricing many at once?">Fill them in a sheet</PriceSheetLink>}
 
       <AttentionLine items={attention} />
 

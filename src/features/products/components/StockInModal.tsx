@@ -48,6 +48,11 @@ import {
 import type { ProductVendor } from '@/features/products/vendors/types'
 import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
 import { StockReceipt } from '@/features/products/components/StockReceipt'
+import { Link } from 'react-router-dom'
+import { formatMoney } from '@/features/selling/money'
+import { usualPrice } from '@/features/selling/sale/saleLine'
+import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { submitStockWrite } from '@/features/outbox/outboxStore'
 import { isAppError } from '@/types/api'
 
@@ -204,6 +209,9 @@ function withDeliveryPack(options: UnitOption[], deliveryPack: UnitOption | null
 export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInModalProps) {
   const { user } = useAuth()
   const canViewVendors = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.VIEW_VENDORS)
+  const canManageProducts = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_PRODUCTS)
+  const { showsSellingPrice } = useSellingPolicy()
+  const online = useOnlineStatus()
   const { vendors: directoryVendors } = useVendorOptions(canViewVendors)
   const { data: productVendors, loading: productVendorsLoading } = useProductVendors(product.id)
   const { options: unitOfMeasureOptions, packagingOptions } = useUnitOfMeasureOptions()
@@ -1026,6 +1034,28 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
               )}
             </dl>
           )}
+          {/* §6.7: a stock-in never changes the selling price; it only says when it no longer covers
+              the cost, in the unit the delivery was typed in. */}
+          {showsSellingPrice &&
+            product.unitPrice != null &&
+            basePriceNumber != null &&
+            basePriceNumber >= product.unitPrice &&
+            unitPriceNumber != null &&
+            (() => {
+              const selling = usualPrice(product, selectedOption)
+              if (selling == null) return null
+              const per = selectedOption.isStockUnit ? `per ${stockUnitText}` : `a ${unitNoun(selectedOption).toLowerCase()}`
+              return (
+                <p data-price-nudge className="rounded-lg border border-warning-200 bg-warning-50 px-4 py-3 text-sm text-warning-900">
+                  You now pay {formatMoney(unitPriceNumber)} {per} and sell at {formatMoney(selling)}.{' '}
+                  {online && canManageProducts && (
+                    <Link to={`/app/products/${product.id}/edit`} className="font-medium text-primary-700 underline underline-offset-2">
+                      Update price
+                    </Link>
+                  )}
+                </p>
+              )
+            })()}
         </StockReceipt>
       )}
     </Sheet>

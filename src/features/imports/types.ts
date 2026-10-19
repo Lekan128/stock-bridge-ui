@@ -290,6 +290,32 @@ export interface ImportSession {
    * (`BULK_IMPORT_CX_PLAN.md` task 1.5). Absent when none were given — `== null`, never `=== null`.
    */
   delivery?: ImportDeliveryDetails | null
+  /**
+   * The one question a product sheet can raise about a price column (`SELLING_PRICE_PLAN.md` §6.8).
+   * Absent when there is none - `== null`.
+   */
+  priceQuestion?: PriceQuestion | null
+}
+
+export type PriceAnswer = 'COST' | 'SELLING' | 'IGNORE'
+
+/**
+ * PRICE_MEANING: a bare "Price" column a company has to say the meaning of - the file waits for it.
+ * KEEP_SELLING_PRICES: selling prices on a sheet from a company that does not record sales; the owner
+ * is asked whether to keep them (which turns selling on), anyone else is told they are left out.
+ */
+export interface PriceQuestion {
+  kind: 'PRICE_MEANING' | 'KEEP_SELLING_PRICES'
+  /** The column, normalized ("price", "unit_price"). */
+  header: string
+  /** Up to three of its values, to check the answer against. */
+  samples: string[]
+  /** The answers that make sense now. */
+  options: PriceAnswer[]
+  sellingOn: boolean
+  canTurnOnSelling: boolean
+  /** Whether Continue waits for an answer. */
+  blocking: boolean
 }
 
 /** What the upload screen asked once for a whole delivery. Each value fills the rows that leave it blank. */
@@ -443,6 +469,20 @@ export interface ImportResult {
    * field existed still renders; absent means "don't offer the handoff".
    */
   kind?: ImportKind
+  /**
+   * After a delivery: products it now costs at least as much as they sell for (`SELLING_PRICE_PLAN.md`
+   * §6.7). Both figures per the product's pack.
+   */
+  pricesToCheck?: PriceToCheck[]
+}
+
+export interface PriceToCheck {
+  productId: string
+  productName: string
+  costEach: number
+  sellingEach: number
+  /** "a carton", "per kg". */
+  per: string
 }
 
 // -------------------------------------------------- §4 UndoBlockedResponse

@@ -5,6 +5,7 @@ import { useAuth } from '@/auth/useAuth'
 import { useToast } from '@/components/useToast'
 import { formatDate } from '@/features/company/formatters'
 import { LegacyPriceReviewSheet } from '@/features/selling/components/LegacyPriceReviewSheet'
+import { PriceSheetLink } from '@/features/selling/components/PriceSheetLink'
 import { sellingApi } from '@/features/selling/sellingApi'
 import { useSellingSettings } from '@/features/selling/useSellingSettings'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
@@ -139,6 +140,9 @@ export function SellingSettingsSection() {
           >
             Add selling prices
           </Link>
+          <span className="ml-4">
+            <PriceSheetLink>Or fill them in a sheet</PriceSheetLink>
+          </span>
           {reviewWaiting && (
             <button
               type="button"
