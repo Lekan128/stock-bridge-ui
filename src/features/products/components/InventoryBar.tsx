@@ -117,7 +117,7 @@ export const InventoryBar = forwardRef<HTMLInputElement, InventoryBarProps>(func
             onChange={(event) => onSearchChange(event.target.value)}
             placeholder="Search name or SKU"
             aria-keyshortcuts="/"
-            className="w-full rounded-md border border-neutral-200 bg-white py-2 pr-9 pl-9 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
+            className="w-full rounded-md border border-neutral-200 bg-white py-2 pr-9 pl-9 text-sm text-neutral-900 placeholder:text-neutral-500 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
           />
           <kbd
             aria-hidden="true"

@@ -8,6 +8,11 @@ export interface SellingPolicy {
   requiresSellingPrice: boolean
   /** This company records sales from its stock (Record a sale, the Sales report). */
   recordsSales: boolean
+  /**
+   * Whether the switch has been read yet. A screen that exists only for selling waits for this
+   * rather than saying "selling isn't on" for the moment before it knows.
+   */
+  loaded: boolean
 }
 
 /**
@@ -26,11 +31,13 @@ export interface SellingPolicy {
  */
 export function useSellingPolicy(): SellingPolicy {
   const { isSeller } = useAuth()
-  const { data } = useSellingSettings()
+  const { data, error } = useSellingSettings()
   const sellsStock = data?.sellsStock === true
   return {
     showsSellingPrice: isSeller || sellsStock,
     requiresSellingPrice: isSeller,
     recordsSales: sellsStock,
+    // A failed first read counts as known: the screen then says selling is off, rather than staying blank.
+    loaded: data !== undefined || error != null,
   }
 }

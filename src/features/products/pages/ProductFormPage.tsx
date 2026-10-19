@@ -1324,6 +1324,7 @@ export function ProductFormPage() {
                   `packagingSize` through setValue, and the picker above is the read-back — so the
                   two can never disagree, which is what a second editable control would risk. */}
               <TextField
+                id="product-contains"
                 label={UNIT_COPY.CONTAINS}
                 placeholder="50 kg"
                 hint={

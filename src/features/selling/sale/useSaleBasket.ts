@@ -7,7 +7,7 @@ import type { Product } from '@/features/products/types'
 import { formatEnteredAndBase } from '@/features/products/unitCopy'
 import { stockUnitLabel, toBaseQuantity } from '@/features/products/unitSet'
 import { formatMoney } from '@/features/selling/money'
-import { lineAmount, openingUnit, optionOf, priceEach, unitsFor, type SaleLine } from '@/features/selling/sale/saleLine'
+import { lineAmount, openingUnit, optionOf, unitsFor, type SaleLine } from '@/features/selling/sale/saleLine'
 import { isAppError } from '@/types/api'
 
 /** How one line of a recorded sale stands. */
@@ -98,7 +98,10 @@ export function useSaleBasket() {
     setLines((all) => (all.some((existing) => existing.key === line.key) ? all : [...all, line]))
   }
 
-  const total = lines.reduce((sum, line) => sum + (lineAmount(line, optionOf(line, unitsFor(line.product, catalogue))) ?? 0), 0)
+  const total = lines.reduce((sum, line) => {
+    const options = unitsFor(line.product, catalogue)
+    return sum + (lineAmount(line, optionOf(line, options), options) ?? 0)
+  }, 0)
 
   /** Records every line under one new sale id, in order; returns how each one stands. */
   async function record(): Promise<RecordedSale> {
@@ -109,10 +112,8 @@ export function useSaleBasket() {
     for (const line of lines) {
       const options = unitsFor(line.product, catalogue)
       const option = optionOf(line, options)
-      const amount = lineAmount(line, option)
-      const each = priceEach(line, option)
+      const amount = lineAmount(line, option, options)
       const base = toBaseQuantity(line.quantity, option)
-      const totalTyped = line.totalTyped != null && line.totalTyped.trim() !== '' ? Number(line.totalTyped) : null
       const quantityText = formatEnteredAndBase(line.quantity, option, base, stockUnitLabel(options))
       try {
         const outcome = await submitStockWrite({
@@ -127,7 +128,9 @@ export function useSaleBasket() {
             unit: option.isStockUnit ? undefined : option.code,
             reason: 'SALE',
             saleId,
-            ...(totalTyped != null ? { lineTotal: totalTyped } : each != null ? { unitPrice: each } : {}),
+            // What the line came to, exactly as the screen showed it - never a price each the server
+            // multiplies back, which would turn "₦5,000 a carton" sold by the piece into ₦4,999.92.
+            ...(amount != null ? { lineTotal: amount } : {}),
             note: note.trim() || undefined,
           },
           baseDelta: -base,

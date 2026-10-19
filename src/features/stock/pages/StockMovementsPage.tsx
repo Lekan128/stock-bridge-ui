@@ -320,7 +320,13 @@ export function StockMovementsPage() {
         <>
           {/* The table scrolls inside its own container rather than the page — eight columns do
               not fit a phone, and a horizontally scrolling page loses the nav. */}
-          <div className={`overflow-x-auto rounded-lg border border-neutral-200 bg-white transition-opacity ${loading ? 'opacity-50' : ''}`}>
+          {/* Focusable, so the columns past the edge can be reached with a keyboard as well as a finger. */}
+          <div
+            tabIndex={0}
+            role="region"
+            aria-label="Stock movements"
+            className={`overflow-x-auto rounded-lg border border-neutral-200 bg-white transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${loading ? 'opacity-50' : ''}`}
+          >
             <table className="w-full min-w-[56rem] text-sm">
               <thead className="border-b border-neutral-200 bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
                 <tr>

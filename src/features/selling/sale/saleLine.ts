@@ -1,4 +1,5 @@
 import type { Product, UnitOption, UnitOfMeasureOption } from '@/features/products/types'
+import { parseMoneyInput } from '@/features/selling/money'
 import { formatNumber, pluraliseUnitNoun, stockUnitWord, unitNoun } from '@/features/products/unitCopy'
 import { productsOwnUnits, resolveUnitSymbol, stockUnitOption, unitOptionsForProduct } from '@/features/products/unitSet'
 
@@ -52,10 +53,22 @@ export function usualPrice(product: Product, option: UnitOption): number | null 
   return Math.round(product.unitPrice * option.factorToStockUnit * 100) / 100
 }
 
-function parse(text: string | null): number | null {
-  if (text == null || text.trim() === '') return null
-  const value = Number(text)
-  return Number.isFinite(value) && value >= 0 ? value : null
+const parse = parseMoneyInput
+
+/**
+ * What `quantity` of `option` comes to at the usual price, worked from the price AS TYPED: 24 pieces
+ * of a "₦5,000 a carton" product are ₦5,000, not 24 × ₦208.33 = ₦4,999.92. Null with no price.
+ */
+export function usualAmount(product: Product, option: UnitOption, options: UnitOption[], quantity: number): number | null {
+  const typedUnit =
+    product.unitPriceEntered != null && product.unitPriceEnteredUnit
+      ? options.find((o) => !o.isStockUnit && o.code === product.unitPriceEnteredUnit)
+      : undefined
+  if (typedUnit && product.unitPriceEntered != null) {
+    return Math.round(((product.unitPriceEntered * quantity * option.factorToStockUnit) / typedUnit.factorToStockUnit) * 100) / 100
+  }
+  if (product.unitPrice == null) return null
+  return Math.round(product.unitPrice * option.factorToStockUnit * quantity * 100) / 100
 }
 
 /** The price each the line is sold at: typed, derived from a typed total, or the usual one. */
@@ -65,10 +78,15 @@ export function priceEach(line: SaleLine, option: UnitOption): number | null {
   return line.priceTyped != null ? parse(line.priceTyped) : usualPrice(line.product, option)
 }
 
-/** What the line comes to - a typed total exactly, else price each × quantity. Null with no price. */
-export function lineAmount(line: SaleLine, option: UnitOption): number | null {
+/**
+ * What the line comes to - a typed total exactly; price each × quantity when a price was typed;
+ * else the usual price, worked from the price as typed so a carton's pieces add up to the carton.
+ * Null with no price.
+ */
+export function lineAmount(line: SaleLine, option: UnitOption, options?: UnitOption[]): number | null {
   const total = parse(line.totalTyped)
   if (total != null) return total
+  if (line.priceTyped == null && options) return usualAmount(line.product, option, options, line.quantity)
   const each = priceEach(line, option)
   return each == null ? null : Math.round(each * line.quantity * 100) / 100
 }

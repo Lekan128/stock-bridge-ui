@@ -79,7 +79,10 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct }: SaleBaske
   }, [])
 
   const itemCount = basket.lines.length
-  const unpriced = basket.lines.filter((line) => lineAmount(line, optionOf(line, unitsFor(line.product, basket.catalogue))) == null)
+  const unpriced = basket.lines.filter((line) => {
+    const options = unitsFor(line.product, basket.catalogue)
+    return lineAmount(line, optionOf(line, options), options) == null
+  })
 
   async function record() {
     if (unpriced.length > 0 && !askUnpriced) {
@@ -211,7 +214,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct }: SaleBaske
           <button
             type="button"
             onClick={() => setNoteOpen(true)}
-            className="self-start rounded-sm text-sm font-medium text-primary-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+            className="-my-2 inline-flex min-h-11 items-center self-start rounded-sm text-sm font-medium text-primary-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
           >
             Add a note
           </button>
@@ -283,7 +286,7 @@ function BasketLine({ line, open, catalogue, canMakeUsual, makeUsual, onMakeUsua
   const options = unitsFor(line.product, catalogue)
   const option = optionOf(line, options)
   const each = priceEach(line, option)
-  const amount = lineAmount(line, option)
+  const amount = lineAmount(line, option, options)
   const usual = belowUsual(line, option)
   const noun = option.isStockUnit ? resolveUnitSymbol(line.product.unitOfMeasure, catalogue) : unitNoun(option)
   const pending = usePendingStock(line.product.id)
@@ -328,7 +331,7 @@ function BasketLine({ line, open, catalogue, canMakeUsual, makeUsual, onMakeUsua
       </button>
 
       {open && (
-        <div className="flex flex-col gap-3 border-t border-neutral-100 bg-neutral-50 px-4 py-3">
+        <div className="flex flex-col gap-3 border-t border-neutral-100 bg-neutral-50 px-4 py-3 [&_input]:scroll-mb-36 [&_select]:scroll-mb-36">
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -423,7 +426,7 @@ function BasketLine({ line, open, catalogue, canMakeUsual, makeUsual, onMakeUsua
           <button
             type="button"
             onClick={onRemove}
-            className="self-start rounded-sm text-sm font-medium text-danger-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+            className="-my-1 inline-flex min-h-11 items-center self-start rounded-sm text-sm font-medium text-danger-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
           >
             Remove
           </button>

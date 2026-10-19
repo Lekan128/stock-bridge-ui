@@ -79,6 +79,8 @@ export interface SaleLineDetail {
   cancelledByName?: string
   priceAdded: boolean
   occurredAt: string
+  /** The product's stock unit code ("PIECE", "KG") - what `quantity` counts. */
+  unitOfMeasure?: string
 }
 
 export interface SaleDetail {

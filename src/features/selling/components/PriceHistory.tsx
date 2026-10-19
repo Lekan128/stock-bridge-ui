@@ -55,7 +55,7 @@ export function PriceHistory({ productId, stockUnit }: { productId: string; stoc
         type="button"
         onClick={toggle}
         aria-expanded={open}
-        className="rounded-sm text-xs font-medium text-primary-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+        className="-my-1 inline-flex min-h-8 items-center rounded-sm text-sm font-medium text-primary-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
       >
         {open ? 'Hide price history' : 'Price history'}
       </button>

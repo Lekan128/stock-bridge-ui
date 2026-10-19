@@ -33,13 +33,13 @@ export function SoldThisMonth({ productId, stockUnit }: { productId: string; sto
   const quantity = row.quantity ?? 0
   const profit = (row.totals.profitKnownSalesAmount ?? 0) > 0 && row.totals.grossProfit != null ? row.totals.grossProfit : null
   return (
-    <p className="text-sm text-neutral-600" data-sold-this-month>
+    <p className="text-sm text-pretty text-neutral-600" data-sold-this-month>
       <Link to="/app/sales" className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
         Sold this month:{' '}
         <span className="font-medium tabular-nums text-neutral-900">
           {formatNumber(quantity)} {stockUnitWord(stockUnit, quantity)} · {formatMoney(row.totals.salesAmount)}
         </span>
-        {profit != null && <span className="tabular-nums"> · {formatMoney(profit)} profit</span>}
+        {profit != null && <span className="whitespace-nowrap tabular-nums"> · {formatMoney(profit)} profit</span>}
       </Link>
     </p>
   )

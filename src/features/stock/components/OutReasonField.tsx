@@ -77,11 +77,11 @@ export function OutReasonLink({ value, onChange, open, onOpenChange }: OutReason
     )
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-neutral-200 bg-neutral-50 py-0.5 pr-1 pl-2.5 text-sm text-neutral-800">
+    <span className="inline-flex items-center gap-0.5 rounded-full border border-neutral-200 bg-neutral-50 pl-2.5 text-sm text-neutral-800">
       <button
         type="button"
         onClick={() => onOpenChange(true)}
-        className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+        className="min-h-9 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
         aria-label={`Reason: ${outReasonLabel(value)}. Change it`}
       >
         <span className="text-neutral-500">Reason:</span> {outReasonLabel(value)}
@@ -90,9 +90,9 @@ export function OutReasonLink({ value, onChange, open, onOpenChange }: OutReason
         type="button"
         onClick={() => onChange(null)}
         aria-label="Remove the reason"
-        className="rounded-full p-0.5 text-neutral-500 hover:bg-neutral-200 hover:text-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+        className="inline-flex h-9 w-9 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-200 hover:text-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
       >
-        <X className="h-3.5 w-3.5" aria-hidden="true" />
+        <X className="h-4 w-4" aria-hidden="true" />
       </button>
     </span>
   )

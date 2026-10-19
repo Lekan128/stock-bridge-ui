@@ -47,7 +47,7 @@ export function PriceSheetLink({
       type="button"
       onClick={() => void download()}
       disabled={busy}
-      className="rounded-sm text-sm font-medium text-primary-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:opacity-60"
+      className="-my-2 inline-flex min-h-11 items-center rounded-sm text-sm font-medium text-primary-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:opacity-60"
     >
       {busy ? 'Preparing the sheet…' : children}
     </button>

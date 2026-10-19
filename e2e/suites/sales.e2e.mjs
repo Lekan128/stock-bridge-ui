@@ -119,6 +119,8 @@ const oil = await createProduct('Oil (sa)', {}, 100)
 const salt = await createProduct('Salt (sa)', { unitPrice: 150 }, 100)
 const sugar = await createProduct('Sugar (sa)', { unitPrice: 900 }, 100)
 const milk = await createProduct('Milk (sa)', { unitPrice: 500 }, 1)
+// Priced per carton of 24: the price as typed is 5,000, per piece it is 208.333...
+const peak = await createProduct('Peak (sa)', { packagingUnit: 'CARTON', packagingSize: 24, unitPrice: 5000, unitPriceUnit: 'CARTON' }, 240)
 
 browser = await chromium.launch(launchOptions)
 const { context, page } = await phone(signup.tokens.refreshToken)
@@ -296,6 +298,32 @@ await check('quick mode Sell: big targets, a stamp per sale, and "Your sales tod
   await page.getByRole('button', { name: 'Stock out', exact: true }).click()
   await page.getByText('For a customer, use Sell.').waitFor()
   await page.screenshot({ path: SHOTS + '4-quick-sell.png' })
+})
+
+await check('money is exact: 24 pieces of a ₦5,000 carton record as ₦5,000, and a price typed "1,500" is kept', async () => {
+  await page.goto(`${UI}/app/sell`)
+  await page.getByRole('heading', { name: 'Record a sale', level: 1 }).waitFor()
+  await scan(peak)
+  await line(peak).getByText('1 carton × ₦5,000').waitFor()
+  // Sold by the piece instead: the unit control is buttons or a select, depending on label length.
+  const group = line(peak).getByRole('group', { name: 'Counted in' })
+  if (await group.count()) await group.getByRole('button', { name: /Piece/ }).click()
+  else {
+    const select = line(peak).getByLabel('Counted in')
+    await select.selectOption(await select.evaluate((el) => [...el.options].find((o) => /piece/i.test(o.text))?.value))
+  }
+  await page.getByLabel('How many Peak (sa)').fill('24')
+  await line(peak).getByText('₦5,000', { exact: true }).waitFor()
+  await scan(rice)
+  await page.getByLabel(/Price each/).fill('1,500')
+  await line(rice).getByText('₦1,500', { exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Record sale ₦6,500' }).click()
+  await page.locator('[data-receipt="synced"]').waitFor()
+  const [peakLine] = await saleLines(peak.id)
+  const [riceLine] = await saleLines(rice.id)
+  assert(peakLine.saleAmount === 5000, `peak recorded ${peakLine.saleAmount}`)
+  assert(riceLine.saleAmount === 1500, `rice recorded ${riceLine.saleAmount}`)
+  await page.getByRole('button', { name: 'New sale' }).click()
 })
 
 await check('lab baseline (§9): a three-item scanned sale in quick mode, on a phone-speed CPU, well under 10 s', async () => {

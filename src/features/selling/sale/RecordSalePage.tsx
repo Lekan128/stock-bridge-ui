@@ -28,7 +28,7 @@ const UNDO_FOR_MS = 110_000
 export function RecordSalePage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
-  const { recordsSales } = useSellingPolicy()
+  const { recordsSales, loaded } = useSellingPolicy()
   const { showToast } = useToast()
   const online = useOnlineStatus()
   const catalog = useCatalogState()
@@ -61,6 +61,7 @@ export function RecordSalePage() {
     }
   }
 
+  if (!loaded) return null
   if (!recordsSales) {
     return (
       <div className="mx-auto flex max-w-xl flex-col gap-3 py-8">
@@ -150,6 +151,8 @@ function SaleReceipt({
   })
   return (
     <div className="mx-auto flex w-full max-w-md flex-col gap-4">
+      {/* The page's name for screen readers; the receipt itself says SALE, stamped. */}
+      <h1 className="sr-only">{kept.length > 0 ? 'Sale recorded' : 'Sale not recorded'}</h1>
       {kept.length > 0 && (
         <StockReceipt state={state} kind="Sale" id={sale.saleId} lines={[...rows, { label: 'Total', value: formatMoney(sale.total) }]} />
       )}

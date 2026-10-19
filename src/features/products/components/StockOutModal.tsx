@@ -34,7 +34,8 @@ import { StockReceipt } from '@/features/products/components/StockReceipt'
 import { OutReasonChooser, OutReasonLink } from '@/features/stock/components/OutReasonField'
 import { outReasonLabel } from '@/features/stock/outReasons'
 import { SellingOffer } from '@/features/selling/components/SellingOffer'
-import { formatMoney } from '@/features/selling/money'
+import { formatMoney, parseMoneyInput } from '@/features/selling/money'
+import { usualAmount } from '@/features/selling/sale/saleLine'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { submitStockWrite } from '@/features/outbox/outboxStore'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
@@ -302,7 +303,18 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
         ? Math.round(product.unitPrice * selectedOption.factorToStockUnit * 100) / 100
         : null
   const salePriceText = salePriceTyped ?? (usualPriceInUnit != null ? String(usualPriceInUnit) : '')
-  const salePrice = salePriceText.trim() === '' ? null : Number(salePriceText)
+  const salePrice = parseMoneyInput(salePriceText)
+  /**
+   * What the sale comes to: worked from the price as typed while the person hasn't changed it, so 24
+   * pieces of a "₦5,000 a carton" product are ₦5,000 and not 24 × ₦208.33; their own price × the
+   * quantity once they have. Sent as the line's total, which the server keeps exactly.
+   */
+  const saleAmount =
+    salePrice == null || quantityNumber <= 0
+      ? null
+      : salePriceTyped == null
+        ? usualAmount(product, selectedOption, productsOwnUnits(unitOptions), quantityNumber)
+        : Math.round(salePrice * quantityNumber * 100) / 100
   const selling = reason === 'SALE' && recordsSales
   /**
    * §3.1 rounds `quantity × factor` HALF_UP at scale 0, so a fractional entry made in the STOCK
@@ -416,7 +428,7 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
         allocations: builtAllocations,
         note: getValues('note') || undefined,
         reason: reason ?? undefined,
-        unitPrice: selling && salePrice != null && Number.isFinite(salePrice) ? salePrice : undefined,
+        lineTotal: selling && saleAmount != null ? saleAmount : undefined,
       }
       // Through the outbox (A4) — see StockInModal. Choosing deliveries needs the server's current
       // lots, so a sale with chosen deliveries is never queued; the outbox refuses it offline.
@@ -721,9 +733,9 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
                 value={salePriceText}
                 onChange={(event) => setSalePriceTyped(event.target.value)}
               />
-              {salePrice != null && Number.isFinite(salePrice) && quantityNumber > 0 && (
+              {salePrice != null && saleAmount != null && (
                 <p className="mt-1.5 text-sm font-medium tabular-nums text-neutral-900">
-                  {formatMoney(salePrice * quantityNumber)}
+                  {formatMoney(saleAmount)}
                   {usualPriceInUnit != null && Math.abs(salePrice - usualPriceInUnit) >= 0.005 && (
                     <span className="ml-2 text-xs font-normal text-neutral-500">usual {formatMoney(usualPriceInUnit)}</span>
                   )}
@@ -778,8 +790,8 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
             { label: 'Product', value: product.name },
             { label: 'Taken out', value: quantityBothWays },
             ...(reason ? [{ label: 'Reason', value: outReasonLabel(reason) }] : []),
-            ...(selling && salePrice != null && Number.isFinite(salePrice)
-              ? [{ label: 'Sold for', value: formatMoney(salePrice * quantityNumber) }]
+            ...(selling && saleAmount != null
+              ? [{ label: 'Sold for', value: formatMoney(saleAmount) }]
               : []),
             ...(noteText ? [{ label: 'Note', value: noteText }] : []),
           ]}

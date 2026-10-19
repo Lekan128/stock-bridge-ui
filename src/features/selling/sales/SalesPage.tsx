@@ -47,7 +47,7 @@ const FIX_LABELS: Partial<Record<SalesFilter, string>> = {
  */
 export function SalesPage() {
   const { user } = useAuth()
-  const { recordsSales } = useSellingPolicy()
+  const { recordsSales, loaded } = useSellingPolicy()
   const { showToast } = useToast()
   const { ops } = useOutboxState()
   const canSell = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.STOCK_OUT)
@@ -101,6 +101,7 @@ export function SalesPage() {
     }
   }
 
+  if (!loaded) return null
   if (!recordsSales) {
     return (
       <div className="mx-auto flex max-w-xl flex-col gap-3 py-8">
@@ -164,7 +165,7 @@ export function SalesPage() {
                   setTab('sale')
                   setFilter(totals.unpricedLineCount > 0 ? 'unpriced' : 'noCost')
                 }}
-                className="rounded-sm font-medium text-primary-700 underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                className="-my-2 inline-flex min-h-11 items-center rounded-sm font-medium text-primary-700 underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
               >
                 Fix these
               </button>
@@ -178,7 +179,23 @@ export function SalesPage() {
         </section>
       )}
 
-      <div role="tablist" aria-label="Show sales" className="flex gap-1 self-start overflow-x-auto rounded-md border border-neutral-200 bg-neutral-50 p-0.5">
+      {/* Five tabs don't fit a phone without one being cut off at the edge, which reads as broken;
+          there it is one labelled choice instead. */}
+      <label className="flex items-center gap-2 text-sm font-medium text-neutral-700 sm:hidden">
+        View
+        <select
+          value={tab}
+          onChange={(event) => setTab(event.target.value as SalesGrouping)}
+          className="min-h-11 flex-1 rounded-md border border-neutral-300 bg-white px-3 text-base text-neutral-900"
+        >
+          {TABS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.value === 'sale' ? 'Each sale' : option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div role="tablist" aria-label="Show sales" className="hidden gap-1 self-start rounded-md border border-neutral-200 bg-neutral-50 p-0.5 sm:flex">
         {TABS.map((option) => (
           <button
             key={option.value}
@@ -209,7 +226,7 @@ export function SalesPage() {
                 on ? 'border-primary-300 bg-primary-50 font-medium text-primary-800' : 'border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50'
               }`}
             >
-              {leak.label} <span className="tabular-nums text-neutral-500">{formatNumber(count)}</span>
+              {leak.label} <span className={`tabular-nums ${on ? 'text-primary-700' : 'text-neutral-500'}`}>{formatNumber(count)}</span>
             </button>
           )
         })}
@@ -301,8 +318,39 @@ function SaleRow({ row, withDate, onOpen }: { row: SalesReportRow; withDate: boo
 
 function BreakdownTable({ report, tab }: { report: SalesReport; tab: SalesGrouping }) {
   const first = tab === 'product' ? 'Product' : tab === 'day' ? 'Day' : tab === 'category' ? 'Category' : 'Person'
+  const labelOf = (row: SalesReportRow) =>
+    tab === 'day' && row.label ? dayLabel(row.label) : (row.label ?? (tab === 'category' ? 'No category' : 'Not recorded'))
+  const soldOf = (row: SalesReportRow) =>
+    tab === 'product'
+      ? `${formatNumber(row.quantity ?? 0)} ${row.unitOfMeasure ? stockUnitWord(row.unitOfMeasure.toLowerCase(), row.quantity ?? 0) : ''}`
+      : `${formatNumber(row.totals.saleCount)} ${row.totals.saleCount === 1 ? 'sale' : 'sales'}`
   return (
-    <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+    <>
+      {/* A phone: one row per line, every figure in view - no columns hiding off the right edge. */}
+      <ul aria-label={`Sales by ${first.toLowerCase()}`} className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white md:hidden">
+        {report.rows.map((row) => (
+          <li key={row.key ?? row.label} className="flex flex-col gap-0.5 px-4 py-3">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="min-w-0 truncate text-sm font-medium text-neutral-900">{labelOf(row)}</span>
+              <span className="shrink-0 text-base font-semibold tabular-nums text-neutral-900">{formatMoney(row.totals.salesAmount)}</span>
+            </div>
+            <p className="text-sm text-neutral-600 tabular-nums">{[soldOf(row), profitText(row.totals)].filter(Boolean).join(' · ')}</p>
+          </li>
+        ))}
+        <li className="flex flex-col gap-0.5 bg-neutral-50 px-4 py-3">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-sm font-semibold text-neutral-900">Total</span>
+            <span className="text-base font-semibold tabular-nums text-neutral-900">{formatMoney(report.totals.salesAmount)}</span>
+          </div>
+          {profitText(report.totals) && <p className="text-sm text-neutral-600 tabular-nums">{profitText(report.totals)}</p>}
+        </li>
+      </ul>
+    <div
+      className="hidden overflow-x-auto rounded-lg border border-neutral-200 bg-white md:block"
+      tabIndex={0}
+      role="region"
+      aria-label={`Sales by ${first.toLowerCase()}`}
+    >
       <table className="w-full min-w-[36rem] text-sm">
         <thead className="border-b border-neutral-200 bg-neutral-50 text-left text-xs font-medium text-neutral-600">
           <tr>
@@ -342,7 +390,14 @@ function BreakdownTable({ report, tab }: { report: SalesReport; tab: SalesGroupi
         </tfoot>
       </table>
     </div>
+    </>
   )
+}
+
+/** "₦3,700 profit (11.3%)", or nothing when no line has both a price and a cost. */
+function profitText(totals: SalesTotals): string | null {
+  if ((totals.profitKnownSalesAmount ?? 0) <= 0 || totals.grossProfit == null) return null
+  return `${formatMoney(totals.grossProfit)} profit${totals.margin != null ? ` (${percent(totals.margin)})` : ''}`
 }
 
 function MoneyCells({ totals }: { totals: SalesTotals }) {

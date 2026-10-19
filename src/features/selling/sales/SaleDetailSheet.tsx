@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
+import { useAuth } from '@/auth/useAuth'
 import { Button } from '@/components/Button'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import { useToast } from '@/components/useToast'
-import { formatNumber } from '@/features/products/unitCopy'
-import { formatMoney } from '@/features/selling/money'
+import { formatNumber, pluraliseUnitNoun, stockUnitWord } from '@/features/products/unitCopy'
+import { formatMoney, parseMoneyInput } from '@/features/selling/money'
 import { salesReportApi } from '@/features/selling/sales/salesReportApi'
 import type { SaleDetail, SaleLineDetail } from '@/features/selling/sales/types'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
@@ -32,6 +33,7 @@ export interface SaleDetailSheetProps {
  */
 export function SaleDetailSheet({ saleId, onClose, onChanged }: SaleDetailSheetProps) {
   const { showToast } = useToast()
+  const { user } = useAuth()
   const online = useOnlineStatus()
   const [sale, setSale] = useState<SaleDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -72,7 +74,14 @@ export function SaleDetailSheet({ saleId, onClose, onChanged }: SaleDetailSheetP
   }
 
   const live = sale ? sale.lines.filter((line) => !line.cancelled) : []
-  const canUndo = sale != null && live.length > 0 && Date.now() - new Date(sale.occurredAt).getTime() < UNDO_FOR_MS
+  // Undo is the recorder's own, while fresh (the server's rule): anyone else - an owner checking a
+  // cashier's sale - goes straight to Cancel, which is recorded with their name.
+  const canUndo =
+    sale != null &&
+    live.length > 0 &&
+    user?.type === 'tenant' &&
+    sale.recordedByUserId === user.id &&
+    Date.now() - new Date(sale.occurredAt).getTime() < UNDO_FOR_MS
   const when = sale
     ? new Date(sale.occurredAt).toLocaleString(undefined, { hour: 'numeric', minute: '2-digit', day: 'numeric', month: 'short' })
     : ''
@@ -87,6 +96,9 @@ export function SaleDetailSheet({ saleId, onClose, onChanged }: SaleDetailSheetP
         footer={
           sale && live.length > 0 ? (
             <>
+              {/* One way to take a sale back at a time: Undo while it is fresh (as if it never
+                  happened), Cancel after that (recorded, with who). Side by side they read as the
+                  same button. */}
               {canUndo && (
                 <Button
                   variant="secondary"
@@ -109,9 +121,18 @@ export function SaleDetailSheet({ saleId, onClose, onChanged }: SaleDetailSheetP
                   Undo sale
                 </Button>
               )}
-              <Button variant="danger" disabled={!online || busy != null} onClick={() => setConfirmCancel('all')}>
-                Cancel sale
-              </Button>
+              {/* Quiet, not a red slab: this sheet is mostly for reading a sale, and the confirm that
+                  follows is where the weight belongs. */}
+              {!canUndo && (
+                <Button
+                  variant="secondary"
+                  disabled={!online || busy != null}
+                  onClick={() => setConfirmCancel('all')}
+                  className="text-danger-700! hover:text-danger-800!"
+                >
+                  Cancel sale
+                </Button>
+              )}
             </>
           ) : undefined
         }
@@ -153,17 +174,17 @@ export function SaleDetailSheet({ saleId, onClose, onChanged }: SaleDetailSheetP
                             setPricing(line.movementId)
                             setPriceText('')
                           }}
-                          className="rounded-sm text-sm font-medium text-primary-700 hover:underline disabled:opacity-50"
+                          className="-my-2 inline-flex min-h-11 items-center rounded-sm text-sm font-medium text-primary-700 hover:underline disabled:opacity-50"
                         >
                           Add price
                         </button>
                       )}
-                      {live.length > 1 && (
+                      {live.length > 1 && !canUndo && (
                         <button
                           type="button"
                           disabled={!online || busy != null}
                           onClick={() => setConfirmCancel(line)}
-                          className="rounded-sm text-sm font-medium text-danger-700 hover:underline disabled:opacity-50"
+                          className="-my-2 inline-flex min-h-11 items-center rounded-sm text-sm font-medium text-danger-700 hover:underline disabled:opacity-50"
                         >
                           Cancel this line
                         </button>
@@ -175,8 +196,8 @@ export function SaleDetailSheet({ saleId, onClose, onChanged }: SaleDetailSheetP
                       className="flex items-end gap-2"
                       onSubmit={(event) => {
                         event.preventDefault()
-                        const amount = Number(priceText)
-                        if (!priceText.trim() || !Number.isFinite(amount) || amount < 0) {
+                        const amount = parseMoneyInput(priceText)
+                        if (amount == null) {
                           setError('Type what the whole line went for.')
                           return
                         }
@@ -240,12 +261,14 @@ export function SaleDetailSheet({ saleId, onClose, onChanged }: SaleDetailSheetP
   )
 }
 
-/** "3 cartons × ₦5,000" as typed, else in the stock unit. */
+/** "3 cartons × ₦5,000" as typed, else "2 pieces × ₦9,000" in the stock unit. */
 function lineText(line: SaleLineDetail): string {
   if (line.enteredQuantity != null && line.enteredUnit) {
     const each = line.enteredUnitPrice != null ? ` × ${formatMoney(line.enteredUnitPrice)}` : ''
-    return `${formatNumber(line.enteredQuantity)} ${line.enteredUnit.toLowerCase()}${each}`
+    const noun = line.enteredUnit.charAt(0) + line.enteredUnit.slice(1).toLowerCase()
+    return `${formatNumber(line.enteredQuantity)} ${pluraliseUnitNoun(noun, line.enteredQuantity).toLowerCase()}${each}`
   }
   const each = line.unitPriceAtTime != null ? ` × ${formatMoney(line.unitPriceAtTime)}` : ''
-  return `${formatNumber(line.quantity)}${each}`
+  const unit = line.unitOfMeasure ? ` ${stockUnitWord(line.unitOfMeasure.toLowerCase(), line.quantity)}` : ''
+  return `${formatNumber(line.quantity)}${unit}${each}`
 }

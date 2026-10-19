@@ -73,11 +73,11 @@ async function product(shop, name, price, cost, categoryId) {
   await api(`/api/products/${created.id}/stock/stock-in`, { token: shop.token, method: 'POST', body: { quantity: 100, unitPrice: cost } })
   return created
 }
-async function sell(shop, saleId, item, quantity, unitPrice) {
+async function sell(shop, saleId, item, quantity, unitPrice, occurredAt) {
   const res = await api(`/api/products/${item.id}/stock/stock-out`, {
     token: shop.token,
     method: 'POST',
-    body: { quantity, reason: 'SALE', saleId, ...(unitPrice != null ? { unitPrice } : {}) },
+    body: { quantity, reason: 'SALE', saleId, ...(unitPrice != null ? { unitPrice } : {}), ...(occurredAt ? { occurredAt } : {}) },
   })
   assert(res.status < 300, `sell ${item.name}: ${res.status} ${JSON.stringify(res.json)}`)
 }
@@ -101,7 +101,8 @@ await sell(shop, s1, soap, 1, 350)
 await sell(shop, randomUUID(), soap, 3, 300)
 await sell(shop, randomUUID(), oil, 1, null)
 const s4 = randomUUID()
-await sell(shop, s4, rice, 1, 2000)
+// Rung up a quarter of an hour ago: past Undo, so it is Cancel that takes it back.
+await sell(shop, s4, rice, 1, 2000, new Date(Date.now() - 15 * 60 * 1000).toISOString())
 await api(`/api/products/${soap.id}/stock/stock-out`, { token: shop.token, method: 'POST', body: { quantity: 1, reason: 'USED' } })
 
 browser = await chromium.launch(launchOptions)
@@ -186,6 +187,15 @@ await check('"Fix these" lists the unpriced sale; adding its price lifts the tot
   await page.getByRole('button', { name: 'Show all sales' }).click()
   await total().getByText(naira(8450)).waitFor()
   await page.getByText(`4 sales · ${naira(2150)} profit`).waitFor()
+})
+
+await check('a sale just recorded offers its recorder Undo only - not Undo and Cancel side by side', async () => {
+  const list = page.getByRole('list', { name: 'Sales' })
+  await list.locator('li').filter({ hasText: 'Rice (sr), Soap (sr)' }).click()
+  const sheet = page.getByRole('dialog').first()
+  await sheet.getByRole('button', { name: 'Undo sale' }).waitFor()
+  assert((await sheet.getByRole('button', { name: 'Cancel sale' }).count()) === 0, 'Cancel beside Undo')
+  await page.keyboard.press('Escape')
 })
 
 await check('Cancel sale puts it back: struck through, with who, and off the total', async () => {
