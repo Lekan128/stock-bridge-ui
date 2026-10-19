@@ -10,7 +10,7 @@ export interface ClientTableProps {
   activatingId?: string | null
 }
 
-const columns = ['Client', 'Identifier', 'Status', 'Users', 'Products', 'Created']
+const columns = ['Client', 'Identifier', 'Status', 'Selling', 'Users', 'Products', 'Created']
 
 export function ClientTable({ clients, onRowClick, onRequestSuspend, onActivate, activatingId }: ClientTableProps) {
   return (
@@ -41,6 +41,7 @@ export function ClientTable({ clients, onRowClick, onRequestSuspend, onActivate,
             <td className="border-b border-neutral-100 px-4 py-2.5">
               <ClientStatusBadge active={client.active} />
             </td>
+            <td className="border-b border-neutral-100 px-4 py-2.5 text-neutral-600">{client.sellsStock ? 'Sells' : '—'}</td>
             <td className="border-b border-neutral-100 px-4 py-2.5 text-neutral-600">{client.userCount}</td>
             <td className="border-b border-neutral-100 px-4 py-2.5 text-neutral-600">{client.productCount}</td>
             <td className="border-b border-neutral-100 px-4 py-2.5 text-neutral-600">{formatDate(client.createdAt)}</td>

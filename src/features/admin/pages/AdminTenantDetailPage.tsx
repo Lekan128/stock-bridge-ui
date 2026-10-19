@@ -36,6 +36,7 @@ import { useClientDetail } from '@/features/admin/hooks/useClientDetail'
 import { useClientMovementsOverTime } from '@/features/admin/hooks/useClientMovementsOverTime'
 import { useClientTopProducts } from '@/features/admin/hooks/useClientTopProducts'
 import type { SuperAdminClientDetail } from '@/features/admin/types'
+import { ChangeSellingDialog } from '@/features/admin/components/ChangeSellingDialog'
 import { isAppError } from '@/types/api'
 
 const TOP_PRODUCTS_LIMIT = 8
@@ -52,6 +53,24 @@ export function AdminTenantDetailPage() {
   const [statusUpdating, setStatusUpdating] = useState(false)
   const [editing, setEditing] = useState(false)
   const [resettingCatalog, setResettingCatalog] = useState(false)
+  const [changingSelling, setChangingSelling] = useState(false)
+  const [sellingSaving, setSellingSaving] = useState(false)
+  const [sellingError, setSellingError] = useState<string | null>(null)
+
+  async function changeSelling(reason: string) {
+    if (!client) return
+    setSellingSaving(true)
+    setSellingError(null)
+    try {
+      await superAdminApiClient.updateClientSelling(client.id, !client.sellsStock, reason)
+      setClient({ ...client, sellsStock: !client.sellsStock })
+      setChangingSelling(false)
+    } catch (err) {
+      setSellingError(isAppError(err) ? err.message : "Couldn't change it. Try again.")
+    } finally {
+      setSellingSaving(false)
+    }
+  }
   // Bumped after a catalog reset so the analytics below refetch — the id and date range are
   // unchanged, so nothing else would tell them their data is gone.
   const [dataVersion, setDataVersion] = useState(0)
@@ -160,6 +179,7 @@ export function AdminTenantDetailPage() {
               <Badge variant={client.paymentTerms === 'PAY_ON_DELIVERY_ALLOWED' ? 'success' : 'neutral'}>
                 {formatPaymentTerms(client.paymentTerms)}
               </Badge>
+              <Badge variant={client.sellsStock ? 'success' : 'neutral'}>{client.sellsStock ? 'Sells from stock' : 'Does not sell'}</Badge>
               {/* ProcurePal is the one tenant whose users a super admin may write, and this is
                   the only screen that knows which row that is. */}
               {client.platformOwner && (
@@ -177,6 +197,9 @@ export function AdminTenantDetailPage() {
           </Button>
           <Button variant="secondary" onClick={() => setResettingCatalog(true)}>
             Clear catalog
+          </Button>
+          <Button variant="secondary" onClick={() => setChangingSelling(true)}>
+            {client.sellsStock ? 'Turn off selling' : 'Turn on selling'}
           </Button>
           {client.active ? (
             <Button variant="danger" onClick={() => setConfirmSuspend(true)}>
@@ -266,6 +289,17 @@ export function AdminTenantDetailPage() {
         <EditClientModal client={client} onClose={() => setEditing(false)} onSuccess={handleEditSuccess} />
       )}
 
+      {client && (
+        <ChangeSellingDialog
+          open={changingSelling}
+          clientName={client.name}
+          sellsStock={client.sellsStock === true}
+          submitting={sellingSaving}
+          error={sellingError}
+          onCancel={() => setChangingSelling(false)}
+          onConfirm={(reason) => void changeSelling(reason)}
+        />
+      )}
       {resettingCatalog && (
         <ResetCatalogModal
           client={client}

@@ -500,6 +500,11 @@ export interface StockOutPayload {
   note?: string
   /** Why it went out. Omitted when nobody said - never defaulted to "Used". */
   reason?: OutReason
+  /**
+   * What a sale went for, per ONE of `unit` (the unit counted in) - the server multiplies by the
+   * quantity as typed, so a carton at 5,000 is 5,000. A price with no reason is a sale (API V46).
+   */
+  unitPrice?: number
 }
 
 // `ProductVendor` / `ProductVendorPriceTier` (GET /api/products/{productId}/vendors) live in

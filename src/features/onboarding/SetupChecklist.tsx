@@ -10,6 +10,7 @@ import { useOnboarding } from '@/features/onboarding/useOnboarding'
 import { WHATSAPP_URL } from '@/marketing/site'
 import { isIos, isStandalone, promptInstall, useServiceWorkerState } from '@/pwa/serviceWorker'
 import { welcomeStorage } from '@/utils/storage'
+import { StockUseQuestion } from '@/features/selling/components/StockUseQuestion'
 import { displayUsername } from '@/utils/whatsappNumber'
 
 const HIDDEN_KEY = 'pp.checklistHidden.'
@@ -105,6 +106,8 @@ export function SetupChecklist() {
           </div>
         </div>
       </div>
+
+      <StockUseQuestion />
 
       <ol className="divide-y divide-neutral-100">
         <Step

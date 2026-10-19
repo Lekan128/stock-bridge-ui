@@ -18,6 +18,7 @@ export function AdminTenantsPage() {
   const { showToast } = useToast()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<ClientStatusFilter>('all')
+  const [sellingFilter, setSellingFilter] = useState<'' | 'on' | 'off'>('')
   const [page, setPage] = useState(0)
   const [suspendTarget, setSuspendTarget] = useState<SuperAdminClientSummary | null>(null)
   const [suspending, setSuspending] = useState(false)
@@ -28,6 +29,7 @@ export function AdminTenantsPage() {
   const { data, loading, error, refetch } = useClients({
     search: debouncedSearch || undefined,
     active: statusFilter === 'all' ? undefined : statusFilter === 'active',
+    sellsStock: sellingFilter === '' ? undefined : sellingFilter === 'on',
     page,
     size: PAGE_SIZE,
   })
@@ -79,6 +81,11 @@ export function AdminTenantsPage() {
         onSearchChange={handleSearchChange}
         statusFilter={statusFilter}
         onStatusFilterChange={handleStatusFilterChange}
+        sellingFilter={sellingFilter}
+        onSellingFilterChange={(value) => {
+          setSellingFilter(value)
+          setPage(0)
+        }}
       />
 
       {loading && (
