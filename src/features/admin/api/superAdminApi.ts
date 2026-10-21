@@ -56,6 +56,10 @@ export const superAdminApiClient = {
   updateClient: (id: string, payload: UpdateClientPayload) =>
     superAdminApi.put<SuperAdminClientDetail>(`/api/superadmin/clients/${id}`, payload).then((r) => r.data),
 
+  /** Support turning selling from stock on or off for a company; the reason is shown to its owner. */
+  updateClientSelling: (id: string, sellsStock: boolean, reason: string) =>
+    superAdminApi.put(`/api/superadmin/clients/${id}/selling`, { sellsStock, reason }).then((r) => r.data),
+
   updateClientStatus: (id: string, active: boolean) =>
     superAdminApi
       .put<SuperAdminClientDetail>(`/api/superadmin/clients/${id}/status`, { active })

@@ -1,9 +1,10 @@
 import { forwardRef, useEffect, useId, useRef, useState } from 'react'
-import { CalendarClock, Download, Plus, Search, Settings, SlidersHorizontal, Tags, Truck, Upload, Zap } from 'lucide-react'
+import { CalendarClock, Download, Plus, Search, Settings, ShoppingBag, SlidersHorizontal, Tags, Truck, Upload, Zap } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { OverflowMenu, type OverflowMenuItem } from '@/components/OverflowMenu'
 import type { CompanyCategory } from '@/features/products/categories/types'
 import type { ProductStatusFilter, StockStatusFilter } from '@/features/products/types'
+import type { PriceFilter } from '@/features/catalog/types'
 import { useClickOutside } from '@/hooks/useClickOutside'
 
 export type StockLevelFilter = 'all' | StockStatusFilter
@@ -22,6 +23,14 @@ export interface InventoryBarProps {
   onCategoryFilterChange: (categoryId: string) => void
   /** Back to the default view (active products, every category) in one step. */
   onClearFilters: () => void
+  /**
+   * The selling-price census (`SELLING_PRICE_PLAN.md` §6.5) - present only where products have a
+   * selling price at all. Neutral words on purpose: a restaurant's gas will never have a price, and
+   * "No price yet" would nag it forever.
+   */
+  priceFilter?: PriceFilter
+  onPriceFilterChange?: (value: PriceFilter) => void
+  priceCounts?: { has: number; none: number }
   canManageProducts: boolean
   canRecordDelivery: boolean
   /** Quick mode (C4): receive, issue or count one item after another. */
@@ -29,6 +38,11 @@ export interface InventoryBarProps {
   onAddProduct: () => void
   onBulkUpload: () => void
   onRecordDelivery: () => void
+  /**
+   * Record a sale (§6.1) - present when the company records sales and this person may. It is then
+   * the screen's action, the thing done all day; Record a delivery steps back to secondary.
+   */
+  onRecordSale?: () => void
   onExpectedDeliveries: () => void
   onExport: () => void
   onSkuSettings: () => void
@@ -41,6 +55,12 @@ const STOCK_CHIPS: { value: StockLevelFilter; label: string }[] = [
   { value: 'OK', label: 'Well stocked' },
   { value: 'LOW', label: 'Low' },
   { value: 'OUT', label: 'Out' },
+]
+
+const PRICE_OPTIONS: { value: PriceFilter; label: string }[] = [
+  { value: 'all', label: 'Any' },
+  { value: 'has', label: 'Has a price' },
+  { value: 'none', label: 'No selling price' },
 ]
 
 const STATUS_OPTIONS: { value: ProductStatusFilter; label: string }[] = [
@@ -97,7 +117,7 @@ export const InventoryBar = forwardRef<HTMLInputElement, InventoryBarProps>(func
             onChange={(event) => onSearchChange(event.target.value)}
             placeholder="Search name or SKU"
             aria-keyshortcuts="/"
-            className="w-full rounded-md border border-neutral-200 bg-white py-2 pr-9 pl-9 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
+            className="w-full rounded-md border border-neutral-200 bg-white py-2 pr-9 pl-9 text-sm text-neutral-900 placeholder:text-neutral-500 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
           />
           <kbd
             aria-hidden="true"
@@ -143,25 +163,41 @@ export const InventoryBar = forwardRef<HTMLInputElement, InventoryBarProps>(func
  * secondary. For someone who manages products but doesn't receive stock, Add product is the action.
  */
 export function InventoryActions(props: InventoryBarProps & { compact?: boolean }) {
-  const { canRecordDelivery, canManageProducts, onRecordDelivery, onAddProduct, compact = false } = props
+  const { canRecordDelivery, canManageProducts, onRecordDelivery, onRecordSale, onAddProduct, compact = false } = props
+  const selling = onRecordSale != null
+  // One action-coloured button: Record a sale, else Record a delivery, else Add product.
+  const productIsAction = !selling && !canRecordDelivery
+  const iconOnly = (others: boolean) => compact && others
   return (
     <>
+      {selling && (
+        <Button variant="action" onClick={onRecordSale} className={compact ? 'flex-1' : 'whitespace-nowrap'}>
+          <ShoppingBag className="h-4 w-4" aria-hidden="true" />
+          Record a sale
+        </Button>
+      )}
       {canRecordDelivery && (
-        <Button variant="action" onClick={onRecordDelivery} className={compact ? 'flex-1' : 'whitespace-nowrap'}>
+        <Button
+          variant={selling ? 'secondary' : 'action'}
+          onClick={onRecordDelivery}
+          title="Record a delivery"
+          aria-label={iconOnly(selling) ? 'Record a delivery' : undefined}
+          className={compact ? (selling ? '' : 'flex-1') : 'whitespace-nowrap'}
+        >
           <Truck className="h-4 w-4" aria-hidden="true" />
-          Record a delivery
+          {iconOnly(selling) ? null : selling && !compact ? <span className="hidden xl:inline">Record a delivery</span> : 'Record a delivery'}
         </Button>
       )}
       {canManageProducts && (
         <Button
-          variant={canRecordDelivery ? 'secondary' : 'action'}
+          variant={productIsAction ? 'action' : 'secondary'}
           onClick={onAddProduct}
           title="Add product"
-          className={compact ? (canRecordDelivery ? '' : 'flex-1') : 'whitespace-nowrap'}
-          aria-label={compact && !canRecordDelivery ? undefined : 'Add product'}
+          className={compact ? (productIsAction ? 'flex-1' : '') : 'whitespace-nowrap'}
+          aria-label={compact && productIsAction ? undefined : 'Add product'}
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
-          {compact && canRecordDelivery ? null : compact ? 'Add product' : <span className="hidden 2xl:inline">Add product</span>}
+          {iconOnly(!productIsAction) ? null : compact ? 'Add product' : <span className="hidden 2xl:inline">Add product</span>}
         </Button>
       )}
       <OverflowMenu label="More inventory actions" items={inventoryMenuItems(props)} />
@@ -177,6 +213,9 @@ function FiltersPopover({
   categoryFilter,
   onCategoryFilterChange,
   onClearFilters,
+  priceFilter,
+  onPriceFilterChange,
+  priceCounts,
 }: InventoryBarProps) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -195,7 +234,7 @@ function FiltersPopover({
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [open])
   // Active is the default view, so only a departure from it counts as a filter.
-  const applied = (statusFilter !== 'active' ? 1 : 0) + (categoryFilter ? 1 : 0)
+  const applied = (statusFilter !== 'active' ? 1 : 0) + (categoryFilter ? 1 : 0) + (priceFilter && priceFilter !== 'all' ? 1 : 0)
   const categoryName = categories.find((category) => category.id === categoryFilter)?.name
 
   return (
@@ -239,6 +278,29 @@ function FiltersPopover({
               ))}
             </div>
           </fieldset>
+          {priceFilter && onPriceFilterChange && (
+            <fieldset className="flex flex-col gap-2">
+              <legend className="mb-1 text-xs font-semibold tracking-wider text-neutral-500 uppercase">Selling price</legend>
+              <div className="flex flex-col gap-0.5">
+                {PRICE_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    aria-pressed={priceFilter === option.value}
+                    onClick={() => onPriceFilterChange(option.value)}
+                    className={`flex items-center justify-between rounded-sm px-3 py-1.5 text-left text-sm font-medium ${
+                      priceFilter === option.value ? 'bg-neutral-100 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-50'
+                    }`}
+                  >
+                    {option.label}
+                    {priceCounts && option.value !== 'all' && (
+                      <span className="tabular-nums text-neutral-500">{priceCounts[option.value].toLocaleString()}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+          )}
           {categories.length > 0 && (
             <div className="flex flex-col gap-1.5">
               <label htmlFor="product-category-filter" className="text-xs font-semibold tracking-wider text-neutral-500 uppercase">

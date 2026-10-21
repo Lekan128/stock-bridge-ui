@@ -13,6 +13,8 @@ import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeas
 import { packEquivalent } from '@/features/products/packEquivalent'
 import type { Product } from '@/features/products/types'
 import { formatNumber } from '@/features/products/unitCopy'
+import { listPriceText } from '@/features/selling/priceText'
+import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { resolveUnitSymbol } from '@/features/products/unitSet'
 
 export interface ProductCardProps {
@@ -42,7 +44,10 @@ export function ProductCard({ product, incoming = 0, quickActions, selection }: 
     product.unitOfMeasure || product.packagingUnit || product.packagingSize != null
       ? formatUnitOfMeasure(label(product.unitOfMeasure), label(product.packagingUnit), product.packagingSize)
       : null
-  const subtitle = [product.categoryName, pack].filter(Boolean).join(' · ') || product.sku
+  const { showsSellingPrice } = useSellingPolicy()
+  // The selling price leads the line where products have one (SELLING_PRICE_PLAN.md §6.5).
+  const price = showsSellingPrice ? listPriceText(product, unitOfMeasureOptions) : null
+  const subtitle = [price, product.categoryName, pack].filter(Boolean).join(' · ') || product.sku
   const press = useRef<{ timer: number; x: number; y: number } | null>(null)
   const longPressed = useRef(false)
   const selecting = selection?.active ?? false

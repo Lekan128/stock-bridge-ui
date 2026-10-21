@@ -51,7 +51,7 @@ export function EarlyAccessLanding() {
             </a>
           ) : (
             <>
-              <a href="/pricing" className="hidden rounded-md px-3 py-2 font-medium whitespace-nowrap text-neutral-700 hover:bg-neutral-100 md:inline">
+              <a href="/pricing" className="hidden rounded-md px-3 py-2 font-medium whitespace-nowrap text-neutral-700 hover:bg-neutral-100 min-[360px]:inline">
                 Pricing
               </a>
               <a href="/guides" className="hidden rounded-md px-3 py-2 font-medium whitespace-nowrap text-neutral-700 hover:bg-neutral-100 md:inline">

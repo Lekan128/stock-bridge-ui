@@ -134,6 +134,17 @@ const RecordDeliveryPage = lazy(() =>
     default: m.RecordDeliveryPage,
   })),
 )
+// Record a sale: a basket of one item or twenty (SELLING_PRICE_PLAN.md §6.1).
+const RecordSalePage = lazy(() =>
+  import('@/features/selling/sale/RecordSalePage').then((m) => ({
+    default: m.RecordSalePage,
+  })),
+)
+const SalesPage = lazy(() =>
+  import('@/features/selling/sales/SalesPage').then((m) => ({
+    default: m.SalesPage,
+  })),
+)
 // What has been ordered from a supplier off the platform and not received yet (task 3.1). Two
 // chunks, like the import screens: the list is read by anyone who can see products, while the
 // screen that writes one down is reached far less often and by fewer people.
@@ -272,6 +283,11 @@ const AdminSetupRequestsPage = lazy(() =>
   })),
 )
 // Every new shop's first week (step 5): activation, and the WhatsApp message that is due.
+const AdminSellingHealthPage = lazy(() =>
+  import('@/features/admin/selling/AdminSellingHealthPage').then((m) => ({
+    default: m.AdminSellingHealthPage,
+  })),
+)
 const AdminFirstWeekPage = lazy(() =>
   import('@/features/admin/firstWeek/AdminFirstWeekPage').then((m) => ({
     default: m.AdminFirstWeekPage,
@@ -641,6 +657,22 @@ export function AppRoutes() {
             }
           />
           <Route
+            path="sell"
+            element={
+              <RequirePermission permission={PERMISSIONS.STOCK_OUT}>
+                <RecordSalePage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="sales"
+            element={
+              <RequirePermission permission={PERMISSIONS.VIEW_ANALYTICS}>
+                <SalesPage />
+              </RequirePermission>
+            }
+          />
+          <Route
             path="products/receive"
             element={
               <RequirePermission permission={PERMISSIONS.MANAGE_INVENTORY}>
@@ -969,6 +1001,7 @@ export function AppRoutes() {
         >
           <Route index element={<Navigate to="tenants" replace />} />
           <Route path="tenants" element={<AdminTenantsPage />} />
+          <Route path="selling" element={<AdminSellingHealthPage />} />
           {/* Procurepaddy's setup requests: shops that booked a founding setup on the landing
               page, waiting for a WhatsApp reply. Speed to lead is the whole point of the screen. */}
           <Route path="setup-requests" element={<AdminSetupRequestsPage />} />

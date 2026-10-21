@@ -79,6 +79,8 @@ function sortedRows(field: CatalogSortField, direction: 'asc' | 'desc'): StoredR
 function query(q: CatalogQuery): CatalogQueryResult {
   const term = q.search.trim().toLowerCase()
   const counts = { all: 0, OK: 0, LOW: 0, OUT: 0 }
+  const priceCounts = { has: 0, none: 0 }
+  const price = q.price ?? 'all'
   const matching: StoredRow[] = []
 
   for (const row of sortedRows(q.sort.field, q.sort.direction)) {
@@ -86,6 +88,14 @@ function query(q: CatalogQuery): CatalogQueryResult {
     if (q.status === 'inactive' && row.active) continue
     if (q.categoryId && row.categoryId !== q.categoryId) continue
     if (term && !row._name.includes(term) && !row._sku.includes(term) && !row._barcode.includes(term)) continue
+    const priced = row.unitPrice != null
+    // Each census is counted under every filter but its own, so a chip says what picking it shows.
+    if (q.stockStatus === 'all' || row.stockStatus === q.stockStatus) {
+      if (priced) priceCounts.has += 1
+      else priceCounts.none += 1
+    }
+    if (price === 'has' && !priced) continue
+    if (price === 'none' && priced) continue
     counts.all += 1
     counts[row.stockStatus] += 1
     if (q.stockStatus !== 'all' && row.stockStatus !== q.stockStatus) continue
@@ -107,6 +117,7 @@ function query(q: CatalogQuery): CatalogQueryResult {
     rows: matching.slice(q.offset, q.offset + q.limit).map(strip),
     total: matching.length,
     counts,
+    priceCounts,
     incoming: { units: incomingUnits, productCount: incomingProducts },
     catalogSize: rows.size,
     activeCount,

@@ -1,6 +1,6 @@
 import type { Granularity } from '@/components/analytics/types'
 
-export type DateRangePreset = 'thisWeek' | 'thisMonth' | 'lastMonth' | 'thisQuarter' | 'custom'
+export type DateRangePreset = 'today' | 'thisWeek' | 'thisMonth' | 'lastMonth' | 'thisQuarter' | 'custom'
 
 export interface DateRange {
   preset: DateRangePreset
@@ -9,6 +9,7 @@ export interface DateRange {
 }
 
 export const PRESET_OPTIONS: { value: DateRangePreset; label: string }[] = [
+  { value: 'today', label: 'Today' },
   { value: 'thisWeek', label: 'This Week' },
   { value: 'thisMonth', label: 'This Month' },
   { value: 'lastMonth', label: 'Last Month' },
@@ -52,6 +53,8 @@ function startOfQuarter(date: Date): Date {
 /** Resolves a non-custom preset to a concrete { from, to } pair, anchored to `now`. */
 export function resolvePresetRange(preset: Exclude<DateRangePreset, 'custom'>, now = new Date()): { from: Date; to: Date } {
   switch (preset) {
+    case 'today':
+      return { from: startOfDay(now), to: endOfDay(now) }
     case 'thisWeek':
       return { from: startOfWeek(now), to: endOfDay(now) }
     case 'thisMonth':
@@ -63,6 +66,11 @@ export function resolvePresetRange(preset: Exclude<DateRangePreset, 'custom'>, n
     case 'thisQuarter':
       return { from: startOfQuarter(now), to: endOfDay(now) }
   }
+}
+
+/** Today, start to end - the Sales page's question at closing time. */
+export function todayRange(): DateRange {
+  return { preset: 'today', ...resolvePresetRange('today') }
 }
 
 export function defaultDateRange(): DateRange {

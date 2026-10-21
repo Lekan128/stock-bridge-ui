@@ -32,6 +32,11 @@ export interface StockBreakdownPanelProps {
   actions?: ReactNode
   /** The newest movement, for "Received 400 kg from Alaba Depot · today 10:42". */
   lastMovement?: StockMovement | null
+  /**
+   * "₦5,000 / carton" - shown beside the stock for a product that is sold (SELLING_PRICE_PLAN.md
+   * §6.6). Absent when the company does not sell or the product has no price.
+   */
+  sellingPrice?: string | null
 }
 
 /** "today 10:42", "yesterday 18:05", "Tue 09:30", "3 Oct" — close enough to place it, no further. */
@@ -87,7 +92,7 @@ function lastMovementLine(movement: StockMovement, unit: string): string {
  * treatment, and it is why the caption line above stays plain prose: the unit belongs to the
  * number, not to the heading.
  */
-export function StockBreakdownPanel({ product, incoming, actions, lastMovement }: StockBreakdownPanelProps) {
+export function StockBreakdownPanel({ product, incoming, actions, lastMovement, sellingPrice }: StockBreakdownPanelProps) {
   const { options: unitOfMeasureOptions } = useUnitOfMeasureOptions()
   const hasIncoming = incoming.quantity > 0
 
@@ -190,7 +195,7 @@ export function StockBreakdownPanel({ product, incoming, actions, lastMovement }
           {/* The quieter facts beside the figure (C2): what is on the way, what is promised, and the
               last thing that happened. Each only when there is something to say — a big grey
               "0 kg incoming" on every product was noise. Never added into the figure. */}
-          {(hasIncoming || (product.expectedQuantity ?? 0) > 0 || lastMovement) && (
+          {(hasIncoming || (product.expectedQuantity ?? 0) > 0 || lastMovement || sellingPrice) && (
           <dl className="flex flex-col gap-3 text-sm sm:border-l sm:border-neutral-100 sm:pl-5">
             {hasIncoming && (
               <div>
@@ -209,6 +214,12 @@ export function StockBreakdownPanel({ product, incoming, actions, lastMovement }
                 <dd className="mt-0.5 font-medium tabular-nums text-neutral-800">
                   {formatNumber(product.expectedQuantity)} {stockUnitWord(unitSymbol, product.expectedQuantity)}
                 </dd>
+              </div>
+            )}
+            {sellingPrice && (
+              <div>
+                <dt className="text-neutral-500">Selling price</dt>
+                <dd className="mt-0.5 font-medium tabular-nums text-neutral-900">{sellingPrice}</dd>
               </div>
             )}
             {lastMovement && (

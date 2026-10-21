@@ -6,6 +6,9 @@ export interface ClientsToolbarProps {
   onSearchChange: (value: string) => void
   statusFilter: ClientStatusFilter
   onStatusFilterChange: (value: ClientStatusFilter) => void
+  /** Selling from stock: '' any, 'on', 'off' (SELLING_PRICE_PLAN.md §5.5 - the adoption figure). */
+  sellingFilter: '' | 'on' | 'off'
+  onSellingFilterChange: (value: '' | 'on' | 'off') => void
 }
 
 const statusOptions: { value: ClientStatusFilter; label: string }[] = [
@@ -14,7 +17,14 @@ const statusOptions: { value: ClientStatusFilter; label: string }[] = [
   { value: 'suspended', label: 'Suspended' },
 ]
 
-export function ClientsToolbar({ search, onSearchChange, statusFilter, onStatusFilterChange }: ClientsToolbarProps) {
+export function ClientsToolbar({
+  search,
+  onSearchChange,
+  statusFilter,
+  onStatusFilterChange,
+  sellingFilter,
+  onSellingFilterChange,
+}: ClientsToolbarProps) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="relative flex-1 sm:max-w-xs">
@@ -32,6 +42,20 @@ export function ClientsToolbar({ search, onSearchChange, statusFilter, onStatusF
         />
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+      <label htmlFor="client-selling" className="sr-only">
+        Selling from stock
+      </label>
+      <select
+        id="client-selling"
+        value={sellingFilter}
+        onChange={(e) => onSellingFilterChange(e.target.value as '' | 'on' | 'off')}
+        className="rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
+      >
+        <option value="">Selling: any</option>
+        <option value="on">Sells from stock</option>
+        <option value="off">Does not sell</option>
+      </select>
       <div className="flex items-center gap-1 rounded-md border border-neutral-200 bg-neutral-50 p-0.5">
         {statusOptions.map((option) => (
           <button
@@ -45,6 +69,7 @@ export function ClientsToolbar({ search, onSearchChange, statusFilter, onStatusF
             {option.label}
           </button>
         ))}
+      </div>
       </div>
     </div>
   )

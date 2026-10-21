@@ -1,4 +1,5 @@
 import {
+  ShoppingBag,
   ArrowLeftRight,
   Building2,
   ChartLine,
@@ -45,6 +46,12 @@ export interface NavItem {
    * duplicate, it does not withhold a capability.
    */
   hideFromPlatformOwner?: boolean
+  /**
+   * Only where the company records sales from its stock (`useSellingPolicy().recordsSales`) - the
+   * Sales report (`SELLING_PRICE_PLAN.md` §6.11). A company setting, not a permission, so it is its
+   * own flag; the permission still applies on top.
+   */
+  recordsSalesOnly?: boolean
 }
 
 export interface NavGroup {
@@ -93,6 +100,14 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: '/app', label: 'Dashboard', icon: LayoutDashboard, exact: true },
       // VIEW_PRODUCTS, not MANAGE_PRODUCTS — read-only roles can browse the catalog.
       { path: '/app/products', label: 'Inventory', icon: Warehouse, requiredPermission: PERMISSIONS.VIEW_PRODUCTS },
+      // "Sales", never "My Sales" or "Selling": those are the marketplace's, and ProcurePal sees both.
+      {
+        path: '/app/sales',
+        label: 'Sales',
+        icon: ShoppingBag,
+        requiredPermission: PERMISSIONS.VIEW_ANALYTICS,
+        recordsSalesOnly: true,
+      },
       // MANAGE_INVENTORY, not VIEW_PRODUCTS: this screen shows cost prices and suppliers on every
       // row, which browsing the catalog does not. Matches the API's own gate on the endpoint.
       {

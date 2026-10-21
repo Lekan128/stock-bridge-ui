@@ -16,6 +16,7 @@ export interface CatalogList {
   /** Matching rows; only those near the screen are loaded — see `rowAt` / `loadRange`. */
   total: number
   counts: CatalogQueryResult['counts']
+  priceCounts: CatalogQueryResult['priceCounts']
   incoming: CatalogQueryResult['incoming']
   catalogSize: number
   activeCount: number
@@ -28,6 +29,7 @@ export interface CatalogList {
 }
 
 const NO_COUNTS = { all: 0, OK: 0, LOW: 0, OUT: 0 }
+const NO_PRICE_COUNTS = { has: 0, none: 0 }
 const NO_INCOMING = { units: 0, productCount: 0 }
 
 /**
@@ -95,6 +97,7 @@ export function useCatalogList(filters: CatalogFilters, enabled: boolean): Catal
   return {
     total: summary?.total ?? 0,
     counts: summary?.counts ?? NO_COUNTS,
+    priceCounts: summary?.priceCounts ?? NO_PRICE_COUNTS,
     incoming: summary?.incoming ?? NO_INCOMING,
     catalogSize: summary?.catalogSize ?? 0,
     activeCount: summary?.activeCount ?? 0,

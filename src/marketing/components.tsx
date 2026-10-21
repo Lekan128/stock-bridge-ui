@@ -60,10 +60,14 @@ export function MarketingHeader({ focused = false }: { focused?: boolean }) {
             <Logo size={26} />
           </a>
         )}
-        <nav aria-label="Main" className="flex items-center gap-1 text-sm">
+        <nav aria-label="Main" className="group/nav flex items-center gap-1 text-sm">
           {!focused && (
             <>
-              <a href="/pricing" className="hidden rounded-md px-3 py-2 font-medium text-neutral-700 hover:bg-neutral-100 md:inline">
+              {/* On a phone, Pricing beside Log in; it steps aside for the longer "Open your workspace". */}
+              <a
+                href="/pricing"
+                className="hidden rounded-md px-3 py-2 font-medium whitespace-nowrap text-neutral-700 hover:bg-neutral-100 min-[360px]:inline max-md:group-has-[a[href='/app']]/nav:hidden"
+              >
                 Pricing
               </a>
               <a href="/guides" className="hidden rounded-md px-3 py-2 font-medium text-neutral-700 hover:bg-neutral-100 md:inline">

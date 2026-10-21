@@ -10,7 +10,7 @@ import {
 } from '@/components/analytics/dateRange'
 import type { CustomerMetric, Granularity, ProductMetric } from '@/features/marketplace/analytics/types'
 
-const PRESETS: DateRangePreset[] = ['thisWeek', 'thisMonth', 'lastMonth', 'thisQuarter', 'custom']
+const PRESETS: DateRangePreset[] = ['today', 'thisWeek', 'thisMonth', 'lastMonth', 'thisQuarter', 'custom']
 const GRANULARITIES: Granularity[] = ['DAY', 'WEEK', 'MONTH']
 const CUSTOMER_METRICS: CustomerMetric[] = ['REVENUE', 'ORDERS']
 const PRODUCT_METRICS: ProductMetric[] = ['REVENUE', 'QUANTITY']

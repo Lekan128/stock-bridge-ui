@@ -17,6 +17,7 @@ import type { TopProductsDirection, TopProductsMetric } from '@/components/analy
 import { useAnalyticsSummary } from '@/features/analytics/hooks/useAnalyticsSummary'
 import { useMovementsOverTime } from '@/features/analytics/hooks/useMovementsOverTime'
 import { useTopProducts } from '@/features/analytics/hooks/useTopProducts'
+import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 
 const TOP_PRODUCTS_LIMIT = 8
 
@@ -27,6 +28,7 @@ const TOP_PRODUCTS_LIMIT = 8
  */
 export function DashboardAnalytics() {
   const { user } = useAuth()
+  const { recordsSales } = useSellingPolicy()
   const [range, setRange] = useState<DateRange>(defaultDateRange)
   const [metric, setMetric] = useState<TopProductsMetric>('value')
   const [direction, setDirection] = useState<TopProductsDirection>('in')
@@ -104,7 +106,13 @@ export function DashboardAnalytics() {
               label="Out"
               swatch="bg-accent-600"
               value={summary.data ? formatCompactCurrency(summary.data.totalOutValue) : '…'}
-              units={summary.data ? `${formatNumber(summary.data.totalUnitsOut)} units` : ''}
+              units={
+                summary.data
+                  ? `${formatNumber(summary.data.totalUnitsOut)} units${
+                      recordsSales && summary.data.sales ? ` · ${formatCompactCurrency(summary.data.sales.salesAmount)} sales` : ''
+                    }`
+                  : ''
+              }
               href={movementsHref('OUT')}
             />
           </dl>
