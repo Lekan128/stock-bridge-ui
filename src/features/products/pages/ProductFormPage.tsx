@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useEffect, useRef, useState } from 'react'
-import { AlertTriangle, ArrowLeft, Clock, Lock, Ruler, Tag, Truck, Zap } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Banknote, Clock, Lock, Ruler, Tag, Truck, Zap } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
@@ -51,6 +51,7 @@ import {
   defaultUnitOption,
   fromBaseQuantity,
   parsePackContents,
+  productsOwnUnits,
   resolveUnitSymbol,
   toBasePrice,
   toBaseQuantity,
@@ -65,6 +66,9 @@ import { invalidateInventory, syncProductIntoCache } from '@/data/inventoryCache
 import { DraftNote } from '@/features/drafts/DraftNote'
 import { useDraft } from '@/features/drafts/useDraft'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
+import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
+import { formatMoney } from '@/features/selling/money'
+import { UnitToggle } from '@/features/products/components/UnitToggle'
 
 const KNOWN_FIELDS = new Set<keyof ProductFormValues>([
   'name',
@@ -223,6 +227,9 @@ export function ProductFormPage() {
   const location = useLocation() as { state?: { name?: string } }
   const { showToast } = useToast()
   const { user, isVendor } = useAuth()
+  const { showsSellingPrice, requiresSellingPrice } = useSellingPolicy()
+  /** The pack a company's selling price is typed per ("CARTON"), or null for the stock unit (V47). */
+  const [priceUnitCode, setPriceUnitCode] = useState<string | null>(null)
   // Fresh from the server, never a cached copy: this fills the form, and saving a cached copy
   // could write another phone's newer edits back to old values. Offline it shows the error.
   const { product, loading: loadingProduct, error: productError, refetch: refetchProduct } = useProduct(id, {
@@ -379,7 +386,14 @@ export function ProductFormPage() {
       unitOfMeasure: product.unitOfMeasure ?? '',
       packagingUnit: product.packagingUnit ?? '',
       packagingSize: product.packagingSize != null ? String(product.packagingSize) : '',
-      unitPrice: product.unitPrice != null ? String(product.unitPrice) : '',
+      // A company's price fills in as it was typed ("5,000" per carton, V47), with its unit picked
+      // below; a marketplace seller's is the per-stock-unit price, as it always was.
+      unitPrice:
+        !requiresSellingPrice && product.unitPriceEntered != null
+          ? String(product.unitPriceEntered)
+          : product.unitPrice != null
+            ? String(product.unitPrice)
+            : '',
       lowStockThreshold: savedLowStock != null ? String(savedLowStock) : '',
       // The "First supplier" block only ever applies at creation — an existing product's
       // suppliers live on the Suppliers tab, not here — so an edit always resets these to blank.
@@ -388,7 +402,8 @@ export function ProductFormPage() {
       initialVendorQuantity: '',
       categoryId: product.categoryId ?? '',
     })
-  }, [product, reset, unitOfMeasureOptions, baseOptions])
+    setPriceUnitCode(!requiresSellingPrice ? (product.unitPriceEnteredUnit ?? null) : null)
+  }, [product, reset, unitOfMeasureOptions, baseOptions, requiresSellingPrice])
 
   /**
    * Live values for the pack group's self-explaining copy. Read through `watch` rather than
@@ -561,6 +576,41 @@ export function ProductFormPage() {
   const watchedUnitPrice = watch('unitPrice')
 
   /**
+   * A company's selling price (`SELLING_PRICE_PLAN.md` §6.4): typed per the stock unit or the pack,
+   * whichever the shop prices in, and stated back in the other - never a bare figure. The profit
+   * line appears once a cost is known, in naira only: "16%" reads as markup to a trader and margin
+   * to a report, and the same ₦800 is both.
+   */
+  const priceOptions: UnitOption[] = watchedStockUnitCode
+    ? productsOwnUnits(
+        unitOptionsForProduct(
+          { unitOfMeasure: watchedStockUnitCode, packagingUnit: watchedPackCode, packagingSize: unitsPerPackNumber },
+          unitOfMeasureOptions,
+        ),
+      )
+    : []
+  const priceOption: UnitOption | null =
+    priceOptions.find((option) => !option.isStockUnit && option.code === priceUnitCode) ??
+    priceOptions.find((option) => option.isStockUnit) ??
+    null
+  const pricePerPack = priceOption != null && !priceOption.isStockUnit
+  const typedPrice = Number(watchedUnitPrice)
+  const priceTyped = watchedUnitPrice.trim() !== '' && Number.isFinite(typedPrice) && typedPrice > 0
+  const priceUnitWord = priceOption == null ? null : pricePerPack ? unitNoun(priceOption) : stockUnitLabel
+  const otherPackOption = priceOptions.find((option) => !option.isStockUnit) ?? null
+  const priceConversion = !priceTyped || priceOption == null
+    ? null
+    : pricePerPack
+      ? stockUnitLabel && `${formatMoney(typedPrice / priceOption.factorToStockUnit)} a ${stockUnitLabel}`
+      : otherPackOption && `${formatMoney(typedPrice * otherPackOption.factorToStockUnit)} a ${unitNoun(otherPackOption)}`
+  /** What one stock unit costs: the product's average on an edit, the first delivery's price on a create. */
+  const costPerStockUnit: number | null = isEdit ? (product?.costPrice ?? null) : (toStockUnitPrice(watchedInitialCost) ?? null)
+  const profitPerPriceUnit =
+    priceTyped && costPerStockUnit != null && priceOption != null
+      ? typedPrice - costPerStockUnit * (pricePerPack ? priceOption.factorToStockUnit : 1)
+      : null
+
+  /**
    * "= 1,600 kg" under a field reading "32", in bags.
    *
    * Not decoration. This is the same number the ledger will hold, converted with the same helper
@@ -731,6 +781,17 @@ export function ProductFormPage() {
     return quantityOption ? toBasePrice(value, quantityOption) : value
   }
 
+  /**
+   * A company's price goes with the unit it was typed per, and a blank one on an edit takes the
+   * price off (the product is no longer sold). A marketplace seller's price is untouched: per
+   * stock unit, never cleared - its form has no such choice.
+   */
+  function companyPriceFields(values: ProductFormValues): { unitPriceUnit?: string; clearUnitPrice?: boolean } {
+    if (!showsSellingPrice || requiresSellingPrice) return {}
+    if (values.unitPrice.trim() === '') return isEdit && product?.unitPrice != null ? { clearUnitPrice: true } : {}
+    return pricePerPack && priceOption ? { unitPriceUnit: priceOption.code } : {}
+  }
+
   async function save(values: ProductFormValues) {
     setFormError(null)
     try {
@@ -746,6 +807,7 @@ export function ProductFormPage() {
               id,
               {
                 ...toProductUpdatePayload(values, product?.categoryId),
+                ...companyPriceFields(values),
                 lowStockThreshold,
                 removeImage: removeImage || undefined,
               },
@@ -760,6 +822,7 @@ export function ProductFormPage() {
             await productsApi.create(
               {
                 ...toProductPayload(values),
+                ...companyPriceFields(values),
                 lowStockThreshold,
                 initialVendor: initialVendor && {
                   ...initialVendor,
@@ -845,7 +908,7 @@ export function ProductFormPage() {
    * own `UnitPriceRequiredException`, which is why the message matches it exactly.
    */
   async function onSubmit(values: ProductFormValues) {
-    if (isVendor && values.unitPrice.trim().length === 0) {
+    if (requiresSellingPrice && values.unitPrice.trim().length === 0) {
       setError('unitPrice', { message: UNIT_PRICE_REQUIRED_MESSAGE })
       return
     }
@@ -1261,6 +1324,7 @@ export function ProductFormPage() {
                   `packagingSize` through setValue, and the picker above is the read-back — so the
                   two can never disagree, which is what a second editable control would risk. */}
               <TextField
+                id="product-contains"
                 label={UNIT_COPY.CONTAINS}
                 placeholder="50 kg"
                 hint={
@@ -1320,22 +1384,78 @@ export function ProductFormPage() {
         </div>
 
         {/* -------------------------------------------------------------- Pricing */}
-        {/* Vendor-only, and only Unit price now — the marketplace selling price, required for a
-            vendor (enforced in `onSubmit`, mirroring the server's UnitPriceRequiredException).
+        {/* Sellers only (a vendor, or ProcurePal — `useSellingPolicy`), and only Unit price now — the
+            marketplace selling price, required for a seller (enforced in `onSubmit`, mirroring the
+            server's UnitPriceRequiredException). It used to be gated on `isVendor`, which left
+            ProcurePal with no price field and a save the server refused for want of one.
             There is no standalone "Cost price" field anywhere on this form any more: a product's
             cost is a server-computed weighted average of actual purchases (see
             MULTI_VENDOR_INVENTORY_DESIGN.md §5.3), never a value typed here. A buying company's
             only price entry point is the "First supplier" block's `initialVendorCost` below, for
             its opening purchase — so a non-vendor has nothing left to show in this section, and
             it is not rendered for them at all. */}
-        {isVendor && (
+        {showsSellingPrice && !requiresSellingPrice && (
+          <>
+            <div className="mt-2 flex items-center gap-2 border-b border-neutral-200 pb-2">
+              <Banknote className="h-4 w-4 shrink-0 text-accent-600" aria-hidden="true" />
+              <div>
+                <h2 className="text-sm font-semibold text-neutral-900">Selling</h2>
+                <p className="text-xs text-neutral-500">What you sell one for. Leave blank if you don't sell this.</p>
+              </div>
+            </div>
+            <div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-2">
+                <div className="flex-1">
+                  <TextField
+                    label={priceUnitWord ? `Selling price (₦ per ${priceUnitWord}, optional)` : 'Selling price (₦, optional)'}
+                    inputMode="decimal"
+                    error={errors.unitPrice?.message}
+                    {...register('unitPrice')}
+                  />
+                </div>
+                {priceOptions.length > 1 && priceOption && (
+                  <div className="sm:pb-0.5">
+                    <UnitToggle
+                      value={priceOption.label}
+                      onChange={(option) => setPriceUnitCode(option.isStockUnit ? null : option.code)}
+                      options={priceOptions}
+                      label="Priced per"
+                    />
+                  </div>
+                )}
+              </div>
+              {/* At most two facts under the field: the price per the other unit, and the profit. */}
+              {(priceConversion || profitPerPriceUnit != null) && (
+                <p className="mt-1.5 text-xs text-neutral-600" data-price-echo>
+                  {priceConversion}
+                  {priceConversion && profitPerPriceUnit != null && ' · '}
+                  {profitPerPriceUnit != null &&
+                    (profitPerPriceUnit >= 0 ? (
+                      <span>
+                        {formatMoney(profitPerPriceUnit)} profit a {priceUnitWord}
+                      </span>
+                    ) : (
+                      <span className="font-medium text-warning-700">{formatMoney(-profitPerPriceUnit)} less than you pay</span>
+                    ))}
+                </p>
+              )}
+            </div>
+          </>
+        )}
+
+        {showsSellingPrice && requiresSellingPrice && (
           <>
             <div className="mt-2 flex items-center gap-2 border-b border-neutral-200 pb-2">
               <Zap className="h-4 w-4 shrink-0 text-accent-600" aria-hidden="true" />
               <div>
                 <h2 className="text-sm font-semibold text-neutral-900">Pricing</h2>
+                {/* The vendor line is about review: a price change never sends a listing back.
+                    ProcurePal is never reviewed and not every product of its is listed, so it gets
+                    the line that is true for it instead. */}
                 <p className="text-xs text-neutral-500">
-                  This goes live straight away. Your listing stays on the storefront.
+                  {isVendor
+                    ? 'This goes live straight away. Your listing stays on the storefront.'
+                    : 'Buyers pay this once the product is listed on the storefront.'}
                 </p>
               </div>
             </div>

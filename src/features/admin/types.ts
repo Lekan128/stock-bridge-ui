@@ -21,6 +21,8 @@ export interface SuperAdminClientSummary {
   userCount: number
   productCount: number
   createdAt: string
+  /** Sells from its stock (API V45). Absent from an API older than the field: read as false. */
+  sellsStock?: boolean
 }
 
 /**
@@ -345,6 +347,8 @@ export type ClientStatusFilter = 'all' | 'active' | 'suspended'
 export interface ClientListParams {
   search?: string
   active?: boolean
+  /** Companies with selling from stock on (true) or off (false). */
+  sellsStock?: boolean
   page?: number
   size?: number
 }

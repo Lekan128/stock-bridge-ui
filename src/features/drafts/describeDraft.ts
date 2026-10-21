@@ -19,8 +19,8 @@ interface ProductLike {
 }
 
 /**
- * A draft as the sync centre lists it (A6). Keys are `delivery:new`, `delivery:{expectedId}` and
- * `product:new` (see `RecordDeliveryPage` and `ProductFormPage`); anything else — a key a later
+ * A draft as the sync centre lists it (A6). Keys are `delivery:new`, `delivery:{expectedId}`,
+ * `product:new` and `sale:new` (see `RecordDeliveryPage`, `ProductFormPage` and `useSaleBasket`); anything else — a key a later
  * version added — is listed plainly rather than hidden, so logout's count always matches the list.
  */
 export function describeDraft(draft: StoredDraft): DraftSummary {
@@ -38,6 +38,11 @@ export function describeDraft(draft: StoredDraft): DraftSummary {
       detail: parts.length > 0 ? parts.join(' · ') : null,
       to: id === 'new' ? '/app/products/receive' : `/app/products/receive?expected=${encodeURIComponent(id)}`,
     }
+  }
+
+  if (kind === 'sale') {
+    const items = ((draft.value as { lines?: unknown[] }).lines ?? []).length
+    return { title: 'Sale', detail: items > 0 ? `${items} ${items === 1 ? 'item' : 'items'}` : null, to: '/app/sell' }
   }
 
   if (kind === 'product') {

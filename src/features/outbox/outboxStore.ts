@@ -356,10 +356,24 @@ export async function sendAvailableInstead(id: string): Promise<void> {
   }
   // `available` is in stock units, so the replacement is entered in stock units too. Swapped in
   // one step, keeping its place in the queue, so the list never shows nothing waiting in between.
+  //
+  // A sale line's price moves with it (SELLING_PRICE_PLAN.md §4.4): it was per the unit typed (a
+  // carton), or a total for the whole line, and the replacement is in stock units for fewer of them -
+  // so it becomes the same money per stock unit, and the old line total, which named the original
+  // quantity, is dropped.
+  const soldFor = op.payload.lineTotal ?? (op.payload.unitPrice != null ? op.payload.unitPrice * op.payload.quantity : null)
+  const perStockUnit = soldFor != null && op.baseDelta !== 0 ? Math.round((soldFor / Math.abs(op.baseDelta)) * 100) / 100 : undefined
   const replacement: OutboxOp = {
     ...op,
     id: crypto.randomUUID(),
-    payload: { ...op.payload, quantity: available, unit: undefined, allocations: undefined },
+    payload: {
+      ...op.payload,
+      quantity: available,
+      unit: undefined,
+      allocations: undefined,
+      lineTotal: undefined,
+      unitPrice: perStockUnit,
+    },
     baseDelta: -available,
     summary: `${available} (what was left)`,
     status: 'pending',

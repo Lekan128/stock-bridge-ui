@@ -8,11 +8,13 @@ import { StockBar } from '@/features/products/components/StockBar'
 import { StockFigure } from '@/features/products/components/StockFigure'
 import { ProductImage } from '@/features/products/components/ProductImage'
 import { StatusBadge } from '@/features/products/components/StatusBadge'
-import { formatCurrency, formatUnitOfMeasure } from '@/features/products/formatters'
+import { formatUnitOfMeasure } from '@/features/products/formatters'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import type { Product } from '@/features/products/types'
 import { packEquivalent } from '@/features/products/packEquivalent'
 import { formatNumber } from '@/features/products/unitCopy'
+import { listPriceText } from '@/features/selling/priceText'
+import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { resolveUnitSymbol } from '@/features/products/unitSet'
 
 export type ProductSortField = 'name' | 'sku' | 'unitPrice' | 'quantityOnHand' | 'active'
@@ -85,20 +87,23 @@ const BASE_COLUMNS: { field: ProductSortField; label: string; align?: 'right' }[
 ]
 const UNIT_PRICE_COLUMN: { field: ProductSortField; label: string; align?: 'right' } = {
   field: 'unitPrice',
-  label: 'Unit price',
+  label: 'Selling price',
   align: 'right',
 }
 
 export function ProductTable({ products, sort, onSortChange, incomingFor, selection, virtual, quickActions }: ProductTableProps) {
   const hasQuickActions = quickActions != null && (quickActions.canStockIn || quickActions.canStockOut)
   const { isVendor } = useAuth()
+  // The price column follows the selling policy (a vendor, ProcurePal, or a company that sells
+  // from its stock); the pack subtitle stays a company's, as before.
+  const { showsSellingPrice } = useSellingPolicy()
   // Fetched for two things now: the packaging subtitle a company sees in place of the unit price
   // column, and — for EVERY tenant, vendor included — the stock unit stamped on the "On hand"
   // figure. A vendor's row used to need nothing from this list; a bare quantity in the on-hand
   // column was the reason it does now (`UNIT_UX_CONTRACT.md` §7.2).
   const { options: unitOfMeasureOptions } = useUnitOfMeasureOptions()
 
-  const columns = isVendor
+  const columns = showsSellingPrice
     ? [BASE_COLUMNS[0], BASE_COLUMNS[1], UNIT_PRICE_COLUMN, ...BASE_COLUMNS.slice(2)]
     : BASE_COLUMNS
 
@@ -249,9 +254,9 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
                 </div>
               </td>
               <td className="border-b border-neutral-100 px-4 py-2.5 text-neutral-600">{product.sku}</td>
-              {isVendor && (
-                <td className="border-b border-neutral-100 px-4 py-2.5 text-right text-neutral-700">
-                  {formatCurrency(product.unitPrice)}
+              {showsSellingPrice && (
+                <td className="border-b border-neutral-100 px-4 py-2.5 text-right whitespace-nowrap tabular-nums text-neutral-700">
+                  {listPriceText(product, unitOfMeasureOptions) ?? <span className="text-neutral-500">—</span>}
                 </td>
               )}
               <td className="border-b border-neutral-100 px-4 py-2.5 text-right">

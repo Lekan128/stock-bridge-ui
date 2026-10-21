@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { ArrowLeft, Minus, Pencil, Plus } from 'lucide-react'
+import { ArrowLeft, Minus, Pencil, Plus, ShoppingBag } from 'lucide-react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { PERMISSIONS } from '@/auth/permissions'
@@ -32,6 +32,10 @@ import type { StockMovement } from '@/features/products/types'
 import { buildPackOption } from '@/features/products/unitSet'
 import { VendorsTab } from '@/features/products/vendors/components/VendorsTab'
 import { isAppError } from '@/types/api'
+import { PriceHistory } from '@/features/selling/components/PriceHistory'
+import { SoldThisMonth } from '@/features/selling/sales/SoldThisMonth'
+import { perStockUnitEcho, sellingPriceText } from '@/features/selling/priceText'
+import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { OverflowMenu, type OverflowMenuItem } from '@/components/OverflowMenu'
 
 
@@ -171,6 +175,8 @@ export function ProductDetailPage() {
   const { ops } = useOutboxState()
   const pending = ops.filter((op) => op.productId === id)
 
+  // Before the early returns below: a hook must run on every render.
+  const { showsSellingPrice, recordsSales } = useSellingPolicy()
   if (loading) return <ProductDetailSkeleton />
 
   if (error || !product) {
@@ -206,11 +212,21 @@ export function ProductDetailPage() {
   const costPricePackEcho = formatPackCostEcho(product.costPrice, packOption)
 
   // Stock in / out / count: inside the hero from a laptop up, in a bar pinned to the bottom on a phone.
+  // Sell (§6.1) opens Record a sale with this product as the first line. It is the screen's action
+  // when the product has a price - a priced product is one that is sold - and Stock in steps back.
+  const canSell = recordsSales && canStockOut
+  const sellLeads = canSell && product.unitPrice != null
   const stockButtons =
     canStockIn || canStockOut || canManageInventory ? (
       <>
+        {canSell && (
+          <Button variant={sellLeads ? 'action' : 'secondary'} onClick={() => navigate(`/app/sell?product=${product.id}`)}>
+            <ShoppingBag className="h-4 w-4" aria-hidden="true" />
+            Sell
+          </Button>
+        )}
         {canStockIn && (
-          <Button variant="action" onClick={() => stockActions.open('in', product)}>
+          <Button variant={sellLeads ? 'secondary' : 'action'} onClick={() => stockActions.open('in', product)}>
             <Plus className="h-4 w-4" aria-hidden="true" />
             Stock in
           </Button>
@@ -277,7 +293,15 @@ export function ProductDetailPage() {
       {/* The hero, first (C2; plan §2 "the number is the hero"): on hand with its packs and anything
           waiting on this phone, the bar against the alert level, what is on the way, the last
           movement — and the stock actions beside it. */}
-      <StockBreakdownPanel product={product} incoming={incoming} actions={stockButtons ?? undefined} lastMovement={lastMovement} />
+      <StockBreakdownPanel
+        product={product}
+        incoming={incoming}
+        actions={stockButtons ?? undefined}
+        lastMovement={lastMovement}
+        sellingPrice={showsSellingPrice ? sellingPriceText(product, stockUnitText, packOption) : null}
+      />
+
+      <SoldThisMonth productId={product.id} stockUnit={stockUnitText} />
 
       <div role="tablist" aria-label="Product detail" className="flex gap-1 border-b border-neutral-200">
         {DETAIL_TABS.map((option) => {
@@ -317,12 +341,20 @@ export function ProductDetailPage() {
               Details
             </h2>
             <dl className="grid grid-cols-1 gap-x-8 border-t border-neutral-200 text-sm sm:grid-cols-2">
-              {/* A buying company's unit price is always null (a marketplace selling price), so the
-                  row is absent rather than an em dash on every product. */}
-              {product.unitPrice != null && (
-                <DetailRow label="Unit price">
-                  <span className="font-medium text-neutral-900">{formatPricePer(product.unitPrice, stockUnitText)}</span>
-                  {unitPricePackEcho && <span className="block text-xs text-neutral-500">{unitPricePackEcho}</span>}
+              {/* Only where a selling price means something (useSellingPolicy): a company that only uses
+                  its stock has no row at all. Said the way it was set - "₦5,000 / carton" - with the
+                  per-stock-unit figure beside it, and who changed it behind one line. */}
+              {showsSellingPrice && (
+                <DetailRow label="Selling price">
+                  <span className="font-medium text-neutral-900">
+                    {sellingPriceText(product, stockUnitText, packOption) ?? 'No selling price'}
+                  </span>
+                  {(perStockUnitEcho(product, stockUnitText, packOption) ?? (product.unitPriceEntered == null ? unitPricePackEcho : null)) && (
+                    <span className="block text-xs text-neutral-500">
+                      {perStockUnitEcho(product, stockUnitText, packOption) ?? unitPricePackEcho}
+                    </span>
+                  )}
+                  <PriceHistory productId={product.id} stockUnit={stockUnitText} />
                 </DetailRow>
               )}
               {/* `costPrice` is a weighted average per ONE stock unit (§9.2), so the row names its

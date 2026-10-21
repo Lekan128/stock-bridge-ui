@@ -11,7 +11,7 @@ import { UnitToggle } from '@/features/products/components/UnitToggle'
 import { formatDateTime } from '@/features/products/formatters'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import { stockOutSchema, type StockOutFormValues } from '@/features/products/schemas'
-import type { Product, StockOutPayload } from '@/features/products/types'
+import type { OutReason, Product, StockOutPayload } from '@/features/products/types'
 import {
   UNIT_COPY,
   formatEnteredAndBase,
@@ -19,6 +19,7 @@ import {
   formatQuantityInUnit,
   howYouCountIt,
   roundsToZeroMessage,
+  unitNoun,
 } from '@/features/products/unitCopy'
 import {
   convertsCleanly,
@@ -30,6 +31,12 @@ import {
   unitOptionsForProduct,
 } from '@/features/products/unitSet'
 import { StockReceipt } from '@/features/products/components/StockReceipt'
+import { OutReasonChooser, OutReasonLink } from '@/features/stock/components/OutReasonField'
+import { outReasonLabel } from '@/features/stock/outReasons'
+import { SellingOffer } from '@/features/selling/components/SellingOffer'
+import { formatMoney, parseMoneyInput } from '@/features/selling/money'
+import { usualAmount } from '@/features/selling/sale/saleLine'
+import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { submitStockWrite } from '@/features/outbox/outboxStore'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
@@ -158,6 +165,12 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
 
   const [choosingLots, setChoosingLots] = useState(false)
   const [noteOpen, setNoteOpen] = useState(false)
+  /** Optional, and null until somebody picks one - never defaulted (`SELLING_PRICE_PLAN.md` §6.3). */
+  const [reason, setReason] = useState<OutReason | null>(null)
+  const [reasonOpen, setReasonOpen] = useState(false)
+  const { recordsSales } = useSellingPolicy()
+  /** What it went for, per the unit counted in - typed, or null to follow the product's own price. */
+  const [salePriceTyped, setSalePriceTyped] = useState<string | null>(null)
   /** The selected option's `label`, or `null` for "not chosen yet" — not its `code`, per
    *  `UnitToggle`'s own doc comment (a code can repeat once a vendor has more than one pack). Same
    *  self-healing resolution as `StockInModal`'s, for the same reason: an option list that arrives
@@ -279,6 +292,31 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
 
   const baseQuantity = toBaseQuantity(quantityNumber, selectedOption)
   /**
+   * A sale's price each, for the unit being counted in (SELLING_PRICE_PLAN.md §6.1): pre-filled from
+   * the price as it was set - exact when that was this unit ("5,000" per carton), else converted
+   * from the per-stock-unit figure - until the person types their own.
+   */
+  const usualPriceInUnit: number | null =
+    product.unitPriceEntered != null && product.unitPriceEnteredUnit === selectedOption.code && !selectedOption.isStockUnit
+      ? product.unitPriceEntered
+      : product.unitPrice != null
+        ? Math.round(product.unitPrice * selectedOption.factorToStockUnit * 100) / 100
+        : null
+  const salePriceText = salePriceTyped ?? (usualPriceInUnit != null ? String(usualPriceInUnit) : '')
+  const salePrice = parseMoneyInput(salePriceText)
+  /**
+   * What the sale comes to: worked from the price as typed while the person hasn't changed it, so 24
+   * pieces of a "₦5,000 a carton" product are ₦5,000 and not 24 × ₦208.33; their own price × the
+   * quantity once they have. Sent as the line's total, which the server keeps exactly.
+   */
+  const saleAmount =
+    salePrice == null || quantityNumber <= 0
+      ? null
+      : salePriceTyped == null
+        ? usualAmount(product, selectedOption, productsOwnUnits(unitOptions), quantityNumber)
+        : Math.round(salePrice * quantityNumber * 100) / 100
+  const selling = reason === 'SALE' && recordsSales
+  /**
    * §3.1 rounds `quantity × factor` HALF_UP at scale 0, so a fractional entry made in the STOCK
    * UNIT is stored as a different number from the one typed — "0.5 kg" leaves as 1 kg.
    *
@@ -389,6 +427,8 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
         unit: selectedOption.code || undefined,
         allocations: builtAllocations,
         note: getValues('note') || undefined,
+        reason: reason ?? undefined,
+        lineTotal: selling && saleAmount != null ? saleAmount : undefined,
       }
       // Through the outbox (A4) — see StockInModal. Choosing deliveries needs the server's current
       // lots, so a sale with chosen deliveries is never queued; the outbox refuses it offline.
@@ -396,7 +436,7 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
         kind: 'STOCK_OUT',
         productId: product.id,
         productName: product.name,
-        summary: quantityBothWays,
+        summary: reason ? `${quantityBothWays} · ${outReasonLabel(reason)}` : quantityBothWays,
         payload,
         baseDelta: -baseQuantity,
       })
@@ -656,8 +696,55 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
             </div>
           )}
 
-          {/* The note is optional, so it waits behind one line (C3) unless there is one already. */}
-          {showNote ? (
+          {/* The reason and the note are both optional, so both wait behind one quiet line each (C3,
+              SELLING_PRICE_PLAN.md §6.3) - side by side while closed, so the sheet is no longer and
+              asks for nothing more than it did. */}
+          {/* Open, the reasons take the place of "Add a reason", above "Add a note" - not below it,
+              where they would read as belonging to the note. */}
+          <OutReasonChooser value={reason} onChange={setReason} open={reasonOpen} onOpenChange={setReasonOpen} />
+          {(!reasonOpen || !showNote) && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <OutReasonLink value={reason} onChange={setReason} open={reasonOpen} onOpenChange={setReasonOpen} />
+              {!reasonOpen && reason == null && !showNote && (
+                <span aria-hidden="true" className="text-neutral-300">
+                  ·
+                </span>
+              )}
+              {!showNote && (
+                <button
+                  type="button"
+                  onClick={() => setNoteOpen(true)}
+                  className="self-start rounded-sm text-sm font-medium text-primary-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                >
+                  Add a note
+                </button>
+              )}
+            </div>
+          )}
+          {/* Sold, by a company that does not record sales: the one place selling is offered in
+              context (§5.2). Sold, by one that does: what it went for, pre-filled and editable. */}
+          {reason === 'SALE' && !recordsSales && !reasonOpen && <SellingOffer />}
+          {selling && !reasonOpen && (
+            <div>
+              <TextField
+                id="stock-out-sale-price"
+                label={`Price each (₦ per ${unitNoun(selectedOption)}, optional)`}
+                inputMode="decimal"
+                value={salePriceText}
+                onChange={(event) => setSalePriceTyped(event.target.value)}
+              />
+              {salePrice != null && saleAmount != null && (
+                <p className="mt-1.5 text-sm font-medium tabular-nums text-neutral-900">
+                  {formatMoney(saleAmount)}
+                  {usualPriceInUnit != null && Math.abs(salePrice - usualPriceInUnit) >= 0.005 && (
+                    <span className="ml-2 text-xs font-normal text-neutral-500">usual {formatMoney(usualPriceInUnit)}</span>
+                  )}
+                </p>
+              )}
+            </div>
+          )}
+
+          {showNote && (
             <div>
               <label htmlFor="stock-out-note" className="mb-1.5 block text-sm font-medium text-neutral-700">
                 Note <span className="font-normal text-neutral-500">(optional)</span>
@@ -670,14 +757,6 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
               />
               {errors.note?.message && <p className="mt-1.5 text-xs text-danger-600">{errors.note.message}</p>}
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setNoteOpen(true)}
-              className="self-start rounded-sm text-sm font-medium text-primary-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-            >
-              Add a note
-            </button>
           )}
 
           {/* A 409 oversell gets its own card — the two numbers (available vs. requested) are
@@ -710,6 +789,10 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
           lines={[
             { label: 'Product', value: product.name },
             { label: 'Taken out', value: quantityBothWays },
+            ...(reason ? [{ label: 'Reason', value: outReasonLabel(reason) }] : []),
+            ...(selling && saleAmount != null
+              ? [{ label: 'Sold for', value: formatMoney(saleAmount) }]
+              : []),
             ...(noteText ? [{ label: 'Note', value: noteText }] : []),
           ]}
         >

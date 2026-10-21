@@ -1,3 +1,4 @@
+import type { SalesTotals } from '@/features/selling/sales/types'
 export interface AnalyticsSummary {
   totalInValue: number
   totalOutValue: number
@@ -11,6 +12,13 @@ export interface AnalyticsSummary {
   /** `activeProductCount` minus every product counted in `lowStockProductCount` or
    *  `outOfStockProductCount` — the count this dashboard had no figure for before. */
   wellStockedProductCount: number
+  /**
+   * Sales in the range, and in the comparison period - the same range a week earlier when the range
+   * is a week or less (`SELLING_PRICE_PLAN.md` §6.10). Zero, not absent, for a company that has never
+   * sold.
+   */
+  sales?: SalesTotals
+  previousSales?: SalesTotals
 }
 
 export type Granularity = 'day' | 'week' | 'month'

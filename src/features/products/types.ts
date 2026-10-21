@@ -4,13 +4,18 @@ export interface Product {
   sku: string
   description: string | null
   /**
-   * The marketplace selling price. `null` for a buying company's private stock — unit price is
-   * meaningless there, and the server now silently discards one if a company ever sent it. Only
-   * a marketplace seller (`isVendor`) has this required and non-null; see `ProductFormPage` for
-   * where that requirement is enforced client-side, since the server 400s with a general
-   * (not field-mapped) `UnitPriceRequiredException` if a seller omits it.
+   * The selling price, per ONE stock unit. Required for a marketplace seller (vendor or ProcurePal);
+   * optional for a company that sells from its stock (`useSellingPolicy`); `null` for one that
+   * doesn't. See `ProductFormPage` for where "required" is enforced client-side.
    */
   unitPrice: number | null
+  /**
+   * The selling price exactly as typed, when that was per a unit other than the stock unit -
+   * "5,000" per `"CARTON"` (API V47). A sale in that unit pre-fills from it, so it charges 5,000
+   * rather than 24 × 208.33. Absent when the price was typed per stock unit.
+   */
+  unitPriceEntered?: number
+  unitPriceEnteredUnit?: string
   /** Usable stock: what can be picked, sold or consumed today. */
   quantityOnHand: number
   costPrice: number | null
@@ -163,6 +168,8 @@ export interface ProductListParams {
   /** Only products in this company category. */
   categoryId?: string
   stockStatus?: StockStatusFilter
+  /** Products with (true) or without (false) a selling price - API V47's `hasSellingPrice`. */
+  hasSellingPrice?: boolean
   page?: number
   size?: number
   sort?: string
@@ -216,6 +223,11 @@ export interface ProductFormPayload {
    * vendor" BEFORE submitting, for a faster and field-attributed error than that 400 gives.
    */
   unitPrice?: number
+  /**
+   * Which of the product's units `unitPrice` is per (API V47): a pack code such as `"CARTON"` for
+   * "5,000 a carton". Omitted means the stock unit - what every caller before it meant.
+   */
+  unitPriceUnit?: string
   /**
    * A `role: "BASE"` code from `GET /api/products/units-of-measure` (e.g. `"KG"`), or omitted.
    * Required (the server 400s with `PackagingRequiresUnitOfMeasureException`) whenever either
@@ -359,6 +371,11 @@ export interface ProductUpdatePayload extends Partial<ProductFormPayload> {
   removeImage?: boolean
   /** Removes the product's category. Needed because an absent `categoryId` leaves it unchanged. */
   clearCategory?: boolean
+  /**
+   * Takes the selling price off (API V47) - a company that no longer sells this product. Needed for
+   * the same reason as `clearCategory`: an absent `unitPrice` leaves it unchanged.
+   */
+  clearUnitPrice?: boolean
   // No `clearCompanyVendor` (or `companyVendorId`) here anymore — there is no flat per-product
   // supplier field left to clear. An existing product's vendors are added, edited and unlinked
   // from the product detail page's Vendors tab (`ProductVendor` rows), not through this payload.
@@ -425,6 +442,14 @@ export interface StockMovement {
   enteredUnit?: string
   enteredQuantity?: number | null
   enteredUnitPrice?: number | null
+  /** Why a stock-out happened (API V46). Absent on every other row, and on a stock-out with no reason given. */
+  outReason?: OutReason
+  /** What a sale line went for, exactly as charged (API V45). Absent for anything else. */
+  saleAmount?: number
+  /** The sale line this row cancels (a sale cancelled later puts the stock back). */
+  reversesMovementId?: string
+  /** The sale line this row adds a price to (no stock moves). */
+  correctsMovementId?: string
 }
 
 export interface CheaperVendorHint {
@@ -466,12 +491,30 @@ export interface StockInPayload {
   note?: string
 }
 
+/**
+ * Why a stock-out happened (API V46, `SELLING_PRICE_PLAN.md` §4.3). Optional everywhere: absent is
+ * "No reason given", and nothing on this side ever picks one for the person. Labels live in
+ * `features/stock/outReasons.ts`.
+ */
+export type OutReason = 'SALE' | 'USED' | 'DAMAGED' | 'EXPIRED' | 'LOST' | 'RETURNED_TO_SUPPLIER' | 'OTHER'
+
 export interface StockOutPayload {
   quantity: number
   unit?: string
   /** Omitted (simple path) = server computes FIFO. Present = manual per-lot override. */
   allocations?: { inMovementId: string; quantity: number }[]
   note?: string
+  /** Why it went out. Omitted when nobody said - never defaulted to "Used". */
+  reason?: OutReason
+  /**
+   * What a sale went for, per ONE of `unit` (the unit counted in) - the server multiplies by the
+   * quantity as typed, so a carton at 5,000 is 5,000. A price with no reason is a sale (API V46).
+   */
+  unitPrice?: number
+  /** The sale this line belongs to (API V46) - made on the phone when the sale starts. */
+  saleId?: string
+  /** What the whole line went for, when a total was typed rather than a price each - kept exactly. */
+  lineTotal?: number
 }
 
 // `ProductVendor` / `ProductVendorPriceTier` (GET /api/products/{productId}/vendors) live in

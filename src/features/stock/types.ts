@@ -1,4 +1,4 @@
-import type { MovementType } from '@/features/products/types'
+import type { MovementType, OutReason } from '@/features/products/types'
 
 /**
  * The stock in/out report — `GET /api/stock/movements` and its `/summary` sibling.
@@ -18,6 +18,10 @@ export interface StockMovementReportParams {
   movementType?: MovementType
   productId?: string
   companyVendorId?: string
+  /** Only stock-outs with this reason (API V46). */
+  outReason?: OutReason
+  /** Only stock-outs with no reason given. */
+  noReason?: boolean
   page?: number
   size?: number
   /** Spring Data sort, e.g. `occurredAt,desc`. Defaults server-side to newest-occurring first. */
@@ -51,4 +55,14 @@ export interface StockMovementSummary {
    * somebody is trying to explain, so it is reported.
    */
   adjustmentCount: number
+  /**
+   * What sales in range went for, as the Sales report counts it (`SELLING_PRICE_PLAN.md` §6.9).
+   * Absent where it doesn't apply - selling off, a supplier filter, a non-sale reason.
+   */
+  salesAmount?: number
+  /** Sale lines in range still without a price; absent with `salesAmount`. */
+  unpricedSaleCount?: number
+  /** Every other stock-out - used, spoilt, sent away - at what the stock cost. */
+  otherOutCost: number
+  otherOutCount: number
 }

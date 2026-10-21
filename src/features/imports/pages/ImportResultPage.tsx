@@ -14,6 +14,7 @@ import { UndoBlockedPanel } from '@/features/imports/components/UndoBlockedPanel
 import { copy } from '@/features/imports/copy'
 import type { ImportResult, UndoBlockedResponse } from '@/features/imports/types'
 import { isAppError } from '@/types/api'
+import { formatMoney } from '@/features/selling/money'
 import { useQueryClient } from '@tanstack/react-query'
 import { invalidateInventory } from '@/data/inventoryCache'
 
@@ -33,6 +34,7 @@ export function ImportResultPage() {
   const { sessionId } = useParams<{ sessionId: string }>()
   const { user } = useAuth()
   const canRecordStock = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_INVENTORY)
+  const canManageProducts = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_PRODUCTS)
   const location = useLocation()
   const { showToast } = useToast()
 
@@ -164,6 +166,35 @@ export function ImportResultPage() {
         </div>
 
         {blocked && <UndoBlockedPanel blocked={blocked} />}
+
+        {/* §6.7: a delivery records what arrived and never changes a selling price - it only says
+            when one now sells for no more than it costs. */}
+        {!failed && result.pricesToCheck != null && result.pricesToCheck.length > 0 && (
+          <section aria-labelledby="prices-to-check" className="flex flex-col gap-2 rounded-lg border border-warning-200 bg-warning-50 p-4">
+            <h2 id="prices-to-check" className="text-sm font-semibold text-warning-900">
+              Check your prices
+            </h2>
+            <ul className="flex flex-col gap-1.5">
+              {result.pricesToCheck.map((check) => (
+                <li key={check.productId} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-sm text-warning-900">
+                  <span>
+                    <span className="font-medium">{check.productName}</span>: you now pay{' '}
+                    <span className="tabular-nums">{formatMoney(check.costEach)}</span> {check.per} and sell at{' '}
+                    <span className="tabular-nums">{formatMoney(check.sellingEach)}</span>.
+                  </span>
+                  {canManageProducts && (
+                    <Link
+                      to={`/app/products/${check.productId}/edit`}
+                      className="shrink-0 font-medium text-primary-700 underline underline-offset-2"
+                    >
+                      Update price
+                    </Link>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {/* §16: products first, stock second. Only after a product import that actually created
             something — `createdCount`, not `productsCreated`, which counts only a stock-in row's
