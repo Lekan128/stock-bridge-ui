@@ -55,6 +55,8 @@ export const PERMISSIONS = {
   WORK_AT_ALL_BRANCHES: 'WORK_AT_ALL_BRANCHES',
   MANAGE_BRANCHES: 'MANAGE_BRANCHES',
   CHANGE_SELLING_PRICES: 'CHANGE_SELLING_PRICES',
+  /** V53: send stock to another branch. Given to every role holding STOCK_OUT; can be taken away. */
+  SEND_STOCK: 'SEND_STOCK',
 
   /**
    * The buying company's own vendor directory — `/api/company-vendors` (V11).

@@ -34,6 +34,8 @@ const MOVEMENT_BADGE: Record<MovementType, { label: string; variant: 'success' |
   IN: { label: 'In', variant: 'success' },
   OUT: { label: 'Out', variant: 'warning' },
   ADJUSTMENT: { label: 'Adjustment', variant: 'neutral' },
+  TRANSFER_OUT: { label: 'Sent', variant: 'neutral' },
+  TRANSFER_IN: { label: 'Received', variant: 'neutral' },
 }
 
 /**

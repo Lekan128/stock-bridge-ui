@@ -28,7 +28,7 @@ export function usePendingStock(productId: string | undefined): PendingStock {
     waiting += 1
     if (op.status === 'needs_attention') needsAttention = true
     if (op.kind === 'COUNT') count = op
-    else delta += op.baseDelta
+    else if (op.baseDelta != null) delta += op.baseDelta
   }
   return { delta, count, waiting, needsAttention }
 }

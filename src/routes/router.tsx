@@ -147,6 +147,11 @@ const SalesPage = lazy(() =>
     default: m.SalesPage,
   })),
 )
+// Transfers between branches (MULTI_BRANCH_UX_PLAN.md §5.4-5.7): one chunk for the three screens,
+// which only a company with two branches ever opens - one, so Send can move to the waybill offline.
+const TransfersPage = lazy(() => import('@/features/transfers/screens').then((m) => ({ default: m.TransfersPage })))
+const SendStockPage = lazy(() => import('@/features/transfers/screens').then((m) => ({ default: m.SendStockPage })))
+const TransferDetailPage = lazy(() => import('@/features/transfers/screens').then((m) => ({ default: m.TransferDetailPage })))
 // What has been ordered from a supplier off the platform and not received yet (task 3.1). Two
 // chunks, like the import screens: the list is read by anyone who can see products, while the
 // screen that writes one down is reached far less often and by fewer people.
@@ -675,6 +680,32 @@ export function AppRoutes() {
             element={
               <RequirePermission permission={PERMISSIONS.VIEW_ANALYTICS}>
                 <SalesPage />
+              </RequirePermission>
+            }
+          />
+          {/* Transfers: reading is any of the stock authorities, as the API's list is; sending is
+            SEND_STOCK. "send" is static, so it is declared before ":id". */}
+          <Route
+            path="transfers"
+            element={
+              <RequirePermission anyOf={[PERMISSIONS.STOCK_IN, PERMISSIONS.STOCK_OUT, PERMISSIONS.SEND_STOCK, PERMISSIONS.MANAGE_INVENTORY]}>
+                <TransfersPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="transfers/send"
+            element={
+              <RequirePermission permission={PERMISSIONS.SEND_STOCK}>
+                <SendStockPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="transfers/:id"
+            element={
+              <RequirePermission anyOf={[PERMISSIONS.STOCK_IN, PERMISSIONS.STOCK_OUT, PERMISSIONS.SEND_STOCK, PERMISSIONS.MANAGE_INVENTORY]}>
+                <TransferDetailPage />
               </RequirePermission>
             }
           />

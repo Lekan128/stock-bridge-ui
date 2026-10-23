@@ -19,6 +19,8 @@ const KIND_LABEL: Record<OutboxOp['kind'], string> = {
   STOCK_IN: 'Stock in',
   STOCK_OUT: 'Stock out',
   COUNT: 'Count',
+  TRANSFER_SEND: 'Send stock',
+  TRANSFER_RECEIVE: 'Receive stock',
 }
 
 /** "10:42" today, "3 Oct, 10:42" otherwise. */
@@ -130,7 +132,7 @@ function ReceiptLine({ op, stamp, sentAt }: { op: OutboxOp; stamp: StampKind; se
           <p className="text-sm text-neutral-900">
             <span className="font-medium">{KIND_LABEL[op.kind]}</span> · {op.summary}
           </p>
-          <p className="truncate text-sm text-neutral-600">{op.productName}</p>
+          {op.productName !== op.summary && <p className="truncate text-sm text-neutral-600">{op.productName}</p>}
           <p className="mt-0.5 text-xs tabular-nums text-neutral-500">
             Recorded {at(op.createdAt)}
             {sentAt != null && ` · sent ${at(sentAt)}`}
@@ -142,10 +144,11 @@ function ReceiptLine({ op, stamp, sentAt }: { op: OutboxOp; stamp: StampKind; se
         <div className="flex flex-col gap-2 rounded-md bg-warning-50 px-3 py-2">
           <p className="text-sm text-warning-900">{op.problem.message}</p>
           <div className="flex flex-wrap gap-2">
-            {op.problem.kind === 'oversell' && op.problem.available > 0 && (
+            {op.kind === 'STOCK_OUT' && op.problem.kind === 'oversell' && op.problem.available > 0 && (
               <Button onClick={() => void sendAvailableInstead(op.id)}>Send {op.problem.available} instead</Button>
             )}
-            {op.problem.kind === 'refused' && (
+            {/* A waybill refused for want of stock goes as it is once the stock is there. */}
+            {(op.problem.kind === 'refused' || op.kind === 'TRANSFER_SEND') && (
               <Button variant="secondary" onClick={() => void retryOp(op.id)}>
                 Try again
               </Button>

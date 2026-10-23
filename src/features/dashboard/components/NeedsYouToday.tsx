@@ -17,6 +17,11 @@ import { useDataIssuesNotice } from '@/features/products/quality/useDataIssuesNo
 import type { Product } from '@/features/products/types'
 import { resolveUnitSymbol } from '@/features/products/unitSet'
 import { SyncCentre } from '@/features/sync/SyncCentre'
+import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
+import { PERMISSIONS } from '@/auth/permissions'
+import { useAuth } from '@/auth/useAuth'
+import { formatNumber } from '@/features/products/unitCopy'
+import { useTransfers } from '@/features/transfers/useTransfers'
 
 const SHOWN_PER_KIND = 4
 
@@ -73,6 +78,22 @@ export function NeedsYouToday({ canStockIn, canReceive }: NeedsYouTodayProps) {
 
   const dataIssues = useDataIssuesNotice()
 
+  // Multiple branches (MULTI_BRANCH_UX_PLAN.md §5.5, §5.7): what is on the way here, and stock that
+  // went missing on the way and nobody has checked - at both ends, until somebody does.
+  const branch = useOptionalWorkingBranch()
+  const { user } = useAuth()
+  const seesTransfers =
+    user?.type === 'tenant' &&
+    [PERMISSIONS.STOCK_IN, PERMISSIONS.STOCK_OUT, PERMISSIONS.SEND_STOCK, PERMISSIONS.MANAGE_INVENTORY].some((code) =>
+      user.permissions.includes(code),
+    )
+  const multi = (branch?.isMultiBranch ?? false) && seesTransfers
+  const here = branch?.isAll ? undefined : branch?.working?.id
+  const openTransfers = useTransfers({ branchId: here, openOnly: true }, multi)
+  const recentTransfers = useTransfers({ branchId: here }, multi)
+  const arriving = (openTransfers.data?.content ?? []).filter((t) => here == null || t.toBranchId === here)
+  const unchecked = (recentTransfers.data?.content ?? []).filter((t) => t.missing > 0)
+
   const rows: ReactNode[] = []
   if (refused > 0) {
     rows.push(
@@ -86,6 +107,37 @@ export function NeedsYouToday({ canStockIn, canReceive }: NeedsYouTodayProps) {
           <button type="button" onClick={() => setSyncOpen(true)} className={buttonClassName('secondary', 'whitespace-nowrap')}>
             Review
           </button>
+        }
+      />,
+    )
+  }
+  for (const transfer of arriving.slice(0, SHOWN_PER_KIND)) {
+    const items = transfer.lines.length
+    rows.push(
+      <NeedRow
+        key={`transfer-${transfer.id}`}
+        icon={<Truck className="h-5 w-5 text-neutral-500" aria-hidden="true" />}
+        title={`${items} ${items === 1 ? 'item' : 'items'} on the way from ${transfer.fromBranchName}`}
+        detail={`${transfer.waybill}${transfer.sentByName ? ` · sent by ${transfer.sentByName}` : ''}${here == null ? ` · to ${transfer.toBranchName}` : ''}`}
+        action={
+          <Link to={`/app/transfers/${transfer.id}`} className={buttonClassName('secondary', 'whitespace-nowrap')}>
+            Receive
+          </Link>
+        }
+      />,
+    )
+  }
+  for (const transfer of unchecked.slice(0, SHOWN_PER_KIND)) {
+    rows.push(
+      <NeedRow
+        key={`missing-${transfer.id}`}
+        icon={<TriangleAlert className="h-5 w-5 text-warning-700" aria-hidden="true" />}
+        title={`${formatNumber(transfer.missing)} missing from ${transfer.waybill}`}
+        detail={`${transfer.fromBranchName} to ${transfer.toBranchName} · not checked yet`}
+        action={
+          <Link to={`/app/transfers/${transfer.id}`} className={buttonClassName('secondary', 'whitespace-nowrap')}>
+            Open
+          </Link>
         }
       />,
     )

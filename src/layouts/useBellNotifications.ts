@@ -41,6 +41,9 @@ const serverIcons: Record<NotificationType, LucideIcon> = {
   PAYMENT_RECEIVED: CircleCheck,
   PAYMENT_FAILED: TriangleAlert,
   ORDER_DELIVERED: PackageCheck,
+  ACCOUNT_SETTING_CHANGED: BellRing,
+  TRANSFER_ON_THE_WAY: Truck,
+  TRANSFER_RECEIVED_SHORT: AlertTriangle,
 }
 
 const serverTones: Record<NotificationType, BellNotificationTone> = {
@@ -49,6 +52,9 @@ const serverTones: Record<NotificationType, BellNotificationTone> = {
   PAYMENT_RECEIVED: 'success',
   PAYMENT_FAILED: 'danger',
   ORDER_DELIVERED: 'success',
+  ACCOUNT_SETTING_CHANGED: 'info',
+  TRANSFER_ON_THE_WAY: 'info',
+  TRANSFER_RECEIVED_SHORT: 'warning',
 }
 
 /**

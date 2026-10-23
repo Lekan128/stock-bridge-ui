@@ -12,14 +12,32 @@ import { buildPackOption } from '@/features/products/unitSet'
 import { outReasonLabel } from '@/features/stock/outReasons'
 import { StockFigure } from '@/features/products/components/StockFigure'
 
-const movementLabels: Record<MovementType, string> = { IN: 'Stock in', OUT: 'Stock out', ADJUSTMENT: 'Adjustment' }
-const PENDING_LABEL: Record<OutboxOp['kind'], string> = { STOCK_IN: 'Stock in', STOCK_OUT: 'Stock out', COUNT: 'Count' }
-const movementVariants: Record<MovementType, BadgeVariant> = { IN: 'success', OUT: 'danger', ADJUSTMENT: 'neutral' }
+const movementLabels: Record<MovementType, string> = {
+  IN: 'Stock in',
+  OUT: 'Stock out',
+  ADJUSTMENT: 'Adjustment',
+  TRANSFER_OUT: 'Sent',
+  TRANSFER_IN: 'Received',
+}
+const PENDING_LABEL: Record<OutboxOp['kind'], string> = {
+  STOCK_IN: 'Stock in',
+  STOCK_OUT: 'Stock out',
+  COUNT: 'Count',
+  TRANSFER_SEND: 'Send stock',
+  TRANSFER_RECEIVE: 'Receive stock',
+}
+const movementVariants: Record<MovementType, BadgeVariant> = {
+  IN: 'success',
+  OUT: 'danger',
+  ADJUSTMENT: 'neutral',
+  TRANSFER_OUT: 'neutral',
+  TRANSFER_IN: 'neutral',
+}
 
 /** The movement as a signed change in stock units: a stock-out is always a fall. */
 function signedQuantity(movement: StockMovement): number {
-  if (movement.movementType === 'OUT') return -Math.abs(movement.quantity)
-  if (movement.movementType === 'IN') return Math.abs(movement.quantity)
+  if (movement.movementType === 'OUT' || movement.movementType === 'TRANSFER_OUT') return -Math.abs(movement.quantity)
+  if (movement.movementType === 'IN' || movement.movementType === 'TRANSFER_IN') return Math.abs(movement.quantity)
   return movement.quantity
 }
 

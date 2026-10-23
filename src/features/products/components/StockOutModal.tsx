@@ -39,6 +39,7 @@ import { formatMoney, parseMoneyInput } from '@/features/selling/money'
 import { usualAmount } from '@/features/selling/sale/saleLine'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { submitStockWrite } from '@/features/outbox/outboxStore'
+import { SendFromOtherBranch } from '@/features/transfers/SendFromOtherBranch'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
 
@@ -778,6 +779,7 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
                   Only {formatQuantity(oversellInfo.available, stockUnitText)} available — you requested{' '}
                   {formatQuantity(oversellInfo.requested, stockUnitText)}.
                 </p>
+                <SendFromOtherBranch product={product} shortAt={sheetBranch.branchId} unit={stockUnitText} />
               </div>
             </div>
           ) : (

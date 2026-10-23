@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/Button'
 import { TextField } from '@/components/TextField'
@@ -113,6 +114,15 @@ export function BranchesPage() {
             {problem?.branchId === branch.id && (
               <p role="alert" className="text-sm text-danger-700">
                 {problem.message}
+                {/* A branch that still holds stock can't close (UX §5.11): send it all elsewhere first. */}
+                {(branch.productsInStock ?? 0) > 0 && (
+                  <>
+                    {' '}
+                    <Link to={`/app/transfers/send?all=${branch.id}`} className="font-medium text-primary-700 hover:underline">
+                      Send all stock
+                    </Link>
+                  </>
+                )}
               </p>
             )}
           </li>

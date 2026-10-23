@@ -33,6 +33,7 @@ const SUITES = [
   'sales-report',
   'dashboard',
   'branches',
+  'transfers',
   'chaos',
   'metrics',
   'a11y',

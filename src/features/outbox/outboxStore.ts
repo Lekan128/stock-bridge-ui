@@ -2,9 +2,12 @@ import Dexie, { type Table } from 'dexie'
 import { invalidateInventory, syncProductIntoCache } from '@/data/inventoryCache'
 import { queryClient } from '@/data/queryClient'
 import { queryKeys } from '@/data/queryKeys'
+import { syncCatalog } from '@/features/catalog/catalogStore'
 import type { OutboxOp, OutboxProblem, StockCountPayload, SubmitOutcome } from '@/features/outbox/types'
 import { stockApi, type StockInRequestPayload } from '@/features/products/api/stockApi'
 import type { StockMutationResponse, StockOutPayload } from '@/features/products/types'
+import { transfersApi } from '@/features/transfers/transfersApi'
+import type { ReceiptPayload, SendPayload, Transfer } from '@/features/transfers/types'
 import { isAppError } from '@/types/api'
 
 /**
@@ -161,11 +164,18 @@ function isTransient(error: unknown): boolean {
   return isAppError(error) && (error.status === 0 || error.status >= 500)
 }
 
-function send(op: OutboxOp, { late }: { late: boolean }): Promise<StockMutationResponse> {
+type Answer = StockMutationResponse | Transfer
+
+function send(op: OutboxOp, { late }: { late: boolean }): Promise<Answer> {
   // A write sent the moment it is entered is dated by the server, as always. One sent later
   // carries the moment it was entered, and says it is late.
   const timing = late ? { occurredAt: new Date(op.createdAt).toISOString(), recordedOffline: true } : {}
   switch (op.kind) {
+    // A waybill keeps the moment it was made, sent now or later: the receiver sees when it left.
+    case 'TRANSFER_SEND':
+      return transfersApi.send({ ...op.payload, occurredAt: new Date(op.createdAt).toISOString() })
+    case 'TRANSFER_RECEIVE':
+      return transfersApi.receive(op.transferId, { ...op.payload, occurredAt: new Date(op.createdAt).toISOString() })
     case 'STOCK_IN':
       return stockApi.stockIn(op.productId, { ...op.payload, ...timing } as StockInRequestPayload, op.id)
     case 'STOCK_OUT':
@@ -191,6 +201,31 @@ function problemFrom(error: unknown): OutboxProblem {
     return { kind: 'refused', message: 'Your account is no longer allowed to record this.' }
   }
   return { kind: 'refused', message: isAppError(error) ? error.message : 'The server could not record this.' }
+}
+
+function keysOf(op: Pick<OutboxOp, 'productId' | 'keys'>): string[] {
+  return op.keys ?? [op.productId]
+}
+
+/**
+ * A transfer has landed: both branches' figures moved, which the catalogue learns from its next delta
+ * (the server logs every product on the waybill), and the transfer lists and pages are out of date.
+ */
+function applyTransferResult(transfer: Transfer): void {
+  queryClient.setQueryData(['transfers', 'detail', transfer.id], transfer)
+  void queryClient.invalidateQueries({ queryKey: ['transfers'] })
+  void queryClient.invalidateQueries({ queryKey: queryKeys.products.lowStock })
+  for (const line of transfer.lines) {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.products.detail(line.productId) })
+    void queryClient.invalidateQueries({ queryKey: ['products', 'history', line.productId] })
+  }
+  void invalidateInventory(queryClient)
+  void syncCatalog()
+}
+
+function applyResult(op: OutboxOp, response: Answer): void {
+  if (op.kind === 'TRANSFER_SEND' || op.kind === 'TRANSFER_RECEIVE') applyTransferResult(response as Transfer)
+  else applyStockResult(op.productId, response as StockMutationResponse)
 }
 
 /** The product's figures everywhere — detail, list, device catalogue — after a write lands (or is undone). */
@@ -248,13 +283,13 @@ export async function submitStockWrite(input: NewOp): Promise<SubmitOutcome<Stoc
     ...(input.kind === 'COUNT' ? { baseDelta: null } : {}),
   } as OutboxOp
 
-  const waitingBehind = state.ops.some((existing) => existing.productId === op.productId)
+  const waitingBehind = isBehind(op)
   // Choosing which deliveries a sale comes from needs the server's current lots: never queued.
   const mustBeOnline = op.kind === 'STOCK_OUT' && (op.payload.allocations?.length ?? 0) > 0
 
   if (!waitingBehind) {
     try {
-      const response = await send(op, { late: false })
+      const response = (await send(op, { late: false })) as StockMutationResponse
       applyStockResult(op.productId, response)
       return { status: 'sent', response }
     } catch (error) {
@@ -267,6 +302,64 @@ export async function submitStockWrite(input: NewOp): Promise<SubmitOutcome<Stoc
   await save({ ...op, attempts: 1, nextAttemptAt: Date.now() + backoff(1) })
   void processOutbox()
   return { status: 'queued', op }
+}
+
+/** Something already waiting shares a product (or the waybill) with this write: it goes after. */
+function isBehind(op: Pick<OutboxOp, 'productId' | 'keys'>): boolean {
+  const mine = new Set(keysOf(op))
+  return state.ops.some((existing) => keysOf(existing).some((key) => mine.has(key)))
+}
+
+type NewTransferOp =
+  | { kind: 'TRANSFER_SEND'; payload: SendPayload; summary: string }
+  | { kind: 'TRANSFER_RECEIVE'; transferId: string; payload: ReceiptPayload; summary: string; productIds: string[] }
+
+/**
+ * Sends a waybill or a receipt the way `submitStockWrite` sends a stock write: now if the server can
+ * be reached, otherwise kept on this phone and sent in order (MULTI_BRANCH_UX_PLAN.md rule 9). It
+ * waits behind any earlier write for one of its products, so "received 10 bags, sent 4 to Oshodi"
+ * typed offline arrives in that order. A refusal that comes back now is thrown for the screen to show.
+ */
+export async function submitTransfer(input: NewTransferOp): Promise<SubmitOutcome<Transfer>> {
+  const transferId = input.kind === 'TRANSFER_SEND' ? input.payload.id : input.transferId
+  const productIds = input.kind === 'TRANSFER_SEND' ? input.payload.lines.map((line) => line.productId) : input.productIds
+  const base = {
+    id: crypto.randomUUID(),
+    productId: `transfer:${transferId}`,
+    keys: [`transfer:${transferId}`, ...productIds],
+    productName: input.summary,
+    summary: input.summary,
+    createdAt: Date.now(),
+    status: 'pending' as const,
+    attempts: 0,
+    nextAttemptAt: 0,
+    baseDelta: null,
+  }
+  const op: OutboxOp =
+    input.kind === 'TRANSFER_SEND'
+      ? { ...base, kind: 'TRANSFER_SEND', payload: input.payload }
+      : { ...base, kind: 'TRANSFER_RECEIVE', transferId: input.transferId, payload: input.payload }
+
+  if (!isBehind(op)) {
+    try {
+      const response = (await send(op, { late: false })) as Transfer
+      applyTransferResult(response)
+      return { status: 'sent', response }
+    } catch (error) {
+      if (!isTransient(error)) throw error
+    }
+  }
+  await save({ ...op, attempts: 1, nextAttemptAt: Date.now() + backoff(1) })
+  void processOutbox()
+  return { status: 'queued', op }
+}
+
+/** The waybills and receipts waiting on this phone, for the transfers screens. */
+export function pendingTransferOps(): Extract<OutboxOp, { kind: 'TRANSFER_SEND' | 'TRANSFER_RECEIVE' }>[] {
+  return state.ops.filter(
+    (op): op is Extract<OutboxOp, { kind: 'TRANSFER_SEND' | 'TRANSFER_RECEIVE' }> =>
+      op.kind === 'TRANSFER_SEND' || op.kind === 'TRANSFER_RECEIVE',
+  )
 }
 
 let processing = false
@@ -298,10 +391,16 @@ export async function processOutbox({ force = false }: { force?: boolean } = {})
   }
   processing = true
   try {
-    // The first waiting write per product; anything behind it waits its turn.
-    const heads = new Map<string, OutboxOp>()
-    for (const op of state.ops) if (!heads.has(op.productId)) heads.set(op.productId, op)
-    for (const op of heads.values()) {
+    // The first waiting write per product; anything behind it waits its turn. A transfer is a head
+    // only when nothing earlier shares one of its products, and holds back what comes after it.
+    const heads: OutboxOp[] = []
+    const taken = new Set<string>()
+    for (const op of state.ops) {
+      const keys = keysOf(op)
+      if (!keys.some((key) => taken.has(key))) heads.push(op)
+      for (const key of keys) taken.add(key)
+    }
+    for (const op of heads) {
       if (op.status !== 'pending') continue
       if (!forceRound && op.nextAttemptAt > Date.now()) continue
       setState({ sending: true })
@@ -313,7 +412,7 @@ export async function processOutbox({ force = false }: { force?: boolean } = {})
           sentThisRound: state.sentThisRound + 1,
           recentlySent: [{ ...op, sentAt: Date.now() }, ...state.recentlySent].slice(0, RECENT_LIMIT),
         })
-        applyStockResult(op.productId, response)
+        applyResult(op, response)
         processAgain = true // the product's next write, if any, can go now
       } catch (error) {
         if (isTransient(error)) {

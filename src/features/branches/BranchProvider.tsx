@@ -26,6 +26,8 @@ export interface WorkingBranchValue {
   /** First open on this phone with more than one place to be: ask "Which branch are you at?" (UX §4.2). */
   needsChoice: boolean
   mayAddBranch: boolean
+  /** Every open branch by name, for Send stock's "To" (UX §5.4). Empty for someone who can't send. */
+  sendTo: { id: string; name: string }[]
   loading: boolean
   choose: (choice: WorkingBranchChoice) => void
   /** Look a branch up by id, for labels on history rows and receipts. */
@@ -127,9 +129,12 @@ export function BranchProvider({ children }: { children: ReactNode }) {
       recordable,
       needsChoice,
       mayAddBranch: list?.mayAddBranch ?? false,
+      sendTo: list?.sendTo ?? [],
       loading: query.loading,
       choose,
-      nameOf: (branchId) => (branchId ? byId.get(branchId)?.name : undefined),
+      // A branch the person doesn't see is still named on a waybill they send or receive.
+      nameOf: (branchId) =>
+        branchId ? (byId.get(branchId)?.name ?? list?.sendTo?.find((entry) => entry.id === branchId)?.name) : undefined,
     }
   }, [query.data, query.loading, chosen, choose])
 

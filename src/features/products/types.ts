@@ -145,6 +145,12 @@ export interface Product {
    * `== null`, never `=== null`.
    */
   expectedQuantity?: number
+  /**
+   * Sent from another branch and not yet received (MULTI_BRANCH_UX_PLAN.md §5.9) - set on the phone by
+   * `scopeProduct` from the branch figures, never sent by the API on the product itself. Beside the
+   * figure, never in it (rule 5).
+   */
+  transferOnTheWay?: number
 }
 
 /** Mirrors Spring Data's Page<T> JSON shape. */
@@ -391,7 +397,8 @@ export interface ProductUpdatePayload extends Partial<ProductFormPayload> {
   // has no use for it and `ProductFormPage` never populates it outside the create form.
 }
 
-export type MovementType = 'IN' | 'OUT' | 'ADJUSTMENT'
+/** TRANSFER_OUT / TRANSFER_IN: stock sent to, or received from, another branch (V53). */
+export type MovementType = 'IN' | 'OUT' | 'ADJUSTMENT' | 'TRANSFER_OUT' | 'TRANSFER_IN'
 
 export interface StockMovement {
   id: string

@@ -50,7 +50,13 @@ export const PERMISSION_CATEGORIES: { label: string; codes: string[] }[] = [
   },
   {
     label: 'Branches',
-    codes: [PERMISSIONS.VIEW_ALL_BRANCHES, PERMISSIONS.WORK_AT_ALL_BRANCHES, PERMISSIONS.MANAGE_BRANCHES],
+    codes: [
+      PERMISSIONS.VIEW_ALL_BRANCHES,
+      PERMISSIONS.WORK_AT_ALL_BRANCHES,
+      PERMISSIONS.MANAGE_BRANCHES,
+      // Subdivides STOCK_OUT (V53, D-U4): a role that sells but shouldn't move stock between branches.
+      PERMISSIONS.SEND_STOCK,
+    ],
   },
 ]
 

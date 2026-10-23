@@ -7,6 +7,8 @@ import { isAppError } from '@/types/api'
 import { branchesApi } from '@/features/branches/branchesApi'
 import { BRANCHES_KEY } from '@/features/branches/BranchProvider'
 import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
+import { PERMISSIONS } from '@/auth/permissions'
+import { useAuth } from '@/auth/useAuth'
 import { useUsers } from '@/features/users/hooks/useUsers'
 import { usersApi } from '@/features/users/api/usersApi'
 import type { Branch } from '@/features/branches/types'
@@ -17,11 +19,13 @@ type Step = 'existing' | 'name' | 'stock' | 'people' | 'done'
  * Adding a branch (MULTI_BRANCH_UX_PLAN.md §5.1), one question a step. The second branch also renames the
  * one the company already has - "Head Office" is wrong for most, and it will be on every waybill - and
  * switches the company to counting per branch (the server copies every figure to the main branch in the
- * same step). Sending stock to the new branch arrives with transfers (Phase 2); until then it is counted,
- * or filled from a stock sheet.
+ * same step). Stock gets to the new branch by sending it from the one that has it, counting it, or a
+ * stock sheet.
  */
 export function AddBranchFlow({ onDone }: { onDone: () => void }) {
-  const { branches, isMultiBranch } = useWorkingBranch()
+  const { branches, isMultiBranch, working } = useWorkingBranch()
+  const { user } = useAuth()
+  const canSend = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.SEND_STOCK)
   const queryClient = useQueryClient()
   const current = branches.find((branch) => branch.main) ?? branches[0]
   const [step, setStep] = useState<Step>(isMultiBranch ? 'name' : 'existing')
@@ -97,10 +101,17 @@ export function AddBranchFlow({ onDone }: { onDone: () => void }) {
       {step === 'stock' && created && (
         <div className="flex flex-col gap-4">
           <h1 className="text-lg font-semibold text-neutral-900">How will stock get to {created.name}?</h1>
-          <p className="text-sm text-neutral-600">
-            {created.name} starts empty. Switch to it from the top bar and record what's there, or upload a sheet for it.
-          </p>
+          <p className="text-sm text-neutral-600">{created.name} starts empty.</p>
           <div className="flex flex-col gap-2">
+            {canSend && (
+              <Link
+                to={`/app/transfers/send?to=${created.id}${(working ?? current) ? `&from=${(working ?? current)!.id}` : ''}`}
+                className="rounded-lg border border-neutral-200 px-4 py-3 text-sm hover:bg-neutral-50"
+              >
+                <span className="font-medium text-neutral-900">Send stock from {(working ?? current)?.name ?? 'another branch'}</span>
+                <span className="block text-neutral-600">A waybill to {created.name}: they receive it when it arrives.</span>
+              </Link>
+            )}
             <Link to="/app/products" className="rounded-lg border border-neutral-200 px-4 py-3 text-sm hover:bg-neutral-50">
               <span className="font-medium text-neutral-900">Count what's already there</span>
               <span className="block text-neutral-600">Open Inventory at {created.name} and count each product.</span>

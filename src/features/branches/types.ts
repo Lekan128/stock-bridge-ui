@@ -24,6 +24,11 @@ export interface BranchList {
   recordsEverywhere: boolean
   /** May add a branch now: can manage branches, and the pilot lets this company. */
   mayAddBranch: boolean
+  /**
+   * Every open branch by name, for Send stock's "To" (UX §5.4) - a storekeeper sends to a branch they
+   * don't otherwise see. Empty for someone who can't send stock. Absent from an older API.
+   */
+  sendTo?: { id: string; name: string }[]
 }
 
 /** A product at one branch — the sync rows' and the product page's `branchStock`. */
@@ -33,6 +38,8 @@ export interface BranchFigure {
   lowStockThreshold?: number
   isLowStock: boolean
   stockStatus: 'OK' | 'LOW' | 'OUT'
+  /** Sent here on open waybills, not yet received. Never in `quantityOnHand` (UX rule 5). */
+  onTheWay?: number
 }
 
 /** Where this phone is: one branch, or every branch the person sees. */

@@ -1,5 +1,6 @@
 import type { StockInRequestPayload } from '@/features/products/api/stockApi'
 import type { StockOutPayload } from '@/features/products/types'
+import type { ReceiptPayload, SendPayload } from '@/features/transfers/types'
 
 /** A stock count as the API takes it (A4): what was on the shelf, in stock units. */
 export interface StockCountPayload {
@@ -20,7 +21,16 @@ export interface StockCountPayload {
  */
 export type OutboxOp = {
   id: string
+  /**
+   * The product it changes. A transfer changes several, so it is keyed by its waybill instead
+   * (`transfer:<id>`) and names its products in `keys`.
+   */
   productId: string
+  /**
+   * Everything this write must wait behind (MULTI_BRANCH_BUILD_PLAN.md §7.3): an earlier waiting write
+   * sharing any of these goes first. Absent means `[productId]`, every write before transfers.
+   */
+  keys?: string[]
   /** For the list of waiting writes, which must make sense without the product loaded. */
   productName: string
   /** "20 bags (1,000 kg)" — exactly what the person typed, for the same list. */
@@ -37,6 +47,10 @@ export type OutboxOp = {
   | { kind: 'STOCK_IN'; payload: StockInRequestPayload; baseDelta: number }
   | { kind: 'STOCK_OUT'; payload: StockOutPayload; baseDelta: number }
   | { kind: 'COUNT'; payload: StockCountPayload; baseDelta: null }
+  /** A waybill (UX §5.4). Its `payload.id` is the waybill's own id, made on this phone. */
+  | { kind: 'TRANSFER_SEND'; payload: SendPayload; baseDelta: null }
+  /** Stock off a waybill (UX §5.5). `payload.id` is the receipt's id; `transferId` the waybill's. */
+  | { kind: 'TRANSFER_RECEIVE'; transferId: string; payload: ReceiptPayload; baseDelta: null }
 )
 
 export type OutboxProblem =

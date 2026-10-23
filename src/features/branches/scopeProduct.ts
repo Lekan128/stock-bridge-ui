@@ -7,13 +7,19 @@ import type { Branch, BranchFigure } from '@/features/branches/types'
  * without knowing branches exist. In "All branches", or at a one-branch company, the product as it is.
  */
 export function scopeProduct(product: Product, working: Branch | null): Product {
-  const figure = working ? product.branchStock?.find((entry) => entry.branchId === working.id) : undefined
-  if (!figure) return product
+  if (product.branchStock == null) return product
+  const figure = working ? product.branchStock.find((entry) => entry.branchId === working.id) : undefined
+  if (!figure) {
+    // "All branches": the company figure, and everything on the way between branches beside it.
+    const onTheWay = working ? 0 : product.branchStock.reduce((sum, entry) => sum + (entry.onTheWay ?? 0), 0)
+    return onTheWay > 0 ? { ...product, transferOnTheWay: onTheWay } : product
+  }
   return {
     ...product,
     quantityOnHand: figure.quantityOnHand,
     lowStockThreshold: figure.lowStockThreshold ?? null,
     isLowStock: figure.isLowStock,
+    transferOnTheWay: figure.onTheWay ?? 0,
   }
 }
 

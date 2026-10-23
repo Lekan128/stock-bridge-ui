@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { carryBranchStock, scopeProduct } from '@/features/branches/scopeProduct'
 import { OtherBranchesList } from '@/features/branches/OtherBranchesList'
-import { ArrowLeft, Minus, Pencil, Plus, ShoppingBag } from 'lucide-react'
+import { ArrowLeft, Minus, Pencil, Plus, ShoppingBag, Truck } from 'lucide-react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { PERMISSIONS } from '@/auth/permissions'
@@ -64,7 +64,7 @@ export function ProductDetailPage() {
   const { product: wholeProduct, setProduct, loading, error, showingSaved, updatedAt, refetch: refetchProduct } = useProduct(id)
   // At a branch, the page reads that branch's figure (MULTI_BRANCH_UX_PLAN.md §5.9); the whole product,
   // with every branch's figure, stays for the "At other branches" list.
-  const { working, isMultiBranch } = useWorkingBranch()
+  const { working, isMultiBranch, recordable } = useWorkingBranch()
   const product = wholeProduct ? scopeProduct(wholeProduct, working) : wholeProduct
   const { options: unitOfMeasureOptions } = useUnitOfMeasureOptions()
   const { refetch: refetchLowStockAlerts } = useLowStockAlerts()
@@ -122,6 +122,13 @@ export function ProductDetailPage() {
   // separately from MANAGE_INVENTORY (which still gates Adjust below). See StockController.
   const canStockIn = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.STOCK_IN)
   const canStockOut = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.STOCK_OUT)
+  // "Send to another branch" (MULTI_BRANCH_UX_PLAN.md §5.4): from the branch this phone is at.
+  const canSend =
+    isMultiBranch &&
+    user?.type === 'tenant' &&
+    user.permissions.includes(PERMISSIONS.SEND_STOCK) &&
+    working != null &&
+    recordable.some((branch) => branch.id === working.id)
 
   /**
    * Back to wherever the user came from — usually the Inventory list WITH its search, filters
@@ -257,8 +264,18 @@ export function ProductDetailPage() {
     ) : null
 
   // Edit and the rare, destructive things live in "⋯" (C2, finding U3); Deactivate behind its confirmation.
+  const sendItem: OverflowMenuItem[] = canSend
+    ? [
+        {
+          label: 'Send to another branch',
+          icon: <Truck className="h-4 w-4 text-neutral-500" aria-hidden="true" />,
+          onSelect: () => navigate(`/app/transfers/send?product=${product.id}`),
+        },
+      ]
+    : []
   const menuItems: OverflowMenuItem[] = canManageProducts
     ? [
+        ...sendItem,
         {
           label: 'Edit product',
           icon: <Pencil className="h-4 w-4 text-neutral-500" aria-hidden="true" />,
@@ -268,7 +285,7 @@ export function ProductDetailPage() {
           ? { label: 'Deactivate', tone: 'danger', onSelect: () => setConfirmDeactivate(true) }
           : { label: activating ? 'Activating…' : 'Activate', onSelect: () => void handleActivate(), disabled: activating },
       ]
-    : []
+    : sendItem
 
   return (
     // Room at the bottom on a phone for the action bar pinned there.

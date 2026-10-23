@@ -62,6 +62,10 @@ function lastMovementLine(movement: StockMovement, unit: string): string {
   if (movement.movementType === 'OUT') {
     return `${amount} went out${movement.note ? ` · ${movement.note}` : ''} · ${when}`
   }
+  // The note names the other branch and the waybill: "Sent to Oshodi on WB-BOL-0042".
+  if (movement.movementType === 'TRANSFER_OUT' || movement.movementType === 'TRANSFER_IN') {
+    return `${movement.movementType === 'TRANSFER_OUT' ? '−' : '+'}${amount}${movement.note ? ` · ${movement.note}` : ''} · ${when}`
+  }
   return movement.quantity === 0
     ? `Counted, no change · ${when}`
     : `Counted: ${movement.quantity > 0 ? '+' : '−'}${amount} · ${when}`
@@ -195,7 +199,7 @@ export function StockBreakdownPanel({ product, incoming, actions, lastMovement, 
           {/* The quieter facts beside the figure (C2): what is on the way, what is promised, and the
               last thing that happened. Each only when there is something to say — a big grey
               "0 kg incoming" on every product was noise. Never added into the figure. */}
-          {(hasIncoming || (product.expectedQuantity ?? 0) > 0 || lastMovement || sellingPrice) && (
+          {(hasIncoming || (product.expectedQuantity ?? 0) > 0 || (product.transferOnTheWay ?? 0) > 0 || lastMovement || sellingPrice) && (
           <dl className="flex flex-col gap-3 text-sm sm:border-l sm:border-neutral-100 sm:pl-5">
             {hasIncoming && (
               <div>
@@ -205,6 +209,17 @@ export function StockBreakdownPanel({ product, incoming, actions, lastMovement, 
                 </dt>
                 <dd className="mt-0.5 font-semibold tabular-nums text-warning-900">
                   {formatNumber(incoming.quantity)} {stockUnitWord(unitSymbol, incoming.quantity)} on the way
+                </dd>
+              </div>
+            )}
+            {product.transferOnTheWay != null && product.transferOnTheWay > 0 && (
+              <div data-transfer-on-the-way>
+                <dt className="flex items-center gap-1.5 text-neutral-500">
+                  <Truck className="h-3.5 w-3.5" aria-hidden="true" />
+                  From another branch
+                </dt>
+                <dd className="mt-0.5 font-semibold tabular-nums text-neutral-900">
+                  {formatNumber(product.transferOnTheWay)} {stockUnitWord(unitSymbol, product.transferOnTheWay)} on the way
                 </dd>
               </div>
             )}
