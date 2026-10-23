@@ -1,6 +1,7 @@
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
 import { api } from '@/api/client'
+import { viewingBranchId } from '@/features/branches/viewingBranch'
 import { useApiQuery } from '@/data/useApiQuery'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { formatNairaCompact } from '@/utils/money'
@@ -24,7 +25,8 @@ export function StockWorthLine() {
   const canSee = recordsSales && user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.VIEW_ANALYTICS)
   const { data } = useApiQuery<StockWorth>({
     queryKey: ['stock-worth'],
-    queryFn: () => api.get<StockWorth>('/api/analytics/stock-worth').then((r) => r.data),
+    // At a branch, what that branch holds is worth (V51).
+    queryFn: () => api.get<StockWorth>('/api/analytics/stock-worth', { params: { branchId: viewingBranchId() } }).then((r) => r.data),
     fallbackError: "Couldn't work out what the stock is worth.",
     enabled: canSee,
     staleTime: 60_000,

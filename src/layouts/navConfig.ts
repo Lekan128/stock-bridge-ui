@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Store,
   Tags,
+  TrendingDown,
   Truck,
   Users,
   Warehouse,
@@ -120,6 +121,8 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: ArrowLeftRight,
         requiredPermission: PERMISSIONS.MANAGE_INVENTORY,
       },
+      // What left without being sold or used, at cost - MANAGE_INVENTORY, as Stock Movements.
+      { path: '/app/losses', label: 'Losses', icon: TrendingDown, requiredPermission: PERMISSIONS.MANAGE_INVENTORY },
       {
         path: '/app/transfers',
         label: 'Transfers',

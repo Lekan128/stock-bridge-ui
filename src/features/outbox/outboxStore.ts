@@ -2,6 +2,7 @@ import Dexie, { type Table } from 'dexie'
 import { invalidateInventory, syncProductIntoCache } from '@/data/inventoryCache'
 import { queryClient } from '@/data/queryClient'
 import { queryKeys } from '@/data/queryKeys'
+import { reportPhoneStatusWith } from '@/features/catalog/catalogApi'
 import { syncCatalog } from '@/features/catalog/catalogStore'
 import type { OutboxOp, OutboxProblem, StockCountPayload, SubmitOutcome } from '@/features/outbox/types'
 import { stockApi, type StockInRequestPayload } from '@/features/products/api/stockApi'
@@ -272,6 +273,35 @@ export function setRecordingBranch(branchId: string | null) {
 export function recordingBranchId(): string | undefined {
   return recordingBranch ?? undefined
 }
+
+/** This phone, as the server knows it: made once, kept in storage. Not a hardware identifier. */
+function deviceId(): string | null {
+  try {
+    const existing = window.localStorage.getItem('pp.device-id')
+    if (existing) return existing
+    const id = crypto.randomUUID()
+    window.localStorage.setItem('pp.device-id', id)
+    return id
+  } catch {
+    return null
+  }
+}
+
+// The owner's branch table reads these (V55): how much is waiting here, and at which branch.
+reportPhoneStatusWith(() => {
+  const device = deviceId()
+  if (!device || !state.ready) return {}
+  const waiting = state.ops.filter((op) => op.status === 'pending')
+  const needsYou = state.ops.filter((op) => op.status === 'needs_attention')
+  const oldest = state.ops.reduce<number | null>((min, op) => (min == null || op.createdAt < min ? op.createdAt : min), null)
+  return {
+    device,
+    waiting: waiting.length,
+    needsYou: needsYou.length,
+    ...(oldest != null ? { oldestWaiting: oldest } : {}),
+    ...(recordingBranch ? { branch: recordingBranch } : {}),
+  }
+})
 
 export async function submitStockWrite(input: NewOp): Promise<SubmitOutcome<StockMutationResponse>> {
   // The branch is fixed when the write is MADE: a queued write sent after the phone switched branch

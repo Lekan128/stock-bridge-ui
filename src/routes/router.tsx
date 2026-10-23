@@ -92,6 +92,8 @@ const StockMovementsPage = lazy(() =>
     default: m.StockMovementsPage,
   })),
 )
+// Losses (MULTI_BRANCH_UX_PLAN.md §5.7): MANAGE_INVENTORY like Stock movements - it shows costs.
+const LossesPage = lazy(() => import('@/features/stock/pages/LossesPage').then((m) => ({ default: m.LossesPage })))
 const FixProductDetailsPage = lazy(() =>
   import('@/pages/FixProductDetailsPage').then((m) => ({
     default: m.FixProductDetailsPage,
@@ -624,6 +626,14 @@ export function AppRoutes() {
             element={
               <RequirePermission permission={PERMISSIONS.MANAGE_INVENTORY}>
                 <StockMovementsPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="losses"
+            element={
+              <RequirePermission permission={PERMISSIONS.MANAGE_INVENTORY}>
+                <LossesPage />
               </RequirePermission>
             }
           />

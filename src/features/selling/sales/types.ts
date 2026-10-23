@@ -4,7 +4,8 @@
  * tested with `== null`.
  */
 
-export type SalesGrouping = 'sale' | 'product' | 'day' | 'user' | 'category'
+/** 'branch': one row per branch, in "All branches" (MULTI_BRANCH_UX_PLAN.md §4.3). */
+export type SalesGrouping = 'sale' | 'product' | 'day' | 'user' | 'category' | 'branch'
 
 /** The leak filters, and the two "Fix these" lists. One at a time. */
 export type SalesFilter = 'belowUsualPrice' | 'belowCost' | 'cancelled' | 'unpriced' | 'noCost'
@@ -39,6 +40,8 @@ export interface SalesReportRow {
   occurredAt?: string
   /** Sale rows: the products in it ("Rice, Soap"). */
   detail?: string
+  /** Sale rows at a multi-branch company: where it was recorded. */
+  branch?: string
   totals: SalesTotals
 }
 

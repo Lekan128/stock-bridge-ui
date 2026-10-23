@@ -1,7 +1,12 @@
-import { ArrowDownToLine, ArrowUpFromLine, PackagePlus, PackageMinus, SlidersHorizontal } from 'lucide-react'
+import { ArrowDownToLine, ArrowUpFromLine, Download, PackagePlus, PackageMinus, SlidersHorizontal } from 'lucide-react'
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Badge } from '@/components/Badge'
+import { Button } from '@/components/Button'
+import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
+import { useToast } from '@/components/useToast'
+import { stockMovementsApi } from '@/features/stock/api/stockMovementsApi'
+import { downloadBlob } from '@/utils/downloadBlob'
 import { EmptyState } from '@/components/EmptyState'
 import { ErrorState } from '@/components/ErrorState'
 import { Pagination } from '@/components/Pagination'
@@ -98,19 +103,38 @@ export function StockMovementsPage() {
   const [page, setPage] = useState(0)
   const reasonApplies = direction === 'OUT'
   const { recordsSales, requiresSellingPrice } = useSellingPolicy()
+  // "All branches" (MULTI_BRANCH_UX_PLAN.md §4.3): every branch's rows, each saying where.
+  const branch = useOptionalWorkingBranch()
+  const showBranch = (branch?.isMultiBranch ?? false) && (branch?.isAll ?? false)
+  const nameOf = (id: string | undefined) => branch?.nameOf(id)
 
   const { vendors } = useVendorOptions(canViewVendors)
 
-  const { movements, totalPages, totalElements, summary, loading, error, refetch } = useStockMovementReport({
+  const filters = {
     from: toApiDateTime(range.from),
     to: toApiDateTime(range.to),
     movementType: direction === 'all' ? undefined : direction,
     companyVendorId: companyVendorId || undefined,
     outReason: reasonApplies && reasonFilter && reasonFilter !== 'NONE' ? reasonFilter : undefined,
     noReason: reasonApplies && reasonFilter === 'NONE' ? true : undefined,
+  }
+  const { movements, totalPages, totalElements, summary, loading, error, refetch } = useStockMovementReport({
+    ...filters,
     page,
     size: PAGE_SIZE,
   })
+  const { showToast } = useToast()
+  const [exporting, setExporting] = useState(false)
+  async function exportIt() {
+    setExporting(true)
+    try {
+      downloadBlob(await stockMovementsApi.export(filters), 'stock-movements.xlsx')
+    } catch {
+      showToast("Couldn't download the movements. Try again.", 'error')
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const rangeLabel = formatDateRange(range.from, range.to)
   const showSkeleton = loading && movements.length === 0
@@ -132,7 +156,13 @@ export function StockMovementsPage() {
             period it really belongs to.
           </p>
         </div>
-        <DateRangeControl value={range} onChange={(next) => applyFilter(() => setRange(next))} />
+        <div className="flex flex-wrap items-center gap-2">
+          <DateRangeControl value={range} onChange={(next) => applyFilter(() => setRange(next))} />
+          <Button variant="secondary" onClick={() => void exportIt()} loading={exporting}>
+            <Download className="h-4 w-4" aria-hidden="true" />
+            Download
+          </Button>
+        </div>
       </div>
 
       {summary && (
@@ -347,6 +377,7 @@ export function StockMovementsPage() {
                   <th scope="col" className="px-4 py-2.5 text-right font-medium">Quantity</th>
                   <th scope="col" className="px-4 py-2.5 text-right font-medium">Unit price</th>
                   <th scope="col" className="px-4 py-2.5 text-right font-medium">Value</th>
+                  {showBranch && <th scope="col" className="px-4 py-2.5 font-medium">Branch</th>}
                   <th scope="col" className="px-4 py-2.5 font-medium">Supplier</th>
                   <th scope="col" className="px-4 py-2.5 font-medium">Note</th>
                 </tr>
@@ -389,6 +420,7 @@ export function StockMovementsPage() {
                       <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums font-medium text-neutral-900">
                         {movement.lineValue == null ? '—' : formatCurrency(movement.lineValue)}
                       </td>
+                      {showBranch && <td className="px-4 py-3 text-neutral-600">{nameOf(movement.branchId) ?? '—'}</td>}
                       <td className="px-4 py-3 text-neutral-600">{movement.companyVendorName ?? '—'}</td>
                       <td className="max-w-xs px-4 py-3 text-neutral-500">{movement.note ?? '—'}</td>
                     </tr>

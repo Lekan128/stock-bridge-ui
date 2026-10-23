@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { ArrowRight, Truck } from 'lucide-react'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
@@ -32,7 +32,9 @@ export function TransfersPage() {
   const permissions = user?.type === 'tenant' ? user.permissions : []
   const canSend = permissions.includes(PERMISSIONS.SEND_STOCK)
   const { working, isAll } = useWorkingBranch()
-  const [tab, setTab] = useState<'open' | 'all'>('open')
+  // ?tab=all from the owner's branch table ("Missing"), else what is on the way.
+  const [searchParams] = useSearchParams()
+  const [tab, setTab] = useState<'open' | 'all'>(searchParams.get('tab') === 'all' ? 'all' : 'open')
   const branchId = isAll ? undefined : working?.id
   const list = useTransfers({ branchId, openOnly: tab === 'open' })
   const recent = useTransfers({ branchId }, tab === 'open')

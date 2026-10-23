@@ -401,6 +401,8 @@ export interface ProductUpdatePayload extends Partial<ProductFormPayload> {
 export type MovementType = 'IN' | 'OUT' | 'ADJUSTMENT' | 'TRANSFER_OUT' | 'TRANSFER_IN'
 
 export interface StockMovement {
+  /** Where it happened (V51). Absent from an older API. */
+  branchId?: string
   id: string
   productId: string
   /**

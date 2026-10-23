@@ -4,6 +4,8 @@ import { useAuth } from '@/auth/useAuth'
 import { DashboardAnalytics } from '@/features/dashboard/components/DashboardAnalytics'
 import { useCatalogList, useCatalogState } from '@/features/catalog/useCatalog'
 import { NeedsYouToday } from '@/features/dashboard/components/NeedsYouToday'
+import { BranchTable } from '@/features/branches/BranchTable'
+import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { StockHealth } from '@/features/dashboard/components/StockHealth'
 import { SalesTodayFigure } from '@/features/selling/sales/SalesTodayFigure'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
@@ -67,6 +69,8 @@ function BuyerToday({
   )
   const counts = onDevice && list.ready ? list.counts : null
   const today = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })
+  const branch = useOptionalWorkingBranch()
+  const ownersView = canViewAnalytics && (branch?.isMultiBranch ?? false) && (branch?.isAll ?? false)
 
   return (
     <div className="flex flex-col gap-6">
@@ -77,10 +81,18 @@ function BuyerToday({
 
       <SetupChecklist />
 
-      {/* The one primary figure, for a company that sells (§6.10) - above stock health. */}
-      {canViewAnalytics && recordsSales && <SalesTodayFigure />}
+      {/* "All branches" (MULTI_BRANCH_UX_PLAN.md §5.8): the branch table replaces today's figures - one
+          row per branch, then the company. Pick a branch and this is the single-branch dashboard again. */}
+      {ownersView ? (
+        <BranchTable />
+      ) : (
+        <>
+          {/* The one primary figure, for a company that sells (§6.10) - above stock health. */}
+          {canViewAnalytics && recordsSales && <SalesTodayFigure />}
 
-      {canViewProducts && <StockHealth counts={counts} />}
+          {canViewProducts && <StockHealth counts={counts} />}
+        </>
+      )}
 
       {canViewProducts && (
         <NeedsYouToday

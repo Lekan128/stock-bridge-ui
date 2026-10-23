@@ -16,6 +16,12 @@ export const stockMovementsApi = {
       .get<PageResponse<StockMovement>>('/api/stock/movements', { params: { branchId: viewingBranchId(), ...params } })
       .then((r) => r.data),
 
+  /** The same rows as a spreadsheet, with a Branch column at a multi-branch company (Phase 3). */
+  export: (params: Omit<StockMovementReportParams, 'page' | 'size' | 'sort'>) =>
+    api
+      .get('/api/stock/movements/export', { params: { branchId: viewingBranchId(), ...params }, responseType: 'blob' })
+      .then((r) => r.data as Blob),
+
   summary: (params: Omit<StockMovementReportParams, 'page' | 'size' | 'sort'>) =>
     api
       .get<StockMovementSummary>('/api/stock/movements/summary', { params: { branchId: viewingBranchId(), ...params } })

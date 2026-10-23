@@ -1,6 +1,7 @@
 import { createContext, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { setViewingBranch } from '@/features/branches/viewingBranch'
+import { track } from '@/marketing/analytics'
 import { setRecordingBranch } from '@/features/outbox/outboxStore'
 import { resyncCatalog } from '@/features/catalog/catalogStore'
 import { useAuth } from '@/auth/useAuth'
@@ -87,6 +88,8 @@ export function BranchProvider({ children }: { children: ReactNode }) {
     (choice: WorkingBranchChoice) => {
       setChosen(choice)
       if (userId) writeChoice(userId, choice)
+      // UX §10: switches per session (high means the phone isn't really at one branch). No names.
+      track('branch_switched', { to: choice === ALL_BRANCHES ? 'all' : 'branch' })
     },
     [userId],
   )
@@ -170,7 +173,15 @@ export function BranchProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setViewingBranch(viewAt)
     if (lastViewAt.current !== undefined && lastViewAt.current !== viewAt) {
-      for (const key of [['analytics'], ['stock-movements'], ['products', 'history']]) {
+      for (const key of [
+        ['analytics'],
+        ['stock-movements'],
+        ['products', 'history'],
+        ['sales-report'],
+        ['sold-this-month'],
+        ['stock-worth'],
+        ['losses'],
+      ]) {
         queryClient.removeQueries({ queryKey: key })
       }
     }

@@ -1,8 +1,10 @@
 import { api } from '@/api/client'
+import { viewingBranchId } from '@/features/branches/viewingBranch'
 import type { SaleDetail, SalesReport, SalesReportParams } from '@/features/selling/sales/types'
 
+/** At a branch, that branch's sales (V51); in "All branches" or a one-branch company, every branch's. */
 function query({ from, to, groupBy, filter, productId }: SalesReportParams) {
-  return { from, to, groupBy, productId, ...(filter ? { [filter]: true } : {}) }
+  return { from, to, groupBy, productId, branchId: viewingBranchId(), ...(filter ? { [filter]: true } : {}) }
 }
 
 /** The Sales report and the fixes a sale can take (`SELLING_PRICE_PLAN.md` §4.3a, §6.11). */
