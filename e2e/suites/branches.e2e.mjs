@@ -47,11 +47,12 @@ async function api(path, { token, method = 'GET', body } = {}) {
 
 async function signup(label) {
   const unique = randomUUID().slice(0, 8)
+  const email = `${label}-${unique}@example.com`
   const response = await api('/api/clients/signup', {
     method: 'POST',
-    body: { name: `E2E ${label} ${unique}`, adminEmail: `${label}-${unique}@example.com`, password: PASSWORD, confirmPassword: PASSWORD },
+    body: { name: `E2E ${label} ${unique}`, adminEmail: email, password: PASSWORD, confirmPassword: PASSWORD },
   })
-  return { ...response.json, unique }
+  return { ...response.json, unique, email }
 }
 
 async function createProduct(token, unique, name) {
@@ -84,7 +85,8 @@ browser = await chromium.launch(launchOptions)
 
 // ------------------------------------------------------------------------------------------ 1
 await check('a one-branch company sees no branch word anywhere but Company settings (rule 1)', async () => {
-  const shop = await signup('one-branch')
+  // Not "one-branch": the company's name is on the screen, and would be the word this looks for.
+  const shop = await signup('solo')
   const product = await createProduct(shop.tokens.accessToken, shop.unique, 'Rice')
   const context = await contextFor(shop.tokens.refreshToken)
   const page = await context.newPage()
@@ -123,10 +125,12 @@ await check('the second branch: the question once, the chip, the sheet title, an
 
   await page.getByRole('button', { name: 'Stock in', exact: true }).first().click()
   await page.getByRole('dialog').getByText('Stock in · Oshodi').waitFor()
-  await page.getByRole('dialog').getByLabel(/how many|quantity/i).first().fill('5')
-  await page.getByRole('button', { name: 'Continue' }).click()
-  await page.getByRole('button', { name: 'Confirm' }).click()
-  await page.getByRole('dialog').getByText(/recorded|saved/i).first().waitFor()
+  const sheet = page.getByRole('dialog')
+  await sheet.getByLabel(/how many|quantity/i).first().fill('5')
+  await sheet.getByRole('button', { name: 'Continue', exact: true }).click()
+  await sheet.getByRole('button', { name: 'Confirm', exact: true }).click()
+  // RECORDED is on this phone; SYNCED is when the server has it (Pattern C). Check the server after.
+  await page.locator('[data-receipt="synced"]').waitFor()
 
   const detail = (await api(`/api/products/${rice.id}`, { token: ownerToken })).json
   const at = Object.fromEntries((detail.branchStock ?? []).map((entry) => [entry.branchId, entry.quantityOnHand]))
@@ -168,7 +172,13 @@ await check('a storekeeper at one branch: the name as plain text, no question, w
 
 // ------------------------------------------------------------------------------------------ 4
 await check('"All branches": a stock sheet asks which branch before it can be saved', async () => {
-  const context = await contextFor(owner.tokens.refreshToken)
+  // A fresh session: check 2's browser rotated the owner's first refresh token, and a rotated token is
+  // refused - as it should be.
+  const login = (await api('/api/auth/login', {
+    method: 'POST',
+    body: { clientIdentifier: owner.user.clientIdentifier, username: owner.email, password: PASSWORD },
+  })).json
+  const context = await contextFor(login.tokens.refreshToken)
   await context.addInitScript(([userId]) => localStorage.setItem(`pp.working-branch.${userId}`, 'ALL'), [owner.user.id])
   const page = await context.newPage()
   await page.goto(`${UI}/app/products/${rice.id}`)
