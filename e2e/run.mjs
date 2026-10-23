@@ -32,6 +32,7 @@ const SUITES = [
   'price-sheets',
   'sales-report',
   'dashboard',
+  'branches',
   'chaos',
   'metrics',
   'a11y',

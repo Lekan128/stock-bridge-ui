@@ -1,4 +1,6 @@
-import { createContext, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { setViewingBranch } from '@/features/branches/viewingBranch'
 import { setRecordingBranch } from '@/features/outbox/outboxStore'
 import { resyncCatalog } from '@/features/catalog/catalogStore'
 import { useAuth } from '@/auth/useAuth'
@@ -154,6 +156,21 @@ export function BranchProvider({ children }: { children: ReactNode }) {
       }
     })
   }, [userId, seenKey])
+
+  // Reports (movements, analytics) ask for the branch being viewed. Their cached answers are not keyed
+  // by branch, so a switch drops them: a figure from one branch must never show under another's name.
+  const queryClient = useQueryClient()
+  const viewAt = value.isMultiBranch && !value.isAll ? (value.working?.id ?? null) : null
+  const lastViewAt = useRef<string | null | undefined>(undefined)
+  useEffect(() => {
+    setViewingBranch(viewAt)
+    if (lastViewAt.current !== undefined && lastViewAt.current !== viewAt) {
+      for (const key of [['analytics'], ['stock-movements'], ['products', 'history']]) {
+        queryClient.removeQueries({ queryKey: key })
+      }
+    }
+    lastViewAt.current = viewAt
+  }, [viewAt, queryClient])
 
   // Writes are stamped with where this phone is (rule 3) - only at a multi-branch company, so a single
   // shop's requests stay exactly as they were.

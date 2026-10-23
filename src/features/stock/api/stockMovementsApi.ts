@@ -1,4 +1,5 @@
 import { api } from '@/api/client'
+import { viewingBranchId } from '@/features/branches/viewingBranch'
 import type { PageResponse, StockMovement } from '@/features/products/types'
 import type { StockMovementReportParams, StockMovementSummary } from '@/features/stock/types'
 
@@ -11,8 +12,12 @@ import type { StockMovementReportParams, StockMovementSummary } from '@/features
  */
 export const stockMovementsApi = {
   list: (params: StockMovementReportParams) =>
-    api.get<PageResponse<StockMovement>>('/api/stock/movements', { params }).then((r) => r.data),
+    api
+      .get<PageResponse<StockMovement>>('/api/stock/movements', { params: { branchId: viewingBranchId(), ...params } })
+      .then((r) => r.data),
 
   summary: (params: Omit<StockMovementReportParams, 'page' | 'size' | 'sort'>) =>
-    api.get<StockMovementSummary>('/api/stock/movements/summary', { params }).then((r) => r.data),
+    api
+      .get<StockMovementSummary>('/api/stock/movements/summary', { params: { branchId: viewingBranchId(), ...params } })
+      .then((r) => r.data),
 }
