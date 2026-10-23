@@ -224,6 +224,15 @@ export function setRecordingBranch(branchId: string | null) {
   recordingBranch = branchId
 }
 
+/**
+ * The same branch, for the stock writes that go straight to the server rather than through the outbox:
+ * sheet imports, Record a delivery, expected deliveries, a new product's opening stock. Undefined at a
+ * one-branch company and in "All branches" - the server then uses the person's one branch, or asks.
+ */
+export function recordingBranchId(): string | undefined {
+  return recordingBranch ?? undefined
+}
+
 export async function submitStockWrite(input: NewOp): Promise<SubmitOutcome<StockMutationResponse>> {
   // The branch is fixed when the write is MADE: a queued write sent after the phone switched branch
   // still lands where it was typed. A sheet that chose a branch itself (All branches) keeps its choice.

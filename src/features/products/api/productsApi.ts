@@ -1,4 +1,5 @@
 import { api } from '@/api/client'
+import { recordingBranchId } from '@/features/outbox/outboxStore'
 import type {
   BulkUploadResponse,
   PageResponse,
@@ -32,7 +33,14 @@ export const productsApi = {
 
   create: (payload: ProductFormPayload, image?: File | null) =>
     api
-      .post<Product>('/api/products', buildProductFormData(payload, image), {
+      .post<Product>(
+        '/api/products',
+        buildProductFormData(
+          // The opening stock lands at the phone's branch (V52).
+          payload.initialVendor ? { ...payload, initialVendor: { ...payload.initialVendor, branchId: recordingBranchId() } } : payload,
+          image,
+        ),
+        {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
       .then((r) => r.data),

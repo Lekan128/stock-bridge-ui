@@ -1,4 +1,5 @@
 import type { AxiosProgressEvent } from 'axios'
+import { recordingBranchId } from '@/features/outbox/outboxStore'
 import { api } from '@/api/client'
 import type {
   CommitPreview,
@@ -154,6 +155,9 @@ const realBackend: ImportsBackend = {
     if (delivery?.deliveryDate) form.append('deliveryDate', delivery.deliveryDate)
     if (delivery?.invoiceNo) form.append('invoiceNo', delivery.invoiceNo)
     if (delivery?.vendorId) form.append('vendorId', delivery.vendorId)
+    // Where this sheet's stock lands (V52): the phone's branch.
+    const branchId = recordingBranchId()
+    if (branchId) form.append('branchId', branchId)
     onProgress?.(0)
     // The Content-Type header is deliberately not set: the browser has to write it itself so it
     // carries the multipart boundary. Setting it by hand is how multipart uploads silently 400.
@@ -271,11 +275,11 @@ const realBackend: ImportsBackend = {
   },
 
   createDelivery(body) {
-    return api.post<ImportSession>(`${BASE}/delivery`, body).then((r) => r.data)
+    return api.post<ImportSession>(`${BASE}/delivery`, { branchId: recordingBranchId(), ...body }).then((r) => r.data)
   },
 
   createFromPaste(body) {
-    return api.post<ImportSession>(`${BASE}/paste`, body).then((r) => r.data)
+    return api.post<ImportSession>(`${BASE}/paste`, { branchId: recordingBranchId(), ...body }).then((r) => r.data)
   },
 
   deliveryLinesByBarcode(barcode) {

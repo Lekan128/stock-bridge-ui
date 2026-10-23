@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, ArrowLeft, Banknote, Clock, Lock, Ruler, Tag, Truck, Zap } from 'lucide-react'
 import { useForm } from 'react-hook-form'
@@ -227,6 +228,16 @@ export function ProductFormPage() {
   const location = useLocation() as { state?: { name?: string } }
   const { showToast } = useToast()
   const { user, isVendor } = useAuth()
+  // One product, one price, every branch (MULTI_BRANCH_UX_PLAN.md §5.14): the form says where a change
+  // lands, and the price is read-only for someone who can't change selling prices.
+  const { isMultiBranch, branches } = useWorkingBranch()
+  const branchCount = branches.filter((branch) => branch.active).length
+  const canChangePrices = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.CHANGE_SELLING_PRICES)
+  const priceHint = !canChangePrices
+    ? 'Prices are set by people who can change selling prices.'
+    : isMultiBranch
+      ? `Same price at all ${branchCount} branches.`
+      : undefined
   const { showsSellingPrice, requiresSellingPrice } = useSellingPolicy()
   /** The pack a company's selling price is typed per ("CARTON"), or null for the stock unit (V47). */
   const [priceUnitCode, setPriceUnitCode] = useState<string | null>(null)
@@ -1409,6 +1420,8 @@ export function ProductFormPage() {
                   <TextField
                     label={priceUnitWord ? `Selling price (₦ per ${priceUnitWord}, optional)` : 'Selling price (₦, optional)'}
                     inputMode="decimal"
+                    hint={priceHint}
+                    readOnly={!canChangePrices}
                     error={errors.unitPrice?.message}
                     {...register('unitPrice')}
                   />
@@ -1472,6 +1485,7 @@ export function ProductFormPage() {
                 formatPackCostEcho(Number(watchedUnitPrice), quantityOption) ??
                 (stockUnitLabel ? `What a buyer pays for one ${stockUnitLabel}.` : undefined)
               }
+              readOnly={!canChangePrices}
               error={errors.unitPrice?.message}
               {...register('unitPrice')}
             />
@@ -1610,6 +1624,9 @@ export function ProductFormPage() {
 
         <FormError message={formError} />
 
+        {isMultiBranch && isEdit && (
+          <p className="text-right text-sm text-neutral-600">Changes to this product apply at all {branchCount} branches.</p>
+        )}
         <div className="flex justify-end gap-2">
           <Button
             variant="secondary"

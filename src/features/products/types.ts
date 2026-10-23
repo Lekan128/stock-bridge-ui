@@ -195,6 +195,8 @@ export interface ProductListParams {
  * fields.
  */
 export interface InitialVendorPayload {
+  /** Where the opening stock is (V52); set by `productsApi.create` from the phone's branch. */
+  branchId?: string
   /** An entry in this company's own vendor directory (`/app/vendors`). */
   companyVendorId: string
   vendorSku?: string
