@@ -1,4 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useWatch } from 'react-hook-form'
+import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
+import { WorksAtField } from '@/features/branches/WorksAtField'
 import { useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { Button } from '@/components/Button'
@@ -24,6 +27,9 @@ function optional(value: string): string | undefined {
 
 export function AddUserModal({ onClose, onSuccess }: AddUserModalProps) {
   const [formError, setFormError] = useState<string | null>(null)
+  // Where they'll work (MULTI_BRANCH_UX_PLAN.md §5.10): starts at the branch you're at.
+  const { isMultiBranch, working } = useWorkingBranch()
+  const [branchIds, setBranchIds] = useState<string[]>(() => (working ? [working.id] : []))
 
   const {
     register,
@@ -35,6 +41,7 @@ export function AddUserModal({ onClose, onSuccess }: AddUserModalProps) {
     resolver: zodResolver(createUserSchema),
     defaultValues: createUserFormDefaults(),
   })
+  const roleId = useWatch({ control, name: 'roleId' })
 
   async function onSubmit(values: CreateUserFormValues) {
     setFormError(null)
@@ -48,6 +55,7 @@ export function AddUserModal({ onClose, onSuccess }: AddUserModalProps) {
         email: optional(values.email),
         phone: optional(values.phone),
         jobTitle: optional(values.jobTitle),
+        branchIds: isMultiBranch && branchIds.length > 0 ? branchIds : undefined,
       })
       onSuccess(user)
     } catch (err) {
@@ -97,6 +105,7 @@ export function AddUserModal({ onClose, onSuccess }: AddUserModalProps) {
             <RoleSelectField value={field.value} onChange={field.onChange} error={errors.roleId?.message} />
           )}
         />
+        <WorksAtField roleId={roleId} value={branchIds} onChange={setBranchIds} />
 
         <div className="border-t border-neutral-200 pt-4">
           <p className="text-sm font-medium text-neutral-700">Profile details</p>

@@ -1,4 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useWatch } from 'react-hook-form'
+import { WorksAtField } from '@/features/branches/WorksAtField'
 import { useState } from 'react'
 import { ShieldCheck } from 'lucide-react'
 import { Controller, useForm } from 'react-hook-form'
@@ -30,6 +32,9 @@ export function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) 
   const lockAccess = isSelf || isRoot
   const lockHint = isRoot ? ROOT_HINT : SELF_HINT
   const [formError, setFormError] = useState<string | null>(null)
+  // Where they work (MULTI_BRANCH_UX_PLAN.md §5.10). Sent only when changed.
+  const [branchIds, setBranchIds] = useState<string[]>(user.branchIds ?? [])
+  const branchesChanged = [...branchIds].sort().join() !== [...(user.branchIds ?? [])].sort().join()
 
   const {
     register,
@@ -48,6 +53,7 @@ export function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) 
       jobTitle: user.jobTitle ?? '',
     },
   })
+  const roleId = useWatch({ control, name: 'roleId' })
 
   // PUT /api/users/{id} patches: an omitted key is left alone, and a blank string clears the
   // stored value. So only touched fields are sent — nothing the admin didn't edit can be lost,
@@ -63,6 +69,7 @@ export function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) 
     if (dirtyFields.email) payload.email = values.email.trim()
     if (dirtyFields.phone) payload.phone = values.phone.trim()
     if (dirtyFields.jobTitle) payload.jobTitle = values.jobTitle.trim()
+    if (branchesChanged) payload.branchIds = branchIds
 
     if (Object.keys(payload).length === 0) {
       onClose()
@@ -123,6 +130,7 @@ export function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) 
             />
           )}
         />
+        {!isRoot && <WorksAtField roleId={roleId} value={branchIds} onChange={setBranchIds} />}
         <Controller
           control={control}
           name="active"

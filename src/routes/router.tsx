@@ -1,4 +1,5 @@
 import { Suspense, lazy } from 'react'
+import { BranchesPage } from '@/features/branches/BranchesPage'
 import { RecordingBranchGate } from '@/features/branches/RecordingBranchGate'
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
@@ -963,6 +964,14 @@ export function AppRoutes() {
             Company ID they need to onboard a colleague) even though only an OWNER can change
             them. The page gates the edit form on MANAGE_COMPANY_PROFILE instead. */}
           <Route path="company" element={<CompanySettingsPage />} />
+          <Route
+            path="company/branches"
+            element={
+              <RequirePermission permission={PERMISSIONS.MANAGE_BRANCHES}>
+                <BranchesPage />
+              </RequirePermission>
+            }
+          />
           <Route
             path="users"
             element={

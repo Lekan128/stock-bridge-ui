@@ -1,4 +1,5 @@
 import { PERMISSIONS } from '@/auth/permissions'
+import { Link } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { ErrorState } from '@/components/ErrorState'
 import { CompanyAccountFacts } from '@/features/company/components/CompanyAccountFacts'
@@ -25,6 +26,8 @@ export function CompanySettingsPage() {
 
   const permissions = user?.type === 'tenant' ? user.permissions : []
   const canEdit = permissions.includes(PERMISSIONS.MANAGE_COMPANY_PROFILE)
+  // The one branch word a one-branch company sees (MULTI_BRANCH_UX_PLAN.md rule 1).
+  const canManageBranches = permissions.includes(PERMISSIONS.MANAGE_BRANCHES)
 
   return (
     <div className="flex flex-col gap-6">
@@ -36,6 +39,19 @@ export function CompanySettingsPage() {
             : "Your company's details as ProcurePal holds them. Only an account owner can change them."}
         </p>
       </div>
+
+      {canManageBranches && (
+        <Link
+          to="/app/company/branches"
+          className="flex items-center justify-between rounded-xl border border-neutral-200 bg-white px-4 py-3 hover:bg-neutral-50"
+        >
+          <span>
+            <span className="block font-medium text-neutral-900">Branches</span>
+            <span className="block text-sm text-neutral-600">Add a branch, or rename and close the ones you have.</span>
+          </span>
+          <span aria-hidden className="text-neutral-400">›</span>
+        </Link>
+      )}
 
       {loading && <CompanySkeleton />}
 

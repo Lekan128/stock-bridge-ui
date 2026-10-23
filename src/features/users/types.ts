@@ -45,6 +45,9 @@ export interface TenantUserSummary {
   root: boolean
   active: boolean
   createdAt: string
+  /** Multiple branches (V52): the open branches they record at now; `worksEverywhere` from their role. */
+  branchIds?: string[]
+  worksEverywhere?: boolean
 }
 
 export interface CreateUserPayload {
@@ -56,6 +59,8 @@ export interface CreateUserPayload {
   email?: string | null
   phone?: string | null
   jobTitle?: string | null
+  /** Where they work (V52) - required at a multi-branch company unless the role works everywhere. */
+  branchIds?: string[]
 }
 
 /** PUT /api/users/{id} has PATCH semantics — omitted keys are left unchanged. */
@@ -67,6 +72,8 @@ export interface UpdateUserPayload {
   email?: string
   phone?: string
   jobTitle?: string
+  /** Where they work (V52), replacing what was there; omitted leaves it alone. */
+  branchIds?: string[]
 }
 
 export interface ResetPasswordPayload {

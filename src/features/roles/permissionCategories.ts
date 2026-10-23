@@ -10,9 +10,9 @@ import { PERMISSIONS } from '@/auth/permissions'
  *     VIEW_OWN_SALES_ANALYTICS — ProcurePal-staff/vendor privileges, meaningless (and
  *     potentially misleading) on an ordinary buying company's own custom role; every screen they
  *     actually gate sits behind a platform-owner/vendor guard as well as the permission itself.
- *   - VIEW_ALL_BRANCHES — permissions.ts calls this "scaffold only, no branch-scoped queries
- *     exist yet"; offering a checkbox for a capability nothing reads would be worse than not
- *     offering it.
+ *
+ * The "Branches" group is shown only at a company with more than one branch (MULTI_BRANCH_UX_PLAN.md
+ * rule 1) - see BRANCH_CATEGORY_LABEL and RoleFormModal.
  *
  * A code the API returns that isn't listed here simply doesn't render as a checkbox - see
  * RoleFormModal - rather than needing a second allow-list kept in sync with this one.
@@ -24,7 +24,13 @@ export const PERMISSION_CATEGORIES: { label: string; codes: string[] }[] = [
   },
   {
     label: 'Products',
-    codes: [PERMISSIONS.VIEW_PRODUCTS, PERMISSIONS.MANAGE_PRODUCTS, PERMISSIONS.PRODUCT_SKU_OVERRIDE],
+    codes: [
+      PERMISSIONS.VIEW_PRODUCTS,
+      PERMISSIONS.MANAGE_PRODUCTS,
+      // Split out of MANAGE_PRODUCTS (V52): one price serves every branch (UX §5.14).
+      PERMISSIONS.CHANGE_SELLING_PRICES,
+      PERMISSIONS.PRODUCT_SKU_OVERRIDE,
+    ],
   },
   {
     label: 'Inventory',
@@ -42,6 +48,13 @@ export const PERMISSION_CATEGORIES: { label: string; codes: string[] }[] = [
     label: 'Company & analytics',
     codes: [PERMISSIONS.MANAGE_COMPANY_PROFILE, PERMISSIONS.VIEW_ANALYTICS],
   },
+  {
+    label: 'Branches',
+    codes: [PERMISSIONS.VIEW_ALL_BRANCHES, PERMISSIONS.WORK_AT_ALL_BRANCHES, PERMISSIONS.MANAGE_BRANCHES],
+  },
 ]
+
+/** Hidden from a one-branch company's roles screen (rule 1): no branch word until there are two. */
+export const BRANCH_CATEGORY_LABEL = 'Branches'
 
 export const ASSIGNABLE_PERMISSION_CODES = new Set(PERMISSION_CATEGORIES.flatMap((category) => category.codes))
