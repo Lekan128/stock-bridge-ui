@@ -43,8 +43,18 @@ export const PERMISSIONS = {
   VIEW_ORDERS: 'VIEW_ORDERS',
   MANAGE_DELIVERY_ADDRESSES: 'MANAGE_DELIVERY_ADDRESSES',
   RECEIVE_DELIVERIES: 'RECEIVE_DELIVERIES',
-  // Scaffold only — no branch-scoped queries exist yet (contract §4.2).
+  // See every branch's stock, read-only (V52 gave it that meaning; owners hold it).
   VIEW_ALL_BRANCHES: 'VIEW_ALL_BRANCHES',
+
+  /**
+   * Multiple branches (V52, MULTI_BRANCH_UX_PLAN.md rule 6 and §5.14). VIEW_ALL_BRANCHES above is
+   * read-only: open any branch, record at none outside one's own. WORK_AT_ALL_BRANCHES records at
+   * every branch, new ones included. MANAGE_BRANCHES adds, renames and closes them.
+   * CHANGE_SELLING_PRICES is split out of MANAGE_PRODUCTS: one price serves every branch.
+   */
+  WORK_AT_ALL_BRANCHES: 'WORK_AT_ALL_BRANCHES',
+  MANAGE_BRANCHES: 'MANAGE_BRANCHES',
+  CHANGE_SELLING_PRICES: 'CHANGE_SELLING_PRICES',
 
   /**
    * The buying company's own vendor directory — `/api/company-vendors` (V11).

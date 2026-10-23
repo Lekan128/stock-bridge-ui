@@ -5,6 +5,12 @@ import type { StockOutPayload } from '@/features/products/types'
 export interface StockCountPayload {
   countedQuantity: number
   note?: string
+  /**
+   * The branch this was recorded at (V51). Stamped by `submitStockWrite` when the write is made, from
+   * the phone's working branch, so a later switch never moves a queued write. Absent at a one-branch
+   * company: the server's only branch, and the request exactly what it was before branches.
+   */
+  branchId?: string
 }
 
 /**

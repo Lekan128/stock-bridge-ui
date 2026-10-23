@@ -214,7 +214,21 @@ type NewOp =
  * A write behind another for the same product that is still waiting is queued straight away, so
  * the product's writes always arrive in the order they were made.
  */
+/**
+ * Where this phone records now (MULTI_BRANCH_UX_PLAN.md rule 3), kept in step by `BranchProvider`. Null
+ * at a one-branch company, and in "All branches", where the sheet names the branch itself.
+ */
+let recordingBranch: string | null = null
+
+export function setRecordingBranch(branchId: string | null) {
+  recordingBranch = branchId
+}
+
 export async function submitStockWrite(input: NewOp): Promise<SubmitOutcome<StockMutationResponse>> {
+  // The branch is fixed when the write is MADE: a queued write sent after the phone switched branch
+  // still lands where it was typed. A sheet that chose a branch itself (All branches) keeps its choice.
+  const branchId = input.payload.branchId ?? recordingBranch ?? undefined
+  if (branchId) input = { ...input, payload: { ...input.payload, branchId } } as NewOp
   const op = {
     ...input,
     id: crypto.randomUUID(),

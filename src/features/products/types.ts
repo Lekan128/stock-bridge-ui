@@ -479,6 +479,12 @@ export interface StockMutationResponse {
 }
 
 export interface StockInPayload {
+  /**
+   * The branch this was recorded at (V51). Stamped by `submitStockWrite` when the write is made, from
+   * the phone's working branch, so a later switch never moves a queued write. Absent at a one-branch
+   * company: the server's only branch, and the request exactly what it was before branches.
+   */
+  branchId?: string
   quantity: number
   /** Which of the product's configured units the quantity was entered in — omit for base unit. */
   unit?: string
@@ -499,6 +505,12 @@ export interface StockInPayload {
 export type OutReason = 'SALE' | 'USED' | 'DAMAGED' | 'EXPIRED' | 'LOST' | 'RETURNED_TO_SUPPLIER' | 'OTHER'
 
 export interface StockOutPayload {
+  /**
+   * The branch this was recorded at (V51). Stamped by `submitStockWrite` when the write is made, from
+   * the phone's working branch, so a later switch never moves a queued write. Absent at a one-branch
+   * company: the server's only branch, and the request exactly what it was before branches.
+   */
+  branchId?: string
   quantity: number
   unit?: string
   /** Omitted (simple path) = server computes FIFO. Present = manual per-lot override. */
