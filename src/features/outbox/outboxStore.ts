@@ -50,6 +50,8 @@ export interface OutboxState {
 }
 
 const RETRY_INTERVAL_MS = 20_000
+/** After a send that got no answer (offline): eligible again at the next tick. */
+const NO_CONNECTION_RETRY_MS = 5_000
 /** Back-off after a failed attempt: 5 s, 10 s, 20 s … capped at 5 minutes. */
 const backoff = (attempts: number) => Math.min(5_000 * 2 ** Math.max(0, attempts - 1), 300_000)
 
@@ -132,16 +134,19 @@ export async function stopOutbox({ deleteData }: { deleteData: boolean }): Promi
 
 function attachTriggers(): () => void {
   const kick = () => void processOutbox()
+  // Back online: whatever waited only for a connection goes now, not after its back-off (a waybill
+  // sent from a dead zone should get its number as the phone walks back into signal).
+  const reconnected = () => void processOutbox({ force: true })
   const onVisible = () => {
     if (document.visibilityState === 'visible') kick()
   }
-  window.addEventListener('online', kick)
+  window.addEventListener('online', reconnected)
   document.addEventListener('visibilitychange', onVisible)
   const timer = window.setInterval(() => {
     if (state.ops.some((op) => op.status === 'pending')) kick()
   }, RETRY_INTERVAL_MS)
   return () => {
-    window.removeEventListener('online', kick)
+    window.removeEventListener('online', reconnected)
     document.removeEventListener('visibilitychange', onVisible)
     window.clearInterval(timer)
   }
@@ -417,7 +422,10 @@ export async function processOutbox({ force = false }: { force?: boolean } = {})
       } catch (error) {
         if (isTransient(error)) {
           const attempts = op.attempts + 1
-          await save({ ...op, attempts, nextAttemptAt: Date.now() + backoff(attempts) })
+          // No answer at all is the phone being offline, not the server struggling: try again at the
+          // next tick rather than backing off for minutes. Only a server error earns the back-off.
+          const wait = isAppError(error) && error.status === 0 ? NO_CONNECTION_RETRY_MS : backoff(attempts)
+          await save({ ...op, attempts, nextAttemptAt: Date.now() + wait })
         } else {
           await save({ ...op, status: 'needs_attention', problem: problemFrom(error) })
         }

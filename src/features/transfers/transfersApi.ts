@@ -15,6 +15,8 @@ export const transfersApi = {
     api.post<Transfer>(`/api/stock-transfers/${id}/receipts`, payload).then((r) => r.data),
   close: (id: string) => api.post<Transfer>(`/api/stock-transfers/${id}/close`).then((r) => r.data),
   cancel: (id: string) => api.post<Transfer>(`/api/stock-transfers/${id}/cancel`).then((r) => r.data),
+  found: (id: string, payload: { id: string; productId: string; quantity: number; branchId: string }) =>
+    api.post<Transfer>(`/api/stock-transfers/${id}/found`, payload).then((r) => r.data),
   checkMissing: (id: string, note: string) =>
     api.post<Transfer>(`/api/stock-transfers/${id}/missing-checked`, { note }).then((r) => r.data),
 }

@@ -5,12 +5,41 @@
 //   3. Received short: a smaller number asks why, and the missing stays in view.
 //   4. Offline: the waybill is kept on the phone, and goes - and gets its number - once back online.
 //   5. A one-branch company has no Transfers in its menu (rule 1).
+//   6. Two phones receive the same waybill at once: received once, the other told by whom.
+//   7. Offline chaos: sent offline while the branch sells online - CHECK on arrival, then it goes.
+//   8. Missing stock that turns up goes back on a shelf.
+//   9. Inventory: select products, then Send.
+//  10. axe on Send stock, the waybill and Transfers.
 import { chromium } from 'playwright'
+import { createRequire } from 'node:module'
 import { API, UI, launchOptions, shotsPrefix } from '../config.mjs'
 import { randomUUID } from 'node:crypto'
 
 const SHOTS = shotsPrefix('transfers')
 const PASSWORD = 'correct-horse-battery-staple'
+const AXE = createRequire(import.meta.url).resolve('axe-core/axe.min.js')
+
+/** axe (WCAG 2.2 A/AA) on what is on screen now, as the a11y suite runs it. */
+async function axe(page) {
+  await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => {}))))
+  await page.addScriptTag({ path: AXE })
+  return page.evaluate(async () => {
+    const result = await window.axe.run(document, {
+      runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] },
+    })
+    return result.violations.map((v) => `${v.id} ×${v.nodes.length}: ${v.nodes.slice(0, 2).map((n) => n.target.join(' ')).join(' | ')}`)
+  })
+}
+
+async function sendApi(token, from, to, productId, quantity) {
+  return (
+    await api('/api/stock-transfers', {
+      token,
+      method: 'POST',
+      body: { id: randomUUID(), fromBranchId: from, toBranchId: to, lines: [{ productId, quantity }] },
+    })
+  ).json
+}
 
 const results = []
 let browser
@@ -221,6 +250,119 @@ await check('a one-branch company has no Transfers in its menu (rule 1)', async 
   await page.goto(`${UI}/app`)
   await page.getByRole('link', { name: 'Inventory' }).first().waitFor()
   assert((await page.getByRole('link', { name: 'Transfers' }).count()) === 0, 'Transfers is in the menu')
+  await context.close()
+})
+
+// ------------------------------------------------------------------------------------------ 6
+await check('two phones receive the same waybill at once: it is received once, and the other is told by whom', async () => {
+  const sent = await sendApi(ownerToken, headOffice.id, oshodi.id, beans.id, 2)
+  const before = (await figures(ownerToken, beans.id))[oshodi.id].quantityOnHand
+  const ownerSession = await login(owner.user.clientIdentifier, owner.email)
+  const adeSession = await login(owner.user.clientIdentifier, `ade-${owner.unique}`)
+  const phones = [await contextFor(ownerSession, oshodi.id), await contextFor(adeSession)]
+  const pages = await Promise.all(phones.map((context) => context.newPage()))
+  await Promise.all(pages.map((page) => page.goto(`${UI}/app/transfers/${sent.id}`)))
+  await Promise.all(pages.map((page) => page.getByRole('button', { name: 'Received as sent' }).waitFor()))
+  await Promise.all(pages.map((page) => page.getByRole('button', { name: 'Received as sent' }).click()))
+  // One gets the toast; the other the server's sentence.
+  await Promise.race(pages.map((page) => page.getByRole('alert').filter({ hasText: 'already received by' }).waitFor()))
+  const after = (await figures(ownerToken, beans.id))[oshodi.id].quantityOnHand
+  assert(after === before + 2, `Oshodi went from ${before} to ${after}, expected +2`)
+  for (const context of phones) await context.close()
+})
+
+// ------------------------------------------------------------------------------------------ 7
+await check('offline chaos: sent offline while the branch sells online - CHECK on arrival, then it goes once there is stock', async () => {
+  const salt = await createProduct(ownerToken, owner.unique, 'Salt')
+  await api(`/api/products/${salt.id}/stock/stock-in`, { token: ownerToken, method: 'POST', body: { quantity: 6, branchId: headOffice.id } })
+  const session = await login(owner.user.clientIdentifier, owner.email)
+  const context = await contextFor(session, headOffice.id)
+  const page = await context.newPage()
+  await page.goto(`${UI}/app/transfers/send?product=${salt.id}`)
+  await page.getByText(salt.name).first().waitFor()
+  await page.getByLabel('To', { exact: true }).selectOption(oshodi.id)
+  await page.getByLabel(/How many/).fill('5')
+  const before = (await api('/api/stock-transfers', { token: ownerToken })).json.totalElements
+  await context.setOffline(true)
+  await page.getByRole('button', { name: 'Send 1 item to Oshodi' }).click()
+  await page.getByText('Saved on this phone · not sent yet', { exact: false }).waitFor()
+
+  // Head Office sells 4 from another phone, online: only 2 are left for the waybill's 5.
+  await api(`/api/products/${salt.id}/stock/stock-out`, { token: ownerToken, method: 'POST', body: { quantity: 4, branchId: headOffice.id } })
+  await context.setOffline(false)
+  const pill = page.getByRole('button', { name: /needs? you/ })
+  await pill.waitFor({ timeout: 30000 })
+  assert((await api('/api/stock-transfers', { token: ownerToken })).json.totalElements === before, 'a waybill was made for stock that was not there')
+  assert((await figures(ownerToken, salt.id))[headOffice.id].quantityOnHand === 2, 'Head Office figure moved')
+
+  // A delivery arrives; Try again sends the waybill as it was, and it gets its number.
+  await api(`/api/products/${salt.id}/stock/stock-in`, { token: ownerToken, method: 'POST', body: { quantity: 10, branchId: headOffice.id } })
+  await pill.click()
+  await page.getByRole('dialog', { name: 'On this phone' }).getByRole('button', { name: 'Try again' }).click()
+  await waitFor(async () => (await api('/api/stock-transfers', { token: ownerToken })).json.totalElements === before + 1, 'the waybill to go')
+  const at = await figures(ownerToken, salt.id)
+  assert(at[headOffice.id].quantityOnHand === 7, `Head Office holds ${at[headOffice.id].quantityOnHand}, expected 7`)
+  assert(at[oshodi.id].onTheWay === 5, `on the way ${at[oshodi.id].onTheWay}, expected 5`)
+  await context.close()
+})
+
+// ------------------------------------------------------------------------------------------ 8
+await check('missing stock that turns up goes back on the shelf it was found at', async () => {
+  const sent = await sendApi(ownerToken, headOffice.id, oshodi.id, beans.id, 3)
+  await api(`/api/stock-transfers/${sent.id}/receipts`, {
+    token: ownerToken,
+    method: 'POST',
+    body: { id: randomUUID(), lines: [{ productId: beans.id, received: 1, missing: 2, damaged: 0 }] },
+  })
+  const before = (await figures(ownerToken, beans.id))[oshodi.id].quantityOnHand
+  const session = await login(owner.user.clientIdentifier, owner.email)
+  const context = await contextFor(session, headOffice.id)
+  const page = await context.newPage()
+  await page.goto(`${UI}/app/transfers/${sent.id}`)
+  await page.getByRole('button', { name: 'Some of the missing stock turned up?' }).click()
+  await page.getByLabel(/How many .* turned up/).fill('2')
+  await page.getByRole('radio', { name: 'Oshodi' }).check()
+  await page.getByRole('button', { name: 'Put it back in stock' }).click()
+  await page.getByText('Found later').waitFor()
+  const after = (await figures(ownerToken, beans.id))[oshodi.id].quantityOnHand
+  assert(after === before + 2, `Oshodi ${after}, expected ${before + 2}`)
+  const transfer = (await api(`/api/stock-transfers/${sent.id}`, { token: ownerToken })).json
+  assert(transfer.status === 'RECEIVED', `status ${transfer.status}`)
+  await context.close()
+})
+
+// ------------------------------------------------------------------------------------------ 9
+await check('Inventory: select products, then Send puts them on one waybill', async () => {
+  const session = await login(owner.user.clientIdentifier, owner.email)
+  const context = await contextFor(session, headOffice.id)
+  const page = await context.newPage()
+  await page.goto(`${UI}/app/products`)
+  const row = page.locator('tr').filter({ hasText: beans.name })
+  await row.getByRole('checkbox').check()
+  await page.getByRole('button', { name: 'Send to another branch' }).click()
+  await page.getByRole('heading', { name: 'Send stock' }).waitFor()
+  await page.getByRole('list', { name: 'On this waybill' }).getByText(beans.name, { exact: true }).waitFor()
+  await context.close()
+})
+
+// ----------------------------------------------------------------------------------------- 10
+await check('axe: Send stock, the waybill and Transfers have no WCAG 2.2 A/AA violations (phone)', async () => {
+  const sent = await sendApi(ownerToken, headOffice.id, oshodi.id, beans.id, 1)
+  const session = await login(owner.user.clientIdentifier, owner.email)
+  const context = await contextFor(session, headOffice.id, { width: 390, height: 844 })
+  const page = await context.newPage()
+  const found = []
+  await page.goto(`${UI}/app/transfers/send?product=${beans.id}`)
+  await page.getByText(beans.name).first().waitFor()
+  found.push(...(await axe(page)).map((v) => `Send: ${v}`))
+  await page.goto(`${UI}/app/transfers/${sent.id}`)
+  await page.getByRole('button', { name: 'Received as sent' }).waitFor()
+  found.push(...(await axe(page)).map((v) => `Waybill: ${v}`))
+  await page.goto(`${UI}/app/transfers`)
+  await page.getByRole('heading', { name: 'Transfers' }).waitFor()
+  await page.waitForLoadState('networkidle')
+  found.push(...(await axe(page)).map((v) => `Transfers: ${v}`))
+  assert(found.length === 0, found.join('\n    '))
   await context.close()
 })
 

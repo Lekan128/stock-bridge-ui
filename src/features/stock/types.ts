@@ -65,4 +65,12 @@ export interface StockMovementSummary {
   /** Every other stock-out - used, spoilt, sent away - at what the stock cost. */
   otherOutCost: number
   otherOutCount: number
+  /**
+   * Stock moved here from another branch, and from here to another (V53): never part of units in or
+   * out. Across every branch the two are equal once all of it has arrived. Absent from an older API.
+   */
+  movedInQuantity?: number
+  movedOutQuantity?: number
+  movedInCount?: number
+  movedOutCount?: number
 }

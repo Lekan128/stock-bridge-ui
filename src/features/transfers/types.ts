@@ -14,6 +14,8 @@ export interface TransferLine {
   quantityReceived: number
   quantityMissing: number
   quantityDamaged: number
+  /** Reported missing, then found and put back on a shelf. */
+  quantityFound?: number
   onTheWay: number
   enteredUnit?: string
   enteredQuantity?: number

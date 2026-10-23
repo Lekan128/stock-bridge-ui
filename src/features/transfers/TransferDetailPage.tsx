@@ -241,6 +241,9 @@ export function TransferDetailPage() {
           )}
         </div>
       )}
+      {atFrom && atTo && transfer.lines.some((line) => line.quantityMissing > 0) && (
+        <FoundForm transfer={transfer} onDone={(next) => setData(next)} />
+      )}
       {transfer.missingCheckedAt && (
         <p className="text-sm text-neutral-600">
           Missing stock checked {formatDateTime(transfer.missingCheckedAt)}
@@ -331,6 +334,7 @@ function WaybillLines({ transfer }: { transfer: Transfer }) {
             {line.quantityReceived > 0 && <p className="text-neutral-600">Received {amount(line, line.quantityReceived)}</p>}
             {line.quantityMissing > 0 && <p className="text-warning-800">Missing {amount(line, line.quantityMissing)}</p>}
             {line.quantityDamaged > 0 && <p className="text-warning-800">Damaged {amount(line, line.quantityDamaged)}</p>}
+            {(line.quantityFound ?? 0) > 0 && <p className="text-neutral-600">Found later {amount(line, line.quantityFound ?? 0)}</p>}
             {transfer.status !== 'CANCELLED' && line.onTheWay > 0 && (
               <p className="text-neutral-600">{amount(line, line.onTheWay)} on the way</p>
             )}
@@ -493,3 +497,113 @@ function ReceiveForm({ transfer, onDone }: { transfer: Transfer; onDone: (next: 
     </section>
   )
 }
+
+/**
+ * Missing stock that turned up (UX §5.7, "Found in the van"): back on the shelf of the branch it was
+ * found at, at what it cost. A decision made online, by somebody who works at both branches.
+ */
+function FoundForm({ transfer, onDone }: { transfer: Transfer; onDone: (next: Transfer) => void }) {
+  const { showToast } = useToast()
+  const missingLines = transfer.lines.filter((line) => line.quantityMissing > 0)
+  const [open, setOpen] = useState(false)
+  const [productId, setProductId] = useState(missingLines[0]?.productId ?? '')
+  const [quantity, setQuantity] = useState('')
+  const [branchId, setBranchId] = useState(transfer.toBranchId)
+  const [saving, setSaving] = useState(false)
+  const [problem, setProblem] = useState<string | null>(null)
+  const line = missingLines.find((entry) => entry.productId === productId) ?? missingLines[0]
+  const amount = Number(quantity)
+  const valid = line != null && Number.isInteger(amount) && amount > 0 && amount <= line.quantityMissing
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="-my-2 inline-flex min-h-11 items-center self-start rounded-sm text-sm font-medium text-primary-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 print:hidden"
+      >
+        Some of the missing stock turned up?
+      </button>
+    )
+  }
+
+  async function save() {
+    if (!valid || !line) return
+    setSaving(true)
+    setProblem(null)
+    try {
+      const next = await transfersApi.found(transfer.id, { id: crypto.randomUUID(), productId: line.productId, quantity: amount, branchId })
+      onDone(next)
+      void queryClient.invalidateQueries({ queryKey: transferKeys.all })
+      const where = branchId === transfer.toBranchId ? transfer.toBranchName : transfer.fromBranchName
+      showToast(`${formatNumber(amount)} ${line.productName} back in stock at ${where}.`, 'success')
+      setOpen(false)
+      setQuantity('')
+    } catch (err) {
+      setProblem(isAppError(err) ? err.message : "Couldn't record that. Try again.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section aria-labelledby="found-heading" className="flex flex-col gap-3 rounded-lg border border-neutral-200 bg-white p-4 print:hidden">
+      <h2 id="found-heading" className="text-sm font-semibold text-neutral-900">
+        Missing stock that turned up
+      </h2>
+      {missingLines.length > 1 && (
+        <div>
+          <label htmlFor="found-product" className="mb-1.5 block text-sm font-medium text-neutral-700">
+            What
+          </label>
+          <select
+            id="found-product"
+            value={line?.productId}
+            onChange={(event) => setProductId(event.target.value)}
+            className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-base sm:text-sm"
+          >
+            {missingLines.map((entry) => (
+              <option key={entry.productId} value={entry.productId}>
+                {entry.productName} · {formatNumber(entry.quantityMissing)} missing
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      <TextField
+        id="found-quantity"
+        label={missingLines.length > 1 ? 'How many turned up' : `How many ${line?.productName ?? ''} turned up`}
+        hint={line ? `${formatNumber(line.quantityMissing)} missing` : undefined}
+        inputMode="numeric"
+        value={quantity}
+        onChange={(event) => setQuantity(event.target.value.replace(/[^0-9]/g, ''))}
+      />
+      <fieldset className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+        <legend className="mb-1 font-medium text-neutral-700">Where is it now?</legend>
+        {[
+          [transfer.toBranchId, transfer.toBranchName],
+          [transfer.fromBranchId, `${transfer.fromBranchName} (it never left)`],
+        ].map(([id, label]) => (
+          <label key={id} className="inline-flex min-h-11 items-center gap-1.5">
+            <input type="radio" name="found-branch" checked={branchId === id} onChange={() => setBranchId(id)} />
+            {label}
+          </label>
+        ))}
+      </fieldset>
+      {problem && (
+        <p role="alert" className="text-sm text-danger-700">
+          {problem}
+        </p>
+      )}
+      <div className="flex gap-2">
+        <Button variant="action" disabled={!valid} loading={saving} onClick={() => void save()}>
+          Put it back in stock
+        </Button>
+        <Button variant="secondary" onClick={() => setOpen(false)}>
+          Not now
+        </Button>
+      </div>
+    </section>
+  )
+}
+

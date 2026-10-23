@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Truck } from 'lucide-react'
+import { PackagePlus, Truck } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { InventoryActions, type InventoryBarProps } from '@/features/products/components/InventoryBar'
 
@@ -9,6 +9,9 @@ export interface InventoryActionBarProps extends InventoryBarProps {
   selectedCount: number
   canStockInSelected: boolean
   onStockInSelected: () => void
+  /** Multiple branches: "Send" the selection to another branch (MULTI_BRANCH_UX_PLAN.md §5.4). */
+  canSendSelected?: boolean
+  onSendSelected?: () => void
   onDoneSelecting: () => void
 }
 
@@ -20,7 +23,7 @@ const BAR_HEIGHT = '4.5rem'
  * Publishes its height so toasts rise above it.
  */
 export function InventoryActionBar(props: InventoryActionBarProps) {
-  const { selecting, selectedCount, canStockInSelected, onStockInSelected, onDoneSelecting } = props
+  const { selecting, selectedCount, canStockInSelected, onStockInSelected, canSendSelected, onSendSelected, onDoneSelecting } = props
 
   useEffect(() => {
     const root = document.documentElement
@@ -43,8 +46,14 @@ export function InventoryActionBar(props: InventoryActionBarProps) {
           </p>
           {canStockInSelected && (
             <Button variant="action" onClick={onStockInSelected} disabled={selectedCount === 0}>
-              <Truck className="h-4 w-4" aria-hidden="true" />
+              <PackagePlus className="h-4 w-4" aria-hidden="true" />
               Stock in
+            </Button>
+          )}
+          {canSendSelected && onSendSelected && (
+            <Button variant={canStockInSelected ? 'secondary' : 'action'} onClick={onSendSelected} disabled={selectedCount === 0}>
+              <Truck className="h-4 w-4" aria-hidden="true" />
+              Send
             </Button>
           )}
           <Button variant="secondary" onClick={onDoneSelecting}>

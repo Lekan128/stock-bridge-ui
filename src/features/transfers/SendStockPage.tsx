@@ -56,8 +56,8 @@ function figureAt(product: Product, branchId: string): number | undefined {
  * button that names what it does. It goes through the outbox, so it works offline; the waybill
  * number comes from the server once it arrives.
  *
- * Opened with `?product=` (the product page's "Send to…"), `?to=`, `?from=`, or `?all=<branch>` to
- * empty a branch that is closing (§5.11).
+ * Opened with `?product=` (the product page's "Send to…"), `?products=` (Inventory's selection),
+ * `?to=`, `?from=`, or `?all=<branch>` to empty a branch that is closing (§5.11).
  */
 export function SendStockPage() {
   const navigate = useNavigate()
@@ -126,11 +126,14 @@ export function SendStockPage() {
   const prefilled = useRef(false)
   useEffect(() => {
     if (prefilled.current || catalogue.length === 0) return
-    const productId = searchParams.get('product')
+    // `?product=` from a product page, `?products=a,b,c` from Inventory's selection.
+    const productIds = [searchParams.get('product'), ...(searchParams.get('products')?.split(',') ?? [])].filter(
+      (id): id is string => !!id,
+    )
     const emptying = searchParams.get('all')
-    if (!productId && !emptying) return
+    if (productIds.length === 0 && !emptying) return
     prefilled.current = true
-    if (productId) {
+    for (const productId of productIds) {
       void productsApi
         .get(productId)
         .then(addProduct)

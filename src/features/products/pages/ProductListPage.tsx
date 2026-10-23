@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Truck, X, Zap } from 'lucide-react'
+import { PackagePlus, Truck, X, Zap } from 'lucide-react'
+import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
@@ -117,6 +118,14 @@ export function ProductListPage() {
   const canImport = canManageProducts || permissions.includes(PERMISSIONS.MANAGE_INVENTORY)
   const canStockIn = permissions.includes(PERMISSIONS.STOCK_IN)
   const canStockOut = permissions.includes(PERMISSIONS.STOCK_OUT)
+  // Select rows → Send (MULTI_BRANCH_UX_PLAN.md §5.4): from the branch this phone is at.
+  const branch = useOptionalWorkingBranch()
+  const canSendSelected =
+    (branch?.isMultiBranch ?? false) &&
+    permissions.includes(PERMISSIONS.SEND_STOCK) &&
+    branch?.working != null &&
+    branch.recordable.some((entry) => entry.id === branch.working?.id)
+  const canSelect = canImport || canSendSelected
   const [searchParams, setSearchParams] = useSearchParams()
   const { search: committedSearch, statusFilter, categoryFilter, stockLevelFilter, priceFilter: requestedPriceFilter, sort, page } =
     readListState(searchParams)
@@ -285,7 +294,7 @@ export function ProductListPage() {
   })
 
   /** Phone selection: a long press starts it with that card ticked. */
-  const cardSelection: CardSelection | undefined = canImport
+  const cardSelection: CardSelection | undefined = canSelect
     ? {
         active: selecting,
         selectedIds,
@@ -312,6 +321,10 @@ export function ProductListPage() {
    * query string so the sheet downloaded on the next screen is pre-filled with exactly these
    * products — contract §3's `productIds`, which wins over `filter`.
    */
+  function handleSendSelected() {
+    navigate(`/app/transfers/send?products=${selectedIds.join(',')}`)
+  }
+
   function handleStockInSelected() {
     navigate(`/app/products/import/new?kind=STOCK_IN&productIds=${selectedIds.join(',')}`)
   }
@@ -501,10 +514,15 @@ export function ProductListPage() {
           canManageProducts={canManageProducts}
           onBulkUpload={() => navigate('/app/products/import')}
           onShowAll={() => handleStatusFilterChange('all')}
-          selection={canImport ? { selectedIds, onToggle: toggleSelected, onToggleAll: toggleAllOnPage } : undefined}
+          selection={canSelect ? { selectedIds, onToggle: toggleSelected, onToggleAll: toggleAllOnPage } : undefined}
           selectionBar={
-            canImport && selectedIds.length > 0 ? (
-              <SelectionBar count={selectedIds.length} onStockIn={handleStockInSelected} onClear={() => setSelectedIds([])} />
+            canSelect && selectedIds.length > 0 ? (
+              <SelectionBar
+                count={selectedIds.length}
+                onStockIn={canImport ? handleStockInSelected : undefined}
+                onSend={canSendSelected ? handleSendSelected : undefined}
+                onClear={() => setSelectedIds([])}
+              />
             ) : null
           }
           onRenderedChange={setRenderedProducts}
@@ -567,8 +585,13 @@ export function ProductListPage() {
                 ))}
               </div>
               {/* On a phone, selection lives in the bottom bar instead (C1, U4). */}
-              {canImport && selectedIds.length > 0 && (
-                <SelectionBar count={selectedIds.length} onStockIn={handleStockInSelected} onClear={() => setSelectedIds([])} />
+              {canSelect && selectedIds.length > 0 && (
+                <SelectionBar
+                count={selectedIds.length}
+                onStockIn={canImport ? handleStockInSelected : undefined}
+                onSend={canSendSelected ? handleSendSelected : undefined}
+                onClear={() => setSelectedIds([])}
+              />
               )}
               <div className="hidden overflow-hidden rounded-lg border border-neutral-200 bg-white md:block">
                 <ProductTable
@@ -577,7 +600,7 @@ export function ProductListPage() {
                   onSortChange={handleSortChange}
                   incomingFor={incomingFor}
                   selection={
-                    canImport
+                    canSelect
                       ? { selectedIds, onToggle: toggleSelected, onToggleAll: toggleAllOnPage }
                       : undefined
                   }
@@ -612,6 +635,8 @@ export function ProductListPage() {
         selectedCount={selectedIds.length}
         canStockInSelected={canImport}
         onStockInSelected={handleStockInSelected}
+        canSendSelected={canSendSelected}
+        onSendSelected={handleSendSelected}
         onDoneSelecting={() => {
           setSelecting(false)
           setSelectedIds([])
@@ -637,17 +662,36 @@ export function ProductListPage() {
 }
 
 /** "3 products selected · Stock in selected · Clear" above the desktop table. */
-function SelectionBar({ count, onStockIn, onClear }: { count: number; onStockIn: () => void; onClear: () => void }) {
+function SelectionBar({
+  count,
+  onStockIn,
+  onSend,
+  onClear,
+}: {
+  count: number
+  onStockIn?: () => void
+  /** Send the selected products to another branch (MULTI_BRANCH_UX_PLAN.md §5.4). */
+  onSend?: () => void
+  onClear: () => void
+}) {
   return (
     <div className="hidden items-center justify-between gap-3 rounded-lg border border-primary-200 bg-primary-50 px-4 py-2.5 md:flex">
       <p className="text-sm font-medium text-primary-900">
         {count} product{count === 1 ? '' : 's'} selected
       </p>
       <div className="flex items-center gap-2">
-        <Button variant="secondary" onClick={onStockIn}>
-          <Truck className="h-4 w-4" aria-hidden="true" />
-          Stock in selected
-        </Button>
+        {onStockIn && (
+          <Button variant="secondary" onClick={onStockIn}>
+            <PackagePlus className="h-4 w-4" aria-hidden="true" />
+            Stock in selected
+          </Button>
+        )}
+        {onSend && (
+          <Button variant="secondary" onClick={onSend}>
+            <Truck className="h-4 w-4" aria-hidden="true" />
+            Send to another branch
+          </Button>
+        )}
         <button
           type="button"
           onClick={onClear}

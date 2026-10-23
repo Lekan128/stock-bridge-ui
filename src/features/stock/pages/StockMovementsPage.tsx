@@ -175,6 +175,15 @@ export function StockMovementsPage() {
         </div>
       )}
 
+      {/* Multiple branches (MULTI_BRANCH_BUILD_PLAN.md §4.3): at one branch, stock moved to and from the
+          others is its own line - never folded into units in or out, which stay purchases and issues. */}
+      {summary && ((summary.movedInCount ?? 0) > 0 || (summary.movedOutCount ?? 0) > 0) && (
+        <p className="text-sm text-neutral-600" data-moved-between-branches>
+          Moved between branches: {formatNumber(summary.movedInQuantity ?? 0)} in from other branches ·{' '}
+          {formatNumber(summary.movedOutQuantity ?? 0)} out to other branches. Not counted in units in or out.
+        </p>
+      )}
+
       {/* The one thing that makes the two numbers above reconcilable. Without it, a large "units
           in" against a smaller "stock in value" reads as a bug rather than as deliveries whose
           price nobody recorded. Shown only when there is actually a gap to explain. */}
