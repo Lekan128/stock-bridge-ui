@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useSheetBranch } from '@/features/branches/useSheetBranch'
 import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronUp, Package, Truck } from 'lucide-react'
 import { useForm } from 'react-hook-form'
@@ -208,6 +209,8 @@ function withDeliveryPack(options: UnitOption[], deliveryPack: UnitOption | null
  */
 export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInModalProps) {
   const { user } = useAuth()
+  // Where this delivery lands (MULTI_BRANCH_UX_PLAN.md §5.2): in the title, or asked first in "All branches".
+  const sheetBranch = useSheetBranch()
   const canViewVendors = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.VIEW_VENDORS)
   const canManageProducts = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_PRODUCTS)
   const { showsSellingPrice } = useSellingPolicy()
@@ -547,9 +550,10 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
         productId: product.id,
         productName: product.name,
         summary: quantityBothWays,
-        payload,
+        payload: { ...payload, branchId: sheetBranch.branchId },
         baseDelta: baseQuantity,
       })
+      sheetBranch.remember()
       if (outcome.status === 'sent') setResult(outcome.response)
       else {
         setQueued(true)
@@ -597,9 +601,9 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
       size="lg"
       title={
         step === 'form'
-          ? 'Stock in'
+          ? `Stock in${sheetBranch.titleSuffix}`
           : step === 'confirm'
-            ? 'Confirm stock in'
+            ? `Confirm stock in${sheetBranch.titleSuffix}`
             : queued
               ? 'Saved on this phone'
               : result
@@ -612,7 +616,10 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
             <Button variant="secondary" onClick={onClose}>
               Cancel
             </Button>
-            <Button onClick={handleSubmit(goToConfirm)} disabled={productVendorsLoading || quantityRefused}>
+            <Button
+              onClick={handleSubmit(goToConfirm)}
+              disabled={productVendorsLoading || quantityRefused || sheetBranch.missing}
+            >
               Continue
             </Button>
           </>
@@ -637,6 +644,7 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
     >
       {step === 'form' && (
         <form onSubmit={handleSubmit(goToConfirm)} noValidate className="flex flex-col gap-4">
+          {sheetBranch.field}
           {/* Quantity and its unit are ONE question — "how much, of what" — so they sit on one
               row with the toggle glued to the input, the way Odoo 18 and Zoho Inventory both
               render a quantity. They stack at 360px rather than shrinking, because a unit label

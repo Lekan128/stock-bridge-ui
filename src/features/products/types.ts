@@ -1,3 +1,4 @@
+import type { BranchFigure } from '@/features/branches/types'
 export interface Product {
   id: string
   name: string
@@ -115,6 +116,11 @@ export interface Product {
   isLowStock: boolean
   createdAt: string
   updatedAt: string
+  /**
+   * Multiple branches (V52): this product at each branch the person sees - the product page only, at
+   * a company with more than one branch. Absent otherwise (`== null`).
+   */
+  branchStock?: BranchFigure[]
   warnings?: string[] | null
   /**
    * True when `packagingUnit`/`packagingSize` above are the DEFAULT among more than one distinct

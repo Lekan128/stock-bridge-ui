@@ -6,11 +6,11 @@ import type { PageResponse, StockMovement } from '@/features/products/types'
 export function useStockHistory(
   productId: string | undefined,
   page: number,
-  { requireFresh = false }: { requireFresh?: boolean } = {},
+  { requireFresh = false, branchId }: { requireFresh?: boolean; branchId?: string } = {},
 ) {
   const result = useApiQuery<PageResponse<StockMovement>>({
-    queryKey: queryKeys.products.history(productId, page),
-    queryFn: () => stockApi.history(productId as string, page),
+    queryKey: [...queryKeys.products.history(productId, page), branchId ?? 'all'],
+    queryFn: () => stockApi.history(productId as string, page, undefined, branchId),
     fallbackError: 'Something went wrong. Please try again.',
     enabled: productId != null,
     keepPrevious: true,

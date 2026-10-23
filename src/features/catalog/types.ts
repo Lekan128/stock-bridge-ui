@@ -1,3 +1,4 @@
+import type { BranchFigure } from '@/features/branches/types'
 import type { StockStatusFilter } from '@/features/products/types'
 
 /**
@@ -31,6 +32,11 @@ export interface CatalogRow {
   active: boolean
   isLowStock: boolean
   stockStatus: StockStatusFilter
+  /**
+   * Multiple branches (V52): this product at each branch the person sees, so the list can show any of
+   * them offline. The fields above stay the company's. Absent at a one-branch company (`== null`).
+   */
+  branchStock?: BranchFigure[]
 }
 
 export interface SnapshotPage {
@@ -66,6 +72,12 @@ export interface CatalogQuery {
   sort: { field: CatalogSortField; direction: 'asc' | 'desc' }
   offset: number
   limit: number
+  /**
+   * Multiple branches (MULTI_BRANCH_UX_PLAN.md §4.3): read every row as this branch holds it. With
+   * `allBranches`, the company figure, and a product low at any branch counts as low.
+   */
+  branchId?: string
+  allBranches?: boolean
 }
 
 export interface CatalogQueryResult {

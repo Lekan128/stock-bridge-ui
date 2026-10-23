@@ -1,4 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
+import { carryBranchStock, scopeProduct } from '@/features/branches/scopeProduct'
+import { OtherBranchesList } from '@/features/branches/OtherBranchesList'
 import { ArrowLeft, Minus, Pencil, Plus, ShoppingBag } from 'lucide-react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
@@ -58,7 +61,11 @@ export function ProductDetailPage() {
   const { showToast } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = parseDetailTab(searchParams.get('tab'))
-  const { product, setProduct, loading, error, showingSaved, updatedAt, refetch: refetchProduct } = useProduct(id)
+  const { product: wholeProduct, setProduct, loading, error, showingSaved, updatedAt, refetch: refetchProduct } = useProduct(id)
+  // At a branch, the page reads that branch's figure (MULTI_BRANCH_UX_PLAN.md §5.9); the whole product,
+  // with every branch's figure, stays for the "At other branches" list.
+  const { working, isMultiBranch } = useWorkingBranch()
+  const product = wholeProduct ? scopeProduct(wholeProduct, working) : wholeProduct
   const { options: unitOfMeasureOptions } = useUnitOfMeasureOptions()
   const { refetch: refetchLowStockAlerts } = useLowStockAlerts()
   // A single-element array so the hook's "does the API send incomingQuantity?" check works the
@@ -68,11 +75,15 @@ export function ProductDetailPage() {
   const { data: history, loading: historyLoading, error: historyError, refetch: refetchHistory } = useStockHistory(
     id,
     historyPage,
+    { branchId: isMultiBranch ? working?.id : undefined },
   )
   // Stock in / out / count, and the toast with Undo after — shared with the Inventory list (C1).
   const stockActions = useStockActions({
     onChanged: (changed) => {
-      setProduct(changed)
+      // The write's answer carries the company figure only: keep the branch list, moved by the same
+      // amount at the branch written to, and read the product again for the truth.
+      setProduct((previous) => carryBranchStock(previous, changed, working?.id ?? null))
+      if (isMultiBranch) refetchProduct()
       setHistoryPage(0)
       refetchHistory()
       refetchLowStockAlerts()
@@ -300,6 +311,8 @@ export function ProductDetailPage() {
         lastMovement={lastMovement}
         sellingPrice={showsSellingPrice ? sellingPriceText(product, stockUnitText, packOption) : null}
       />
+
+      {wholeProduct && <OtherBranchesList product={wholeProduct} unitLabel={stockUnitText} />}
 
       <SoldThisMonth productId={product.id} stockUnit={stockUnitText} />
 

@@ -1,5 +1,6 @@
 import { createContext, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { setRecordingBranch } from '@/features/outbox/outboxStore'
+import { resyncCatalog } from '@/features/catalog/catalogStore'
 import { useAuth } from '@/auth/useAuth'
 import { useApiQuery } from '@/data/useApiQuery'
 import { branchesApi } from '@/features/branches/branchesApi'
@@ -129,6 +130,30 @@ export function BranchProvider({ children }: { children: ReactNode }) {
       nameOf: (branchId) => (branchId ? byId.get(branchId)?.name : undefined),
     }
   }, [query.data, query.loading, chosen, choose])
+
+  // The on-phone catalogue's rows carry a figure per branch this person sees: when that set changes,
+  // fetch a fresh copy (once per change, per phone; remembered so a reload doesn't fetch it again).
+  const seenKey = value.isMultiBranch ? value.branches.map((branch) => branch.id).sort().join(',') : ''
+  useEffect(() => {
+    if (!userId || !seenKey) return
+    const storageName = `pp.catalog-branches.${userId}`
+    let previous: string | null = null
+    try {
+      previous = window.localStorage.getItem(storageName)
+    } catch {
+      // Unreadable storage: treat as unchanged rather than re-download on every open.
+      return
+    }
+    if (previous === seenKey) return
+    void resyncCatalog().then((started) => {
+      if (!started) return
+      try {
+        window.localStorage.setItem(storageName, seenKey)
+      } catch {
+        // Not remembered: asked again next open, which is only a re-download.
+      }
+    })
+  }, [userId, seenKey])
 
   // Writes are stamped with where this phone is (rule 3) - only at a multi-branch company, so a single
   // shop's requests stay exactly as they were.

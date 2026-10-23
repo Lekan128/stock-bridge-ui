@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { getCatalogState, queryCatalog, subscribeCatalog, toProduct, type CatalogState } from '@/features/catalog/catalogStore'
 import type { CatalogQuery, CatalogQueryResult } from '@/features/catalog/types'
 import type { Product } from '@/features/products/types'
@@ -37,7 +38,13 @@ const NO_INCOMING = { units: 0, productCount: 0 }
  * the filters change or the copy itself changes (a sync, or a write from this phone), keeping
  * whichever windows the user has scrolled through.
  */
-export function useCatalogList(filters: CatalogFilters, enabled: boolean): CatalogList {
+export function useCatalogList(asked: CatalogFilters, enabled: boolean): CatalogList {
+  // Rows read as the phone's branch holds them, or as "All branches" (MULTI_BRANCH_UX_PLAN.md §4.3).
+  const branch = useOptionalWorkingBranch()
+  const filters: CatalogFilters =
+    branch?.isMultiBranch && (branch.working || branch.isAll)
+      ? { ...asked, branchId: branch.isAll ? undefined : branch.working?.id, allBranches: branch.isAll }
+      : asked
   const { version } = useCatalogState()
   const key = JSON.stringify(filters)
   const [summary, setSummary] = useState<Omit<CatalogQueryResult, 'rows'> | null>(null)

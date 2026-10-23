@@ -76,6 +76,27 @@ function sortedRows(field: CatalogSortField, direction: 'asc' | 'desc'): StoredR
   return order
 }
 
+/**
+ * A row as the list should read it (MULTI_BRANCH_UX_PLAN.md §4.3). At a branch: that branch's figure,
+ * level and status. In "All branches": the company figure, low when it is low at any branch, out only
+ * when every branch is. A row with no figure for the branch (it arrived before the branch existed) is
+ * read as holding none there - never as the company's figure, which would overstate the shelf.
+ */
+function asSeen(row: StoredRow, q: CatalogQuery): StoredRow {
+  if (row.branchStock == null) return row
+  if (q.branchId) {
+    const figure = row.branchStock.find((entry) => entry.branchId === q.branchId)
+    return figure
+      ? { ...row, quantityOnHand: figure.quantityOnHand, lowStockThreshold: figure.lowStockThreshold ?? null,
+          isLowStock: figure.isLowStock, stockStatus: figure.stockStatus }
+      : { ...row, quantityOnHand: 0, isLowStock: row.lowStockThreshold != null, stockStatus: 'OUT' }
+  }
+  if (q.allBranches && row.stockStatus !== 'OUT' && row.branchStock.some((entry) => entry.stockStatus !== 'OK')) {
+    return { ...row, isLowStock: true, stockStatus: 'LOW' }
+  }
+  return row
+}
+
 function query(q: CatalogQuery): CatalogQueryResult {
   const term = q.search.trim().toLowerCase()
   const counts = { all: 0, OK: 0, LOW: 0, OUT: 0 }
@@ -83,7 +104,10 @@ function query(q: CatalogQuery): CatalogQueryResult {
   const price = q.price ?? 'all'
   const matching: StoredRow[] = []
 
-  for (const row of sortedRows(q.sort.field, q.sort.direction)) {
+  // A branch's own figures sort differently from the company's: sorted here, after the filters.
+  const byBranchQuantity = q.branchId != null && q.sort.field === 'quantityOnHand'
+  for (const stored of sortedRows(byBranchQuantity ? 'name' : q.sort.field, q.sort.direction)) {
+    const row = asSeen(stored, q)
     if (q.status === 'active' && !row.active) continue
     if (q.status === 'inactive' && row.active) continue
     if (q.categoryId && row.categoryId !== q.categoryId) continue
@@ -100,6 +124,10 @@ function query(q: CatalogQuery): CatalogQueryResult {
     counts[row.stockStatus] += 1
     if (q.stockStatus !== 'all' && row.stockStatus !== q.stockStatus) continue
     matching.push(row)
+  }
+  if (byBranchQuantity) {
+    const sign = q.sort.direction === 'asc' ? 1 : -1
+    matching.sort((a, b) => sign * (a.quantityOnHand - b.quantityOnHand) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   }
 
   let incomingUnits = 0

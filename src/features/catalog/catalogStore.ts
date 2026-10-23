@@ -208,6 +208,20 @@ export async function syncCatalog(): Promise<void> {
   }
 }
 
+/**
+ * Starts the copy over (MULTI_BRANCH_BUILD_PLAN.md §6.1): every row carries a figure per branch the
+ * person sees, so when that set of branches changes - a branch added, somebody given another - rows
+ * already on the phone lack the new one, and no product changed to send it. Online only: offline the
+ * old copy is still the best there is, and the provider asks again when the branches next load.
+ */
+export async function resyncCatalog(): Promise<boolean> {
+  if (!databaseName || !worker || !navigator.onLine) return false
+  await call({ type: 'reset' })
+  setState({ phase: 'loading', loaded: 0, total: null, version: state.version + 1 })
+  void syncCatalog()
+  return true
+}
+
 /** The first full copy, resuming from where an interrupted one stopped. */
 async function loadSnapshotIfNeeded(name: string): Promise<CatalogMeta | null> {
   let meta = await currentMeta()

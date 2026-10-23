@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useSheetBranch } from '@/features/branches/useSheetBranch'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Button } from '@/components/Button'
@@ -42,6 +43,8 @@ export function StockAdjustmentModal({
   onSuccess,
   onQueued,
 }: StockAdjustmentModalProps) {
+  // Which branch's shelf is counted (MULTI_BRANCH_UX_PLAN.md §5.2).
+  const sheetBranch = useSheetBranch()
   const [formError, setFormError] = useState<string | null>(null)
   const [queuedSentence, setQueuedSentence] = useState<string | null>(null)
   const [queuedOpId, setQueuedOpId] = useState<string | null>(null)
@@ -69,8 +72,9 @@ export function StockAdjustmentModal({
         productId,
         productName,
         summary: formatQuantity(countedQuantity, stockUnit),
-        payload: { countedQuantity, note: values.note || undefined },
+        payload: { countedQuantity, note: values.note || undefined, branchId: sheetBranch.branchId },
       })
+      sheetBranch.remember()
       if (outcome.status === 'sent') onSuccess(outcome.response)
       else {
         setQueuedSentence(formatQuantity(countedQuantity, stockUnit))
@@ -107,20 +111,21 @@ export function StockAdjustmentModal({
     <Sheet
       open
       onClose={onClose}
-      title="Count stock"
+      title={`Count stock${sheetBranch.titleSuffix}`}
       size="sm"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="action" onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
+          <Button variant="action" onClick={handleSubmit(onSubmit)} loading={isSubmitting} disabled={sheetBranch.missing}>
             Record count
           </Button>
         </>
       }
     >
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
+        {sheetBranch.field}
         <TextField
           label={`How much is on the shelf now? (${stockUnit})`}
           inputMode="numeric"

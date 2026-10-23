@@ -9,3 +9,11 @@ export function useWorkingBranch(): WorkingBranchValue {
   }
   return value
 }
+
+/**
+ * The same, or null outside the workspace (no provider) - for shared code such as the catalogue list,
+ * which then reads company figures exactly as it did before branches.
+ */
+export function useOptionalWorkingBranch(): WorkingBranchValue | null {
+  return useContext(WorkingBranchContext)
+}

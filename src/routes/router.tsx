@@ -1,4 +1,5 @@
 import { Suspense, lazy } from 'react'
+import { RecordingBranchGate } from '@/features/branches/RecordingBranchGate'
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
 import { RedirectIfAuthenticated } from '@/auth/RedirectIfAuthenticated'
@@ -652,7 +653,9 @@ export function AppRoutes() {
             path="quick"
             element={
               <RequirePermission anyOf={[PERMISSIONS.STOCK_IN, PERMISSIONS.STOCK_OUT, PERMISSIONS.MANAGE_INVENTORY]}>
-                <QuickModePage />
+                <RecordingBranchGate doing="recording">
+                  <QuickModePage />
+                </RecordingBranchGate>
               </RequirePermission>
             }
           />
@@ -660,7 +663,9 @@ export function AppRoutes() {
             path="sell"
             element={
               <RequirePermission permission={PERMISSIONS.STOCK_OUT}>
-                <RecordSalePage />
+                <RecordingBranchGate doing="selling">
+                  <RecordSalePage />
+                </RecordingBranchGate>
               </RequirePermission>
             }
           />
