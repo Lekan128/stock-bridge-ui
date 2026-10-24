@@ -45,6 +45,14 @@ async function check(name, fn) {
 function assert(cond, msg) {
   if (!cond) throw new Error(msg)
 }
+async function waitFor(condition, what, timeout = 15000) {
+  const until = Date.now() + timeout
+  while (Date.now() < until) {
+    if (await condition()) return
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  }
+  throw new Error(`timed out waiting for ${what}`)
+}
 
 async function api(path, { token, method = 'GET', body } = {}) {
   const res = await fetch(API + path, {
@@ -228,6 +236,12 @@ await check('expected deliveries: a Going to field, and the branch on each in Al
   await page.goto(`${UI}/app/products/expected`)
   await page.getByText('Going to Oshodi').first().waitFor()
   await context.close()
+  // At a branch, it is going there unless changed - even when the branches load after the screen.
+  const at = await ownerPage(oshodi.id)
+  await at.page.goto(`${UI}/app/products/expected/new`)
+  await at.page.getByLabel('Going to').waitFor()
+  await waitFor(async () => (await at.page.getByLabel('Going to').inputValue()) === oshodi.id, 'Going to to be Oshodi')
+  await at.context.close()
 })
 
 // ------------------------------------------------------------------------------------------ 8
@@ -335,7 +349,20 @@ await check('the branch this phone was at closes: it says so', async () => {
   const { context, page } = await ownerPage(ikeja.id)
   await page.goto(`${UI}/app/products`)
   await page.getByText("Ikeja has closed. This phone isn't at it any more.").waitFor()
+  // Said once: the next open asks where the phone is instead of saying it again.
+  await page.reload()
+  await page.getByRole('heading', { name: 'Which branch are you at?' }).waitFor()
+  assert((await page.getByText('Ikeja has closed').count()) === 0, 'told again after a reload')
   await context.close()
+
+  // A closed branch holds nothing, and is never "low": Rice is still low at Oshodi only.
+  const all = await ownerPage('ALL')
+  await all.page.goto(`${UI}/app/products`)
+  await all.page.locator('tr').filter({ hasText: 'Rice' }).getByText('Low at 1 branch').waitFor({ timeout: 30000 })
+  await all.page.goto(`${UI}/app/products/low-stock`)
+  await all.page.locator('[data-low-group]').first().waitFor()
+  assert((await all.page.locator('[data-low-group]').filter({ hasText: 'Ikeja' }).count()) === 0, 'a group for the closed branch')
+  await all.context.close()
 })
 
 await browser.close()

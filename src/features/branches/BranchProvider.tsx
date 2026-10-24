@@ -36,6 +36,14 @@ function readChoice(userId: string | undefined): WorkingBranchChoice | null {
   }
 }
 
+function forgetChoice(userId: string) {
+  try {
+    window.localStorage.removeItem(storageKey(userId))
+  } catch {
+    // Storage blocked: nothing was remembered to forget.
+  }
+}
+
 function writeChoice(userId: string, choice: WorkingBranchChoice) {
   try {
     window.localStorage.setItem(storageKey(userId), choice)
@@ -117,6 +125,7 @@ export function BranchProvider({ children }: { children: ReactNode }) {
       recordable,
       needsChoice,
       mayAddBranch: list?.mayAddBranch ?? false,
+      openBranches: list?.openBranches ?? open.length,
       sendTo: list?.sendTo ?? [],
       loading: query.loading,
       choose,
@@ -141,18 +150,23 @@ export function BranchProvider({ children }: { children: ReactNode }) {
       was ? `${was.name} has closed. This phone isn't at it any more.` : name ? `You no longer work at ${name}.` : 'You no longer work at that branch.',
       'info',
     )
-  }, [list, chosen, showToast])
+    // Forgotten once said, so the next open asks where the phone is rather than saying it again.
+    setChosen(null)
+    if (userId) forgetChoice(userId)
+  }, [list, chosen, showToast, userId])
 
   // The on-phone catalogue's rows carry a figure per branch this person sees: when that set changes,
   // fetch a fresh copy (once per change, per phone; remembered so a reload doesn't fetch it again).
   // Past WIDE branches (a chain) rows carry the working branch's figure only, so changing branch is a
   // change of what the phone holds, too (MULTI_BRANCH_BUILD_PLAN.md §6.1).
-  const wide = value.branches.length > WIDE
+  // Open branches only, as the server sends them: closing one changes what the rows carry.
+  const openIds = value.branches.filter((branch) => branch.active).map((branch) => branch.id)
+  const wide = openIds.length > WIDE
   const seenKey = !value.isMultiBranch
     ? ''
     : wide
       ? `wide:${value.isAll ? 'ALL' : (value.working?.id ?? '')}`
-      : value.branches.map((branch) => branch.id).sort().join(',')
+      : openIds.sort().join(',')
   // Only once a copy is on the device: resetting one mid-download would start a second download beside
   // it. Until then the list reads the server, which answers for the branch being viewed.
   const catalogOpen = useCatalogState().phase === 'ready'

@@ -68,15 +68,20 @@ export function NewExpectedDeliveryPage() {
   // "Going to" (MULTI_BRANCH_UX_PLAN.md §5.10): the branch it is for - this one by default, and the
   // delivery shows on that branch's Needs you only. Not asked at a one-branch company (rule 1).
   const branch = useOptionalWorkingBranch()
-  const goingToOptions = branch?.isMultiBranch ? branch.recordable : []
-  const [goingTo, setGoingTo] = useState(() =>
+  const multiBranch = branch?.isMultiBranch ?? false
+  const goingToOptions = multiBranch ? (branch?.recordable ?? []) : []
+  // Worked out on each render rather than once: the branches may arrive after the screen opens.
+  const defaultGoingTo =
     branch?.working && goingToOptions.some((option) => option.id === branch.working?.id)
       ? branch.working.id
       : goingToOptions.length === 1
         ? goingToOptions[0].id
-        : '',
-  )
-  const needsGoingTo = goingToOptions.length > 0 && !goingTo
+        : ''
+  const [pickedGoingTo, setGoingTo] = useState('')
+  const goingTo = pickedGoingTo || defaultGoingTo
+  // Somebody who records at no branch can't say where it is going, and the server would refuse it.
+  const nowhereToRecord = multiBranch && !branch?.loading && goingToOptions.length === 0
+  const needsGoingTo = multiBranch && !goingTo
 
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -170,6 +175,12 @@ export function NewExpectedDeliveryPage() {
                 hint={expectedCopy.create.supplierHint}
               />
             </div>
+          )}
+          {nowhereToRecord && (
+            <p role="alert" className="text-sm text-danger-700 sm:col-span-2">
+              You don't record stock at any branch, so you can't say where this is going. Ask whoever manages your
+              branches.
+            </p>
           )}
           {goingToOptions.length > 0 && (
             <div className="sm:col-span-2">

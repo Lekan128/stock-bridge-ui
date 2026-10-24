@@ -232,8 +232,8 @@ export function ProductFormPage() {
   const { user, isVendor } = useAuth()
   // One product, one price, every branch (MULTI_BRANCH_UX_PLAN.md §5.14): the form says where a change
   // lands, and the price is read-only for someone who can't change selling prices.
-  const { isMultiBranch, branches } = useWorkingBranch()
-  const branchCount = branches.filter((branch) => branch.active).length
+  // Every open branch in the company, not only those this person sees: a price applies at all of them.
+  const { isMultiBranch, openBranches: branchCount } = useWorkingBranch()
   const canChangePrices = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.CHANGE_SELLING_PRICES)
   const priceHint = !canChangePrices
     ? 'Prices are set by people who can change selling prices.'

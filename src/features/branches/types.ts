@@ -32,6 +32,8 @@ export interface BranchList {
    * don't otherwise see. Empty for someone who can't send stock. Absent from an older API.
    */
   sendTo?: { id: string; name: string }[]
+  /** How many open branches the company has, whether or not this person sees them. Absent from an older API. */
+  openBranches?: number
 }
 
 /** A product at one branch — the sync rows' and the product page's `branchStock`. */

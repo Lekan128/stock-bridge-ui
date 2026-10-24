@@ -17,6 +17,8 @@ export interface WorkingBranchValue {
   /** First open on this phone with more than one place to be: ask "Which branch are you at?" (UX §4.2). */
   needsChoice: boolean
   mayAddBranch: boolean
+  /** How many open branches the company has, seen or not - where a price applies (UX §5.14). */
+  openBranches: number
   /** Every open branch by name, for Send stock's "To" (UX §5.4). Empty for someone who can't send. */
   sendTo: { id: string; name: string }[]
   loading: boolean

@@ -575,10 +575,16 @@ async function sendWaybillLineInstead(op: Extract<OutboxOp, { kind: 'TRANSFER_SE
     await remove(op.id)
     return
   }
+  // "2 items to Oshodi" says how many lines: one dropped, the count drops. The keys name the products
+  // still on it, so a product taken off no longer waits behind this waybill.
+  const summary = op.summary.replace(/^\d+ items? /, `${lines.length} ${lines.length === 1 ? 'item' : 'items'} `)
   const replacement: OutboxOp = {
     ...op,
     id: crypto.randomUUID(),
     payload: { ...op.payload, lines },
+    summary,
+    productName: summary,
+    keys: [`transfer:${op.payload.id}`, ...lines.map((line) => line.productId)],
     status: 'pending',
     problem: undefined,
     attempts: 0,

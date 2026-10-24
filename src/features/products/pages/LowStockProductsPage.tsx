@@ -48,6 +48,7 @@ export function LowStockProductsPage() {
   const groups = useMemo(() => {
     if (!branch?.isMultiBranch || !branch.isAll) return null
     return branch.branches
+      .filter((at) => at.active)
       .map((at) => ({
         branch: at,
         products: sorted
