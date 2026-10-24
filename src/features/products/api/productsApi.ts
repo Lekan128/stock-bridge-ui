@@ -68,7 +68,9 @@ export const productsApi = {
 
   template: () => api.get('/api/products/template', { responseType: 'blob' }).then((r) => r.data as Blob),
 
-  export: () => api.get('/api/products/export', { responseType: 'blob' }).then((r) => r.data as Blob),
+  // The stock column is the branch being viewed's (multiple branches), as Inventory shows it.
+  export: () =>
+    api.get('/api/products/export', { params: { branchId: viewingBranchId() }, responseType: 'blob' }).then((r) => r.data as Blob),
 
   /** "Add prices in a sheet" (`SELLING_PRICE_PLAN.md` §6.8): the products with no selling price, to fill in. */
   exportPrices: () => api.get('/api/products/export/prices', { responseType: 'blob' }).then((r) => r.data as Blob),

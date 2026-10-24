@@ -1,4 +1,5 @@
 import type { AxiosProgressEvent } from 'axios'
+import { viewingBranchId } from '@/features/branches/viewingBranch'
 import { recordingBranchId } from '@/features/outbox/outboxStore'
 import { api } from '@/api/client'
 import type {
@@ -325,6 +326,9 @@ function stockInTemplateQuery(params: StockInTemplateParams): Record<string, str
     query.filter = params.filter
     if (params.filter === 'BY_VENDOR' && params.vendorId) query.vendorId = params.vendorId
     if (params.filter === 'BY_CATEGORY' && params.categoryId) query.categoryId = params.categoryId
+    // "Low stock" means low at the branch being viewed (multiple branches), as the Low stock page does.
+    const branchId = viewingBranchId()
+    if (params.filter === 'LOW_STOCK' && branchId) query.branchId = branchId
   }
   return query
 }
