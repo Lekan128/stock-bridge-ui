@@ -299,7 +299,7 @@ reportPhoneStatusWith(() => {
     waiting: waiting.length,
     needsYou: needsYou.length,
     ...(oldest != null ? { oldestWaiting: oldest } : {}),
-    ...(recordingBranch ? { branch: recordingBranch } : {}),
+    // The branch goes with every change-feed request already (the one being viewed).
   }
 })
 

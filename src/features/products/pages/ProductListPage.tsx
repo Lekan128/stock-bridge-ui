@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { PackagePlus, Truck, X, Zap } from 'lucide-react'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
+import { BranchLevelDialog } from '@/features/branches/BranchLevelDialog'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
@@ -125,7 +126,10 @@ export function ProductListPage() {
     permissions.includes(PERMISSIONS.SEND_STOCK) &&
     branch?.working != null &&
     branch.recordable.some((entry) => entry.id === branch.working?.id)
-  const canSelect = canImport || canSendSelected
+  // A low-stock level for the selection at this branch (Phase 4): at a branch, MANAGE_PRODUCTS.
+  const levelBranch = branch?.isMultiBranch && !branch.isAll && canManageProducts ? branch.working : null
+  const [settingLevel, setSettingLevel] = useState(false)
+  const canSelect = canImport || canSendSelected || levelBranch != null
   const [searchParams, setSearchParams] = useSearchParams()
   const { search: committedSearch, statusFilter, categoryFilter, stockLevelFilter, priceFilter: requestedPriceFilter, sort, page } =
     readListState(searchParams)
@@ -521,6 +525,7 @@ export function ProductListPage() {
                 count={selectedIds.length}
                 onStockIn={canImport ? handleStockInSelected : undefined}
                 onSend={canSendSelected ? handleSendSelected : undefined}
+                onSetLevel={levelBranch ? () => setSettingLevel(true) : undefined}
                 onClear={() => setSelectedIds([])}
               />
             ) : null
@@ -590,6 +595,7 @@ export function ProductListPage() {
                 count={selectedIds.length}
                 onStockIn={canImport ? handleStockInSelected : undefined}
                 onSend={canSendSelected ? handleSendSelected : undefined}
+                onSetLevel={levelBranch ? () => setSettingLevel(true) : undefined}
                 onClear={() => setSelectedIds([])}
               />
               )}
@@ -637,6 +643,7 @@ export function ProductListPage() {
         onStockInSelected={handleStockInSelected}
         canSendSelected={canSendSelected}
         onSendSelected={handleSendSelected}
+        onSetLevelSelected={levelBranch ? () => setSettingLevel(true) : undefined}
         onDoneSelecting={() => {
           setSelecting(false)
           setSelectedIds([])
@@ -644,6 +651,19 @@ export function ProductListPage() {
       />
 
       {stockActions.sheet}
+
+      {settingLevel && levelBranch && (
+        <BranchLevelDialog
+          branch={levelBranch}
+          productIds={selectedIds}
+          onClose={() => setSettingLevel(false)}
+          onDone={() => {
+            setSettingLevel(false)
+            setSelectedIds([])
+            setSelecting(false)
+          }}
+        />
+      )}
 
       <ManageCategoriesModal
         open={manageCategoriesOpen && canManageProducts}
@@ -666,12 +686,15 @@ function SelectionBar({
   count,
   onStockIn,
   onSend,
+  onSetLevel,
   onClear,
 }: {
   count: number
   onStockIn?: () => void
   /** Send the selected products to another branch (MULTI_BRANCH_UX_PLAN.md §5.4). */
   onSend?: () => void
+  /** One low-stock level for them at this branch (Phase 4). */
+  onSetLevel?: () => void
   onClear: () => void
 }) {
   return (
@@ -690,6 +713,11 @@ function SelectionBar({
           <Button variant="secondary" onClick={onSend}>
             <Truck className="h-4 w-4" aria-hidden="true" />
             Send to another branch
+          </Button>
+        )}
+        {onSetLevel && (
+          <Button variant="secondary" onClick={onSetLevel}>
+            Set low-stock level
           </Button>
         )}
         <button

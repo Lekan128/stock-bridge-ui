@@ -18,7 +18,7 @@ export function scopeProduct(product: Product, working: Branch | null): Product 
     ...product,
     quantityOnHand: figure.quantityOnHand,
     lowStockThreshold: figure.lowStockThreshold ?? null,
-    isLowStock: figure.isLowStock,
+    isLowStock: figure.isLowStock === true,
     transferOnTheWay: figure.onTheWay ?? 0,
   }
 }

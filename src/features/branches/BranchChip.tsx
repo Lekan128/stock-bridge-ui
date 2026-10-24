@@ -6,6 +6,8 @@ import { useToast } from '@/components/useToast'
 import { useAuth } from '@/auth/useAuth'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
+import { WIDE } from '@/features/branches/BranchProvider'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { ALL_BRANCHES, type Branch } from '@/features/branches/types'
 
 /** From this many branches the menu gets a search field (Avatar C, UX §4.1). */
@@ -28,6 +30,7 @@ function short(name: string) {
 export function BranchChip() {
   const { isMultiBranch, branches, working, isAll, seesEverywhere, choose } = useWorkingBranch()
   const { showToast } = useToast()
+  const online = useOnlineStatus()
   const { user } = useAuth()
   const managesBranches = user?.permissions.includes(PERMISSIONS.MANAGE_BRANCHES) ?? false
   const [open, setOpen] = useState(false)
@@ -57,6 +60,11 @@ export function BranchChip() {
     search ? list.filter((branch) => branch.name.toLowerCase().includes(search.toLowerCase())) : list
 
   function pick(id: string, name: string) {
+    // A chain's phone holds only the branch it is at (§6.1): another branch's figures need a download.
+    if (branches.length > WIDE && !online && id !== (isAll ? ALL_BRANCHES : working?.id)) {
+      showToast(`Changing branch needs a connection: this phone only holds ${label}'s figures.`, 'info')
+      return
+    }
     setOpen(false)
     setSearch('')
     choose(id)
@@ -73,7 +81,8 @@ export function BranchChip() {
       className={itemClassName}
     >
       <Check className={`h-4 w-4 shrink-0 ${current ? 'text-primary-600' : 'invisible'}`} aria-hidden />
-      <span className="truncate">{branch.name}</span>
+      {/* The whole name here (UX §6): "Ikota Shopping Complex, Lekki Phase 2" wraps, it is never cut. */}
+      <span className="min-w-0 break-words">{branch.name}</span>
       {branch.main && <span className="ml-auto shrink-0 text-xs text-neutral-500">Main</span>}
     </button>
   )
@@ -98,33 +107,51 @@ export function BranchChip() {
         <ChevronDown className="h-4 w-4 shrink-0 text-neutral-500" aria-hidden />
       </button>
       {open && (
-        <div role="menu" aria-label="Branches" className="absolute right-0 z-50 mt-2 w-64 rounded-lg border border-neutral-200 bg-white py-1 shadow-lg">
+        <div className="absolute right-0 z-50 mt-2 flex max-h-[min(28rem,70vh)] w-72 max-w-[calc(100vw-2rem)] flex-col rounded-lg border border-neutral-200 bg-white shadow-lg">
           {open_.length >= SEARCH_FROM && (
-            <label className="flex items-center gap-2 border-b border-neutral-100 px-3 py-2">
+            <label className="flex shrink-0 items-center gap-2 border-b border-neutral-100 px-3 py-2">
               <Search className="h-4 w-4 text-neutral-500" aria-hidden />
               <input
                 value={search}
+                autoFocus
                 onChange={(event) => setSearch(event.target.value)}
+                onKeyDown={(event) => {
+                  // A chain's manager types "lek" and presses Enter: the one match is chosen.
+                  const matches = [...filter(mine), ...filter(viewOnly)]
+                  if (event.key === 'Enter' && matches.length === 1) pick(matches[0].id, matches[0].name)
+                  if (event.key === 'Escape') setOpen(false)
+                }}
                 placeholder="Find a branch"
                 aria-label="Find a branch"
                 className="w-full text-sm outline-none"
               />
             </label>
           )}
+          {search && filter(mine).length + filter(viewOnly).length === 0 && (
+            <p className="px-3 py-2 text-sm text-neutral-500">No branch matches “{search}”.</p>
+          )}
+          <div role="menu" aria-label="Branches" className="flex min-h-0 flex-col">
+          {/* 26 branches scroll inside the menu; the search and the bottom actions stay put. */}
+          <div role="none" className="min-h-0 flex-1 overflow-y-auto py-1">
           {filter(mine).map((branch) => row(branch, !isAll && working?.id === branch.id))}
           {filter(viewOnly).length > 0 && (
             <>
-              <p className="mt-1 border-t border-neutral-100 px-3 pb-1 pt-2 text-xs font-medium text-neutral-500">View only</p>
-              {filter(viewOnly).map((branch) => row(branch, !isAll && working?.id === branch.id))}
+              <div role="group" aria-label="View only">
+                <p role="none" className="mt-1 border-t border-neutral-100 px-3 pb-1 pt-2 text-xs font-medium text-neutral-500" aria-hidden>
+                  View only
+                </p>
+                {filter(viewOnly).map((branch) => row(branch, !isAll && working?.id === branch.id))}
+              </div>
             </>
           )}
+          </div>
           {seesEverywhere && (
             <button
               type="button"
               role="menuitemradio"
               aria-checked={isAll}
               onClick={() => pick(ALL_BRANCHES, 'All branches')}
-              className={`${itemClassName} mt-1 border-t border-neutral-100`}
+              className={`${itemClassName} shrink-0 border-t border-neutral-100`}
             >
               <Check className={`h-4 w-4 shrink-0 ${isAll ? 'text-primary-600' : 'invisible'}`} aria-hidden />
               All branches
@@ -135,11 +162,12 @@ export function BranchChip() {
             to="/app/company/branches"
             role="menuitem"
             onClick={() => setOpen(false)}
-            className={`${itemClassName} border-t border-neutral-100 text-primary-700`}
+            className={`${itemClassName} shrink-0 border-t border-neutral-100 text-primary-700`}
           >
             Manage branches
           </Link>
           )}
+          </div>
         </div>
       )}
     </div>

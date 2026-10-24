@@ -35,6 +35,7 @@ const SUITES = [
   'branches',
   'transfers',
   'owner-view',
+  'chain',
   'chaos',
   'metrics',
   'a11y',

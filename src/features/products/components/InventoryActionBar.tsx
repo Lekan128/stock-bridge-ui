@@ -12,6 +12,8 @@ export interface InventoryActionBarProps extends InventoryBarProps {
   /** Multiple branches: "Send" the selection to another branch (MULTI_BRANCH_UX_PLAN.md §5.4). */
   canSendSelected?: boolean
   onSendSelected?: () => void
+  /** One low-stock level for the selection at this branch (Phase 4). */
+  onSetLevelSelected?: () => void
   onDoneSelecting: () => void
 }
 
@@ -23,7 +25,8 @@ const BAR_HEIGHT = '4.5rem'
  * Publishes its height so toasts rise above it.
  */
 export function InventoryActionBar(props: InventoryActionBarProps) {
-  const { selecting, selectedCount, canStockInSelected, onStockInSelected, canSendSelected, onSendSelected, onDoneSelecting } = props
+  const { selecting, selectedCount, canStockInSelected, onStockInSelected, canSendSelected, onSendSelected, onSetLevelSelected, onDoneSelecting } =
+    props
 
   useEffect(() => {
     const root = document.documentElement
@@ -54,6 +57,11 @@ export function InventoryActionBar(props: InventoryActionBarProps) {
             <Button variant={canStockInSelected ? 'secondary' : 'action'} onClick={onSendSelected} disabled={selectedCount === 0}>
               <Truck className="h-4 w-4" aria-hidden="true" />
               Send
+            </Button>
+          )}
+          {onSetLevelSelected && (
+            <Button variant="secondary" onClick={onSetLevelSelected} disabled={selectedCount === 0}>
+              Level
             </Button>
           )}
           <Button variant="secondary" onClick={onDoneSelecting}>

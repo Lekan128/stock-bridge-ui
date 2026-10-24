@@ -4,6 +4,7 @@ import { setViewingBranch } from '@/features/branches/viewingBranch'
 import { track } from '@/marketing/analytics'
 import { setRecordingBranch } from '@/features/outbox/outboxStore'
 import { resyncCatalog } from '@/features/catalog/catalogStore'
+import { useCatalogState } from '@/features/catalog/useCatalog'
 import { useAuth } from '@/auth/useAuth'
 import { useApiQuery } from '@/data/useApiQuery'
 import { branchesApi } from '@/features/branches/branchesApi'
@@ -36,6 +37,9 @@ export interface WorkingBranchValue {
 }
 
 export const WorkingBranchContext = createContext<WorkingBranchValue | null>(null)
+
+/** The server's ProductSyncService.WIDE: past this many branches, sync carries one branch's figures. */
+export const WIDE = 10
 
 function storageKey(userId: string) {
   return `pp.working-branch.${userId}`
@@ -143,9 +147,23 @@ export function BranchProvider({ children }: { children: ReactNode }) {
 
   // The on-phone catalogue's rows carry a figure per branch this person sees: when that set changes,
   // fetch a fresh copy (once per change, per phone; remembered so a reload doesn't fetch it again).
-  const seenKey = value.isMultiBranch ? value.branches.map((branch) => branch.id).sort().join(',') : ''
+  // Past WIDE branches (a chain) rows carry the working branch's figure only, so changing branch is a
+  // change of what the phone holds, too (MULTI_BRANCH_BUILD_PLAN.md §6.1).
+  const wide = value.branches.length > WIDE
+  const seenKey = !value.isMultiBranch
+    ? ''
+    : wide
+      ? `wide:${value.isAll ? 'ALL' : (value.working?.id ?? '')}`
+      : value.branches.map((branch) => branch.id).sort().join(',')
+  // Only once a copy is on the device: resetting one mid-download would start a second download beside
+  // it. Until then the list reads the server, which answers for the branch being viewed.
+  const catalogOpen = useCatalogState().phase === 'ready'
+  const viewing = value.isMultiBranch && !value.isAll ? (value.working?.id ?? null) : null
   useEffect(() => {
-    if (!userId || !seenKey) return
+    if (!userId || !seenKey || !catalogOpen) return
+    // The download asks for the branch being viewed: say which before it starts (the effect that
+    // usually does this runs after this one).
+    setViewingBranch(viewing)
     const storageName = `pp.catalog-branches.${userId}`
     let previous: string | null = null
     try {
@@ -163,7 +181,7 @@ export function BranchProvider({ children }: { children: ReactNode }) {
         // Not remembered: asked again next open, which is only a re-download.
       }
     })
-  }, [userId, seenKey])
+  }, [userId, seenKey, catalogOpen, viewing])
 
   // Reports (movements, analytics) ask for the branch being viewed. Their cached answers are not keyed
   // by branch, so a switch drops them: a figure from one branch must never show under another's name.
@@ -177,6 +195,7 @@ export function BranchProvider({ children }: { children: ReactNode }) {
         ['analytics'],
         ['stock-movements'],
         ['products', 'history'],
+        ['products', 'list'],
         ['sales-report'],
         ['sold-this-month'],
         ['stock-worth'],

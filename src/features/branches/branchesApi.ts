@@ -14,4 +14,7 @@ export const branchesApi = {
   makeMain: (id: string) => api.post<Branch>(`/api/branches/${id}/main`).then((r) => r.data),
   close: (id: string) => api.post<Branch>(`/api/branches/${id}/close`).then((r) => r.data),
   reopen: (id: string) => api.post<Branch>(`/api/branches/${id}/reopen`).then((r) => r.data),
+  /** One low-stock level for many products at a branch; null takes them back to their own (Phase 4). */
+  setThresholds: (id: string, body: { productIds: string[]; lowStockThreshold: number | null }) =>
+    api.put<{ updated: number }>(`/api/branches/${id}/thresholds`, body).then((r) => r.data),
 }

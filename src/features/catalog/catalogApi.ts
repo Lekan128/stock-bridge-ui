@@ -1,4 +1,5 @@
 import { api } from '@/api/client'
+import { viewingBranchId } from '@/features/branches/viewingBranch'
 import type { ChangesPage, SnapshotPage } from '@/features/catalog/types'
 
 /** Rows per request: big enough that 100k products is ~50 round trips, small enough to stay quick on 3G. */
@@ -20,12 +21,13 @@ export const catalogApi = {
   snapshot: (afterId: string | null) =>
     api
       .get<SnapshotPage>('/api/products/sync/snapshot', {
-        params: { limit: SYNC_PAGE_SIZE, ...(afterId ? { afterId } : {}) },
+        // The branch being viewed: past 10 branches the rows carry that branch's figure only (§6.1).
+        params: { limit: SYNC_PAGE_SIZE, branch: viewingBranchId(), ...(afterId ? { afterId } : {}) },
       })
       .then((r) => r.data),
 
   changes: (cursor: string) =>
     api
-      .get<ChangesPage>('/api/products/sync/changes', { params: { cursor, limit: SYNC_PAGE_SIZE, ...phoneStatus() } })
+      .get<ChangesPage>('/api/products/sync/changes', { params: { cursor, limit: SYNC_PAGE_SIZE, branch: viewingBranchId(), ...phoneStatus() } })
       .then((r) => r.data),
 }

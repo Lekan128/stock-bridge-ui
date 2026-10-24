@@ -1,4 +1,5 @@
 import { api } from '@/api/client'
+import { viewingBranchId } from '@/features/branches/viewingBranch'
 import { recordingBranchId } from '@/features/outbox/outboxStore'
 import type {
   BulkUploadResponse,
@@ -25,7 +26,9 @@ function buildProductFormData(payload: object, image?: File | null): FormData {
 
 export const productsApi = {
   list: (params: ProductListParams) =>
-    api.get<PageResponse<Product>>('/api/products', { params }).then((r) => r.data),
+    // At a branch, that branch's figures and stock filter (Phase 4) - the list before the phone's
+    // catalogue is ready, and on screens that ask the server.
+    api.get<PageResponse<Product>>('/api/products', { params: { branchId: viewingBranchId(), ...params } }).then((r) => r.data),
 
   get: (id: string) => api.get<Product>(`/api/products/${id}`).then((r) => r.data),
 

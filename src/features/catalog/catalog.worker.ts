@@ -88,7 +88,7 @@ function asSeen(row: StoredRow, q: CatalogQuery): StoredRow {
     const figure = row.branchStock.find((entry) => entry.branchId === q.branchId)
     return figure
       ? { ...row, quantityOnHand: figure.quantityOnHand, lowStockThreshold: figure.lowStockThreshold ?? null,
-          isLowStock: figure.isLowStock, stockStatus: figure.stockStatus }
+          isLowStock: figure.isLowStock === true, stockStatus: figure.stockStatus }
       : { ...row, quantityOnHand: 0, isLowStock: row.lowStockThreshold != null, stockStatus: 'OUT' }
   }
   if (q.allBranches && row.stockStatus !== 'OUT' && row.branchStock.some((entry) => entry.stockStatus !== 'OK')) {
