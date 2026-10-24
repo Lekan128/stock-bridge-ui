@@ -24,6 +24,7 @@ import {
 } from '@/features/imports/delivery'
 import { useDeliveryLines } from '@/features/imports/hooks/useDeliveryLines'
 import type { DeliveryLine } from '@/features/imports/types'
+import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { SupplierField } from '@/features/vendors/components/SupplierField'
 import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
 import { isAppError } from '@/types/api'
@@ -64,6 +65,18 @@ export function NewExpectedDeliveryPage() {
   const [note, setNote] = useState('')
   const [search, setSearch] = useState('')
   const [entries, setEntries] = useState<Record<string, DeliveryEntry>>({})
+  // "Going to" (MULTI_BRANCH_UX_PLAN.md §5.10): the branch it is for - this one by default, and the
+  // delivery shows on that branch's Needs you only. Not asked at a one-branch company (rule 1).
+  const branch = useOptionalWorkingBranch()
+  const goingToOptions = branch?.isMultiBranch ? branch.recordable : []
+  const [goingTo, setGoingTo] = useState(() =>
+    branch?.working && goingToOptions.some((option) => option.id === branch.working?.id)
+      ? branch.working.id
+      : goingToOptions.length === 1
+        ? goingToOptions[0].id
+        : '',
+  )
+  const needsGoingTo = goingToOptions.length > 0 && !goingTo
 
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -87,7 +100,7 @@ export function NewExpectedDeliveryPage() {
   const count = totals.lines.length
   // With a line priced nowhere, the sum would understate the order, so the button leaves it out.
   const totalText = count > 0 && !totals.partial ? formatPrice(totals.total) : null
-  const canSubmit = count > 0 && !totals.invalid && !submitting
+  const canSubmit = count > 0 && !totals.invalid && !submitting && !needsGoingTo
 
   function handleLineChange(line: DeliveryLine, patch: Partial<Omit<DeliveryEntry, 'line'>>) {
     const key = lineKey(line)
@@ -109,6 +122,7 @@ export function NewExpectedDeliveryPage() {
     try {
       await expectedApi.create({
         vendorId: vendorId || undefined,
+        ...(goingTo ? { branchId: goingTo } : {}),
         expectedDate: expectedDate || undefined,
         reference: reference.trim() || undefined,
         note: note.trim() || undefined,
@@ -155,6 +169,27 @@ export function NewExpectedDeliveryPage() {
                 onCreated={addVendor}
                 hint={expectedCopy.create.supplierHint}
               />
+            </div>
+          )}
+          {goingToOptions.length > 0 && (
+            <div className="sm:col-span-2">
+              <label htmlFor="expected-going-to" className="mb-1.5 block text-sm font-medium text-neutral-700">
+                Going to
+              </label>
+              <select
+                id="expected-going-to"
+                value={goingTo}
+                disabled={submitting}
+                onChange={(event) => setGoingTo(event.target.value)}
+                className="h-11 w-full rounded-md border border-neutral-300 bg-white px-3 text-sm"
+              >
+                <option value="">Choose a branch</option>
+                {goingToOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
             </div>
           )}
           {/*

@@ -22,6 +22,8 @@ export interface StockMovementReportParams {
   outReason?: OutReason
   /** Only stock-outs with no reason given. */
   noReason?: boolean
+  /** One branch, chosen in "All branches"; otherwise the branch being viewed (`viewingBranchId`). */
+  branchId?: string
   page?: number
   size?: number
   /** Spring Data sort, e.g. `occurredAt,desc`. Defaults server-side to newest-occurring first. */

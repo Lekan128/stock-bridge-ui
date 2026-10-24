@@ -1,6 +1,8 @@
-import { createContext, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { setViewingBranch } from '@/features/branches/viewingBranch'
+import { useToast } from '@/components/useToast'
+import { queryKeys } from '@/data/queryKeys'
 import { track } from '@/marketing/analytics'
 import { setRecordingBranch } from '@/features/outbox/outboxStore'
 import { resyncCatalog } from '@/features/catalog/catalogStore'
@@ -9,34 +11,13 @@ import { useAuth } from '@/auth/useAuth'
 import { useApiQuery } from '@/data/useApiQuery'
 import { branchesApi } from '@/features/branches/branchesApi'
 import { ALL_BRANCHES, type Branch, type BranchList, type WorkingBranchChoice } from '@/features/branches/types'
+import { WorkingBranchContext, type WorkingBranchValue } from '@/features/branches/workingBranchContext'
 
 export const BRANCHES_KEY = ['branches'] as const
 
-export interface WorkingBranchValue {
-  /** The company has, or has had, two branches. False: render nothing branch-related (rule 1). */
-  isMultiBranch: boolean
-  /** Every branch this person sees, main first, closed last. */
-  branches: Branch[]
-  /** Where this phone records: the working branch, or null in "All branches". */
-  working: Branch | null
-  /** "All branches" is the working choice: figures are the company's, and a write must pick a branch. */
-  isAll: boolean
-  /** The person sees every branch, so "All branches" is theirs to choose. */
-  seesEverywhere: boolean
-  /** The open branches this person may record at — what a sheet's Branch field offers. */
-  recordable: Branch[]
-  /** First open on this phone with more than one place to be: ask "Which branch are you at?" (UX §4.2). */
-  needsChoice: boolean
-  mayAddBranch: boolean
-  /** Every open branch by name, for Send stock's "To" (UX §5.4). Empty for someone who can't send. */
-  sendTo: { id: string; name: string }[]
-  loading: boolean
-  choose: (choice: WorkingBranchChoice) => void
-  /** Look a branch up by id, for labels on history rows and receipts. */
-  nameOf: (branchId: string | undefined) => string | undefined
-}
-
-export const WorkingBranchContext = createContext<WorkingBranchValue | null>(null)
+// The context lives on its own (`workingBranchContext.ts`): the landing page's receipt reads it, and
+// must not pull this provider's queries and catalogue into the marketing bundle.
+export { WorkingBranchContext, type WorkingBranchValue } from '@/features/branches/workingBranchContext'
 
 /** The server's ProductSyncService.WIDE: past this many branches, sync carries one branch's figures. */
 export const WIDE = 10
@@ -145,6 +126,23 @@ export function BranchProvider({ children }: { children: ReactNode }) {
     }
   }, [query.data, query.loading, chosen, choose])
 
+  // The branch this phone was at has closed, or the person no longer works there (UX §6): say so once,
+  // rather than let the figures change under the same screen without a word.
+  const { showToast } = useToast()
+  const toldAbout = useRef<string | null>(null)
+  const list = query.data
+  useEffect(() => {
+    if (!list?.multiBranch || !chosen || chosen === ALL_BRANCHES || toldAbout.current === chosen) return
+    const was = list.branches.find((branch) => branch.id === chosen)
+    if (was?.active) return
+    toldAbout.current = chosen
+    const name = was?.name ?? list.sendTo?.find((entry) => entry.id === chosen)?.name
+    showToast(
+      was ? `${was.name} has closed. This phone isn't at it any more.` : name ? `You no longer work at ${name}.` : 'You no longer work at that branch.',
+      'info',
+    )
+  }, [list, chosen, showToast])
+
   // The on-phone catalogue's rows carry a figure per branch this person sees: when that set changes,
   // fetch a fresh copy (once per change, per phone; remembered so a reload doesn't fetch it again).
   // Past WIDE branches (a chain) rows carry the working branch's figure only, so changing branch is a
@@ -200,9 +198,15 @@ export function BranchProvider({ children }: { children: ReactNode }) {
         ['sold-this-month'],
         ['stock-worth'],
         ['losses'],
+        ['expected'],
       ]) {
         queryClient.removeQueries({ queryKey: key })
       }
+    }
+    // The low-stock alerts sit above this provider and stay mounted, so they are asked again rather
+    // than dropped - and on the first open at a branch too, in case they were asked before it was known.
+    if (lastViewAt.current !== viewAt && (lastViewAt.current !== undefined || viewAt != null)) {
+      void queryClient.resetQueries({ queryKey: queryKeys.products.lowStock })
     }
     lastViewAt.current = viewAt
   }, [viewAt, queryClient])

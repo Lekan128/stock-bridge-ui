@@ -55,7 +55,7 @@ export type OutboxOp = {
 
 export type OutboxProblem =
   /** Stock-out of more than was there by the time it arrived. */
-  | { kind: 'oversell'; message: string; available: number; requested: number }
+  | { kind: 'oversell'; message: string; available: number; requested: number; productId?: string }
   /** Anything else the server said no to: product gone, permission removed, invalid entry. */
   | { kind: 'refused'; message: string }
 

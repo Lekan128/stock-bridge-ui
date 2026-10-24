@@ -21,6 +21,7 @@ import { VerifyEmailToOrderNotice } from '@/features/profile/components/VerifyEm
 import { toAddressPayload, type AddressFormValues } from '@/features/checkout/schemas'
 import type { Order, PlaceOrderPayload, UnavailableLine } from '@/features/checkout/types'
 import { isAppError } from '@/types/api'
+import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { marketplacePaths } from '@/routes/marketplacePaths'
 
 const STEPS = [
@@ -96,6 +97,7 @@ export function CheckoutPage() {
     [addresses, selectedAddressId],
   )
 
+  const multiBranch = useOptionalWorkingBranch()?.isMultiBranch ?? false
   const reviewAddress: ReviewAddressSummary | null = useMemo(() => {
     if (newAddress) {
       return {
@@ -123,8 +125,11 @@ export function CheckoutPage() {
         .filter(Boolean)
         .join(', '),
       notes: selectedAddress.deliveryNotes,
+      // MULTI_BRANCH_UX_PLAN.md §5.12: the order is received at the address's branch (rule 1: only
+      // when there is more than one).
+      branchName: multiBranch ? selectedAddress.branchName : undefined,
     }
-  }, [newAddress, selectedAddress])
+  }, [newAddress, selectedAddress, multiBranch])
 
   const hasAddress = !!newAddress || !!selectedAddressId
 

@@ -1,3 +1,4 @@
+import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { usePendingStock } from '@/features/outbox/useOutbox'
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { Delete, Search, X } from 'lucide-react'
@@ -98,6 +99,8 @@ const STAMP_MS = 900
  */
 export function QuickModePage() {
   const navigate = useNavigate()
+  const branch = useOptionalWorkingBranch()
+  const branchHere = branch?.isMultiBranch && !branch.isAll ? branch.working?.name : undefined
   const [params, setParams] = useSearchParams()
   const { user } = useAuth()
   const permissions = user?.type === 'tenant' ? user.permissions : []
@@ -194,7 +197,8 @@ export function QuickModePage() {
           Exit
         </button>
         <h1 id="quick-mode-title" className="text-base font-semibold">
-          Quick mode
+          {/* Where every scan here lands (UX §5.2): "Quick mode · Oshodi". */}
+          Quick mode{branchHere ? ` · ${branchHere}` : ''}
         </h1>
         <SyncPill large />
       </header>

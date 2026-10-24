@@ -7,6 +7,7 @@ import { SavedDataNote } from '@/components/SavedDataNote'
 import { Skeleton } from '@/components/Skeleton'
 import { useToast } from '@/components/useToast'
 import { useApiQuery } from '@/data/useApiQuery'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { formatNairaCompact } from '@/utils/money'
 
@@ -274,6 +275,48 @@ export function BranchTable() {
           </p>
         </li>
       </ul>
+      <DigestSwitch />
     </section>
+  )
+}
+
+/**
+ * "Email me this every evening" (MULTI_BRANCH_UX_PLAN.md §5.13): the owner's daily digest, only if they
+ * turn it on - one email a day, never a reminder. A setting of this person's own, so online only.
+ */
+function DigestSwitch() {
+  const online = useOnlineStatus()
+  const { showToast } = useToast()
+  const { data, setData } = useApiQuery<{ enabled: boolean }>({
+    queryKey: ['analytics', 'branches', 'digest'],
+    queryFn: () => api.get<{ enabled: boolean }>('/api/analytics/branches/digest').then((r) => r.data),
+    fallbackError: "Couldn't load your email setting.",
+  })
+  const [saving, setSaving] = useState(false)
+  if (!data) return null
+
+  async function change(enabled: boolean) {
+    setSaving(true)
+    try {
+      setData(await api.put<{ enabled: boolean }>('/api/analytics/branches/digest', { enabled }).then((r) => r.data))
+      showToast(enabled ? "You'll get this by email every evening." : 'No more evening emails.', 'success')
+    } catch {
+      showToast("Couldn't change that. Try again.", 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <label className="flex min-h-11 items-center gap-2 self-start text-sm text-neutral-700">
+      <input
+        type="checkbox"
+        checked={data.enabled}
+        disabled={saving || !online}
+        onChange={(event) => void change(event.target.checked)}
+        className="h-4 w-4 rounded-sm border-neutral-300 accent-primary-600"
+      />
+      Email me this every evening
+    </label>
   )
 }

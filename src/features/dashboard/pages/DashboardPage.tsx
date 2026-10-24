@@ -1,3 +1,4 @@
+import { useRecordsHere } from '@/features/branches/useRecordsHere'
 import { Lock } from 'lucide-react'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
@@ -70,6 +71,7 @@ function BuyerToday({
   const counts = onDevice && list.ready ? list.counts : null
   const today = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })
   const branch = useOptionalWorkingBranch()
+  const recordsHere = useRecordsHere()
   const ownersView = canViewAnalytics && (branch?.isMultiBranch ?? false) && (branch?.isAll ?? false)
 
   return (
@@ -96,8 +98,8 @@ function BuyerToday({
 
       {canViewProducts && (
         <NeedsYouToday
-          canStockIn={permissions.includes(PERMISSIONS.STOCK_IN)}
-          canReceive={permissions.includes(PERMISSIONS.MANAGE_INVENTORY)}
+          canStockIn={recordsHere && permissions.includes(PERMISSIONS.STOCK_IN)}
+          canReceive={recordsHere && permissions.includes(PERMISSIONS.MANAGE_INVENTORY)}
         />
       )}
 

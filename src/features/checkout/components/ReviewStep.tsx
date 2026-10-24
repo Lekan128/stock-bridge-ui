@@ -15,6 +15,8 @@ export interface ReviewAddressSummary {
   notes?: string
   /** True for an inline address that will not be kept in the address book. */
   oneOff?: boolean
+  /** The branch the address belongs to, at a multi-branch company: the order is received there. */
+  branchName?: string
 }
 
 export interface ReviewStepProps {
@@ -71,6 +73,11 @@ export function ReviewStep({
           <h3 className="text-sm font-semibold text-neutral-900">Delivering to</h3>
           {address ? (
             <div className="mt-2">
+              {address.branchName && (
+                <p className="mb-1 text-sm font-medium text-primary-800" data-delivering-to>
+                  Delivering to {address.branchName}
+                </p>
+              )}
               <p className="text-sm font-medium text-neutral-900">{address.label}</p>
               <p className="mt-0.5 text-sm text-neutral-700">{address.contactName}</p>
               <p className="mt-0.5 flex items-start gap-1.5 text-sm text-neutral-600">

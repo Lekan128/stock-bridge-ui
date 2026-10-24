@@ -1005,6 +1005,7 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
 
       {step === 'receipt' && (
         <StockReceipt
+          branchId={sheetBranch.branchId}
           state={result ? 'synced' : queued ? 'recorded' : 'sending'}
           kind="Stock in"
           id={result?.movement?.id ?? queuedOpId}

@@ -1,4 +1,5 @@
 import { api } from '@/api/client'
+import { viewingBranchId } from '@/features/branches/viewingBranch'
 import { recordingBranchId } from '@/features/outbox/outboxStore'
 import type {
   ExpectedDelivery,
@@ -26,7 +27,8 @@ export const expectedApi = {
   list(params: ExpectedDeliveryListParams): Promise<PageResponse<ExpectedDelivery>> {
     return api
       .get<PageResponse<ExpectedDelivery>>(BASE, {
-        params: { status: params.status, page: params.page, size: params.size },
+        // At a branch, the ones going there; in "All branches", every one (each with its branch).
+        params: { status: params.status, page: params.page, size: params.size, branchId: viewingBranchId() },
       })
       .then((response) => response.data)
   },

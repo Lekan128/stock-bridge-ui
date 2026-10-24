@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import { Minus, Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { expectedCopy } from '@/features/expected/copy'
+import { LowAtBranches } from '@/features/branches/LowAtBranches'
 import { IncomingStockBadge } from '@/features/products/components/IncomingStockBadge'
 import { StockBar } from '@/features/products/components/StockBar'
 import { StockFigure } from '@/features/products/components/StockFigure'
@@ -140,6 +141,7 @@ export function ProductCard({ product, incoming = 0, quickActions, selection }: 
             )}
           </div>
           <StockBar quantity={product.quantityOnHand} threshold={product.lowStockThreshold} low={product.isLowStock} unit={unit} />
+          <LowAtBranches product={product} />
           <IncomingStockBadge quantity={incoming} />
         </div>
       </div>

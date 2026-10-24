@@ -7,6 +7,7 @@ import { Badge, type BadgeVariant } from '@/components/Badge'
 import { Button } from '@/components/Button'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ErrorState } from '@/components/ErrorState'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { Skeleton } from '@/components/Skeleton'
 import { TextField } from '@/components/TextField'
 import { useToast } from '@/components/useToast'
@@ -67,6 +68,7 @@ export function TransferDetailPage() {
   const { recordable } = useWorkingBranch()
   const recordableIds = useMemo(() => new Set(recordable.map((branch) => branch.id)), [recordable])
   const { data: transfer, loading, error, refetch, setData } = useTransfer(id)
+  const online = useOnlineStatus()
   const pending = usePendingTransfers()
   const queuedSend = pending.find((op) => op.kind === 'TRANSFER_SEND' && op.payload.id === id)
   const queuedReceipts = pending.filter((op) => op.kind === 'TRANSFER_RECEIVE' && op.transferId === id)
@@ -94,6 +96,14 @@ export function TransferDetailPage() {
           </p>
           <p className="mt-2 text-xs text-neutral-500">Share waits until it is sent, so the number on it is real.</p>
         </div>
+      </Page>
+    )
+  }
+  if (!transfer && !online) {
+    // Receiving works offline only for a transfer already on the phone (UX §6, Receive).
+    return (
+      <Page>
+        <ErrorState title="Connect to see what's on the way" message="This transfer isn't saved on this phone yet." onRetry={refetch} />
       </Page>
     )
   }

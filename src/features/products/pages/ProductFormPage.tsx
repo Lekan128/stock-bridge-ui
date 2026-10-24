@@ -24,6 +24,8 @@ import { useProduct } from '@/features/products/hooks/useProduct'
 import { useProductSkuSettings } from '@/features/products/hooks/useProductSkuSettings'
 import { useStockHistory } from '@/features/products/hooks/useStockHistory'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
+import { BranchLevels } from '@/features/branches/BranchLevels'
+import { listPriceText } from '@/features/selling/priceText'
 import {
   makeProductFormSchema,
   productFormDefaults,
@@ -870,6 +872,10 @@ export function ProductFormPage() {
         showToast('Saved. This listing is back with us for review and will return to the storefront once approved.', 'success')
       } else if (isVendor && !isEdit) {
         showToast('Product created. It goes for a quick review before buyers can see it.', 'success')
+      } else if (isMultiBranch && isEdit && priceChanged(product, saved)) {
+        // One price for the company (MULTI_BRANCH_UX_PLAN.md §5.6): the toast says where it now applies.
+        const price = listPriceText(saved, unitOfMeasureOptions)
+        showToast(price ? `Saved. ${price.replace(' / ', ' a ')} at all ${branchCount} branches.` : 'Product updated.', 'success')
       } else {
         showToast(isEdit ? 'Product updated.' : 'Product created.', 'success')
       }
@@ -1620,6 +1626,9 @@ export function ProductFormPage() {
             error={errors.lowStockThreshold?.message}
             {...register('lowStockThreshold')}
           />
+          {isMultiBranch && isEdit && product?.branchStock != null && (
+            <BranchLevels key={product.id} product={product} unit={stockUnitLabel ?? undefined} />
+          )}
         </div>
 
         <FormError message={formError} />
@@ -1674,5 +1683,15 @@ export function ProductFormPage() {
         />
       )}
     </div>
+  )
+}
+
+/** The selling price, as typed, is not what it was before this save. */
+function priceChanged(before: Product | null | undefined, after: Product): boolean {
+  return (
+    after.unitPrice != null &&
+    (before?.unitPrice !== after.unitPrice ||
+      before?.unitPriceEntered !== after.unitPriceEntered ||
+      before?.unitPriceEnteredUnit !== after.unitPriceEnteredUnit)
   )
 }

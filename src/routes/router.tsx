@@ -723,7 +723,9 @@ export function AppRoutes() {
             path="products/receive"
             element={
               <RequirePermission permission={PERMISSIONS.MANAGE_INVENTORY}>
-                <RecordDeliveryPage />
+                <RecordingBranchGate question="Which branch is this delivery for?">
+                  <RecordDeliveryPage />
+                </RecordingBranchGate>
               </RequirePermission>
             }
           />

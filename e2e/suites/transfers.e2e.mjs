@@ -7,6 +7,7 @@
 //   5. A one-branch company has no Transfers in its menu (rule 1).
 //   6. Two phones receive the same waybill at once: received once, the other told by whom.
 //   7. Offline chaos: sent offline while the branch sells online - CHECK on arrival, then it goes.
+//  7b. Short of one product: "Send 2 instead" sends that line for what was there.
 //   8. Missing stock that turns up goes back on a shelf.
 //   9. Inventory: select products, then Send.
 //  10. axe on Send stock, the waybill and Transfers.
@@ -303,6 +304,34 @@ await check('offline chaos: sent offline while the branch sells online - CHECK o
   const at = await figures(ownerToken, salt.id)
   assert(at[headOffice.id].quantityOnHand === 7, `Head Office holds ${at[headOffice.id].quantityOnHand}, expected 7`)
   assert(at[oshodi.id].onTheWay === 5, `on the way ${at[oshodi.id].onTheWay}, expected 5`)
+  await context.close()
+})
+
+// ----------------------------------------------------------------------------------------- 7b
+await check('a waybill short of one product: "Send 2 instead" sends that line for what was there', async () => {
+  const sugar = await createProduct(ownerToken, owner.unique, 'Sugar')
+  await api(`/api/products/${sugar.id}/stock/stock-in`, { token: ownerToken, method: 'POST', body: { quantity: 6, branchId: headOffice.id } })
+  const session = await login(owner.user.clientIdentifier, owner.email)
+  const context = await contextFor(session, headOffice.id)
+  const page = await context.newPage()
+  await page.goto(`${UI}/app/transfers/send?product=${sugar.id}`)
+  await page.getByText(sugar.name).first().waitFor()
+  await page.getByLabel('To', { exact: true }).selectOption(oshodi.id)
+  await page.getByLabel(/How many/).fill('5')
+  const before = (await api('/api/stock-transfers', { token: ownerToken })).json.totalElements
+  await context.setOffline(true)
+  await page.getByRole('button', { name: 'Send 1 item to Oshodi' }).click()
+  await page.getByText('Saved on this phone · not sent yet', { exact: false }).waitFor()
+  await api(`/api/products/${sugar.id}/stock/stock-out`, { token: ownerToken, method: 'POST', body: { quantity: 4, branchId: headOffice.id } })
+  await context.setOffline(false)
+  const pill = page.getByRole('button', { name: /needs? you/ })
+  await pill.waitFor({ timeout: 30000 })
+  await pill.click()
+  await page.getByRole('dialog', { name: 'On this phone' }).getByRole('button', { name: 'Send 2 instead' }).click()
+  await waitFor(async () => (await api('/api/stock-transfers', { token: ownerToken })).json.totalElements === before + 1, 'the waybill to go')
+  const at = await figures(ownerToken, sugar.id)
+  assert(at[headOffice.id].quantityOnHand === 0, `Head Office holds ${at[headOffice.id].quantityOnHand}, expected 0`)
+  assert(at[oshodi.id].onTheWay === 2, `on the way ${at[oshodi.id].onTheWay}, expected 2`)
   await context.close()
 })
 

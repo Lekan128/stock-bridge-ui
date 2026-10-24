@@ -1,5 +1,5 @@
 import { useContext } from 'react'
-import { WorkingBranchContext, type WorkingBranchValue } from '@/features/branches/BranchProvider'
+import { WorkingBranchContext, type WorkingBranchValue } from '@/features/branches/workingBranchContext'
 
 /** Where this phone is (UX §4). Every branch-aware screen reads this, never the API directly. */
 export function useWorkingBranch(): WorkingBranchValue {

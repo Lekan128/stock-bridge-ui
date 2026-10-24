@@ -23,6 +23,8 @@ export interface CatalogProductListProps {
   quickActions?: ProductQuickActions
   /** Selection on a phone's cards: long press to start, tap to tick (C1). */
   cardSelection?: CardSelection
+  /** The laptop table's By branch column, in "All branches" (`ProductTable.byBranch`). */
+  byBranch?: boolean
 }
 
 export interface CardSelection {
@@ -50,6 +52,7 @@ export function CatalogProductList({
   onRenderedChange,
   quickActions,
   cardSelection,
+  byBranch,
 }: CatalogProductListProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)')
   const containerRef = useRef<HTMLDivElement>(null)
@@ -114,6 +117,7 @@ export function CatalogProductList({
             incomingFor={(product) => ({ quantity: product.incomingQuantity ?? 0 })}
             selection={selection}
             quickActions={quickActions}
+            byBranch={byBranch}
             virtual={{
               paddingTop,
               paddingBottom,

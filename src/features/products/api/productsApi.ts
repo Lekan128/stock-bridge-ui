@@ -32,7 +32,8 @@ export const productsApi = {
 
   get: (id: string) => api.get<Product>(`/api/products/${id}`).then((r) => r.data),
 
-  lowStock: () => api.get<Product[]>('/api/products/low-stock').then((r) => r.data),
+  // Low at the branch being viewed; in "All branches", low at any (each with its branch figures).
+  lowStock: () => api.get<Product[]>('/api/products/low-stock', { params: { branchId: viewingBranchId() } }).then((r) => r.data),
 
   create: (payload: ProductFormPayload, image?: File | null) =>
     api

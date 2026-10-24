@@ -198,12 +198,21 @@ function send(op: OutboxOp, { late }: { late: boolean }): Promise<Answer> {
 /** What the server answered, made into something the person can act on. */
 function problemFrom(error: unknown): OutboxProblem {
   if (isAppError(error) && error.status === 409 && error.availableQuantity != null && error.requestedQuantity != null) {
-    return { kind: 'oversell', message: error.message, available: error.availableQuantity, requested: error.requestedQuantity }
+    return {
+      kind: 'oversell',
+      message: error.message,
+      available: error.availableQuantity,
+      requested: error.requestedQuantity,
+      ...(error.productId ? { productId: error.productId } : {}),
+    }
   }
   if (isAppError(error) && error.status === 404) {
     return { kind: 'refused', message: 'This product no longer exists.' }
   }
   if (isAppError(error) && error.status === 403) {
+    // The branch was taken away since this was saved (UX §5.10): say which, not just "not allowed".
+    const lost = /You don't work at (.+?), so/.exec(error.message ?? '')
+    if (lost) return { kind: 'refused', message: `You no longer work at ${lost[1]}. This change wasn't sent.` }
     return { kind: 'refused', message: 'Your account is no longer allowed to record this.' }
   }
   return { kind: 'refused', message: isAppError(error) ? error.message : 'The server could not record this.' }
@@ -507,7 +516,9 @@ export async function discardOp(id: string): Promise<void> {
  * to replay it for a different one.
  */
 export async function sendAvailableInstead(id: string): Promise<void> {
-  const op = state.ops.find((entry) => entry.id === id)
+  const found = state.ops.find((entry) => entry.id === id)
+  if (found?.kind === 'TRANSFER_SEND') return sendWaybillLineInstead(found)
+  const op = found
   if (!op || op.kind !== 'STOCK_OUT' || op.problem?.kind !== 'oversell') return
   const available = op.problem.available
   if (available <= 0) {
@@ -536,6 +547,38 @@ export async function sendAvailableInstead(id: string): Promise<void> {
     },
     baseDelta: -available,
     summary: `${available} (what was left)`,
+    status: 'pending',
+    problem: undefined,
+    attempts: 0,
+    nextAttemptAt: 0,
+  }
+  setState({ ops: state.ops.map((entry) => (entry.id === op.id ? replacement : entry)) })
+  await db?.transaction('rw', db.ops, async () => {
+    await db!.ops.delete(op.id)
+    await db!.ops.put(replacement)
+  }).catch(() => undefined)
+  await processOutbox({ force: true })
+}
+
+/**
+ * A waybill refused because one product was short at the sending branch (UX §6, Send: *Send 8 instead*):
+ * that line becomes what the branch had, in stock units, or leaves the waybill at none. The waybill keeps
+ * its id - the server made nothing of the refused one - so its page on this phone stays the same.
+ */
+async function sendWaybillLineInstead(op: Extract<OutboxOp, { kind: 'TRANSFER_SEND' }>): Promise<void> {
+  if (op.problem?.kind !== 'oversell' || !op.problem.productId) return
+  const { productId: shortId, available } = op.problem
+  const lines = op.payload.lines.flatMap((line) =>
+    line.productId !== shortId ? [line] : available > 0 ? [{ productId: line.productId, quantity: available }] : [],
+  )
+  if (lines.length === 0) {
+    await remove(op.id)
+    return
+  }
+  const replacement: OutboxOp = {
+    ...op,
+    id: crypto.randomUUID(),
+    payload: { ...op.payload, lines },
     status: 'pending',
     problem: undefined,
     attempts: 0,

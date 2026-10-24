@@ -1,5 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useSheetBranch } from '@/features/branches/useSheetBranch'
+import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Button } from '@/components/Button'
@@ -45,6 +46,10 @@ export function StockAdjustmentModal({
 }: StockAdjustmentModalProps) {
   // Which branch's shelf is counted (MULTI_BRANCH_UX_PLAN.md §5.2).
   const sheetBranch = useSheetBranch()
+  const branchContext = useOptionalWorkingBranch()
+  const countedAt = branchContext?.isMultiBranch
+    ? branchContext.nameOf(sheetBranch.branchId ?? branchContext.working?.id)
+    : undefined
   const [formError, setFormError] = useState<string | null>(null)
   const [queuedSentence, setQueuedSentence] = useState<string | null>(null)
   const [queuedOpId, setQueuedOpId] = useState<string | null>(null)
@@ -95,6 +100,7 @@ export function StockAdjustmentModal({
         footer={<Button onClick={() => (queuedOpId && onQueued ? onQueued(queuedOpId) : onClose())}>Done</Button>}
       >
         <StockReceipt
+          branchId={sheetBranch.branchId}
           state="recorded"
           kind="Count"
           id={queuedOpId}
@@ -131,7 +137,12 @@ export function StockAdjustmentModal({
           inputMode="numeric"
           autoFocus
           error={errors.countedQuantity?.message}
-          hint={`The app says ${formatQuantity(currentQuantity, stockUnit)}.`}
+          hint={
+            // At a branch the figure is that branch's, so say whose (UX §5.2: "Oshodi's books say 40").
+            countedAt
+              ? `${countedAt}'s books say ${formatQuantity(currentQuantity, stockUnit)}.`
+              : `The app says ${formatQuantity(currentQuantity, stockUnit)}.`
+          }
           {...register('countedQuantity')}
         />
         {/* The difference, before anything is recorded (C3, D1): set as a figure, because it is

@@ -1,3 +1,4 @@
+import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import type { ReactNode } from 'react'
 import { Stamp } from '@/components/Stamp'
 
@@ -23,6 +24,11 @@ export interface StockReceiptProps {
   lines: ReceiptLine[]
   /** What the server said back, below the tear line: the new figure, where a sale came from. */
   children?: ReactNode
+  /**
+   * The branch a sheet chose itself ("All branches"). Absent: the phone's working branch. Printed under
+   * the number at a multi-branch company (MULTI_BRANCH_UX_PLAN.md rule 3: the branch is on the receipt).
+   */
+  branchId?: string
 }
 
 /**
@@ -31,8 +37,10 @@ export interface StockReceiptProps {
  * moment Confirm is pressed and turns SYNCED when the server has it, or stays RECORDED, saying so
  * plainly, when the phone is offline. One for stock in, stock out and count.
  */
-export function StockReceipt({ state, kind, id, lines, children }: StockReceiptProps) {
+export function StockReceipt({ state, kind, id, lines, children, branchId }: StockReceiptProps) {
   const number = id ? id.replace(/-/g, '').slice(-6).toUpperCase() : null
+  const branch = useOptionalWorkingBranch()
+  const branchName = branch?.isMultiBranch ? branch.nameOf(branchId ?? branch.working?.id) : undefined
   return (
     <div className="flex flex-col gap-4" data-receipt={state}>
       <div className="relative rounded-sm border border-neutral-200 bg-white shadow-paper">
@@ -43,6 +51,11 @@ export function StockReceipt({ state, kind, id, lines, children }: StockReceiptP
             <div>
               <p className="text-xs font-semibold tracking-wider text-neutral-500 uppercase">{kind}</p>
               {number && <p className="mt-0.5 text-xs tabular-nums text-neutral-500">No. {number}</p>}
+              {branchName && (
+                <p className="mt-0.5 text-xs text-neutral-700" data-receipt-branch>
+                  {branchName}
+                </p>
+              )}
             </div>
             {/* Keyed by state, so the change from RECORDED to SYNCED lands as a fresh stamp. */}
             <Stamp key={state} kind={state === 'synced' ? 'synced' : 'recorded'} land />

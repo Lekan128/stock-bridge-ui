@@ -1,3 +1,4 @@
+import { useRecordsHere } from '@/features/branches/useRecordsHere'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { PackagePlus, Truck, X, Zap } from 'lucide-react'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
@@ -117,8 +118,12 @@ export function ProductListPage() {
    * still sees the affordance that leads to bulk stock-in.
    */
   const canImport = canManageProducts || permissions.includes(PERMISSIONS.MANAGE_INVENTORY)
-  const canStockIn = permissions.includes(PERMISSIONS.STOCK_IN)
-  const canStockOut = permissions.includes(PERMISSIONS.STOCK_OUT)
+  // At a branch the person only views, nothing here records (UX §4.1, "View only").
+  const recordsHere = useRecordsHere()
+  // Bringing stock in from a sheet records it - not at a branch the person only views.
+  const canStockInSheet = canImport && recordsHere
+  const canStockIn = recordsHere && permissions.includes(PERMISSIONS.STOCK_IN)
+  const canStockOut = recordsHere && permissions.includes(PERMISSIONS.STOCK_OUT)
   // Select rows → Send (MULTI_BRANCH_UX_PLAN.md §5.4): from the branch this phone is at.
   const branch = useOptionalWorkingBranch()
   const canSendSelected =
@@ -129,6 +134,10 @@ export function ProductListPage() {
   // A low-stock level for the selection at this branch (Phase 4): at a branch, MANAGE_PRODUCTS.
   const levelBranch = branch?.isMultiBranch && !branch.isAll && canManageProducts ? branch.working : null
   const [settingLevel, setSettingLevel] = useState(false)
+  // All branches, on a laptop: every branch's figure in a By branch column (UX §5.1).
+  const offersByBranch = (branch?.isMultiBranch ?? false) && (branch?.isAll ?? false)
+  const [byBranchChosen, setByBranch] = useState(false)
+  const byBranch = offersByBranch && byBranchChosen
   const canSelect = canImport || canSendSelected || levelBranch != null
   const [searchParams, setSearchParams] = useSearchParams()
   const { search: committedSearch, statusFilter, categoryFilter, stockLevelFilter, priceFilter: requestedPriceFilter, sort, page } =
@@ -450,8 +459,9 @@ export function ProductListPage() {
       : {}),
     onClearFilters: () => updateListState({ status: null, category: null, price: null }),
     canManageProducts,
-    canRecordDelivery: permissions.includes(PERMISSIONS.MANAGE_INVENTORY),
-    onQuickMode: canStockIn || canStockOut || permissions.includes(PERMISSIONS.MANAGE_INVENTORY) ? () => navigate('/app/quick') : undefined,
+    canRecordDelivery: recordsHere && permissions.includes(PERMISSIONS.MANAGE_INVENTORY),
+    onQuickMode:
+      canStockIn || canStockOut || (recordsHere && permissions.includes(PERMISSIONS.MANAGE_INVENTORY)) ? () => navigate('/app/quick') : undefined,
     onAddProduct: () => setAddProductOpen(true),
     onBulkUpload: () => navigate('/app/products/import'),
     onRecordDelivery: () => navigate('/app/products/receive'),
@@ -503,6 +513,19 @@ export function ProductListPage() {
 
       <AttentionLine items={attention} />
 
+      {offersByBranch && (
+        <button
+          type="button"
+          aria-pressed={byBranch}
+          onClick={() => setByBranch((on) => !on)}
+          className={`hidden min-h-9 items-center self-start rounded-md border px-3 text-sm font-medium md:inline-flex ${
+            byBranch ? 'border-primary-300 bg-primary-50 text-primary-800' : 'border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50'
+          }`}
+        >
+          By branch
+        </button>
+      )}
+
       {/* The skeleton is for the FIRST load only. After that the rows on screen stay put while the
           next answer loads — dimmed, with a thin bar — instead of the whole table unmounting into
           a skeleton on every keystroke, chip and page turn. */}
@@ -523,7 +546,7 @@ export function ProductListPage() {
             canSelect && selectedIds.length > 0 ? (
               <SelectionBar
                 count={selectedIds.length}
-                onStockIn={canImport ? handleStockInSelected : undefined}
+                onStockIn={canStockInSheet ? handleStockInSelected : undefined}
                 onSend={canSendSelected ? handleSendSelected : undefined}
                 onSetLevel={levelBranch ? () => setSettingLevel(true) : undefined}
                 onClear={() => setSelectedIds([])}
@@ -533,6 +556,7 @@ export function ProductListPage() {
           onRenderedChange={setRenderedProducts}
           quickActions={quickActions}
           cardSelection={cardSelection}
+          byBranch={byBranch}
         />
       )}
 
@@ -593,7 +617,7 @@ export function ProductListPage() {
               {canSelect && selectedIds.length > 0 && (
                 <SelectionBar
                 count={selectedIds.length}
-                onStockIn={canImport ? handleStockInSelected : undefined}
+                onStockIn={canStockInSheet ? handleStockInSelected : undefined}
                 onSend={canSendSelected ? handleSendSelected : undefined}
                 onSetLevel={levelBranch ? () => setSettingLevel(true) : undefined}
                 onClear={() => setSelectedIds([])}
@@ -611,6 +635,7 @@ export function ProductListPage() {
                       : undefined
                   }
                   quickActions={quickActions}
+                  byBranch={byBranch}
                 />
               </div>
             </>
@@ -639,7 +664,7 @@ export function ProductListPage() {
         {...barProps}
         selecting={selecting}
         selectedCount={selectedIds.length}
-        canStockInSelected={canImport}
+        canStockInSelected={canStockInSheet}
         onStockInSelected={handleStockInSelected}
         canSendSelected={canSendSelected}
         onSendSelected={handleSendSelected}
@@ -749,6 +774,7 @@ interface OnDeviceListProps {
   onRenderedChange: (products: Product[]) => void
   quickActions?: ProductQuickActions
   cardSelection?: CardSelection
+  byBranch: boolean
 }
 
 /**
@@ -771,6 +797,7 @@ function OnDeviceList({
   onRenderedChange,
   quickActions,
   cardSelection,
+  byBranch,
 }: OnDeviceListProps) {
   if (!list.ready) return <ProductListSkeleton />
   if (list.catalogSize === 0) {
@@ -806,6 +833,7 @@ function OnDeviceList({
         onRenderedChange={onRenderedChange}
         quickActions={quickActions}
         cardSelection={cardSelection}
+        byBranch={byBranch}
       />
     </div>
   )

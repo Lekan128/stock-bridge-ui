@@ -13,6 +13,8 @@ import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeas
 import type { Product } from '@/features/products/types'
 import { packEquivalent } from '@/features/products/packEquivalent'
 import { formatNumber } from '@/features/products/unitCopy'
+import { LowAtBranches } from '@/features/branches/LowAtBranches'
+import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { listPriceText } from '@/features/selling/priceText'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { resolveUnitSymbol } from '@/features/products/unitSet'
@@ -65,6 +67,11 @@ export interface ProductTableProps {
   virtual?: ProductTableVirtualWindow
   /** Quick stock in / out on each row, without leaving the list (C1, finding U2). */
   quickActions?: ProductQuickActions
+  /**
+   * "All branches" of a multi-branch company (MULTI_BRANCH_UX_PLAN.md §5.1): a By branch column with
+   * every branch's figure. Ignored anywhere else. (A row there always says where it is low.)
+   */
+  byBranch?: boolean
 }
 
 export interface ProductQuickActions {
@@ -91,7 +98,7 @@ const UNIT_PRICE_COLUMN: { field: ProductSortField; label: string; align?: 'righ
   align: 'right',
 }
 
-export function ProductTable({ products, sort, onSortChange, incomingFor, selection, virtual, quickActions }: ProductTableProps) {
+export function ProductTable({ products, sort, onSortChange, incomingFor, selection, virtual, quickActions, byBranch }: ProductTableProps) {
   const hasQuickActions = quickActions != null && (quickActions.canStockIn || quickActions.canStockOut)
   const { isVendor } = useAuth()
   // The price column follows the selling policy (a vendor, ProcurePal, or a company that sells
@@ -109,7 +116,10 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
 
   // Both `unitOfMeasure` and `packagingUnit` codes live in the same fetched list — one lookup
   // serves both.
-  const columnCount = columns.length + (selection ? 1 : 0) + (hasQuickActions ? 1 : 0)
+  const branch = useOptionalWorkingBranch()
+  const allBranches = branch?.isMultiBranch && branch.isAll ? branch : null
+  const showByBranch = allBranches != null && (byBranch ?? false)
+  const columnCount = columns.length + (selection ? 1 : 0) + (hasQuickActions ? 1 : 0) + (showByBranch ? 1 : 0)
 
   function unitOfMeasureLabel(code: string | undefined): string | undefined {
     return unitOfMeasureOptions.find((option) => option.code === code)?.label
@@ -149,7 +159,16 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
               />
             </th>
           )}
-          {columns.map((col) => (
+          {columns.map((col) => [
+            col.field === 'active' && showByBranch && (
+              <th
+                key="by-branch"
+                scope="col"
+                className="border-b border-neutral-200 bg-neutral-50 px-4 py-2.5 text-left text-xs font-medium text-neutral-500"
+              >
+                By branch
+              </th>
+            ),
             <th
               key={col.field}
               scope="col"
@@ -173,8 +192,8 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
                   <ArrowUpDown className="h-3.5 w-3.5 text-neutral-300" />
                 )}
               </button>
-            </th>
-          ))}
+            </th>,
+          ])}
           {hasQuickActions && (
             <th scope="col" className="w-24 border-b border-neutral-200 bg-neutral-50 px-2 py-2.5">
               <span className="sr-only">Quick stock in and out</span>
@@ -290,10 +309,29 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
                     low={product.isLowStock}
                     unit={resolveUnitSymbol(product.unitOfMeasure, unitOfMeasureOptions)}
                   />
+                  <LowAtBranches product={product} />
                   {/* On its own line, never summed into the figure above. */}
                   {incoming > 0 && <IncomingStockBadge quantity={incoming} />}
                 </div>
               </td>
+              {showByBranch && allBranches && (
+                <td className="border-b border-neutral-100 px-4 py-2.5 align-top">
+                  <ul className="flex flex-col gap-0.5 text-xs" aria-label={`${product.name} by branch`}>
+                    {(product.branchStock ?? []).map((entry) => (
+                      <li key={entry.branchId} className="flex justify-between gap-3">
+                        <span className="min-w-0 truncate text-neutral-600">{allBranches.nameOf(entry.branchId) ?? 'Closed branch'}</span>
+                        <span
+                          className={`shrink-0 tabular-nums ${
+                            entry.stockStatus === 'OUT' ? 'text-danger-700' : entry.stockStatus === 'LOW' ? 'text-warning-700' : 'text-neutral-900'
+                          }`}
+                        >
+                          {formatNumber(entry.quantityOnHand)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </td>
+              )}
               <td className="border-b border-neutral-100 px-4 py-2.5">
                 {/* Calm by default: "Inactive" is the exception worth a badge; active is the norm. */}
                 {product.active ? (

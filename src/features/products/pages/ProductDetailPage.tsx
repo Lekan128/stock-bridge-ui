@@ -1,3 +1,4 @@
+import { useRecordsHere } from '@/features/branches/useRecordsHere'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { carryBranchStock, scopeProduct } from '@/features/branches/scopeProduct'
@@ -120,8 +121,10 @@ export function ProductDetailPage() {
   const canManageProducts = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_PRODUCTS)
   // Independently grantable since V27 — a role may receive stock, issue it, both or neither,
   // separately from MANAGE_INVENTORY (which still gates Adjust below). See StockController.
-  const canStockIn = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.STOCK_IN)
-  const canStockOut = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.STOCK_OUT)
+  // At a branch the person only views, nothing here records (UX §4.1, "View only").
+  const recordsHere = useRecordsHere()
+  const canStockIn = recordsHere && user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.STOCK_IN)
+  const canStockOut = recordsHere && user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.STOCK_OUT)
   // "Send to another branch" (MULTI_BRANCH_UX_PLAN.md §5.4): from the branch this phone is at.
   const canSend =
     isMultiBranch &&
@@ -235,7 +238,7 @@ export function ProductDetailPage() {
   const canSell = recordsSales && canStockOut
   const sellLeads = canSell && product.unitPrice != null
   const stockButtons =
-    canStockIn || canStockOut || canManageInventory ? (
+    canStockIn || canStockOut || (canManageInventory && recordsHere) ? (
       <>
         {canSell && (
           <Button variant={sellLeads ? 'action' : 'secondary'} onClick={() => navigate(`/app/sell?product=${product.id}`)}>
@@ -255,7 +258,7 @@ export function ProductDetailPage() {
             Stock out
           </Button>
         )}
-        {canManageInventory && (
+        {canManageInventory && recordsHere && (
           <Button variant="secondary" onClick={() => stockActions.open('count', product)}>
             Count
           </Button>

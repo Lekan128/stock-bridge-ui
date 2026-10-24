@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/Button'
 import { TextField } from '@/components/TextField'
@@ -14,11 +14,12 @@ import type { Branch } from '@/features/branches/types'
 
 /**
  * Company settings → Branches (MULTI_BRANCH_UX_PLAN.md §5.11): every branch with what it holds, and the
- * changes a branch takes - rename, phone, make main, close, reopen. A branch is a shared record, so this
+ * changes a branch takes - rename, address and phone, make main, close, reopen. A branch is a shared record, so this
  * is online only (Pattern C.5), and every refusal is the server's own sentence with the way out in it.
  */
 export function BranchesPage() {
-  const { branches, mayAddBranch, isMultiBranch } = useWorkingBranch()
+  const { branches, mayAddBranch, isMultiBranch, recordable, choose } = useWorkingBranch()
+  const navigate = useNavigate()
   const online = useOnlineStatus()
   const queryClient = useQueryClient()
   const [adding, setAdding] = useState(false)
@@ -70,7 +71,7 @@ export function BranchesPage() {
                 branch={branch}
                 busy={busy === branch.id}
                 onCancel={() => setEditing(null)}
-                onSave={(name, phone) => void act(branch, () => branchesApi.update(branch.id, { name, phone }))}
+                onSave={(name, phone, address) => void act(branch, () => branchesApi.update(branch.id, { name, phone, address }))}
               />
             ) : (
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -81,14 +82,20 @@ export function BranchesPage() {
                     {!branch.active && <span className="rounded bg-neutral-100 px-1.5 text-xs text-neutral-600">Closed</span>}
                   </p>
                   <p className="text-sm text-neutral-600">
-                    {branch.productsInStock != null && `${branch.productsInStock} products in stock`}
-                    {branch.stockWorth != null && ` · ${formatNairaWhole(branch.stockWorth)}`}
-                    {branch.phone && ` · ${branch.phone}`}
+                    {[
+                      branch.productsInStock != null ? `${branch.productsInStock} products in stock` : null,
+                      branch.stockWorth != null ? formatNairaWhole(branch.stockWorth) : null,
+                      branch.people != null ? `${branch.people} ${branch.people === 1 ? 'person' : 'people'}` : null,
+                      branch.phone ?? null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
                   </p>
+                  {branch.address && <p className="text-sm text-neutral-500">{branch.address}</p>}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button variant="quiet" onClick={() => setEditing(branch.id)} disabled={!online}>
-                    Rename
+                    Edit
                   </Button>
                   {branch.active && !branch.main && (
                     <Button variant="quiet" loading={busy === branch.id} disabled={!online}
@@ -121,6 +128,22 @@ export function BranchesPage() {
                     <Link to={`/app/transfers/send?all=${branch.id}`} className="font-medium text-primary-700 hover:underline">
                       Send all stock
                     </Link>
+                    {/* …or count it to zero there: quick mode, at that branch. */}
+                    {recordable.some((entry) => entry.id === branch.id) && (
+                      <>
+                        {' · '}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            choose(branch.id)
+                            navigate('/app/quick')
+                          }}
+                          className="font-medium text-primary-700 hover:underline"
+                        >
+                          Count
+                        </button>
+                      </>
+                    )}
                   </>
                 )}
               </p>
@@ -142,20 +165,22 @@ function BranchEditor({
   branch: Branch
   busy: boolean
   onCancel: () => void
-  onSave: (name: string, phone: string) => void
+  onSave: (name: string, phone: string, address: string) => void
 }) {
   const [name, setName] = useState(branch.name)
   const [phone, setPhone] = useState(branch.phone ?? '')
+  const [address, setAddress] = useState(branch.address ?? '')
   return (
     <form
       className="flex flex-col gap-3 sm:flex-row sm:items-end"
       onSubmit={(event) => {
         event.preventDefault()
-        onSave(name.trim(), phone.trim())
+        onSave(name.trim(), phone.trim(), address.trim())
       }}
     >
-      <TextField label="Name" value={name} onChange={(event) => setName(event.target.value)} />
-      <TextField label="Phone (optional)" value={phone} onChange={(event) => setPhone(event.target.value)} />
+      <TextField id={`branch-${branch.id}-name`} label="Name" value={name} onChange={(event) => setName(event.target.value)} />
+      <TextField id={`branch-${branch.id}-phone`} label="Phone (optional)" value={phone} onChange={(event) => setPhone(event.target.value)} />
+      <TextField id={`branch-${branch.id}-address`} label="Address (optional)" value={address} onChange={(event) => setAddress(event.target.value)} />
       <div className="flex gap-2">
         <Button type="submit" loading={busy} disabled={!name.trim()}>
           Save

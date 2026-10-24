@@ -790,6 +790,7 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
 
       {step === 'receipt' && (
         <StockReceipt
+          branchId={sheetBranch.branchId}
           state={result ? 'synced' : queued ? 'recorded' : 'sending'}
           kind="Stock out"
           id={result?.movement?.id ?? queuedOpId}

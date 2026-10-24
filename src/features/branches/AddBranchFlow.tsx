@@ -32,6 +32,8 @@ export function AddBranchFlow({ onDone }: { onDone: () => void }) {
   const [existingName, setExistingName] = useState(current?.name ?? '')
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
+  const [address, setAddress] = useState('')
+  const [moreDetails, setMoreDetails] = useState(false)
   const [created, setCreated] = useState<Branch | null>(null)
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
@@ -67,6 +69,7 @@ export function AddBranchFlow({ onDone }: { onDone: () => void }) {
         >
           <h1 className="text-lg font-semibold text-neutral-900">First, what do you call the place you already have?</h1>
           <TextField
+            id="existing-branch-name"
             label="Branch name"
             value={existingName}
             autoFocus
@@ -83,7 +86,11 @@ export function AddBranchFlow({ onDone }: { onDone: () => void }) {
           onSubmit={(event) => {
             event.preventDefault()
             void run(async () => {
-              const branch = await branchesApi.add({ name: name.trim(), phone: phone.trim() || undefined })
+              const branch = await branchesApi.add({
+                name: name.trim(),
+                phone: phone.trim() || undefined,
+                address: address.trim() || undefined,
+              })
               setCreated(branch)
               await refresh()
               setStep('stock')
@@ -92,8 +99,22 @@ export function AddBranchFlow({ onDone }: { onDone: () => void }) {
           className="flex flex-col gap-4"
         >
           <h1 className="text-lg font-semibold text-neutral-900">What's the new branch called?</h1>
-          <TextField label="Branch name" value={name} autoFocus onChange={(event) => setName(event.target.value)} />
-          <TextField label="Phone (optional)" value={phone} onChange={(event) => setPhone(event.target.value)} />
+          <TextField id="new-branch-name" label="Branch name" value={name} autoFocus onChange={(event) => setName(event.target.value)} />
+          {/* Folded away: the name is the one question here (§5.1 step 2). */}
+          {moreDetails ? (
+            <>
+              <TextField id="new-branch-address" label="Address (optional)" value={address} onChange={(event) => setAddress(event.target.value)} />
+              <TextField id="new-branch-phone" label="Phone (optional)" value={phone} onChange={(event) => setPhone(event.target.value)} />
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setMoreDetails(true)}
+              className="inline-flex min-h-11 items-center self-start text-sm font-medium text-primary-700 hover:underline"
+            >
+              Add address and phone
+            </button>
+          )}
           <Actions busy={busy} onCancel={onDone} next="Add branch" disabled={!name.trim()} />
         </form>
       )}

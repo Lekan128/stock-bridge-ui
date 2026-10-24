@@ -4,6 +4,7 @@ import type { Branch, BranchList } from '@/features/branches/types'
 export interface BranchPayload {
   name?: string
   phone?: string
+  address?: string
 }
 
 /** A company's branches. Changing one is a shared-record edit: online only (Pattern C.5). */

@@ -16,7 +16,7 @@ const SEARCH_FROM = 8
 const CHIP_CHARS = 18
 
 const itemClassName =
-  'flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50 focus-visible:bg-neutral-50'
+  'flex min-h-11 w-full items-center gap-2 px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50 focus-visible:bg-neutral-50'
 
 function short(name: string) {
   return name.length > CHIP_CHARS ? `${name.slice(0, CHIP_CHARS - 1)}…` : name
@@ -107,7 +107,15 @@ export function BranchChip() {
         <ChevronDown className="h-4 w-4 shrink-0 text-neutral-500" aria-hidden />
       </button>
       {open && (
-        <div className="absolute right-0 z-50 mt-2 flex max-h-[min(28rem,70vh)] w-72 max-w-[calc(100vw-2rem)] flex-col rounded-lg border border-neutral-200 bg-white shadow-lg">
+        // On a phone, a bottom sheet over the screen (UX §4.1); from sm up, a menu under the chip.
+        <div aria-hidden className="fixed inset-0 z-40 bg-neutral-900/30 sm:hidden" onClick={() => setOpen(false)} />
+      )}
+      {open && (
+        <div
+          data-branch-sheet
+          className="fixed inset-x-0 bottom-0 z-50 flex max-h-[80vh] flex-col rounded-t-2xl border-t border-neutral-200 bg-white pb-[env(safe-area-inset-bottom)] shadow-lg sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:mt-2 sm:max-h-[min(28rem,70vh)] sm:w-72 sm:max-w-[calc(100vw-2rem)] sm:rounded-lg sm:border sm:pb-0"
+        >
+          <p className="shrink-0 px-4 pb-1 pt-3 text-sm font-semibold text-neutral-900 sm:hidden">Choose a branch</p>
           {open_.length >= SEARCH_FROM && (
             <label className="flex shrink-0 items-center gap-2 border-b border-neutral-100 px-3 py-2">
               <Search className="h-4 w-4 text-neutral-500" aria-hidden />

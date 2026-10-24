@@ -3,6 +3,7 @@ export interface Branch {
   id: string
   name: string
   phone?: string
+  address?: string
   /** The main branch: where marketplace orders arrive, and where people with no branch of their own work. */
   main: boolean
   active: boolean
@@ -12,6 +13,8 @@ export interface Branch {
   /** Only for people who can manage branches. Absent otherwise (`== null`, never `=== null`). */
   productsInStock?: number
   stockWorth?: number
+  /** How many people work there. Only for people who can manage branches. */
+  people?: number
 }
 
 export interface BranchList {
@@ -40,6 +43,10 @@ export interface BranchFigure {
   stockStatus: 'OK' | 'LOW' | 'OUT'
   /** Sent here on open waybills, not yet received. Never in `quantityOnHand` (UX rule 5). */
   onTheWay?: number
+  /** The product page only: when this branch last counted it. */
+  lastCountedAt?: string
+  /** The product page only: this branch's own level, absent when it uses the product's. */
+  ownLowStockThreshold?: number
 }
 
 /** Where this phone is: one branch, or every branch the person sees. */

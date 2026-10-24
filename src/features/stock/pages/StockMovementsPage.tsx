@@ -107,6 +107,9 @@ export function StockMovementsPage() {
   const branch = useOptionalWorkingBranch()
   const showBranch = (branch?.isMultiBranch ?? false) && (branch?.isAll ?? false)
   const nameOf = (id: string | undefined) => branch?.nameOf(id)
+  // …and a filter to one of them (UX §5.1).
+  const [branchFilter, setBranchFilter] = useState('')
+  const filteredBranch = showBranch && branchFilter ? branchFilter : undefined
 
   const { vendors } = useVendorOptions(canViewVendors)
 
@@ -117,6 +120,7 @@ export function StockMovementsPage() {
     companyVendorId: companyVendorId || undefined,
     outReason: reasonApplies && reasonFilter && reasonFilter !== 'NONE' ? reasonFilter : undefined,
     noReason: reasonApplies && reasonFilter === 'NONE' ? true : undefined,
+    ...(filteredBranch ? { branchId: filteredBranch } : {}),
   }
   const { movements, totalPages, totalElements, summary, loading, error, refetch } = useStockMovementReport({
     ...filters,
@@ -298,6 +302,27 @@ export function StockMovementsPage() {
                 </option>
               ))}
               <option value="NONE">{NO_REASON_LABEL}</option>
+            </select>
+          </div>
+        )}
+
+        {showBranch && branch && (
+          <div>
+            <label htmlFor="movement-branch" className="mb-1.5 block text-sm font-medium text-neutral-700">
+              Branch
+            </label>
+            <select
+              id="movement-branch"
+              value={branchFilter}
+              onChange={(event) => applyFilter(() => setBranchFilter(event.target.value))}
+              className="rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            >
+              <option value="">Every branch</option>
+              {branch.branches.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
+                </option>
+              ))}
             </select>
           </div>
         )}

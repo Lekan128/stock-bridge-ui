@@ -147,6 +147,12 @@ function ReceiptLine({ op, stamp, sentAt }: { op: OutboxOp; stamp: StampKind; se
             {op.kind === 'STOCK_OUT' && op.problem.kind === 'oversell' && op.problem.available > 0 && (
               <Button onClick={() => void sendAvailableInstead(op.id)}>Send {op.problem.available} instead</Button>
             )}
+            {/* A waybill short of one product: that line goes for what the branch had (UX §6). */}
+            {op.kind === 'TRANSFER_SEND' && op.problem.kind === 'oversell' && op.problem.productId != null && (
+              <Button onClick={() => void sendAvailableInstead(op.id)}>
+                {op.problem.available > 0 ? `Send ${op.problem.available} instead` : 'Send without it'}
+              </Button>
+            )}
             {/* A waybill refused for want of stock goes as it is once the stock is there. */}
             {(op.problem.kind === 'refused' || op.kind === 'TRANSFER_SEND') && (
               <Button variant="secondary" onClick={() => void retryOp(op.id)}>
