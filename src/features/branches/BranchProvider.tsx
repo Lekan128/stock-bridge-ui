@@ -211,7 +211,6 @@ export function BranchProvider({ children }: { children: ReactNode }) {
         ['sales-report'],
         ['sold-this-month'],
         ['stock-worth'],
-        ['losses'],
         ['expected'],
       ]) {
         queryClient.removeQueries({ queryKey: key })

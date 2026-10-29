@@ -102,6 +102,9 @@ export function StockMovementsPage() {
   const [reasonFilter, setReasonFilter] = useState<'' | 'NONE' | OutReason>('')
   const [page, setPage] = useState(0)
   const reasonApplies = direction === 'OUT'
+  // "Adjustments" is stock written off - counts and damaged, expired or lost stock-outs - not the
+  // ledger's ADJUSTMENT type, which also holds fixes to sales.
+  const showingAdjustments = direction === 'ADJUSTMENT'
   const { recordsSales, requiresSellingPrice } = useSellingPolicy()
   // "All branches" (MULTI_BRANCH_UX_PLAN.md §4.3): every branch's rows, each saying where.
   const branch = useOptionalWorkingBranch()
@@ -116,7 +119,8 @@ export function StockMovementsPage() {
   const filters = {
     from: toApiDateTime(range.from),
     to: toApiDateTime(range.to),
-    movementType: direction === 'all' ? undefined : direction,
+    movementType: direction === 'all' || showingAdjustments ? undefined : direction,
+    adjustments: showingAdjustments ? true : undefined,
     companyVendorId: companyVendorId || undefined,
     outReason: reasonApplies && reasonFilter && reasonFilter !== 'NONE' ? reasonFilter : undefined,
     noReason: reasonApplies && reasonFilter === 'NONE' ? true : undefined,
@@ -169,7 +173,32 @@ export function StockMovementsPage() {
         </div>
       </div>
 
-      {summary && (
+      {summary && showingAdjustments && (
+        <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard
+              label="Written off"
+              value={formatCurrency(summary.writtenOffCost ?? 0)}
+              subtitle={`${formatNumber(summary.writtenOffQuantity ?? 0)} units · ${rangeLabel}`}
+              icon={SlidersHorizontal}
+            />
+          </div>
+          <p className="text-sm text-neutral-600" data-adjustments-note>
+            Counts that found less than the records, and stock given out as damaged, expired or lost, at what it cost. A
+            count that found more is taken off.
+            {(summary.writtenOffUnpricedCount ?? 0) > 0 && (
+              <>
+                {' '}
+                {formatNumber(summary.writtenOffUnpricedCount ?? 0)}{' '}
+                {summary.writtenOffUnpricedCount === 1 ? 'entry has' : 'entries have'} no cost, so the total leaves{' '}
+                {summary.writtenOffUnpricedCount === 1 ? 'it' : 'them'} out.
+              </>
+            )}
+          </p>
+        </div>
+      )}
+
+      {summary && !showingAdjustments && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             label="Stock in value"
@@ -222,6 +251,7 @@ export function StockMovementsPage() {
           in" against a smaller "stock in value" reads as a bug rather than as deliveries whose
           price nobody recorded. Shown only when there is actually a gap to explain. */}
       {summary &&
+        !showingAdjustments &&
         (summary.unpricedInCount > 0 ||
           (requiresSellingPrice && summary.unpricedOutCount > 0) ||
           (summary.unpricedSaleCount ?? 0) > 0 ||

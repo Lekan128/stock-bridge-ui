@@ -22,6 +22,8 @@ export interface StockMovementReportParams {
   outReason?: OutReason
   /** Only stock-outs with no reason given. */
   noReason?: boolean
+  /** Only stock adjustments: counts that changed the figure, and damaged, expired or lost stock-outs. */
+  adjustments?: boolean
   /** One branch, chosen in "All branches"; otherwise the branch being viewed (`viewingBranchId`). */
   branchId?: string
   page?: number
@@ -75,4 +77,12 @@ export interface StockMovementSummary {
   movedOutQuantity?: number
   movedInCount?: number
   movedOutCount?: number
+  /**
+   * Stock adjustments in range, net, at cost: damaged, expired and lost stock-outs, and counts at the
+   * product's cost (short adds, over takes off). Entries with no cost are left out and counted in
+   * `writtenOffUnpricedCount`. Absent from an older API.
+   */
+  writtenOffCost?: number
+  writtenOffQuantity?: number
+  writtenOffUnpricedCount?: number
 }

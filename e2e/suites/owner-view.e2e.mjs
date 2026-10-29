@@ -5,9 +5,8 @@
 //   2. A figure opens its screen at that branch, and says so ("Opened at Oshodi").
 //   3. Phones: a branch whose phone has writes waiting says so.
 //   4. On a phone the table is one card per branch.
-//   5. Losses: missing on the way and expired stock, at cost; By branch in All branches.
-//   6. A one-branch company's Losses page has no branch word (rule 1).
-//   7. axe on the branch table and Losses.
+//   5. Stock movements' Adjustments: the expired stock written off, at cost; not the stock missing on the way.
+//   6. axe on the branch table and Stock movements' Adjustments.
 import { chromium } from 'playwright'
 import { createRequire } from 'node:module'
 import { API, UI, launchOptions, shotsPrefix } from '../config.mjs'
@@ -191,40 +190,21 @@ await check('on a phone the table is one card per branch, same figures', async (
 })
 
 // ------------------------------------------------------------------------------------------ 5
-await check('losses: missing on the way and expired stock, at cost; By branch in All branches', async () => {
+await check("adjustments: the expired stock written off, at cost; missing on the way stays on the waybill", async () => {
   const session = await login(owner.user.clientIdentifier, owner.email)
   const context = await contextFor(session, 'ALL')
   const page = await context.newPage()
-  await page.goto(`${UI}/app/losses`)
-  const total = page.locator('[data-losses-total]')
-  await total.waitFor()
-  const text = await total.innerText()
-  assert(text.includes('₦300'), `total: ${text}`)
-  assert(text.includes('1 missing on the way') && text.includes('2 expired'), `breakdown: ${text}`)
-  await page.getByRole('tab', { name: 'By branch' }).click()
-  const list = page.getByRole('list', { name: 'Losses' })
-  await list.getByText('Oshodi').waitFor()
-  await list.getByText('Head Office').waitFor()
-  await page.getByRole('tab', { name: 'By person' }).click()
-  await list.getByText('Tunde (carried)').waitFor()
+  await page.goto(`${UI}/app/stock-movements?movementType=ADJUSTMENT`)
+  await page.locator('[data-adjustments-note]').waitFor()
+  const card = page.getByText('Written off').locator('..').locator('..')
+  await card.getByText('₦200').first().waitFor()
+  const text = await page.locator('main').innerText()
+  assert(text.includes('2 units'), `units: ${text}`)
   await context.close()
 })
 
 // ------------------------------------------------------------------------------------------ 6
-await check('a one-branch company: Losses has no branch word (rule 1)', async () => {
-  const solo = await signup('solo-losses')
-  const context = await contextFor(solo)
-  const page = await context.newPage()
-  await page.goto(`${UI}/app/losses`)
-  await page.getByRole('heading', { name: 'Losses' }).waitFor()
-  await page.waitForLoadState('networkidle')
-  const text = (await page.locator('main').innerText()).toLowerCase()
-  assert(!text.includes('branch'), 'the word "branch" is on the page')
-  await context.close()
-})
-
-// ------------------------------------------------------------------------------------------ 7
-await check('axe: the branch table (laptop and phone) and Losses have no WCAG 2.2 A/AA violations', async () => {
+await check("axe: the branch table (laptop and phone) and Stock movements' Adjustments have no WCAG 2.2 A/AA violations", async () => {
   const found = []
   for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
     const session = await login(owner.user.clientIdentifier, owner.email)
@@ -234,9 +214,10 @@ await check('axe: the branch table (laptop and phone) and Losses have no WCAG 2.
     await page.locator('[data-branch-table]').waitFor()
     await page.waitForLoadState('networkidle')
     found.push(...(await axe(page)).map((v) => `Dashboard ${viewport.width}: ${v}`))
-    await page.goto(`${UI}/app/losses`)
-    await page.locator('[data-losses-total]').waitFor()
-    found.push(...(await axe(page)).map((v) => `Losses ${viewport.width}: ${v}`))
+    await page.goto(`${UI}/app/stock-movements?movementType=ADJUSTMENT`)
+    await page.locator('[data-adjustments-note]').waitFor()
+    await page.waitForLoadState('networkidle')
+    found.push(...(await axe(page)).map((v) => `Adjustments ${viewport.width}: ${v}`))
     await context.close()
   }
   assert(found.length === 0, found.join('\n    '))
