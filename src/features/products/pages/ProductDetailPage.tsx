@@ -26,6 +26,7 @@ import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeas
 import { useProduct } from '@/features/products/hooks/useProduct'
 import { useProductIncoming } from '@/features/products/hooks/useProductIncoming'
 import { useStockActions } from '@/features/products/hooks/useStockActions'
+import { useMoveSheet } from '@/features/moves/useMoveSheet'
 import { useStockHistory } from '@/features/products/hooks/useStockHistory'
 import {
   UNIT_COPY,
@@ -81,6 +82,7 @@ export function ProductDetailPage() {
     { branchId: isMultiBranch ? working?.id : undefined },
   )
   // Stock in / out / count, and the toast with Undo after — shared with the Inventory list (C1).
+  const moveSheet = useMoveSheet()
   const stockActions = useStockActions({
     onChanged: (changed) => {
       // The write's answer carries the company figure only: keep the branch list, moved by the same
@@ -339,13 +341,14 @@ export function ProductDetailPage() {
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
           <AreaBreakdown product={product} unitLabel={stockUnitText} />
           {canStockOut && (
-            <Link
-              to={`/app/move?product=${product.id}`}
+            <button
+              type="button"
+              onClick={() => moveSheet.open([product.id])}
               className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-neutral-300 bg-white px-3 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
             >
               <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
               Move
-            </Link>
+            </button>
           )}
         </div>
       )}
@@ -482,6 +485,7 @@ export function ProductDetailPage() {
       {stockButtons && <ProductActionBar>{stockButtons}</ProductActionBar>}
 
       {stockActions.sheet}
+      {moveSheet.sheet}
 
       <ConfirmDialog
         open={confirmDeactivate}

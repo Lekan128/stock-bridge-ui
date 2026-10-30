@@ -2,6 +2,8 @@ import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { useSheetArea } from '@/features/branches/useSheetBranch'
 import { hasAreas } from '@/features/branches/areas'
 import { useWorkArea } from '@/features/branches/workArea'
+import { MoveEditor, type Moved } from '@/features/moves/MoveEditor'
+import { movesApi } from '@/features/moves/movesApi'
 import { usePendingStock } from '@/features/outbox/useOutbox'
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { Delete, Search, X } from 'lucide-react'
@@ -11,7 +13,7 @@ import { useAuth } from '@/auth/useAuth'
 import { PERMISSIONS } from '@/auth/permissions'
 import { Stamp, type StampKind } from '@/components/Stamp'
 import { useDialogBehaviour } from '@/components/useDialogBehaviour'
-import { discardOp, getOutboxState, isInFlight, submitStockWrite } from '@/features/outbox/outboxStore'
+import { applyMoveResult, discardOp, getOutboxState, isInFlight, submitStockWrite } from '@/features/outbox/outboxStore'
 import { useOutboxState } from '@/features/outbox/useOutbox'
 import { stockApi } from '@/features/products/api/stockApi'
 import { StockFigure } from '@/features/products/components/StockFigure'
@@ -50,7 +52,7 @@ import { SyncPill } from '@/features/sync/SyncPill'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
 
-type Mode = 'sell' | 'in' | 'out' | 'count'
+type Mode = 'sell' | 'in' | 'out' | 'move' | 'count'
 
 // The same names as everywhere else in the app (it said Receive and Issue, warehouse words a
 // shopkeeper had to guess at), each with one line saying what it does — Count most of all.
@@ -59,6 +61,8 @@ const MODES: { value: Mode; label: string; verb: string; meaning: string }[] = [
   { value: 'sell', label: 'Sell', verb: 'Sold', meaning: 'Scan what the customer is buying, then record the sale in one go.' },
   { value: 'in', label: 'Stock in', verb: 'Stock in', meaning: 'Goods coming in, like a delivery or a return. Adds them to your stock.' },
   { value: 'out', label: 'Stock out', verb: 'Stock out', meaning: 'Goods going out: sold, used or sent away. Takes them off your stock.' },
+  // At a branch with areas (STOCK_AREAS_PART_3.md): from one area to another, several items at once.
+  { value: 'move', label: 'Move', verb: 'Moved', meaning: 'From one area to another, a few items at a time.' },
   {
     value: 'count',
     label: 'Count',
@@ -72,7 +76,7 @@ const OUT_MEANING_WHEN_SELLING = 'Goods going out without a sale: used, spoilt o
 const OUT_MEANING_WITH_AREAS = 'Used, sold or thrown away. To another area, use Move.'
 const OUT_MEANING_WITH_AREAS_SELLING = 'Used or thrown away, not sold. To another area, use Move.'
 /** The Record button says what it will do: "Stock in 2 bags (100 kg)". */
-const ACTION: Record<Exclude<Mode, 'sell'>, string> = { in: 'Stock in', out: 'Stock out', count: 'Record count:' }
+const ACTION: Record<Exclude<Mode, 'sell' | 'move'>, string> = { in: 'Stock in', out: 'Stock out', count: 'Record count:' }
 const GRID_COLS = ['', 'grid-cols-1', 'grid-cols-2', 'grid-cols-3', 'grid-cols-4']
 
 /** One write made in this session, and where it stands. */
@@ -87,6 +91,8 @@ interface SessionEntry {
   opId?: string
   /** A sale: its lines, each sent or waiting, undone together. */
   sale?: RecordedSale
+  /** A move between areas that reached the server, for Undo (a queued one is `opId`). */
+  moveId?: string
   undone?: boolean
 }
 
@@ -119,12 +125,14 @@ export function QuickModePage() {
     in: permissions.includes(PERMISSIONS.STOCK_IN),
     out: permissions.includes(PERMISSIONS.STOCK_OUT),
     count: permissions.includes(PERMISSIONS.MANAGE_INVENTORY),
+    move: false,
   }
   // At a branch with areas a move is done every day and a count once in a while: Move takes Count's place
   // in the row (it opens the Move stock screen), and Count becomes a small link beside the line below.
   const working = branch && !branch.isAll ? branch.working : null
   const work = useWorkArea(working)
   const movesHere = allowed.out && hasAreas(working) && work.areas.length > 0
+  allowed.move = movesHere
   const tabs = MODES.filter((m) => allowed[m.value] && !(movesHere && m.value === 'count'))
   const requested = params.get('mode') as Mode | null
   const mode: Mode = requested && allowed[requested] ? requested : (MODES.find((m) => allowed[m.value])?.value ?? 'in')
@@ -143,6 +151,7 @@ export function QuickModePage() {
   // Held here, not in the Sell step, so the basket (a draft on the phone) outlives the stamp.
   const basket = useSaleBasket()
   const [salesRecorded, setSalesRecorded] = useState(0)
+  const [movesRecorded, setMovesRecorded] = useState(0)
   const rootRef = useRef<HTMLDivElement>(null)
 
   // A full screen over the workspace, so it behaves as a dialog does (Phase H accessibility): the
@@ -182,6 +191,22 @@ export function QuickModePage() {
     )
   }
 
+  function moveRecorded(moved: Moved) {
+    setMovesRecorded((n) => n + 1)
+    recorded(
+      {
+        key: moved.status === 'sent' ? moved.move.id : moved.opId,
+        mode: 'move',
+        productId: '',
+        productName: moved.route,
+        summary: moved.items,
+        moveId: moved.status === 'sent' ? moved.move.id : undefined,
+        opId: moved.status === 'queued' ? moved.opId : undefined,
+      },
+      moved.status === 'sent' ? 'synced' : 'recorded',
+    )
+  }
+
   function recorded(entry: SessionEntry, kind: StampKind) {
     area.remember()
     setSession((current) => [entry, ...current])
@@ -214,7 +239,7 @@ export function QuickModePage() {
         </button>
         <h1 id="quick-mode-title" className="text-base font-semibold">
           {/* Where every scan here lands (UX §5.2): "Quick mode · Oshodi". */}
-          Quick mode{branchHere ? ` · ${branchHere}` : ''}{area.titleSuffix}
+          Quick mode{branchHere ? ` · ${branchHere}` : ''}{mode === 'move' ? '' : area.titleSuffix}
         </h1>
         <SyncPill large />
       </header>
@@ -225,7 +250,7 @@ export function QuickModePage() {
             role="group"
             aria-label="What are you doing?"
             aria-describedby="quick-mode-meaning"
-            className={`grid ${GRID_COLS[tabs.length + (movesHere ? 1 : 0)]} gap-1 rounded-lg bg-neutral-100 p-1`}
+            className={`grid ${GRID_COLS[tabs.length]} gap-1 rounded-lg bg-neutral-100 p-1`}
           >
             {tabs.map((m) => (
               <button
@@ -240,15 +265,6 @@ export function QuickModePage() {
                 {m.label}
               </button>
             ))}
-            {movesHere && (
-              <button
-                type="button"
-                onClick={() => navigate('/app/move')}
-                className="h-12 rounded-md text-base font-semibold text-neutral-600"
-              >
-                Move
-              </button>
-            )}
           </div>
           {/* Count shares the explanation's line, so it costs no height above the keyboard. */}
           <div className="flex items-start justify-between gap-3">
@@ -276,7 +292,7 @@ export function QuickModePage() {
           </div>
           {mode === 'sell' && <MySalesToday refreshKey={salesRecorded} />}
           {mode === 'out' && <QuickReason value={outReason} onChange={setOutReason} />}
-          {mode !== 'sell' && area.field}
+          {mode !== 'sell' && mode !== 'move' && area.field}
         </div>
 
         {flash ? (
@@ -285,6 +301,16 @@ export function QuickModePage() {
           <div className="flex flex-col gap-4">
             <SaleBasketEditor basket={basket} onRecorded={saleRecorded} />
           </div>
+        ) : mode === 'move' ? (
+          // A fresh editor after each move: the stamp, then the next one.
+          <MoveEditor key={movesRecorded} onMoved={moveRecorded}>
+            {({ body, action }) => (
+              <div className="flex flex-col gap-3">
+                {body}
+                {action}
+              </div>
+            )}
+          </MoveEditor>
         ) : product ? (
           <AmountStep
             key={`${product.id}-${mode}`}
@@ -385,7 +411,7 @@ function AmountStep({
   onBack,
   onRecorded,
 }: {
-  mode: Exclude<Mode, 'sell'>
+  mode: Exclude<Mode, 'sell' | 'move'>
   product: Product
   /** The session's stock-out reason, or null for none given. */
   reason: OutReason | null
@@ -707,7 +733,7 @@ function SessionList({ entries, onUndone }: { entries: SessionEntry[]; onUndone:
       const stamps = entry.sale.lines.filter((l) => l.status !== 'refused').map((l) => opStamp(l.opId, l.movementId))
       return stamps.includes('check') ? 'check' : stamps.includes('recorded') ? 'recorded' : 'synced'
     }
-    if (entry.movementId) return 'synced'
+    if (entry.movementId || entry.moveId) return 'synced'
     const waiting = ops.find((op) => op.id === entry.opId)
     if (waiting) return waiting.status === 'needs_attention' ? 'check' : 'recorded'
     return recentlySent.some((op) => op.id === entry.opId) ? 'synced' : 'recorded'
@@ -719,6 +745,8 @@ function SessionList({ entries, onUndone }: { entries: SessionEntry[]; onUndone:
       if (entry.sale) {
         const problems = await undoSale(entry.sale)
         if (problems.length > 0) throw new Error(`Some of it couldn't be undone. ${problems.join(' ')}`)
+      } else if (entry.moveId) {
+        applyMoveResult(await movesApi.undo(entry.moveId))
       } else if (entry.movementId) {
         await stockApi.voidWrite(entry.productId, entry.movementId)
       } else if (entry.opId) {

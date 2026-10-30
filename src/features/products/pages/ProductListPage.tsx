@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowLeftRight, PackagePlus, Truck, X, Zap } from 'lucide-react'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { hasAreas } from '@/features/branches/areas'
+import { useMoveSheet } from '@/features/moves/useMoveSheet'
 import { BranchLevelDialog } from '@/features/branches/BranchLevelDialog'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
@@ -148,6 +149,7 @@ export function ProductListPage() {
     hasAreas(branch.working) &&
     branch.recordable.some((entry) => entry.id === branch.working?.id)
   const canSelect = canImport || canSendSelected || canMove || levelBranch != null
+  const moveSheet = useMoveSheet()
   const [searchParams, setSearchParams] = useSearchParams()
   const { search: committedSearch, statusFilter, categoryFilter, stockLevelFilter, priceFilter: requestedPriceFilter, sort, page } =
     readListState(searchParams)
@@ -348,7 +350,7 @@ export function ProductListPage() {
   }
 
   function handleMoveSelected() {
-    navigate(`/app/move?products=${selectedIds.join(',')}`)
+    moveSheet.open(selectedIds)
   }
 
   function handleStockInSelected() {
@@ -478,7 +480,7 @@ export function ProductListPage() {
     onAddProduct: () => setAddProductOpen(true),
     onBulkUpload: () => navigate('/app/products/import'),
     onRecordDelivery: () => navigate('/app/products/receive'),
-    onMoveStock: canMove ? () => navigate('/app/move') : undefined,
+    onMoveStock: canMove ? () => moveSheet.open() : undefined,
     onRecordSale: recordsSales && canStockOut ? () => navigate('/app/sell') : undefined,
     onExpectedDeliveries: () => navigate('/app/products/expected'),
     onExport: () => void handleExport(),
@@ -693,6 +695,7 @@ export function ProductListPage() {
       />
 
       {stockActions.sheet}
+      {moveSheet.sheet}
 
       {settingLevel && levelBranch && (
         <BranchLevelDialog

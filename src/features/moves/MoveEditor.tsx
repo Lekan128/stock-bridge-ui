@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, ArrowLeftRight, Repeat, Search, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { ArrowLeftRight, Repeat, Search, X } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { TextField } from '@/components/TextField'
 import { useApiQuery } from '@/data/useApiQuery'
@@ -13,7 +12,7 @@ import { DraftNote } from '@/features/drafts/DraftNote'
 import { useDraft } from '@/features/drafts/useDraft'
 import { movesApi } from '@/features/moves/movesApi'
 import type { AreaMove } from '@/features/moves/types'
-import { applyMoveResult, submitMove } from '@/features/outbox/outboxStore'
+import { submitMove } from '@/features/outbox/outboxStore'
 import { productsApi } from '@/features/products/api/productsApi'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import type { Product, UnitOption } from '@/features/products/types'
@@ -39,8 +38,25 @@ interface MoveDraft {
   note: string
 }
 
-/** What happened once Move was pressed. */
-type Done = { status: 'sent'; move: AreaMove } | { status: 'queued'; summary: string }
+/** What happened once Move was pressed: sent (Undo through the move), or saved on this phone (Undo drops it). */
+export type Moved = ({ status: 'sent'; move: AreaMove } | { status: 'queued'; opId: string }) & {
+  /** "Moved" or "Given" (to an area that uses what it's given). */
+  verb: string
+  /** "2 items". */
+  items: string
+  /** "Store → Kitchen". */
+  route: string
+}
+
+export interface MoveEditorProps {
+  /** Products to start with: the product page's Move, or the products selected on Inventory. */
+  productIds?: string[]
+  /** Focus the search when it opens (a laptop, where a scanner types too); never on a phone. */
+  focusSearch?: boolean
+  onMoved: (moved: Moved) => void
+  /** Where the editor goes: its body, and the Move button for a footer. */
+  children: (parts: { body: ReactNode; action: ReactNode }) => ReactNode
+}
 
 /** A new line opens in the product's pack (crates, bags) when it has one, as Send stock does. */
 function openingOption(options: UnitOption[]): UnitOption {
@@ -54,18 +70,16 @@ function figureIn(product: Product, areaId: string): number | undefined {
 }
 
 /**
- * Move stock (STOCK_AREAS_PLAN.md §5.1, STOCK_AREAS_PART_2.md): the areas of the branch at the top, as
- * chips with a swap; the routes this branch uses most, and "Repeat the last one"; a line per product with
- * both areas' figures, before → after; a button that names what it does. A page, like Send stock: a
- * document built item by item, with a draft kept on the phone. It goes through the outbox, so it works
- * offline. To an area that uses what it's given (Housekeeping) it is a give, recorded as Used there.
- *
- * Opened with `?product=` (the product page's Move), `?from=` and `?to=`.
+ * Move stock (STOCK_AREAS_PLAN.md §5.1, STOCK_AREAS_PART_2/3.md), as one piece the app places where the
+ * other stock actions are: a tab of quick mode, and a Sheet from Inventory and the product page - never a
+ * screen of its own (owner, 2026-10-30). The route on one row (From ⇄ To, opening on the last route used);
+ * the search; with nothing added, last time's items on this route one tap away; one row per item with both
+ * areas' figures before → after beneath. The place shows the result as it shows every write (the stamp,
+ * the toast) with Undo. It goes through the outbox, so it works offline. To an area that uses what it's
+ * given (Housekeeping) it is a give, recorded as Used there.
  */
-export function MoveStockPage() {
-  const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-  const { working, recordable, isMultiBranch } = useWorkingBranch()
+export function MoveEditor({ productIds = [], focusSearch = false, onMoved, children }: MoveEditorProps) {
+  const { working, recordable } = useWorkingBranch()
   const { options: catalogue } = useUnitOfMeasureOptions()
   const online = useOnlineStatus()
   const branch = working && recordable.some((entry) => entry.id === working.id) ? working : null
@@ -75,11 +89,11 @@ export function MoveStockPage() {
   const work = useWorkArea(branch)
   const fromChoices = work.areas
   const allOpen = (branch?.areas ?? []).filter((area) => area.active)
-  const [fromChoice, setFromChoice] = useState<string | null>(() => searchParams.get('from'))
+  const [fromChoice, setFromChoice] = useState<string | null>(null)
   const fromAreaId = fromChoices.some((area) => area.id === fromChoice)
     ? (fromChoice as string)
     : (work.area?.id ?? fromChoices.find((area) => area.delivery)?.id ?? fromChoices[0]?.id ?? '')
-  const [toAreaId, setToAreaId] = useState<string>(() => searchParams.get('to') ?? '')
+  const [toAreaId, setToAreaId] = useState<string>('')
   const toChoices = allOpen.filter((area) => area.id !== fromAreaId)
   const from = allOpen.find((area) => area.id === fromAreaId)
   const to = toChoices.find((area) => area.id === toAreaId)
@@ -89,7 +103,6 @@ export function MoveStockPage() {
   const [term, setTerm] = useState('')
   const [moving, setMoving] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
-  const [done, setDone] = useState<Done | null>(null)
 
   // ------------------------------------------------------------------- usual routes, and the last one
   const recent = useApiQuery({
@@ -111,12 +124,12 @@ export function MoveStockPage() {
   }, [recent.data, fromChoices, allOpen])
   const lastOnRoute = routes.find((move) => move.fromAreaId === fromAreaId && move.toAreaId === toAreaId)
   // Opened with nothing chosen, the route is the last one used from here - most days the same as yesterday.
-  const routed = useRef(searchParams.get('to') != null)
+  const routed = useRef(false)
   useEffect(() => {
     if (routed.current || recent.data == null) return
     routed.current = true
     if (toAreaId) return
-    const last = routes.find((move) => !searchParams.get('from') || move.fromAreaId === searchParams.get('from'))
+    const last = routes[0]
     if (!last) return
     setFromChoice(last.fromAreaId)
     setToAreaId(last.toAreaId)
@@ -125,6 +138,8 @@ export function MoveStockPage() {
 
   // ------------------------------------------------------------------------------ the draft (A5)
   const draft = useDraft<MoveDraft>(`move:${branch?.id ?? 'none'}`, branch != null)
+  // Once moved, nothing more is saved as a draft: the place clears or closes the editor.
+  const finished = useRef(false)
   const [restored, setRestored] = useState(false)
   const { initial, save } = draft
   useEffect(() => {
@@ -132,28 +147,36 @@ export function MoveStockPage() {
     const saved = initial.value
     setFromChoice(saved.fromAreaId)
     // Unfinished work wins over the last route; a link that named where it goes wins over both.
-    setToAreaId((current) => (searchParams.get('to') ? current : saved.toAreaId || current))
+    setToAreaId((current) => saved.toAreaId || current)
     setLines((current) => [...current, ...saved.lines.filter((line) => !current.some((c) => c.product.id === line.product.id))])
     setNote(saved.note)
     setRestored(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial])
+  // A draft only once something's been typed: a product opened from its page with no amount yet is not work
+  // to pick up later. Everything cleared again: no draft left either.
+  const hadWork = useRef(false)
   useEffect(() => {
-    if (initial === undefined || lines.length === 0 || done) return
+    if (initial === undefined || finished.current) return
+    const work = lines.some((line) => line.quantity.trim() !== '') || note.trim() !== ''
+    if (!work) {
+      if (hadWork.current) void draft.clear()
+      hadWork.current = false
+      return
+    }
+    hadWork.current = true
     save({ fromAreaId, toAreaId, lines, note })
-  }, [fromAreaId, toAreaId, lines, note, initial, save, done])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromAreaId, toAreaId, lines, note, initial, save])
 
   // ---------------------------------------------------------------------- pre-filled from a link
-  // `?product=` from a product page, `?products=a,b` from the products selected on Inventory.
+  // The product page's product, or the products selected on Inventory.
   const prefilled = useRef(false)
-  const linkedIds = [searchParams.get('product'), ...(searchParams.get('products')?.split(',') ?? [])].filter(
-    (id): id is string => !!id,
-  )
   useEffect(() => {
-    if (prefilled.current || catalogue.length === 0 || linkedIds.length === 0) return
+    if (prefilled.current || catalogue.length === 0 || productIds.length === 0) return
     prefilled.current = true
-    const one = linkedIds.length === 1
-    for (const id of linkedIds) {
+    const one = productIds.length === 1
+    for (const id of productIds) {
       void productsApi
         .get(id)
         .then((product) => addProduct(product, '', undefined, one))
@@ -162,14 +185,14 @@ export function MoveStockPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [catalogue])
 
-  // Opened from Inventory with nothing chosen, the screen is a list to build: on a laptop (where a
-  // scanner types too) the search is ready. Not on a phone, where the keyboard would hide the routes.
+  // Opened with nothing chosen, it's a list to build: on a laptop (where a scanner types too) the search is
+  // ready. Not on a phone, where the keyboard would cover the route and last time's items.
   const searchRef = useRef<HTMLInputElement>(null)
   const searchReadied = useRef(false)
   useEffect(() => {
     if (searchReadied.current || !searchRef.current) return
     searchReadied.current = true
-    if (linkedIds.length > 0 || !window.matchMedia?.('(pointer: fine)').matches) return
+    if (!focusSearch || productIds.length > 0 || !window.matchMedia?.('(pointer: fine)').matches) return
     searchRef.current.focus()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branch?.id])
@@ -247,8 +270,10 @@ export function MoveStockPage() {
         },
         summary,
       )
+      finished.current = true
       await draft.finish()
-      setDone(outcome.status === 'sent' ? { status: 'sent', move: outcome.response } : { status: 'queued', summary })
+      const said = { verb: verb === 'Give' ? 'Given' : 'Moved', items, route: `${from.name} → ${to.name}` }
+      onMoved(outcome.status === 'sent' ? { status: 'sent', move: outcome.response, ...said } : { status: 'queued', opId: outcome.op.id, ...said })
     } catch (error) {
       setProblem(isAppError(error) ? error.message : "Couldn't move this. Try again.")
     } finally {
@@ -256,18 +281,10 @@ export function MoveStockPage() {
     }
   }
 
-  function moveMore() {
-    setDone(null)
-    setLines([])
-    setNote('')
-    setNoteOpen(false)
-    setRestored(false)
-  }
-
   if (!branch || !hasAreas(branch) || fromChoices.length === 0) {
-    return (
-      <div className="mx-auto flex max-w-2xl flex-col gap-3">
-        <h1 className="text-2xl font-semibold text-neutral-900">Move stock</h1>
+    return children({
+      action: null,
+      body: (
         <p className="text-sm text-neutral-700">
           {branch && work.limited
             ? `You don't work in an area of ${branch.name} that keeps stock, so there is nothing for you to move from here.`
@@ -275,33 +292,12 @@ export function MoveStockPage() {
             ? `${branch.name} has one area, so there is nowhere to move stock to. Add areas in Company settings → Branches.`
             : 'Choose a branch at the top of the screen first: stock moves between the areas of one branch.'}
         </p>
-      </div>
-    )
+      ),
+    })
   }
 
-  if (done) {
-    return <MoveDone done={done} onMoreMoves={moveMore} onDone={() => navigate(-1)} />
-  }
-
-  return (
-    <div className="flex min-h-full flex-col">
-      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-3 sm:gap-4">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            aria-label="Back"
-            className="-ml-2 inline-flex h-11 w-11 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-          <h1 className="text-xl font-semibold text-neutral-900 sm:text-2xl">
-            Move stock
-            {/* The branch only where there's more than one; the top bar says it too. */}
-            {isMultiBranch && <span className="font-normal text-neutral-600"> · {branch.name}</span>}
-          </h1>
-        </div>
-
+  const body = (
+      <div className="flex flex-col gap-3">
         <DraftNote
           savedAt={draft.savedAt}
           restored={restored}
@@ -513,19 +509,18 @@ export function MoveStockPage() {
           </p>
         )}
       </div>
-
-      <div className="sticky -bottom-6 z-10 -mx-6 mt-4 -mb-6 border-t border-neutral-200 bg-white/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur">
-        <div className="mx-auto flex max-w-2xl flex-col gap-2">
-          <Button variant="action" className="w-full" disabled={!canMove} loading={moving} onClick={() => void move()}>
-            {!to ? 'Choose where it goes' : ready.length === 0 ? `${verb} to ${to.name}` : `${verb} ${items} to ${to.name}`}
-          </Button>
-          {!online && ready.length > 0 && (
-            <p className="text-center text-xs text-neutral-600">You're offline. It's kept on this phone and goes when you're connected.</p>
-          )}
-        </div>
-      </div>
+  )
+  const action = (
+    <div className="flex w-full flex-col gap-2">
+      <Button variant="action" className="w-full" disabled={!canMove} loading={moving} onClick={() => void move()}>
+        {!to ? 'Choose where it goes' : ready.length === 0 ? `${verb} to ${to.name}` : `${verb} ${items} to ${to.name}`}
+      </Button>
+      {!online && ready.length > 0 && (
+        <p className="text-center text-xs text-neutral-600">You're offline. It's kept on this phone and goes when you're connected.</p>
+      )}
     </div>
   )
+  return children({ body, action })
 }
 
 /** How a move's line was typed: "2 bags", or the stock-unit figure. */
@@ -612,87 +607,6 @@ function RouteEnd({
           ))}
         </select>
       )}
-    </div>
-  )
-}
-
-/** After Move: what was recorded, Undo for two minutes, and the way on. */
-function MoveDone({ done, onMoreMoves, onDone }: { done: Done; onMoreMoves: () => void; onDone: () => void }) {
-  const [move, setMove] = useState<AreaMove | null>(done.status === 'sent' ? done.move : null)
-  const [undoing, setUndoing] = useState(false)
-  const [problem, setProblem] = useState<string | null>(null)
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 5_000)
-    return () => window.clearInterval(timer)
-  }, [])
-  const mayUndo = move?.undoUntil != null && new Date(move.undoUntil).getTime() > now && move.status === 'DONE'
-
-  async function undo() {
-    if (!move) return
-    setUndoing(true)
-    setProblem(null)
-    try {
-      const undone = await movesApi.undo(move.id)
-      applyMoveResult(undone)
-      setMove(undone)
-    } catch (error) {
-      setProblem(isAppError(error) ? error.message : "Couldn't undo this. Try again.")
-    } finally {
-      setUndoing(false)
-    }
-  }
-
-  return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-4">
-      <h1 className="text-2xl font-semibold text-neutral-900">
-        {done.status === 'queued' ? 'Saved on this phone' : move?.status === 'VOIDED' ? 'Undone' : move?.toKeepsStock ? 'Moved' : 'Given'}
-      </h1>
-      {done.status === 'queued' ? (
-        <p className="text-sm text-neutral-700">{done.summary}. It goes when you're connected.</p>
-      ) : (
-        move && (
-          <div className="flex flex-col gap-2 border-y border-neutral-200 py-3" data-move-receipt={move.status}>
-            <p className="text-sm text-neutral-700">
-              {move.status === 'VOIDED' ? 'Put back where it came from. ' : ''}
-              {move.fromAreaName} → {move.toAreaName}
-              {!move.toKeepsStock && ' (used there)'} · by {move.movedByName ?? 'you'},{' '}
-              {new Date(move.movedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
-            </p>
-            <ul className="text-sm text-neutral-900">
-              {move.lines.map((line) => (
-                <li key={line.productId} className="flex justify-between gap-3 py-0.5">
-                  <span className="truncate">{line.productName}</span>
-                  <span className="shrink-0 tabular-nums">
-                    {typedAs(line)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )
-      )}
-      {problem && (
-        <p role="alert" className="text-sm text-danger-700">
-          {problem}
-        </p>
-      )}
-      <div className="flex flex-wrap justify-end gap-2">
-        {mayUndo && (
-          <Button variant="secondary" loading={undoing} onClick={() => void undo()}>
-            Undo
-          </Button>
-        )}
-        <Button variant="secondary" onClick={onMoreMoves}>
-          Move more
-        </Button>
-        <Button variant="action" onClick={onDone}>
-          Done
-        </Button>
-      </div>
-      <Link to="/app/stock-movements?moves=1" className="self-start text-sm font-medium text-primary-700 hover:underline">
-        See all moves
-      </Link>
     </div>
   )
 }

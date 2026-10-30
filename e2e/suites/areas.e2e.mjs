@@ -256,59 +256,72 @@ await check('the empty Bar closes and reopens from its menu; the Store, where de
 })
 
 // ----------------------------------------------------------------------------------------- 5b
-await check('Move stock: the morning move with before → after, then the route is usual and repeats', async () => {
+/** The Move panel: a Sheet, like Stock in and Stock out. */
+const moveSheet = page.getByRole('dialog', { name: /Move stock/ })
+
+await check('Move stock opens in a panel like the other actions: before → after, then the route kept and "Add the same"', async () => {
   await page.goto(`${UI}/app/products/${rice.id}`)
   await page.getByRole('heading', { name: 'Rice', level: 1 }).waitFor()
-  await page.getByRole('link', { name: 'Move', exact: true }).click()
-  await page.getByRole('heading', { name: 'Move stock', level: 1 }).waitFor()
+  await page.getByRole('button', { name: 'Move', exact: true }).click()
+  await moveSheet.waitFor()
   assert((await chosenIn(page, '#move-from')) === 'Store', 'does not start from the Store')
   await page.locator('#move-to').selectOption({ label: 'Kitchen' })
   await page.getByLabel('How many Rice').fill('4')
   const line = page.locator('[data-before-after]').first()
   await waitFor(async () => /Store\s+10 → 6\b[\s\S]*Kitchen\s+1 → 5\b/.test(await line.innerText()), 'the line to read Store 10 → 6, Kitchen 1 → 5')
   await page.screenshot({ path: SHOTS + '7-move-stock.png' })
-  await page.setViewportSize({ width: 360, height: 740 })
-  await page.screenshot({ path: SHOTS + '7-move-stock-phone.png' })
-  await page.setViewportSize({ width: 1280, height: 900 })
-  await page.getByRole('button', { name: 'Move 1 item to Kitchen' }).click()
-  await page.getByRole('heading', { name: 'Moved', level: 1 }).waitFor()
+  await moveSheet.getByRole('button', { name: 'Move 1 item to Kitchen' }).click()
+  // Done like every other write: the panel closes, and a toast says what happened, with Undo.
+  await moveSheet.waitFor({ state: 'hidden' })
+  await page.getByText('Moved · 1 item · Store → Kitchen').waitFor()
   let at = await areaFigures(ownerToken, rice.id)
   assert(at.Store === 6 && at.Kitchen === 5, `figures ${JSON.stringify(at)}`)
 
-  await page.getByRole('button', { name: 'Move more' }).click()
-  // The route stays Store → Kitchen, and last time's items are one tap away.
-  assert((await chosenIn(page, '#move-to')) === 'Kitchen', 'the route was not kept')
+  // Opened again from Inventory, with nothing chosen: the route stays Store → Kitchen, and last time's
+  // items are one tap away.
+  await page.goto(`${UI}/app/products`)
+  await page.getByRole('button', { name: 'Move stock' }).click()
+  await moveSheet.waitFor()
+  await waitFor(async () => (await chosenIn(page, '#move-to')) === 'Kitchen', 'the route to be kept')
   await page.getByRole('button', { name: 'Add the same' }).click()
   await waitFor(async () => (await page.getByLabel('How many Rice').inputValue().catch(() => '')) === '4', 'the last move to be repeated')
 })
 
-await check('a give to Housekeeping is recorded as used there, and Undo puts it back', async () => {
+await check("a give to Housekeeping is recorded as used there, and the toast's Undo puts it back", async () => {
   await page.locator('#move-to').selectOption({ label: 'Housekeeping (uses it)' })
   await page.getByText("Housekeeping uses what it's given").waitFor()
   await page.getByLabel('How many Rice').fill('1')
-  await page.getByRole('button', { name: 'Give 1 item to Housekeeping' }).click()
-  await page.getByRole('heading', { name: 'Given', level: 1 }).waitFor()
+  await moveSheet.getByRole('button', { name: 'Give 1 item to Housekeeping' }).click()
+  await page.getByText('Given · 1 item · Store → Housekeeping').waitFor()
   let at = await areaFigures(ownerToken, rice.id)
   assert(at.Store === 5, `the Store holds ${at.Store}, expected 5`)
-  await page.getByRole('button', { name: 'Undo' }).click()
-  await page.getByRole('heading', { name: 'Undone', level: 1 }).waitFor()
+  await page.getByRole('button', { name: 'Undo' }).last().click()
+  await page.getByText('Undone · back in the Store').waitFor()
   at = await areaFigures(ownerToken, rice.id)
   assert(at.Store === 6, `the Store holds ${at.Store} after Undo, expected 6`)
 })
 
 await check('more than the Store has turns the line red and holds the button', async () => {
-  await page.getByRole('button', { name: 'Move more' }).click()
-  await page.goto(`${UI}/app/move?product=${rice.id}`)
+  await page.goto(`${UI}/app/products/${rice.id}`)
+  await page.getByRole('heading', { name: 'Rice', level: 1 }).waitFor()
+  await page.getByRole('button', { name: 'Move', exact: true }).click()
+  await moveSheet.waitFor()
   await page.locator('#move-to').selectOption({ label: 'Kitchen' })
   await page.getByLabel('How many Rice').fill('99')
   await page.getByText('The Store has 6').waitFor()
-  assert(await page.getByRole('button', { name: 'Move 1 item to Kitchen' }).isDisabled(), 'the button is not held')
+  assert(await moveSheet.getByRole('button', { name: 'Move 1 item to Kitchen' }).isDisabled(), 'the button is not held')
+  await page.getByRole('button', { name: 'Take Rice off' }).click()
+  await page.keyboard.press('Escape')
+  await moveSheet.waitFor({ state: 'hidden' })
 })
 
 await check('moving in bags shows what is left in bags and in kg', async () => {
   const flour = await createProduct(ownerToken, owner.unique, 'Flour', { unitOfMeasure: 'KG', packagingUnit: 'BAG', packagingSize: 50 })
   await api(`/api/products/${flour.id}/stock/stock-in`, { token: ownerToken, method: 'POST', body: { quantity: 180 } })
-  await page.goto(`${UI}/app/move?product=${flour.id}`)
+  await page.goto(`${UI}/app/products/${flour.id}`)
+  await page.getByRole('heading', { name: 'Flour', level: 1 }).waitFor()
+  await page.getByRole('button', { name: 'Move', exact: true }).click()
+  await moveSheet.waitFor()
   await page.locator('#move-to').selectOption({ label: 'Kitchen' })
   await page.getByLabel('Unit for Flour').selectOption({ label: 'bag' })
   await page.getByLabel('How many Flour').fill('2')
@@ -318,49 +331,59 @@ await check('moving in bags shows what is left in bags and in kg', async () => {
     'the bag line to read 3 bags + 30 kg → 1 bag + 30 kg · 180 → 80 kg, Kitchen 0 → 2 bags',
   )
   await page.screenshot({ path: SHOTS + '7b-move-in-bags.png' })
-  await page.getByRole('button', { name: `Take Flour off` }).click()
-  await page.goto(`${UI}/app/move?product=${rice.id}`)
-  await page.locator('#move-to').selectOption({ label: 'Kitchen' })
+  await page.getByRole('button', { name: 'Take Flour off' }).click()
+  await page.keyboard.press('Escape')
+  await moveSheet.waitFor({ state: 'hidden' })
 })
 
 await check('offline, a move is kept on the phone and goes once back online', async () => {
+  await page.goto(`${UI}/app/products/${rice.id}`)
+  await page.getByRole('heading', { name: 'Rice', level: 1 }).waitFor()
+  await page.getByRole('button', { name: 'Move', exact: true }).click()
+  await moveSheet.waitFor()
+  await page.locator('#move-to').selectOption({ label: 'Kitchen' })
   await page.getByLabel('How many Rice').fill('2')
   await context.setOffline(true)
-  await page.getByRole('button', { name: 'Move 1 item to Kitchen' }).click()
-  await page.getByRole('heading', { name: 'Saved on this phone', level: 1 }).waitFor()
+  await moveSheet.getByRole('button', { name: 'Move 1 item to Kitchen' }).click()
+  await page.getByText("Saved on this phone. It goes when you're connected.").waitFor()
   await context.setOffline(false)
   await page.evaluate(() => window.dispatchEvent(new Event('online')))
   await waitFor(async () => (await areaFigures(ownerToken, rice.id)).Kitchen === 7, 'the queued move to arrive (Kitchen 7)')
 })
 
-await check('Inventory opens Move stock ready for a list, and moves the products selected on it', async () => {
+await check('Inventory opens Move stock in a panel, and moves the products selected on it', async () => {
   await page.goto(`${UI}/app/products`)
   await page.getByRole('button', { name: 'Move stock' }).click()
-  await page.getByRole('heading', { name: 'Move stock', level: 1 }).waitFor()
+  await moveSheet.waitFor()
   await waitFor(async () => (await page.evaluate(() => document.activeElement?.id)) === 'move-search', 'the search to be ready')
   await page.screenshot({ path: SHOTS + '7c-move-from-inventory.png' })
+  await page.keyboard.press('Escape')
 
-  // On a phone, Move sits in the bar along the bottom, beside Record a delivery.
+  // On a phone, Move sits in the bar along the bottom, and opens as a sheet from the bottom.
   await page.setViewportSize({ width: 360, height: 780 })
   await page.goto(`${UI}/app/products`)
   await page.getByRole('region', { name: 'Inventory actions' }).getByRole('button', { name: 'Move' }).waitFor()
   await page.screenshot({ path: SHOTS + '7d-phone-inventory-bar.png' })
-  // …and opens on the last route, with last time's items one tap away.
   await page.getByRole('region', { name: 'Inventory actions' }).getByRole('button', { name: 'Move' }).click()
   await page.locator('[data-last-time]').waitFor()
   await page.screenshot({ path: SHOTS + '7e-phone-move-empty.png' })
   await page.getByRole('button', { name: 'Add the same' }).click()
   await page.locator('[data-move-line]').first().waitFor()
   await page.screenshot({ path: SHOTS + '7f-phone-move-lines.png' })
+  await page.getByRole('button', { name: 'Take Rice off' }).click()
+  await page.keyboard.press('Escape')
   await page.setViewportSize({ width: 1280, height: 900 })
 
   await page.goto(`${UI}/app/products`)
   await page.locator('tr').filter({ hasText: 'Rice' }).getByRole('checkbox').check()
   await page.locator('tr').filter({ hasText: 'Flour' }).getByRole('checkbox').check()
   await page.getByRole('button', { name: 'Move to an area' }).click()
-  await page.getByRole('heading', { name: 'Move stock', level: 1 }).waitFor()
+  await moveSheet.waitFor()
   await page.getByLabel('How many Rice').waitFor()
   await page.getByLabel('How many Flour').waitFor()
+  await page.getByRole('button', { name: 'Take Rice off' }).click()
+  await page.getByRole('button', { name: 'Take Flour off' }).click()
+  await page.keyboard.press('Escape')
 })
 
 await check('Stock movements lists the moves, and says the area on each row', async () => {
@@ -390,8 +413,17 @@ await check('quick mode at a branch with areas: Move in the row, Count a link be
   await page.getByRole('button', { name: 'Count stock' }).click()
   await page.getByText("Count what's on the shelf.", { exact: false }).waitFor()
   await page.getByRole('button', { name: 'Done counting' }).click()
+  // Move is a tab like the others: moved, the stamp, and the move in This session with Undo.
   await row.getByRole('button', { name: 'Move' }).click()
-  await page.getByRole('heading', { name: 'Move stock', level: 1 }).waitFor()
+  await page.getByRole('button', { name: 'Add the same' }).click()
+  await page.getByLabel('How many Rice').waitFor()
+  await page.screenshot({ path: SHOTS + '14-quick-move-phone.png' })
+  await page.getByRole('button', { name: /^Move 1 item to / }).click()
+  const session = page.getByRole('region', { name: /This session/ })
+  await session.getByText(/Moved · 1 item/).waitFor()
+  await page.screenshot({ path: SHOTS + '15-quick-move-done-phone.png' })
+  await session.getByRole('button', { name: 'Undo' }).click()
+  await session.getByText('Undone').waitFor()
   await page.setViewportSize({ width: 1280, height: 900 })
 })
 
