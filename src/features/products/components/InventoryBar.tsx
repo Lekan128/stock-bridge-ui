@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useId, useRef, useState } from 'react'
-import { CalendarClock, Download, Plus, Search, Settings, ShoppingBag, SlidersHorizontal, Tags, Truck, Upload, Zap } from 'lucide-react'
+import { ArrowLeftRight, CalendarClock, Download, Plus, Search, Settings, ShoppingBag, SlidersHorizontal, Tags, Truck, Upload, Zap } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { OverflowMenu, type OverflowMenuItem } from '@/components/OverflowMenu'
 import type { CompanyCategory } from '@/features/products/categories/types'
@@ -38,6 +38,8 @@ export interface InventoryBarProps {
   onAddProduct: () => void
   onBulkUpload: () => void
   onRecordDelivery: () => void
+  /** Move stock between the branch's areas - present at a branch with areas, for whoever may stock out. */
+  onMoveStock?: () => void
   /**
    * Record a sale (§6.1) - present when the company records sales and this person may. It is then
    * the screen's action, the thing done all day; Record a delivery steps back to secondary.
@@ -163,7 +165,7 @@ export const InventoryBar = forwardRef<HTMLInputElement, InventoryBarProps>(func
  * secondary. For someone who manages products but doesn't receive stock, Add product is the action.
  */
 export function InventoryActions(props: InventoryBarProps & { compact?: boolean }) {
-  const { canRecordDelivery, canManageProducts, onRecordDelivery, onRecordSale, onAddProduct, compact = false } = props
+  const { canRecordDelivery, canManageProducts, onRecordDelivery, onRecordSale, onMoveStock, onAddProduct, compact = false } = props
   const selling = onRecordSale != null
   // One action-coloured button: Record a sale, else Record a delivery, else Add product.
   const productIsAction = !selling && !canRecordDelivery
@@ -181,11 +183,31 @@ export function InventoryActions(props: InventoryBarProps & { compact?: boolean 
           variant={selling ? 'secondary' : 'action'}
           onClick={onRecordDelivery}
           title="Record a delivery"
-          aria-label={iconOnly(selling) ? 'Record a delivery' : undefined}
-          className={compact ? (selling ? '' : 'flex-1') : 'whitespace-nowrap'}
+          aria-label={iconOnly(selling) || (compact && onMoveStock) ? 'Record a delivery' : undefined}
+          className={compact ? (selling ? '' : 'flex-1 whitespace-nowrap') : 'whitespace-nowrap'}
         >
           <Truck className="h-4 w-4" aria-hidden="true" />
-          {iconOnly(selling) ? null : selling && !compact ? <span className="hidden xl:inline">Record a delivery</span> : 'Record a delivery'}
+          {/* On a phone beside Move, the short word keeps the bar on one line. */}
+          {iconOnly(selling) ? null : selling && !compact ? (
+            <span className="hidden xl:inline">Record a delivery</span>
+          ) : compact && onMoveStock ? (
+            'Delivery'
+          ) : (
+            'Record a delivery'
+          )}
+        </Button>
+      )}
+      {/* Move stock, beside Record a delivery: at a branch with areas it is done every day. */}
+      {onMoveStock && (
+        <Button
+          variant={!selling && !canRecordDelivery && !canManageProducts ? 'action' : 'secondary'}
+          onClick={onMoveStock}
+          title="Move stock"
+          aria-label={iconOnly(selling) ? 'Move stock' : undefined}
+          className={compact ? '' : 'whitespace-nowrap'}
+        >
+          <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
+          {iconOnly(selling) ? null : compact ? 'Move' : 'Move stock'}
         </Button>
       )}
       {canManageProducts && (

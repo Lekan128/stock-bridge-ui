@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { PackagePlus, Truck } from 'lucide-react'
+import { ArrowLeftRight, PackagePlus, Truck } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { InventoryActions, type InventoryBarProps } from '@/features/products/components/InventoryBar'
 
@@ -12,6 +12,8 @@ export interface InventoryActionBarProps extends InventoryBarProps {
   /** Multiple branches: "Send" the selection to another branch (MULTI_BRANCH_UX_PLAN.md §5.4). */
   canSendSelected?: boolean
   onSendSelected?: () => void
+  /** Areas: move the selection between this branch's areas (STOCK_AREAS_PART_2.md). */
+  onMoveSelected?: () => void
   /** One low-stock level for the selection at this branch (Phase 4). */
   onSetLevelSelected?: () => void
   onDoneSelecting: () => void
@@ -25,8 +27,17 @@ const BAR_HEIGHT = '4.5rem'
  * Publishes its height so toasts rise above it.
  */
 export function InventoryActionBar(props: InventoryActionBarProps) {
-  const { selecting, selectedCount, canStockInSelected, onStockInSelected, canSendSelected, onSendSelected, onSetLevelSelected, onDoneSelecting } =
-    props
+  const {
+    selecting,
+    selectedCount,
+    canStockInSelected,
+    onStockInSelected,
+    canSendSelected,
+    onSendSelected,
+    onMoveSelected,
+    onSetLevelSelected,
+    onDoneSelecting,
+  } = props
 
   useEffect(() => {
     const root = document.documentElement
@@ -57,6 +68,12 @@ export function InventoryActionBar(props: InventoryActionBarProps) {
             <Button variant={canStockInSelected ? 'secondary' : 'action'} onClick={onSendSelected} disabled={selectedCount === 0}>
               <Truck className="h-4 w-4" aria-hidden="true" />
               Send
+            </Button>
+          )}
+          {onMoveSelected && (
+            <Button variant="secondary" onClick={onMoveSelected} disabled={selectedCount === 0}>
+              <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
+              Move
             </Button>
           )}
           {onSetLevelSelected && (

@@ -1,7 +1,8 @@
 import { useRecordsHere } from '@/features/branches/useRecordsHere'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { PackagePlus, Truck, X, Zap } from 'lucide-react'
+import { ArrowLeftRight, PackagePlus, Truck, X, Zap } from 'lucide-react'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
+import { hasAreas } from '@/features/branches/areas'
 import { BranchLevelDialog } from '@/features/branches/BranchLevelDialog'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
@@ -138,7 +139,15 @@ export function ProductListPage() {
   const offersByBranch = (branch?.isMultiBranch ?? false) && (branch?.isAll ?? false)
   const [byBranchChosen, setByBranch] = useState(false)
   const byBranch = offersByBranch && byBranchChosen
-  const canSelect = canImport || canSendSelected || levelBranch != null
+  // Move stock between this branch's areas (STOCK_AREAS_PART_2.md): done every day where there are areas,
+  // so it sits on the list itself, and the selection can be moved too.
+  const canMove =
+    canStockOut &&
+    branch?.working != null &&
+    !branch.isAll &&
+    hasAreas(branch.working) &&
+    branch.recordable.some((entry) => entry.id === branch.working?.id)
+  const canSelect = canImport || canSendSelected || canMove || levelBranch != null
   const [searchParams, setSearchParams] = useSearchParams()
   const { search: committedSearch, statusFilter, categoryFilter, stockLevelFilter, priceFilter: requestedPriceFilter, sort, page } =
     readListState(searchParams)
@@ -338,6 +347,10 @@ export function ProductListPage() {
     navigate(`/app/transfers/send?products=${selectedIds.join(',')}`)
   }
 
+  function handleMoveSelected() {
+    navigate(`/app/move?products=${selectedIds.join(',')}`)
+  }
+
   function handleStockInSelected() {
     navigate(`/app/products/import/new?kind=STOCK_IN&productIds=${selectedIds.join(',')}`)
   }
@@ -465,6 +478,7 @@ export function ProductListPage() {
     onAddProduct: () => setAddProductOpen(true),
     onBulkUpload: () => navigate('/app/products/import'),
     onRecordDelivery: () => navigate('/app/products/receive'),
+    onMoveStock: canMove ? () => navigate('/app/move') : undefined,
     onRecordSale: recordsSales && canStockOut ? () => navigate('/app/sell') : undefined,
     onExpectedDeliveries: () => navigate('/app/products/expected'),
     onExport: () => void handleExport(),
@@ -548,6 +562,7 @@ export function ProductListPage() {
                 count={selectedIds.length}
                 onStockIn={canStockInSheet ? handleStockInSelected : undefined}
                 onSend={canSendSelected ? handleSendSelected : undefined}
+                onMove={canMove ? handleMoveSelected : undefined}
                 onSetLevel={levelBranch ? () => setSettingLevel(true) : undefined}
                 onClear={() => setSelectedIds([])}
               />
@@ -619,6 +634,7 @@ export function ProductListPage() {
                 count={selectedIds.length}
                 onStockIn={canStockInSheet ? handleStockInSelected : undefined}
                 onSend={canSendSelected ? handleSendSelected : undefined}
+                onMove={canMove ? handleMoveSelected : undefined}
                 onSetLevel={levelBranch ? () => setSettingLevel(true) : undefined}
                 onClear={() => setSelectedIds([])}
               />
@@ -668,6 +684,7 @@ export function ProductListPage() {
         onStockInSelected={handleStockInSelected}
         canSendSelected={canSendSelected}
         onSendSelected={handleSendSelected}
+        onMoveSelected={canMove ? handleMoveSelected : undefined}
         onSetLevelSelected={levelBranch ? () => setSettingLevel(true) : undefined}
         onDoneSelecting={() => {
           setSelecting(false)
@@ -711,6 +728,7 @@ function SelectionBar({
   count,
   onStockIn,
   onSend,
+  onMove,
   onSetLevel,
   onClear,
 }: {
@@ -718,6 +736,8 @@ function SelectionBar({
   onStockIn?: () => void
   /** Send the selected products to another branch (MULTI_BRANCH_UX_PLAN.md §5.4). */
   onSend?: () => void
+  /** Move them between this branch's areas (STOCK_AREAS_PART_2.md). */
+  onMove?: () => void
   /** One low-stock level for them at this branch (Phase 4). */
   onSetLevel?: () => void
   onClear: () => void
@@ -738,6 +758,12 @@ function SelectionBar({
           <Button variant="secondary" onClick={onSend}>
             <Truck className="h-4 w-4" aria-hidden="true" />
             Send to another branch
+          </Button>
+        )}
+        {onMove && (
+          <Button variant="secondary" onClick={onMove}>
+            <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
+            Move to an area
           </Button>
         )}
         {onSetLevel && (

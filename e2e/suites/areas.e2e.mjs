@@ -325,6 +325,29 @@ await check('offline, a move is kept on the phone and goes once back online', as
   await waitFor(async () => (await areaFigures(ownerToken, rice.id)).Kitchen === 7, 'the queued move to arrive (Kitchen 7)')
 })
 
+await check('Inventory opens Move stock ready for a list, and moves the products selected on it', async () => {
+  await page.goto(`${UI}/app/products`)
+  await page.getByRole('button', { name: 'Move stock' }).click()
+  await page.getByRole('heading', { name: 'Move stock', level: 1 }).waitFor()
+  await waitFor(async () => (await page.evaluate(() => document.activeElement?.id)) === 'move-search', 'the search to be ready')
+  await page.screenshot({ path: SHOTS + '7c-move-from-inventory.png' })
+
+  // On a phone, Move sits in the bar along the bottom, beside Record a delivery.
+  await page.setViewportSize({ width: 360, height: 780 })
+  await page.goto(`${UI}/app/products`)
+  await page.getByRole('region', { name: 'Inventory actions' }).getByRole('button', { name: 'Move' }).waitFor()
+  await page.screenshot({ path: SHOTS + '7d-phone-inventory-bar.png' })
+  await page.setViewportSize({ width: 1280, height: 900 })
+
+  await page.goto(`${UI}/app/products`)
+  await page.locator('tr').filter({ hasText: 'Rice' }).getByRole('checkbox').check()
+  await page.locator('tr').filter({ hasText: 'Flour' }).getByRole('checkbox').check()
+  await page.getByRole('button', { name: 'Move to an area' }).click()
+  await page.getByRole('heading', { name: 'Move stock', level: 1 }).waitFor()
+  await page.getByLabel('How many Rice').waitFor()
+  await page.getByLabel('How many Flour').waitFor()
+})
+
 await check('Stock movements lists the moves, and says the area on each row', async () => {
   await page.goto(`${UI}/app/stock-movements?moves=1`)
   const moves = page.getByRole('list', { name: 'Moves between areas' })

@@ -127,18 +127,35 @@ export function MoveStockPage() {
   }, [fromAreaId, toAreaId, lines, note, initial, save, done])
 
   // ---------------------------------------------------------------------- pre-filled from a link
+  // `?product=` from a product page, `?products=a,b` from the products selected on Inventory.
   const prefilled = useRef(false)
+  const linkedIds = [searchParams.get('product'), ...(searchParams.get('products')?.split(',') ?? [])].filter(
+    (id): id is string => !!id,
+  )
   useEffect(() => {
-    if (prefilled.current || catalogue.length === 0) return
-    const productId = searchParams.get('product')
-    if (!productId) return
+    if (prefilled.current || catalogue.length === 0 || linkedIds.length === 0) return
     prefilled.current = true
-    void productsApi
-      .get(productId)
-      .then(addProduct)
-      .catch(() => undefined)
+    const one = linkedIds.length === 1
+    for (const id of linkedIds) {
+      void productsApi
+        .get(id)
+        .then((product) => addProduct(product, '', undefined, one))
+        .catch(() => undefined)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [catalogue])
+
+  // Opened from Inventory with nothing chosen, the screen is a list to build: on a laptop (where a
+  // scanner types too) the search is ready. Not on a phone, where the keyboard would hide the routes.
+  const searchRef = useRef<HTMLInputElement>(null)
+  const searchReadied = useRef(false)
+  useEffect(() => {
+    if (searchReadied.current || !searchRef.current) return
+    searchReadied.current = true
+    if (linkedIds.length > 0 || !window.matchMedia?.('(pointer: fine)').matches) return
+    searchRef.current.focus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branch?.id])
 
   /** A new line goes at the top, just under the search, and its quantity is ready to type. */
   function addProduct(product: Product, quantity = '', unitLabel?: string, focus = true) {
@@ -356,6 +373,7 @@ export function MoveStockPage() {
               Scan or search to add an item
             </label>
             <input
+              ref={searchRef}
               id="move-search"
               type="search"
               autoComplete="off"
