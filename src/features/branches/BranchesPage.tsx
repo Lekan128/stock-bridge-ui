@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/Button'
+import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
@@ -44,9 +45,7 @@ export function BranchesPage() {
     }
   }
 
-  if (adding) {
-    return <AddBranchFlow onDone={() => setAdding(false)} />
-  }
+  const editingBranch = branches.find((branch) => branch.id === editing)
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-4">
@@ -69,64 +68,54 @@ export function BranchesPage() {
       <ul className="divide-y divide-neutral-100 rounded-xl border border-neutral-200 bg-white">
         {branches.map((branch) => (
           <li key={branch.id} className="flex flex-col gap-2 p-4">
-            {editing === branch.id ? (
-              <BranchEditor
-                branch={branch}
-                busy={busy === branch.id}
-                onCancel={() => setEditing(null)}
-                onSave={(name, phone, address) => void act(branch, () => branchesApi.update(branch.id, { name, phone, address }))}
-              />
-            ) : (
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="flex items-center gap-2 font-medium text-neutral-900">
-                    <span className="truncate">{branch.name}</span>
-                    {branch.main && <span className="rounded bg-primary-100 px-1.5 text-xs text-primary-800">Main</span>}
-                    {!branch.active && <span className="rounded bg-neutral-100 px-1.5 text-xs text-neutral-600">Closed</span>}
-                  </p>
-                  <p className="text-sm text-neutral-600">
-                    {[
-                      branch.productsInStock != null
-                        ? `${branch.productsInStock} ${branch.productsInStock === 1 ? 'product' : 'products'} in stock`
-                        : null,
-                      branch.stockWorth != null ? formatNairaWhole(branch.stockWorth) : null,
-                      branch.people != null ? `${branch.people} ${branch.people === 1 ? 'person' : 'people'}` : null,
-                      branch.phone ?? null,
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </p>
-                  {branch.address && <p className="text-sm text-neutral-500">{branch.address}</p>}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="quiet" onClick={() => setEditing(branch.id)} disabled={!online}>
-                    Edit
-                  </Button>
-                  {branch.active && !branch.main && (
-                    <Button variant="quiet" loading={busy === branch.id} disabled={!online}
-                      onClick={() => void act(branch, () => branchesApi.makeMain(branch.id))}>
-                      Make main branch
-                    </Button>
-                  )}
-                  {branch.active && !branch.main && (
-                    <Button variant="quiet" loading={busy === branch.id} disabled={!online}
-                      onClick={() => void act(branch, () => branchesApi.close(branch.id))}>
-                      Close
-                    </Button>
-                  )}
-                  {!branch.active && (
-                    <Button variant="quiet" loading={busy === branch.id} disabled={!online}
-                      onClick={() => void act(branch, () => branchesApi.reopen(branch.id))}>
-                      Reopen
-                    </Button>
-                  )}
-                </div>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="flex items-center gap-2 font-medium text-neutral-900">
+                  <span className="truncate">{branch.name}</span>
+                  {branch.main && <span className="rounded bg-primary-100 px-1.5 text-xs text-primary-800">Main</span>}
+                  {!branch.active && <span className="rounded bg-neutral-100 px-1.5 text-xs text-neutral-600">Closed</span>}
+                </p>
+                <p className="text-sm text-neutral-600">
+                  {[
+                    branch.productsInStock != null
+                      ? `${branch.productsInStock} ${branch.productsInStock === 1 ? 'product' : 'products'} in stock`
+                      : null,
+                    branch.stockWorth != null ? formatNairaWhole(branch.stockWorth) : null,
+                    branch.people != null ? `${branch.people} ${branch.people === 1 ? 'person' : 'people'}` : null,
+                    branch.phone ?? null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+                {branch.address && <p className="text-sm text-neutral-500">{branch.address}</p>}
               </div>
-            )}
-            {editing !== branch.id && (
-              <BranchAreas branch={branch} online={online} mayAddArea={mayAddArea} onAddAreas={() => setAddingAreasTo(branch)} />
-            )}
-            {problem?.branchId === branch.id && (
+              <div className="flex flex-wrap gap-2">
+                <Button variant="quiet" onClick={() => setEditing(branch.id)} disabled={!online}>
+                  Edit
+                </Button>
+                {branch.active && !branch.main && (
+                  <Button variant="quiet" loading={busy === branch.id} disabled={!online}
+                    onClick={() => void act(branch, () => branchesApi.makeMain(branch.id))}>
+                    Make main branch
+                  </Button>
+                )}
+                {branch.active && !branch.main && (
+                  <Button variant="quiet" loading={busy === branch.id} disabled={!online}
+                    onClick={() => void act(branch, () => branchesApi.close(branch.id))}>
+                    Close
+                  </Button>
+                )}
+                {!branch.active && (
+                  <Button variant="quiet" loading={busy === branch.id} disabled={!online}
+                    onClick={() => void act(branch, () => branchesApi.reopen(branch.id))}>
+                    Reopen
+                  </Button>
+                )}
+              </div>
+            </div>
+            <BranchAreas branch={branch} online={online} mayAddArea={mayAddArea} onAddAreas={() => setAddingAreasTo(branch)} />
+            {/* While the branch is open in Edit, its refusal shows in the sheet instead. */}
+            {problem?.branchId === branch.id && editing !== branch.id && (
               <p role="alert" className="text-sm text-danger-700">
                 {problem.message}
                 {/* A branch that still holds stock can't close (UX §5.11): send it all elsewhere first. */}
@@ -161,18 +150,33 @@ export function BranchesPage() {
       </ul>
       {!online && <p className="text-sm text-neutral-600">Changing branches needs a connection.</p>}
       {addingAreasTo && <AddAreasSheet branch={addingAreasTo} onClose={() => setAddingAreasTo(null)} />}
+      {adding && <AddBranchFlow onDone={() => setAdding(false)} />}
+      {editingBranch && (
+        <BranchEditor
+          branch={editingBranch}
+          busy={busy === editingBranch.id}
+          problem={problem?.branchId === editingBranch.id ? problem.message : null}
+          onCancel={() => setEditing(null)}
+          onSave={(name, phone, address) =>
+            void act(editingBranch, () => branchesApi.update(editingBranch.id, { name, phone, address }))
+          }
+        />
+      )}
     </div>
   )
 }
 
+/** A branch's name, phone and address: three fields, so a `Sheet` (DESIGN.md) rather than a form in its row. */
 function BranchEditor({
   branch,
   busy,
+  problem,
   onCancel,
   onSave,
 }: {
   branch: Branch
   busy: boolean
+  problem: string | null
   onCancel: () => void
   onSave: (name: string, phone: string, address: string) => void
 }) {
@@ -180,24 +184,39 @@ function BranchEditor({
   const [phone, setPhone] = useState(branch.phone ?? '')
   const [address, setAddress] = useState(branch.address ?? '')
   return (
-    <form
-      className="flex flex-col gap-3 sm:flex-row sm:items-end"
-      onSubmit={(event) => {
-        event.preventDefault()
-        onSave(name.trim(), phone.trim(), address.trim())
-      }}
+    <Sheet
+      open
+      onClose={onCancel}
+      title={`Edit ${branch.name}`}
+      size="sm"
+      footer={
+        <>
+          <Button type="button" variant="secondary" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button type="submit" form="branch-editor" variant="action" loading={busy} disabled={!name.trim()}>
+            Save
+          </Button>
+        </>
+      }
     >
-      <TextField id={`branch-${branch.id}-name`} label="Name" value={name} onChange={(event) => setName(event.target.value)} />
-      <TextField id={`branch-${branch.id}-phone`} label="Phone (optional)" value={phone} onChange={(event) => setPhone(event.target.value)} />
-      <TextField id={`branch-${branch.id}-address`} label="Address (optional)" value={address} onChange={(event) => setAddress(event.target.value)} />
-      <div className="flex gap-2">
-        <Button type="submit" loading={busy} disabled={!name.trim()}>
-          Save
-        </Button>
-        <Button type="button" variant="secondary" onClick={onCancel}>
-          Cancel
-        </Button>
-      </div>
-    </form>
+      <form
+        id="branch-editor"
+        className="flex flex-col gap-4"
+        onSubmit={(event) => {
+          event.preventDefault()
+          onSave(name.trim(), phone.trim(), address.trim())
+        }}
+      >
+        <TextField id={`branch-${branch.id}-name`} label="Name" value={name} onChange={(event) => setName(event.target.value)} />
+        <TextField id={`branch-${branch.id}-phone`} label="Phone (optional)" value={phone} onChange={(event) => setPhone(event.target.value)} />
+        <TextField id={`branch-${branch.id}-address`} label="Address (optional)" value={address} onChange={(event) => setAddress(event.target.value)} />
+        {problem && (
+          <p role="alert" className="text-sm text-danger-700">
+            {problem}
+          </p>
+        )}
+      </form>
+    </Sheet>
   )
 }

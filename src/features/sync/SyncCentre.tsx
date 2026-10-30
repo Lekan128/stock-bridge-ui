@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/Button'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { Stamp, type StampKind } from '@/components/Stamp'
 import { syncCatalog } from '@/features/catalog/catalogStore'
 import { useCatalogState } from '@/features/catalog/useCatalog'
@@ -62,7 +62,7 @@ export function SyncCentre({ open, onClose }: { open: boolean; onClose: () => vo
   const { ops, recentlySent } = useOutboxState()
 
   return (
-    <Modal
+    <Sheet
       open={open}
       onClose={onClose}
       title="On this phone"
@@ -117,7 +117,7 @@ export function SyncCentre({ open, onClose }: { open: boolean; onClose: () => vo
         <DraftsSection open={open} onLeave={onClose} />
         <CatalogSection online={status.online} />
       </div>
-    </Modal>
+    </Sheet>
   )
 }
 

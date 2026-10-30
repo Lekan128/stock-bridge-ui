@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Button } from '@/components/Button'
+import { useDialogBehaviour } from '@/components/useDialogBehaviour'
 import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { ALL_BRANCHES, type WorkingBranchChoice } from '@/features/branches/types'
 
@@ -7,16 +9,22 @@ import { ALL_BRANCHES, type WorkingBranchChoice } from '@/features/branches/type
  * "Which branch are you at?" (MULTI_BRANCH_UX_PLAN.md §4.2): once per person per phone, for anyone with
  * more than one place to be. The one full-screen interruption in the branch interface. Not guessed from
  * GPS: wrong at the boundary between two neighbouring depots, and wrong silently.
+ *
+ * Portaled and given `useDialogBehaviour` like every dialog (DESIGN.md), so focus starts on the choice
+ * and nothing behind it can be reached. It has no close: the answer is the only way on.
  */
 export function BranchQuestion() {
   const { needsChoice, branches, seesEverywhere, choose } = useWorkingBranch()
   const open = branches.filter((branch) => branch.active)
   const [picked, setPicked] = useState<WorkingBranchChoice | null>(seesEverywhere ? ALL_BRANCHES : null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useDialogBehaviour(dialogRef, needsChoice, () => {})
 
   if (!needsChoice) return null
 
-  return (
+  return createPortal(
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby="branch-question-title"
@@ -77,6 +85,7 @@ export function BranchQuestion() {
           Continue
         </Button>
       </form>
-    </div>
+    </div>,
+    document.body,
   )
 }

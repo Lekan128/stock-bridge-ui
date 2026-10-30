@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/Button'
+import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import { isAppError } from '@/types/api'
 import { branchesApi } from '@/features/branches/branchesApi'
@@ -21,6 +22,9 @@ type Step = 'existing' | 'name' | 'stock' | 'people' | 'done'
  * switches the company to counting per branch (the server copies every figure to the main branch in the
  * same step). Stock gets to the new branch by sending it from the one that has it, counting it, or a
  * stock sheet.
+ *
+ * A task, so a `Sheet` (DESIGN.md), not a screen in place of the Branches page: the list stays beside it
+ * on a laptop and shows the new branch as soon as it is added. Each step's buttons are the sheet's footer.
  */
 export function AddBranchFlow({ onDone }: { onDone: () => void }) {
   const { branches, isMultiBranch, working } = useWorkingBranch()
@@ -52,10 +56,48 @@ export function AddBranchFlow({ onDone }: { onDone: () => void }) {
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: BRANCHES_KEY })
 
+  const cancel = (
+    <Button type="button" variant="secondary" onClick={onDone}>
+      Cancel
+    </Button>
+  )
+  const footer =
+    step === 'existing' ? (
+      <>
+        {cancel}
+        <Button type="submit" form="add-branch-existing" variant="action" loading={busy} disabled={!existingName.trim()}>
+          Next
+        </Button>
+      </>
+    ) : step === 'name' ? (
+      <>
+        {cancel}
+        <Button type="submit" form="add-branch-name" variant="action" loading={busy} disabled={!name.trim()}>
+          Add branch
+        </Button>
+      </>
+    ) : step === 'stock' ? (
+      <Button onClick={() => setStep('people')}>Later</Button>
+    ) : step === 'people' ? (
+      <>
+        <Button variant="secondary" onClick={() => setStep('done')}>
+          Skip
+        </Button>
+        <Button type="submit" form="add-branch-people" variant="action" loading={busy}>
+          Save
+        </Button>
+      </>
+    ) : (
+      <Button variant="action" onClick={onDone}>
+        Done
+      </Button>
+    )
+
   return (
-    <div className="mx-auto max-w-lg rounded-xl border border-neutral-200 bg-white p-6">
+    <Sheet open onClose={onDone} title="Add a branch" size="md" footer={footer}>
       {step === 'existing' && current && (
         <form
+          id="add-branch-existing"
           onSubmit={(event) => {
             event.preventDefault()
             void run(async () => {
@@ -67,7 +109,7 @@ export function AddBranchFlow({ onDone }: { onDone: () => void }) {
           }}
           className="flex flex-col gap-4"
         >
-          <h1 className="text-lg font-semibold text-neutral-900">First, what do you call the place you already have?</h1>
+          <h3 className="text-base font-semibold text-neutral-900">First, what do you call the place you already have?</h3>
           <TextField
             id="existing-branch-name"
             label="Branch name"
@@ -77,12 +119,12 @@ export function AddBranchFlow({ onDone }: { onDone: () => void }) {
             onChange={(event) => setExistingName(event.target.value)}
             hint="All your current stock, history and staff stay here."
           />
-          <Actions busy={busy} onCancel={onDone} next="Next" disabled={!existingName.trim()} />
         </form>
       )}
 
       {step === 'name' && (
         <form
+          id="add-branch-name"
           onSubmit={(event) => {
             event.preventDefault()
             void run(async () => {
@@ -98,7 +140,7 @@ export function AddBranchFlow({ onDone }: { onDone: () => void }) {
           }}
           className="flex flex-col gap-4"
         >
-          <h1 className="text-lg font-semibold text-neutral-900">What's the new branch called?</h1>
+          <h3 className="text-base font-semibold text-neutral-900">What's the new branch called?</h3>
           <TextField id="new-branch-name" label="Branch name" value={name} autoFocus onChange={(event) => setName(event.target.value)} />
           {/* Folded away: the name is the one question here (§5.1 step 2). */}
           {moreDetails ? (
@@ -115,13 +157,12 @@ export function AddBranchFlow({ onDone }: { onDone: () => void }) {
               Add address and phone
             </button>
           )}
-          <Actions busy={busy} onCancel={onDone} next="Add branch" disabled={!name.trim()} />
         </form>
       )}
 
       {step === 'stock' && created && (
         <div className="flex flex-col gap-4">
-          <h1 className="text-lg font-semibold text-neutral-900">How will stock get to {created.name}?</h1>
+          <h3 className="text-base font-semibold text-neutral-900">How will stock get to {created.name}?</h3>
           <p className="text-sm text-neutral-600">{created.name} starts empty.</p>
           <div className="flex flex-col gap-2">
             {canSend && (
@@ -142,23 +183,15 @@ export function AddBranchFlow({ onDone }: { onDone: () => void }) {
               <span className="block text-neutral-600">The usual stock sheet, recorded at the branch you choose.</span>
             </Link>
           </div>
-          <div className="flex justify-end">
-            <Button onClick={() => setStep('people')}>Later</Button>
-          </div>
         </div>
       )}
 
-      {step === 'people' && created && <PeopleStep branch={created} onDone={() => setStep('done')} />}
+      {step === 'people' && created && <PeopleStep branch={created} run={run} onDone={() => setStep('done')} />}
 
       {step === 'done' && created && (
         <div className="flex flex-col gap-4">
-          <h1 className="text-lg font-semibold text-neutral-900">{created.name} is ready.</h1>
+          <h3 className="text-base font-semibold text-neutral-900">{created.name} is ready.</h3>
           <p className="text-sm text-neutral-600">Everyone on this account now sees a branch name at the top of the screen.</p>
-          <div className="flex justify-end">
-            <Button variant="action" onClick={onDone}>
-              Done
-            </Button>
-          </div>
         </div>
       )}
 
@@ -167,36 +200,40 @@ export function AddBranchFlow({ onDone }: { onDone: () => void }) {
           {problem}
         </p>
       )}
-    </div>
+    </Sheet>
   )
 }
 
 /** "Who works there?" (§5.1 step 4): the company's people, ticked to add this branch to theirs. */
-function PeopleStep({ branch, onDone }: { branch: Branch; onDone: () => void }) {
+function PeopleStep({
+  branch,
+  run,
+  onDone,
+}: {
+  branch: Branch
+  /** The flow's own: the footer's Save shows it working, and a refusal shows under the step. */
+  run: (action: () => Promise<void>) => Promise<void>
+  onDone: () => void
+}) {
   const { data } = useUsers({ page: 0, size: 100 })
   const [ticked, setTicked] = useState<string[]>([])
-  const [busy, setBusy] = useState(false)
-  const [problem, setProblem] = useState<string | null>(null)
   const people = data?.content.filter((person) => person.active) ?? []
 
-  async function save() {
-    setBusy(true)
-    setProblem(null)
-    try {
-      for (const person of people.filter((candidate) => ticked.includes(candidate.id))) {
-        await usersApi.update(person.id, { branchIds: [...new Set([...(person.branchIds ?? []), branch.id])] })
-      }
-      onDone()
-    } catch (error) {
-      setProblem(isAppError(error) ? error.message : 'Something went wrong. Please try again.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
   return (
-    <div className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold text-neutral-900">Who works at {branch.name}?</h1>
+    <form
+      id="add-branch-people"
+      className="flex flex-col gap-4"
+      onSubmit={(event) => {
+        event.preventDefault()
+        void run(async () => {
+          for (const person of people.filter((candidate) => ticked.includes(candidate.id))) {
+            await usersApi.update(person.id, { branchIds: [...new Set([...(person.branchIds ?? []), branch.id])] })
+          }
+          onDone()
+        })
+      }}
+    >
+      <h3 className="text-base font-semibold text-neutral-900">Who works at {branch.name}?</h3>
       <ul className="flex flex-col gap-2">
         {people.map((person) => (
           <li key={person.id}>
@@ -223,33 +260,11 @@ function PeopleStep({ branch, onDone }: { branch: Branch; onDone: () => void }) 
         Adding someone new? <Link to="/app/users" className="font-medium text-primary-700 hover:underline">Invite them from Users</Link>{' '}
         and choose {branch.name} there.
       </p>
-      {problem && <p role="alert" className="text-sm text-danger-700">{problem}</p>}
-      <div className="flex justify-end gap-2">
-        <Button variant="secondary" onClick={onDone}>
-          Skip
-        </Button>
-        <Button variant="action" loading={busy} onClick={() => void save()}>
-          Save
-        </Button>
-      </div>
-    </div>
+    </form>
   )
 }
 
 function displayName(person: { firstName?: string | null; lastName?: string | null; username: string }) {
   const name = [person.firstName, person.lastName].filter(Boolean).join(' ').trim()
   return name || person.username
-}
-
-function Actions({ busy, onCancel, next, disabled }: { busy: boolean; onCancel: () => void; next: string; disabled: boolean }) {
-  return (
-    <div className="flex justify-end gap-2">
-      <Button type="button" variant="secondary" onClick={onCancel}>
-        Cancel
-      </Button>
-      <Button type="submit" variant="action" loading={busy} disabled={disabled}>
-        {next}
-      </Button>
-    </div>
-  )
 }
