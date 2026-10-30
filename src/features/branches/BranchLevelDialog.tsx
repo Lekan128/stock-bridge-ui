@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Button } from '@/components/Button'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import { useToast } from '@/components/useToast'
 import { queryClient } from '@/data/queryClient'
@@ -57,7 +57,7 @@ export function BranchLevelDialog({
   }
 
   return (
-    <Modal
+    <Sheet
       open
       onClose={onClose}
       title={`Low-stock level at ${branch.name}`}
@@ -88,6 +88,6 @@ export function BranchLevelDialog({
           {problem}
         </p>
       )}
-    </Modal>
+    </Sheet>
   )
 }

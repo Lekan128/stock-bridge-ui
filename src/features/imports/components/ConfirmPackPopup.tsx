@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Button } from '@/components/Button'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 
@@ -41,7 +41,7 @@ export function ConfirmPackPopup({
   const canSubmit = unit !== '' && Number.isFinite(sizeNumber) && sizeNumber > 0
 
   return (
-    <Modal
+    <Sheet
       open
       onClose={onCancel}
       title="Confirm new pack"
@@ -51,7 +51,7 @@ export function ConfirmPackPopup({
           <Button variant="secondary" onClick={onCancel} disabled={busy}>
             Cancel
           </Button>
-          <Button onClick={() => onConfirm(unit, sizeNumber)} disabled={!canSubmit} loading={busy}>
+          <Button variant="action" onClick={() => onConfirm(unit, sizeNumber)} disabled={!canSubmit} loading={busy}>
             Confirm pack
           </Button>
         </>
@@ -88,6 +88,6 @@ export function ConfirmPackPopup({
           />
         </div>
       </div>
-    </Modal>
+    </Sheet>
   )
 }

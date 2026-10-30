@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import { productVendorsApi } from '@/features/products/api/productVendorsApi'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
@@ -103,7 +103,7 @@ export function AddPackModal({ productId, vendor, stockUnit, onClose, onSuccess 
   }
 
   return (
-    <Modal
+    <Sheet
       open
       onClose={onClose}
       title={`Add pack — ${vendor.companyVendorName}`}
@@ -113,7 +113,7 @@ export function AddPackModal({ productId, vendor, stockUnit, onClose, onSuccess 
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
+          <Button variant="action" onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
             Add
           </Button>
         </>
@@ -175,6 +175,6 @@ export function AddPackModal({ productId, vendor, stockUnit, onClose, onSuccess 
 
         <FormError message={formError} />
       </form>
-    </Modal>
+    </Sheet>
   )
 }
