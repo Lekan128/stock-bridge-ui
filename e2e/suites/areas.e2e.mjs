@@ -363,6 +363,78 @@ await check('Stock movements lists the moves, and says the area on each row', as
 })
 
 // ------------------------------------------------------------------------------------------ 6
+// ------------------------------------------------------------------------------------- 5c (Part 3)
+await check('the owner places a cook in the Kitchen; the cook records there without being asked, and sees only the Kitchen', async () => {
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.goto(`${UI}/app/users`)
+  await page.getByRole('button', { name: 'Add user' }).first().click()
+  const sheet = page.getByRole('dialog')
+  const cookName = `cook-${owner.unique}`
+  await sheet.getByLabel('Username').fill(cookName)
+  await sheet.getByLabel('Password', { exact: true }).fill(PASSWORD)
+  await sheet.getByLabel('Confirm password').fill(PASSWORD)
+  await sheet.getByRole('radiogroup', { name: 'Role' }).getByRole('radio', { name: /^Storekeeper/ }).click()
+  await sheet.getByRole('radiogroup', { name: 'Areas' }).getByRole('radio', { name: 'Only some' }).click()
+  await sheet.getByLabel('Kitchen').check()
+  await page.screenshot({ path: SHOTS + '10-works-in-areas.png' })
+  await sheet.getByRole('button', { name: 'Add user' }).click()
+  await sheet.waitFor({ state: 'hidden' })
+
+  const cookContext = await contextFor(await login(owner.user.clientIdentifier, cookName))
+  const cookPage = await cookContext.newPage()
+  await cookPage.goto(`${UI}/app/products/${rice.id}`)
+  await cookPage.getByRole('heading', { name: 'Rice', level: 1 }).waitFor()
+  await cookPage.locator('[data-area-chip]').getByText('Kitchen').waitFor()
+  const areaLine = cookPage.locator('[data-area-breakdown]').first()
+  await waitFor(async () => /^Kitchen/.test(await areaLine.innerText().catch(() => '')), 'the area line to start at the Kitchen')
+  assert(!/Store|Bar/.test(await areaLine.innerText()), `the cook sees other areas: ${await areaLine.innerText()}`)
+
+  const before = (await areaFigures(ownerToken, rice.id)).Kitchen
+  await cookPage.getByRole('button', { name: 'Stock out' }).first().click()
+  const cookSheet = cookPage.getByRole('dialog')
+  await cookSheet.getByRole('heading', { name: /Kitchen/ }).waitFor()
+  assert((await cookSheet.getByText('Which area?').count()) === 0, 'the cook is asked which area')
+  await cookSheet.getByLabel('Quantity').fill('1')
+  await cookSheet.getByRole('button', { name: 'Confirm' }).click()
+  await cookSheet.getByRole('button', { name: 'Done' }).click()
+  await waitFor(async () => (await areaFigures(ownerToken, rice.id)).Kitchen === before - 1, 'the Kitchen to hold one fewer')
+  await cookPage.screenshot({ path: SHOTS + '11-cook-product.png' })
+
+  // Move stock: from the Kitchen, the only area they take from.
+  await cookPage.goto(`${UI}/app/move`)
+  const from = cookPage.getByRole('radiogroup', { name: 'From' })
+  await from.waitFor()
+  assert((await from.getByRole('radio').count()) === 1, 'the cook can move from more than the Kitchen')
+  assert((await from.getByRole('radio', { name: 'Kitchen' }).getAttribute('aria-checked')) === 'true', 'Move does not start from the Kitchen')
+  await cookContext.close()
+})
+
+await check('a barman in the Bar and the Kitchen chooses where this phone is, and the sheets follow it', async () => {
+  const areaIds = Object.fromEntries((await api('/api/branches', { token: ownerToken })).json.branches[0].areas.map((a) => [a.name, a.id]))
+  const role = (await api('/api/roles', { token: ownerToken })).json.find((r) => r.name === 'STOREKEEPER')
+  const barName = `barman-${owner.unique}`
+  await api('/api/users', { token: ownerToken, method: 'POST', body: { username: barName, password: PASSWORD, roleId: role.id, areaIds: [areaIds.Bar, areaIds.Kitchen] } })
+  const barContext = await contextFor(await login(owner.user.clientIdentifier, barName))
+  const barPage = await barContext.newPage()
+  await barPage.goto(`${UI}/app/products/${rice.id}`)
+  await barPage.getByRole('heading', { name: 'Rice', level: 1 }).waitFor()
+  await barPage.getByRole('button', { name: 'Choose your area' }).click()
+  await barPage.getByRole('menuitemradio', { name: 'Bar' }).click()
+  await barPage.getByRole('button', { name: 'Area: Bar. Change area' }).waitFor()
+  await barPage.getByRole('button', { name: 'Stock in' }).first().click()
+  const barSheet = barPage.getByRole('dialog')
+  await barSheet.getByRole('heading', { name: /Stock in · Bar/ }).waitFor()
+  assert((await barSheet.getByText('Which area?').count()) === 0, 'the barman is asked which area')
+  await barPage.keyboard.press('Escape')
+  await barPage.getByRole('button', { name: 'Area: Bar. Change area' }).click()
+  await barPage.getByRole('menuitemradio', { name: 'Kitchen' }).click()
+  await barPage.getByRole('button', { name: 'Stock in' }).first().click()
+  await barSheet.getByRole('heading', { name: /Stock in · Kitchen/ }).waitFor()
+  await barPage.waitForTimeout(500)
+  await barPage.screenshot({ path: SHOTS + '12-barman-sheet.png' })
+  await barContext.close()
+})
+
 await check('a company without areas sees no area word on its sheets or product page, and renames its Store', async () => {
   const shop = await signup('noareas')
   const beans = await createProduct(shop.tokens.accessToken, shop.unique, 'Beans')

@@ -35,6 +35,8 @@ export interface Area {
   closedAt?: string
   /** How many products it holds any of - people who manage branches, at a branch with areas. */
   productsInStock?: number
+  /** Whether the signed-in person works here (V64, STOCK_AREAS_PART_3.md). Absent from an older API: yes. */
+  worksHere?: boolean
 }
 
 /** A product in one area - the product page's and the sync rows' `areaStock` (V60). */

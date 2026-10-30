@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { findNavItemForPath } from '@/layouts/navConfig'
 import { NotificationBell } from '@/layouts/NotificationBell'
 import { UserMenu } from '@/layouts/UserMenu'
+import { AreaChip } from '@/features/branches/AreaChip'
 import { BranchChip } from '@/features/branches/BranchChip'
 import { SyncPill } from '@/features/sync/SyncPill'
 
@@ -37,6 +38,8 @@ export function Topbar({ onOpenMobileSidebar }: TopbarProps) {
       <div className="flex items-center gap-2">
         {/* Where this phone is (MULTI_BRANCH_UX_PLAN.md §4.1). Nothing at a one-branch company. */}
         <BranchChip />
+        {/* …and where in it, for someone placed in particular areas (STOCK_AREAS_PART_3.md). */}
+        <AreaChip />
         {/* Offline, waiting to send, sending, needs you, all caught up: one pill (A6). */}
         <SyncPill />
         <NotificationBell />

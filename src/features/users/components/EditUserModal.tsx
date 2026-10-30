@@ -35,6 +35,9 @@ export function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) 
   // Where they work (MULTI_BRANCH_UX_PLAN.md §5.10). Sent only when changed.
   const [branchIds, setBranchIds] = useState<string[]>(user.branchIds ?? [])
   const branchesChanged = [...branchIds].sort().join() !== [...(user.branchIds ?? [])].sort().join()
+  // …and in which areas (STOCK_AREAS_PART_3.md). Sent only when changed; empty = every area.
+  const [areaIds, setAreaIds] = useState<string[]>(user.areaIds ?? [])
+  const areasChanged = [...areaIds].sort().join() !== [...(user.areaIds ?? [])].sort().join()
 
   const {
     register,
@@ -70,6 +73,7 @@ export function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) 
     if (dirtyFields.phone) payload.phone = values.phone.trim()
     if (dirtyFields.jobTitle) payload.jobTitle = values.jobTitle.trim()
     if (branchesChanged) payload.branchIds = branchIds
+    if (areasChanged) payload.areaIds = areaIds
 
     if (Object.keys(payload).length === 0) {
       onClose()
@@ -130,7 +134,9 @@ export function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) 
             />
           )}
         />
-        {!isRoot && <WorksAtField roleId={roleId} value={branchIds} onChange={setBranchIds} />}
+        {!isRoot && (
+          <WorksAtField roleId={roleId} value={branchIds} onChange={setBranchIds} areaIds={areaIds} onAreasChange={setAreaIds} />
+        )}
         <Controller
           control={control}
           name="active"

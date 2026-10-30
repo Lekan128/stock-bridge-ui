@@ -30,6 +30,8 @@ export function AddUserModal({ onClose, onSuccess }: AddUserModalProps) {
   // Where they'll work (MULTI_BRANCH_UX_PLAN.md §5.10): starts at the branch you're at.
   const { isMultiBranch, working } = useWorkingBranch()
   const [branchIds, setBranchIds] = useState<string[]>(() => (working ? [working.id] : []))
+  // …and in which areas (STOCK_AREAS_PART_3.md): every area unless narrowed.
+  const [areaIds, setAreaIds] = useState<string[]>([])
 
   const {
     register,
@@ -56,6 +58,7 @@ export function AddUserModal({ onClose, onSuccess }: AddUserModalProps) {
         phone: optional(values.phone),
         jobTitle: optional(values.jobTitle),
         branchIds: isMultiBranch && branchIds.length > 0 ? branchIds : undefined,
+        areaIds: areaIds.length > 0 ? areaIds : undefined,
       })
       onSuccess(user)
     } catch (err) {
@@ -105,7 +108,7 @@ export function AddUserModal({ onClose, onSuccess }: AddUserModalProps) {
             <RoleSelectField value={field.value} onChange={field.onChange} error={errors.roleId?.message} />
           )}
         />
-        <WorksAtField roleId={roleId} value={branchIds} onChange={setBranchIds} />
+        <WorksAtField roleId={roleId} value={branchIds} onChange={setBranchIds} areaIds={areaIds} onAreasChange={setAreaIds} />
 
         <div className="border-t border-neutral-200 pt-4">
           <p className="text-sm font-medium text-neutral-700">Profile details</p>

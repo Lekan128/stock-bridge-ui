@@ -4,7 +4,8 @@ import { ArrowLeft, ArrowLeftRight, ArrowRight, ArrowUpDown, Repeat, Search, X }
 import { Button } from '@/components/Button'
 import { TextField } from '@/components/TextField'
 import { useApiQuery } from '@/data/useApiQuery'
-import { hasAreas, stockAreas } from '@/features/branches/areas'
+import { hasAreas } from '@/features/branches/areas'
+import { useWorkArea } from '@/features/branches/workArea'
 import { SheetChoices } from '@/features/branches/SheetChoices'
 import type { Area } from '@/features/branches/types'
 import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
@@ -70,12 +71,15 @@ export function MoveStockPage() {
   const online = useOnlineStatus()
   const branch = working && recordable.some((entry) => entry.id === working.id) ? working : null
 
-  const fromChoices = stockAreas(branch)
+  // From: the areas this person works in (Part 3) - they're taking stock out of it - starting where this
+  // phone is for them; for people in every area, where deliveries arrive. To: any open area.
+  const work = useWorkArea(branch)
+  const fromChoices = work.areas
   const allOpen = (branch?.areas ?? []).filter((area) => area.active)
   const [fromChoice, setFromChoice] = useState<string | null>(() => searchParams.get('from'))
   const fromAreaId = fromChoices.some((area) => area.id === fromChoice)
     ? (fromChoice as string)
-    : (fromChoices.find((area) => area.delivery)?.id ?? fromChoices[0]?.id ?? '')
+    : (work.area?.id ?? fromChoices.find((area) => area.delivery)?.id ?? fromChoices[0]?.id ?? '')
   const [toAreaId, setToAreaId] = useState<string>(() => searchParams.get('to') ?? '')
   const toChoices = allOpen.filter((area) => area.id !== fromAreaId)
   const from = allOpen.find((area) => area.id === fromAreaId)
@@ -251,7 +255,9 @@ export function MoveStockPage() {
       <div className="mx-auto flex max-w-2xl flex-col gap-3">
         <h1 className="text-2xl font-semibold text-neutral-900">Move stock</h1>
         <p className="text-sm text-neutral-700">
-          {branch
+          {branch && work.limited
+            ? `You don't work in an area of ${branch.name} that keeps stock, so there is nothing for you to move from here.`
+            : branch
             ? `${branch.name} has one area, so there is nowhere to move stock to. Add areas in Company settings → Branches.`
             : 'Choose a branch at the top of the screen first: stock moves between the areas of one branch.'}
         </p>

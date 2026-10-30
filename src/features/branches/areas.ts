@@ -24,13 +24,19 @@ export function deliveryArea(branch: Branch | null | undefined): Area | undefine
   return branch?.areas?.find((area) => area.delivery)
 }
 
-/** The product's figure in each open area of `branch` that keeps stock, zeros left out, in the branch's order. */
+/**
+ * The product's figure in each open area of `branch` that keeps stock, zeros left out, in the branch's
+ * order. Someone placed in particular areas (Part 3, D-A10) sees only theirs, zero included: it's where
+ * they are, and "Kitchen 0" is the answer they came for.
+ */
 export function areaBreakdown(product: Product, branch: Branch | null | undefined): { area: Area; quantity: number }[] {
   if (!hasAreas(branch) || product.areaStock == null) return []
   const held = new Map(product.areaStock.map((figure) => [figure.areaId, figure.quantityOnHand]))
+  const limited = (branch?.areas ?? []).some((area) => area.active && area.worksHere === false)
   return stockAreas(branch)
+    .filter((area) => !limited || area.worksHere !== false)
     .map((area) => ({ area, quantity: held.get(area.id) ?? 0 }))
-    .filter((entry) => entry.quantity !== 0)
+    .filter((entry) => limited || entry.quantity !== 0)
 }
 
 /** How many of the product one area holds, when the product says; undefined when it doesn't. */
