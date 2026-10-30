@@ -9,7 +9,7 @@ import { BRANCHES_KEY } from '@/features/branches/BranchProvider'
 import { deliveryArea, hasAreas } from '@/features/branches/areas'
 import type { Branch } from '@/features/branches/types'
 
-type Step = 'current' | 'add' | 'kind' | 'delivery' | 'done'
+type Step = 'add' | 'kind' | 'delivery' | 'done'
 
 /** The quick picks (STOCK_AREAS_PLAN.md §4.1 step 2): the places our restaurants, hotels and shops name. */
 const SUGGESTIONS = ['Kitchen', 'Bar', 'Front desk', 'Shop floor', 'Housekeeping']
@@ -21,15 +21,17 @@ interface Wanted {
 
 /**
  * Adding areas to a branch (STOCK_AREAS_PLAN.md §4.1, STOCK_AREAS_PART_1.md), one question a step. The
- * first time, it also names the place the stock is kept now - everything the branch holds stays there.
- * Then the other areas (quick picks, or typed), whether each keeps stock or uses what it's given, and,
+ * branch's Store is already there, holding everything - the first step says so, with "Rename it" beside
+ * it, rather than asking (owner, 2026-10-30). Then the other areas (quick picks, or typed), whether each keeps stock or uses what it's given, and,
  * once two or more keep stock, where deliveries arrive. Online only, like every branch change.
  */
 export function AddAreasFlow({ branch, onDone }: { branch: Branch; onDone: () => void }) {
   const queryClient = useQueryClient()
   const first = !hasAreas(branch)
   const current = branch.areas?.find((area) => area.delivery) ?? branch.areas?.[0]
-  const [step, setStep] = useState<Step>(first ? 'current' : 'add')
+  const [step, setStep] = useState<Step>('add')
+  // The Store is shown, not asked about (owner, 2026-10-30); renaming it here is one tap away.
+  const [renamingStore, setRenamingStore] = useState(false)
   const [currentName, setCurrentName] = useState(current?.name ?? 'Store')
   const [wanted, setWanted] = useState<Wanted[]>([])
   const [typed, setTyped] = useState('')
@@ -87,29 +89,6 @@ export function AddAreasFlow({ branch, onDone }: { branch: Branch; onDone: () =>
 
   return (
     <div className="mx-auto max-w-lg rounded-xl border border-neutral-200 bg-white p-6">
-      {step === 'current' && (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault()
-            if (storeName) setStep('add')
-          }}
-          className="flex flex-col gap-4"
-        >
-          <p className="text-sm text-neutral-600">Areas at {branch.name}</p>
-          <h1 className="text-lg font-semibold text-neutral-900">What do you call the place your stock is kept now?</h1>
-          <TextField
-            id="current-area-name"
-            label="Area name"
-            value={currentName}
-            autoFocus
-            onFocus={(event) => event.target.select()}
-            onChange={(event) => setCurrentName(event.target.value)}
-            hint="All your current stock stays here."
-          />
-          <Actions onCancel={onDone} next="Next" disabled={!currentName.trim()} />
-        </form>
-      )}
-
       {step === 'add' && (
         <form
           onSubmit={(event) => {
@@ -123,6 +102,29 @@ export function AddAreasFlow({ branch, onDone }: { branch: Branch; onDone: () =>
           <h1 className="text-lg font-semibold text-neutral-900">
             {first ? 'Add the other areas.' : `Add an area to ${branch.name}.`}
           </h1>
+          {first &&
+            (renamingStore ? (
+              <TextField
+                id="current-area-name"
+                label="Where your stock is now"
+                value={currentName}
+                autoFocus
+                onFocus={(event) => event.target.select()}
+                onChange={(event) => setCurrentName(event.target.value)}
+                hint="All your current stock stays here."
+              />
+            ) : (
+              <p className="text-sm text-neutral-700">
+                Your stock is in the <span className="font-medium text-neutral-900">{storeName}</span>.{' '}
+                <button
+                  type="button"
+                  onClick={() => setRenamingStore(true)}
+                  className="inline-flex min-h-11 items-center font-medium text-primary-700 hover:underline"
+                >
+                  Rename it
+                </button>
+              </p>
+            ))}
           <div className="flex flex-wrap gap-2" role="group" aria-label="Quick picks">
             {SUGGESTIONS.filter((name) => !taken(name)).map((name) => (
               <button
@@ -168,10 +170,10 @@ export function AddAreasFlow({ branch, onDone }: { branch: Branch; onDone: () =>
             </ul>
           )}
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={first ? () => setStep('current') : onDone}>
-              {first ? 'Back' : 'Cancel'}
+            <Button type="button" variant="secondary" onClick={onDone}>
+              Cancel
             </Button>
-            <Button type="button" variant="action" onClick={() => setStep('kind')} disabled={wanted.length === 0}>
+            <Button type="button" variant="action" onClick={() => setStep('kind')} disabled={wanted.length === 0 || !storeName}>
               Next
             </Button>
           </div>
@@ -301,19 +303,6 @@ export function AddAreasFlow({ branch, onDone }: { branch: Branch; onDone: () =>
           </div>
         </div>
       )}
-    </div>
-  )
-}
-
-function Actions({ onCancel, next, disabled }: { onCancel: () => void; next: string; disabled: boolean }) {
-  return (
-    <div className="flex justify-end gap-2">
-      <Button type="button" variant="secondary" onClick={onCancel}>
-        Cancel
-      </Button>
-      <Button type="submit" variant="action" disabled={disabled}>
-        {next}
-      </Button>
     </div>
   )
 }

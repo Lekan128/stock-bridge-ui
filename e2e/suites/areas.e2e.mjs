@@ -1,12 +1,13 @@
 // End-to-end checks for areas inside a branch, Part 1 (STOCK_AREAS_PART_1.md), against the production
 // preview (4173) and the real API (8081).
-//   1. The owner adds Kitchen, Bar and Housekeeping (uses what it's given) from Branches; the steps say
-//      what they should, and everything the branch held stays in the Store.
+//   1. The Store is shown before any area is added; the owner adds Kitchen, Bar and Housekeeping (uses
+//      what it's given) from Branches; everything the branch held stays in the Store.
 //   2. The product page and Inventory show "Store 10 · ...", zeros left out.
 //   3. A stock-in sheet asks which area, and records into the Kitchen.
 //   4. A stock-out from the Kitchen is judged against the Kitchen: asking for more than it has is refused.
 //   5. The Bar closes (empty), and the Store, where deliveries arrive, can't.
-//   6. A company without areas sees no area word on its sheets or its product page (rule 1).
+//   6. A company without areas sees no area word on its sheets or its product page (rule 1), and can
+//      rename its Store from Branches.
 //   7. axe on Branches with areas, and on the add-areas steps (phone).
 import { chromium } from 'playwright'
 import { createRequire } from 'node:module'
@@ -131,13 +132,13 @@ const dialog = page.getByRole('dialog')
 await check('the owner adds Kitchen, Bar and Housekeeping; everything stays in the Store', async () => {
   await page.goto(`${UI}/app/company/branches`)
   await page.getByRole('heading', { name: 'Branches', level: 1 }).waitFor()
+  // The Store is there before anything is added, holding everything (owner, 2026-10-30).
+  await page.locator('[data-area="Store"]').getByText('where all your stock is now').waitFor()
   await page.getByRole('button', { name: 'Add areas' }).click()
-  await page.getByRole('heading', { name: 'What do you call the place your stock is kept now?' }).waitFor()
-  assert((await page.getByLabel('Area name').inputValue()) === 'Store', 'the current area is not pre-filled "Store"')
-  await page.getByText('All your current stock stays here.').waitFor()
-  await page.getByRole('button', { name: 'Next' }).click()
 
   await page.getByRole('heading', { name: 'Add the other areas.' }).waitFor()
+  await page.getByText(/Your stock is in the Store\./).waitFor()
+  await page.getByRole('button', { name: 'Rename it' }).waitFor()
   for (const name of ['Kitchen', 'Bar', 'Housekeeping']) await page.getByRole('button', { name: `+ ${name}` }).click()
   await page.getByRole('list', { name: 'Areas to add' }).getByText('Housekeeping').waitFor()
   await page.getByRole('button', { name: 'Next' }).click()
@@ -237,7 +238,7 @@ await check('the empty Bar closes and reopens; the Store, where deliveries arriv
 })
 
 // ------------------------------------------------------------------------------------------ 6
-await check('a company without areas sees no area word on its sheets or product page', async () => {
+await check('a company without areas sees no area word on its sheets or product page, and renames its Store', async () => {
   const shop = await signup('noareas')
   const beans = await createProduct(shop.tokens.accessToken, shop.unique, 'Beans')
   await api(`/api/products/${beans.id}/stock/stock-in`, { token: shop.tokens.accessToken, method: 'POST', body: { quantity: 4 } })
@@ -250,6 +251,13 @@ await check('a company without areas sees no area word on its sheets or product 
   await shopPage.getByRole('dialog').getByLabel('Quantity').waitFor()
   assert((await shopPage.getByText('Which area?').count()) === 0, 'a sheet asks which area')
   assert((await shopPage.locator('[data-area-breakdown]').count()) === 0, 'an area line on the product page')
+  await shopPage.keyboard.press('Escape')
+  await shopPage.goto(`${UI}/app/company/branches`)
+  const store = shopPage.locator('[data-area="Store"]')
+  await store.getByRole('button', { name: 'Rename' }).click()
+  await shopPage.getByLabel('Area name').fill('Shop floor')
+  await shopPage.getByRole('button', { name: 'Save' }).click()
+  await shopPage.locator('[data-area="Shop floor"]').getByText('where all your stock is now').waitFor()
   await shopContext.close()
 })
 

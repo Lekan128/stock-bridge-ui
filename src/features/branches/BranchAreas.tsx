@@ -9,10 +9,12 @@ import { hasAreas } from '@/features/branches/areas'
 import type { Area, Branch } from '@/features/branches/types'
 
 /**
- * A branch's areas on the Branches page (STOCK_AREAS_PLAN.md §4.1, §5.8). A branch without areas shows
- * only "Add areas", for someone who may - nothing else about areas exists for it (rule 1). Once it has
- * them: each area with what it holds, and the changes an area takes - rename, where deliveries arrive,
- * keeps stock or uses what it's given, close, reopen. Online only, like the rest of the page; every
+ * A branch's areas on the Branches page (STOCK_AREAS_PLAN.md §4.1, §5.8). A branch that hasn't added
+ * any shows its Store as it is - where all its stock is now, renameable - and "Add areas". This page is
+ * the one exception to rule 1 (no area word until there are two): it is for owners and managers, and
+ * hiding an area that already holds everything only confused them. Once it has more: each area with
+ * what it holds, and the changes an area takes - rename, where deliveries arrive, keeps stock or uses
+ * what it's given, close, reopen. Online only, like the rest of the page; every
  * refusal is the server's own sentence.
  */
 export function BranchAreas({
@@ -47,18 +49,53 @@ export function BranchAreas({
     }
   }
 
+  const areas = branch.areas ?? []
+  // A branch with only its Store: shown as it is, holding everything (owner, 2026-10-30) - not as
+  // something adding areas creates. Only where areas can be added: for a seller it would be noise.
   if (!hasAreas(branch)) {
-    if (!mayAddArea || !mayChange) return null
+    const store = areas[0]
+    if (!store || !mayAddArea) return null
     return (
-      <div>
-        <Button variant="quiet" onClick={onAddAreas} disabled={!online}>
-          {online ? 'Add areas' : 'Add areas when online'}
-        </Button>
-      </div>
+      <section aria-label={`Areas at ${branch.name}`} className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-neutral-900">Areas</h3>
+          {mayChange && (
+            <Button variant="quiet" onClick={onAddAreas} disabled={!online}>
+              {online ? 'Add areas' : 'Add areas when online'}
+            </Button>
+          )}
+        </div>
+        <div className="mt-2 flex flex-col gap-2" data-area={store.name}>
+          {renaming === store.id ? (
+            <RenameArea
+              area={store}
+              busy={busy === store.id}
+              onCancel={() => setRenaming(null)}
+              onSave={(name) => void act(store, () => areasApi.update(store.id, { name }))}
+            />
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="min-w-0 text-sm">
+                <span className="font-medium text-neutral-900">{store.name}</span>
+                <span className="text-neutral-600"> · where all your stock is now · deliveries arrive here</span>
+              </p>
+              {mayChange && (
+                <Button variant="quiet" onClick={() => setRenaming(store.id)} disabled={!online}>
+                  Rename
+                </Button>
+              )}
+            </div>
+          )}
+          {problem?.areaId === store.id && (
+            <p role="alert" className="text-sm text-danger-700">
+              {problem.message}
+            </p>
+          )}
+        </div>
+      </section>
     )
   }
 
-  const areas = branch.areas ?? []
   return (
     <section aria-label={`Areas at ${branch.name}`} className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
       <div className="flex items-center justify-between gap-3">
