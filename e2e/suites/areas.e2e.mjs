@@ -5,7 +5,8 @@
 //   2. The product page and Inventory show "Store 10 · ...", zeros left out.
 //   3. A stock-in sheet asks which area, and records into the Kitchen.
 //   4. A stock-out from the Kitchen is judged against the Kitchen: asking for more than it has is refused.
-//   5. From an area's "⋯": the Bar closes (empty) and reopens; the Store, where deliveries arrive, can't close.
+//   5. Deliveries move from their own setting and back; from an area's "⋯" the Bar closes (empty) and
+//      reopens; the Store, where deliveries arrive, can't close.
 //   6. A company without areas sees no area word on its sheets or its product page (rule 1), and can
 //      rename its Store from Branches.
 //   7. axe on Branches with areas, and on the Add areas sheet (phone).
@@ -150,7 +151,10 @@ await check('the owner adds Kitchen, Bar and Housekeeping in one sheet; everythi
 
   const areas = page.getByRole('region', { name: `Areas at ${branchName}` })
   await areas.locator('[data-area="Housekeeping"]').getByText("Uses what it's given").waitFor()
-  await areas.locator('[data-area="Store"]').getByText('deliveries arrive here').waitFor()
+  // Where deliveries arrive is a setting of its own, by the heading - said once (owner's comment).
+  const deliveries = areas.getByLabel('Deliveries arrive in')
+  assert((await deliveries.locator('option:checked').innerText()) === 'Store', 'deliveries do not arrive in the Store')
+  assert((await areas.getByText('deliveries arrive here').count()) === 0, 'the delivery area is also noted on its row')
   await page.screenshot({ path: SHOTS + '3-branches-with-areas.png' })
   const at = await areaFigures(ownerToken, rice.id)
   assert(at.Store === 10 && at.Kitchen === 0 && at.Bar === 0, `figures ${JSON.stringify(at)}`)
@@ -220,6 +224,12 @@ await check('a stock-out from the Kitchen is judged against the Kitchen, and the
 await check('the empty Bar closes and reopens from its menu; the Store, where deliveries arrive, offers no Close', async () => {
   await page.goto(`${UI}/app/company/branches`)
   const areas = page.getByRole('region', { name: `Areas at ${branchName}` })
+  // Deliveries move from the setting, and back.
+  const deliveries = areas.getByLabel('Deliveries arrive in')
+  await deliveries.selectOption({ label: 'Bar' })
+  await waitFor(async () => (await api('/api/branches', { token: ownerToken })).json.branches[0].areas.find((a) => a.delivery)?.name === 'Bar', 'deliveries to arrive in the Bar')
+  await deliveries.selectOption({ label: 'Store' })
+  await waitFor(async () => (await api('/api/branches', { token: ownerToken })).json.branches[0].areas.find((a) => a.delivery)?.name === 'Store', 'deliveries to arrive in the Store again')
   const bar = areas.locator('[data-area="Bar"]')
   await bar.getByRole('button', { name: 'Change Bar' }).click()
   await page.screenshot({ path: SHOTS + '4-area-menu.png' })
