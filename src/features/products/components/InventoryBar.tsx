@@ -200,7 +200,8 @@ export function InventoryActions(props: InventoryBarProps & { compact?: boolean 
           {iconOnly(!productIsAction) ? null : compact ? 'Add product' : <span className="hidden 2xl:inline">Add product</span>}
         </Button>
       )}
-      <OverflowMenu label="More inventory actions" items={inventoryMenuItems(props)} />
+      {/* On a phone these sit in the bar along the bottom, so the menu opens upwards to stay on screen. */}
+      <OverflowMenu label="More inventory actions" items={inventoryMenuItems(props)} side={compact ? 'above' : 'below'} />
     </>
   )
 }
