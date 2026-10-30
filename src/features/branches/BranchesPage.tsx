@@ -10,7 +10,7 @@ import { branchesApi } from '@/features/branches/branchesApi'
 import { BRANCHES_KEY } from '@/features/branches/BranchProvider'
 import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { AddBranchFlow } from '@/features/branches/AddBranchFlow'
-import { AddAreasFlow } from '@/features/branches/AddAreasFlow'
+import { AddAreasSheet } from '@/features/branches/AddAreasSheet'
 import { BranchAreas } from '@/features/branches/BranchAreas'
 import type { Branch } from '@/features/branches/types'
 
@@ -46,9 +46,6 @@ export function BranchesPage() {
 
   if (adding) {
     return <AddBranchFlow onDone={() => setAdding(false)} />
-  }
-  if (addingAreasTo) {
-    return <AddAreasFlow branch={addingAreasTo} onDone={() => setAddingAreasTo(null)} />
   }
 
   return (
@@ -89,7 +86,9 @@ export function BranchesPage() {
                   </p>
                   <p className="text-sm text-neutral-600">
                     {[
-                      branch.productsInStock != null ? `${branch.productsInStock} products in stock` : null,
+                      branch.productsInStock != null
+                        ? `${branch.productsInStock} ${branch.productsInStock === 1 ? 'product' : 'products'} in stock`
+                        : null,
                       branch.stockWorth != null ? formatNairaWhole(branch.stockWorth) : null,
                       branch.people != null ? `${branch.people} ${branch.people === 1 ? 'person' : 'people'}` : null,
                       branch.phone ?? null,
@@ -161,6 +160,7 @@ export function BranchesPage() {
         ))}
       </ul>
       {!online && <p className="text-sm text-neutral-600">Changing branches needs a connection.</p>}
+      {addingAreasTo && <AddAreasSheet branch={addingAreasTo} onClose={() => setAddingAreasTo(null)} />}
     </div>
   )
 }

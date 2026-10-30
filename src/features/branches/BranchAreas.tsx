@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { Plus } from 'lucide-react'
 import { Button } from '@/components/Button'
+import { OverflowMenu, type OverflowMenuItem } from '@/components/OverflowMenu'
 import { TextField } from '@/components/TextField'
 import { isAppError } from '@/types/api'
 import { areasApi } from '@/features/branches/branchesApi'
@@ -9,13 +11,13 @@ import { hasAreas } from '@/features/branches/areas'
 import type { Area, Branch } from '@/features/branches/types'
 
 /**
- * A branch's areas on the Branches page (STOCK_AREAS_PLAN.md §4.1, §5.8). A branch that hasn't added
- * any shows its Store as it is - where all its stock is now, renameable - and "Add areas". This page is
- * the one exception to rule 1 (no area word until there are two): it is for owners and managers, and
- * hiding an area that already holds everything only confused them. Once it has more: each area with
- * what it holds, and the changes an area takes - rename, where deliveries arrive, keeps stock or uses
- * what it's given, close, reopen. Online only, like the rest of the page; every
- * refusal is the server's own sentence.
+ * A branch's areas on the Branches page (STOCK_AREAS_PLAN.md §4.1, §5.8), as rows under the branch's
+ * own line - ruled, not a box inside its card (DESIGN.md: "rules and columns first"). Each row says what
+ * the area is in one quiet line, and keeps its changes - rename, where deliveries arrive, keeps stock or
+ * uses what it's given, close, reopen - in "⋯", because they are rarely made. A branch that hasn't added
+ * any shows its Store as it is, holding everything (owner, 2026-10-30): this page is the one exception to
+ * rule 1, being for owners and managers. Online only, like the rest of the page; every refusal is the
+ * server's own sentence.
  */
 export function BranchAreas({
   branch,
@@ -29,11 +31,15 @@ export function BranchAreas({
   onAddAreas: () => void
 }) {
   const queryClient = useQueryClient()
-  const [busy, setBusy] = useState<string | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
   const [problem, setProblem] = useState<{ areaId: string; message: string } | null>(null)
   // Changing an area is for someone who works at the branch (the server checks it again).
   const mayChange = branch.active && branch.canRecord
+  const areas = branch.areas ?? []
+  const withAreas = hasAreas(branch)
+  // Only where areas can be added, or already have been: for a seller the Store alone would be noise.
+  if (areas.length === 0 || (!withAreas && !mayAddArea)) return null
 
   async function act(area: Area, action: () => Promise<unknown>) {
     setBusy(area.id)
@@ -49,66 +55,47 @@ export function BranchAreas({
     }
   }
 
-  const areas = branch.areas ?? []
-  // A branch with only its Store: shown as it is, holding everything (owner, 2026-10-30) - not as
-  // something adding areas creates. Only where areas can be added: for a seller it would be noise.
-  if (!hasAreas(branch)) {
-    const store = areas[0]
-    if (!store || !mayAddArea) return null
-    return (
-      <section aria-label={`Areas at ${branch.name}`} className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold text-neutral-900">Areas</h3>
-          {mayChange && (
-            <Button variant="quiet" onClick={onAddAreas} disabled={!online}>
-              {online ? 'Add areas' : 'Add areas when online'}
-            </Button>
-          )}
-        </div>
-        <div className="mt-2 flex flex-col gap-2" data-area={store.name}>
-          {renaming === store.id ? (
-            <RenameArea
-              area={store}
-              busy={busy === store.id}
-              onCancel={() => setRenaming(null)}
-              onSave={(name) => void act(store, () => areasApi.update(store.id, { name }))}
-            />
-          ) : (
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="min-w-0 text-sm">
-                <span className="font-medium text-neutral-900">{store.name}</span>
-                <span className="text-neutral-600"> · where all your stock is now · deliveries arrive here</span>
-              </p>
-              {mayChange && (
-                <Button variant="quiet" onClick={() => setRenaming(store.id)} disabled={!online}>
-                  Rename
-                </Button>
-              )}
-            </div>
-          )}
-          {problem?.areaId === store.id && (
-            <p role="alert" className="text-sm text-danger-700">
-              {problem.message}
-            </p>
-          )}
-        </div>
-      </section>
-    )
+  /** What the area is, in one line: "25 products · deliveries arrive here". */
+  function describe(area: Area): string {
+    if (!withAreas) return 'where all your stock is now · deliveries arrive here'
+    const parts: string[] = []
+    if (!area.active) parts.push('Closed')
+    if (!area.keepsStock) parts.push("Uses what it's given")
+    else if (area.productsInStock != null) parts.push(`${area.productsInStock} ${area.productsInStock === 1 ? 'product' : 'products'}`)
+    if (area.delivery) parts.push('deliveries arrive here')
+    return parts.join(' · ')
+  }
+
+  function menu(area: Area): OverflowMenuItem[] {
+    const items: OverflowMenuItem[] = [{ label: 'Rename', onSelect: () => setRenaming(area.id), disabled: !online }]
+    if (!withAreas) return items
+    if (area.active && area.keepsStock && !area.delivery) {
+      items.push({
+        label: 'Deliveries arrive here',
+        onSelect: () => void act(area, () => areasApi.update(area.id, { delivery: true })),
+        disabled: !online,
+      })
+    }
+    if (area.active && !area.delivery) {
+      items.push({
+        label: area.keepsStock ? "Change to: uses what it's given" : 'Change to: keeps stock',
+        onSelect: () => void act(area, () => areasApi.update(area.id, { keepsStock: !area.keepsStock })),
+        disabled: !online,
+      })
+      items.push({ label: 'Close', tone: 'danger', onSelect: () => void act(area, () => areasApi.close(area.id)), disabled: !online })
+    }
+    if (!area.active) {
+      items.push({ label: 'Reopen', onSelect: () => void act(area, () => areasApi.reopen(area.id)), disabled: !online })
+    }
+    return items
   }
 
   return (
-    <section aria-label={`Areas at ${branch.name}`} className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold text-neutral-900">Areas</h3>
-        {mayAddArea && mayChange && (
-          <Button variant="quiet" onClick={onAddAreas} disabled={!online}>
-            Add an area
-          </Button>
-        )}
-      </div>
-      <ul className="mt-2 divide-y divide-neutral-200">
+    <section aria-label={`Areas at ${branch.name}`} className="border-t border-neutral-100 pt-3">
+      <h3 className="text-sm font-medium text-neutral-700">Areas</h3>
+      <ul className="mt-1 divide-y divide-neutral-100">
         {areas.map((area) => (
-          <li key={area.id} className="flex flex-col gap-2 py-2" data-area={area.name}>
+          <li key={area.id} className="py-2" data-area={area.name}>
             {renaming === area.id ? (
               <RenameArea
                 area={area}
@@ -117,61 +104,31 @@ export function BranchAreas({
                 onSave={(name) => void act(area, () => areasApi.update(area.id, { name }))}
               />
             ) : (
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-neutral-900">
-                    <span className="truncate">{area.name}</span>
-                    {area.delivery && <span className="rounded bg-primary-100 px-1.5 text-xs text-primary-800">Deliveries arrive here</span>}
-                    {!area.keepsStock && <span className="rounded bg-neutral-200 px-1.5 text-xs text-neutral-700">Uses what it's given</span>}
-                    {!area.active && <span className="rounded bg-neutral-200 px-1.5 text-xs text-neutral-700">Closed</span>}
-                  </p>
-                  {area.productsInStock != null && area.keepsStock && (
-                    <p className="text-xs text-neutral-600">
-                      {area.productsInStock} {area.productsInStock === 1 ? 'product' : 'products'} in stock
-                    </p>
-                  )}
-                </div>
+              <div className="flex items-center justify-between gap-3">
+                <p className={`min-w-0 text-sm ${area.active ? '' : 'opacity-70'}`}>
+                  <span className="font-medium text-neutral-900">{area.name}</span>
+                  <span className="text-neutral-600"> · {describe(area)}</span>
+                </p>
                 {mayChange && (
-                  <div className="flex flex-wrap gap-1">
-                    <Button variant="quiet" onClick={() => setRenaming(area.id)} disabled={!online}>
-                      Rename
-                    </Button>
-                    {area.active && area.keepsStock && !area.delivery && (
-                      <Button variant="quiet" loading={busy === area.id} disabled={!online}
-                        onClick={() => void act(area, () => areasApi.update(area.id, { delivery: true }))}>
-                        Deliveries arrive here
-                      </Button>
-                    )}
-                    {area.active && !area.delivery && (
-                      <Button variant="quiet" loading={busy === area.id} disabled={!online}
-                        onClick={() => void act(area, () => areasApi.update(area.id, { keepsStock: !area.keepsStock }))}>
-                        {area.keepsStock ? "Change to uses what it's given" : 'Change to keeps stock'}
-                      </Button>
-                    )}
-                    {area.active && !area.delivery && (
-                      <Button variant="quiet" loading={busy === area.id} disabled={!online}
-                        onClick={() => void act(area, () => areasApi.close(area.id))}>
-                        Close
-                      </Button>
-                    )}
-                    {!area.active && (
-                      <Button variant="quiet" loading={busy === area.id} disabled={!online}
-                        onClick={() => void act(area, () => areasApi.reopen(area.id))}>
-                        Reopen
-                      </Button>
-                    )}
-                  </div>
+                  <OverflowMenu label={`Change ${area.name}`} items={menu(area)} />
                 )}
               </div>
             )}
+            {busy === area.id && renaming !== area.id && <p className="text-xs text-neutral-600">Saving…</p>}
             {problem?.areaId === area.id && (
-              <p role="alert" className="text-sm text-danger-700">
+              <p role="alert" className="mt-1 text-sm text-danger-700">
                 {problem.message}
               </p>
             )}
           </li>
         ))}
       </ul>
+      {mayAddArea && mayChange && (
+        <Button variant="quiet" onClick={onAddAreas} disabled={!online} className="mt-1 -ml-2">
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          {online ? (withAreas ? 'Add an area' : 'Add areas') : 'Add areas when online'}
+        </Button>
+      )}
     </section>
   )
 }

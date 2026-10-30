@@ -5,10 +5,10 @@
 //   2. The product page and Inventory show "Store 10 · ...", zeros left out.
 //   3. A stock-in sheet asks which area, and records into the Kitchen.
 //   4. A stock-out from the Kitchen is judged against the Kitchen: asking for more than it has is refused.
-//   5. The Bar closes (empty), and the Store, where deliveries arrive, can't.
+//   5. From an area's "⋯": the Bar closes (empty) and reopens; the Store, where deliveries arrive, can't close.
 //   6. A company without areas sees no area word on its sheets or its product page (rule 1), and can
 //      rename its Store from Branches.
-//   7. axe on Branches with areas, and on the add-areas steps (phone).
+//   7. axe on Branches with areas, and on the Add areas sheet (phone).
 import { chromium } from 'playwright'
 import { createRequire } from 'node:module'
 import { API, UI, launchOptions, shotsPrefix } from '../config.mjs'
@@ -129,35 +129,29 @@ const page = await context.newPage()
 const dialog = page.getByRole('dialog')
 
 // ------------------------------------------------------------------------------------------ 1
-await check('the owner adds Kitchen, Bar and Housekeeping; everything stays in the Store', async () => {
+await check('the owner adds Kitchen, Bar and Housekeeping in one sheet; everything stays in the Store', async () => {
   await page.goto(`${UI}/app/company/branches`)
   await page.getByRole('heading', { name: 'Branches', level: 1 }).waitFor()
   // The Store is there before anything is added, holding everything (owner, 2026-10-30).
   await page.locator('[data-area="Store"]').getByText('where all your stock is now').waitFor()
+  await page.screenshot({ path: SHOTS + '1-branches-store-only.png' })
   await page.getByRole('button', { name: 'Add areas' }).click()
 
-  await page.getByRole('heading', { name: 'Add the other areas.' }).waitFor()
-  await page.getByText(/Your stock is in the Store\./).waitFor()
-  await page.getByRole('button', { name: 'Rename it' }).waitFor()
-  for (const name of ['Kitchen', 'Bar', 'Housekeeping']) await page.getByRole('button', { name: `+ ${name}` }).click()
-  await page.getByRole('list', { name: 'Areas to add' }).getByText('Housekeeping').waitFor()
-  await page.getByRole('button', { name: 'Next' }).click()
-
-  await page.getByRole('heading', { name: 'Does each area keep stock you want to count?' }).waitFor()
-  await page.getByRole('group', { name: 'Housekeeping' }).getByLabel('No, what goes there is used').check()
-  await page.getByRole('button', { name: 'Next' }).click()
-
-  await page.getByRole('heading', { name: 'Where do deliveries arrive?' }).waitFor()
-  assert(await page.getByLabel('Store').isChecked(), 'the Store is not where deliveries arrive by default')
-  await page.getByRole('button', { name: 'Add 3 areas' }).click()
-  await page.getByRole('heading', { name: `${branchName} now has 4 areas.` }).waitFor()
-  await page.getByText('Everything you have is in the Store.').waitFor()
-  await page.getByRole('button', { name: 'Done' }).click()
+  // A task flow is a Sheet (DESIGN.md), the branch still in view beside it.
+  await dialog.getByRole('heading', { name: `Add areas to ${branchName}` }).waitFor()
+  await dialog.getByText(/Your stock is in the Store\./).waitFor()
+  for (const name of ['Kitchen', 'Bar', 'Housekeeping']) await dialog.getByRole('button', { name, exact: true }).click()
+  await dialog.getByRole('radiogroup', { name: 'What Housekeeping does with stock' }).getByRole('radio', { name: "Uses what it's given" }).click()
+  // The two kinds are explained once, not under every row (owner's comment).
+  assert((await dialog.getByText('has its own figure').count()) === 1, 'the explanation is repeated')
+  await dialog.screenshot({ path: SHOTS + '2-add-areas-sheet.png' })
+  await dialog.getByRole('button', { name: 'Add 3 areas' }).click()
+  await page.getByRole('status').filter({ hasText: `${branchName} now has 4 areas. Everything you have is in the Store.` }).waitFor()
 
   const areas = page.getByRole('region', { name: `Areas at ${branchName}` })
-  await areas.waitFor()
   await areas.locator('[data-area="Housekeeping"]').getByText("Uses what it's given").waitFor()
-  await areas.locator('[data-area="Store"]').getByText('Deliveries arrive here').waitFor()
+  await areas.locator('[data-area="Store"]').getByText('deliveries arrive here').waitFor()
+  await page.screenshot({ path: SHOTS + '3-branches-with-areas.png' })
   const at = await areaFigures(ownerToken, rice.id)
   assert(at.Store === 10 && at.Kitchen === 0 && at.Bar === 0, `figures ${JSON.stringify(at)}`)
   assert(!('Housekeeping' in at), 'a used area carries a figure')
@@ -223,18 +217,25 @@ await check('a stock-out from the Kitchen is judged against the Kitchen, and the
 })
 
 // ------------------------------------------------------------------------------------------ 5
-await check('the empty Bar closes and reopens; the Store, where deliveries arrive, offers no Close', async () => {
+await check('the empty Bar closes and reopens from its menu; the Store, where deliveries arrive, offers no Close', async () => {
   await page.goto(`${UI}/app/company/branches`)
   const areas = page.getByRole('region', { name: `Areas at ${branchName}` })
   const bar = areas.locator('[data-area="Bar"]')
-  await bar.getByRole('button', { name: 'Close' }).click()
+  await bar.getByRole('button', { name: 'Change Bar' }).click()
+  await page.screenshot({ path: SHOTS + '4-area-menu.png' })
+  await page.getByRole('menuitem', { name: 'Close' }).click()
   await bar.getByText('Closed').waitFor()
-  await bar.getByRole('button', { name: 'Reopen' }).click()
-  await bar.getByRole('button', { name: 'Close' }).waitFor()
-  assert((await areas.locator('[data-area="Store"]').getByRole('button', { name: 'Close' }).count()) === 0, 'the Store offers Close')
+  await bar.getByRole('button', { name: 'Change Bar' }).click()
+  await page.getByRole('menuitem', { name: 'Reopen' }).click()
+  await bar.getByText('0 products').waitFor()
+  await areas.locator('[data-area="Store"]').getByRole('button', { name: 'Change Store' }).click()
+  assert((await page.getByRole('menuitem', { name: 'Close' }).count()) === 0, 'the Store offers Close')
+  await page.keyboard.press('Escape')
   // The Kitchen holds 1: the server refuses, in its own words.
-  await areas.locator('[data-area="Kitchen"]').getByRole('button', { name: 'Close' }).click()
-  await areas.locator('[data-area="Kitchen"]').getByRole('alert').getByText('Kitchen still has 1 item.').waitFor()
+  const kitchen = areas.locator('[data-area="Kitchen"]')
+  await kitchen.getByRole('button', { name: 'Change Kitchen' }).click()
+  await page.getByRole('menuitem', { name: 'Close' }).click()
+  await kitchen.getByRole('alert').getByText('Kitchen still has 1 item.').waitFor()
 })
 
 // ------------------------------------------------------------------------------------------ 6
@@ -254,7 +255,8 @@ await check('a company without areas sees no area word on its sheets or product 
   await shopPage.keyboard.press('Escape')
   await shopPage.goto(`${UI}/app/company/branches`)
   const store = shopPage.locator('[data-area="Store"]')
-  await store.getByRole('button', { name: 'Rename' }).click()
+  await store.getByRole('button', { name: 'Change Store' }).click()
+  await shopPage.getByRole('menuitem', { name: 'Rename' }).click()
   await shopPage.getByLabel('Area name').fill('Shop floor')
   await shopPage.getByRole('button', { name: 'Save' }).click()
   await shopPage.locator('[data-area="Shop floor"]').getByText('where all your stock is now').waitFor()
@@ -269,13 +271,15 @@ await check('axe: Branches with areas and the add-areas steps have no WCAG 2.2 A
   await phonePage.goto(`${UI}/app/company/branches`)
   await phonePage.getByRole('region', { name: `Areas at ${branchName}` }).waitFor()
   found.push(...(await axe(phonePage)).map((v) => `Branches: ${v}`))
+  await phonePage.screenshot({ path: SHOTS + '5-phone-branches.png', fullPage: true })
   await phonePage.getByRole('button', { name: 'Add an area' }).click()
-  await phonePage.getByRole('heading', { name: `Add an area to ${branchName}.` }).waitFor()
-  found.push(...(await axe(phonePage)).map((v) => `Add: ${v}`))
-  await phonePage.getByRole('button', { name: '+ Front desk' }).click()
-  await phonePage.getByRole('button', { name: 'Next' }).click()
-  await phonePage.getByRole('heading', { name: 'Does the Front desk keep stock you want to count?' }).waitFor()
-  found.push(...(await axe(phonePage)).map((v) => `Kind: ${v}`))
+  const sheet = phonePage.getByRole('dialog')
+  await sheet.getByRole('heading', { name: `Add areas to ${branchName}` }).waitFor()
+  await sheet.getByRole('button', { name: 'Front desk', exact: true }).click()
+  await sheet.getByRole('radiogroup', { name: 'What Front desk does with stock' }).waitFor()
+  await phonePage.waitForTimeout(300)
+  await phonePage.screenshot({ path: SHOTS + '6-phone-add-sheet.png' })
+  found.push(...(await axe(phonePage)).map((v) => `Add sheet: ${v}`))
   assert(found.length === 0, found.join('\n    '))
   await phone.close()
 })
