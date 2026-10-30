@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ArrowLeftRight, Plus, Search, X } from 'lucide-react'
+import { ArrowLeftRight, ChevronDown, Plus, Search, X } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { TextField } from '@/components/TextField'
 import { useApiQuery } from '@/data/useApiQuery'
@@ -155,6 +155,7 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
     return items.length > 0 ? { label: `Usual to ${toName}`, items } : lastTime
   }, [recent.data, fromAreaId, toAreaId, allOpen])
   const [allUsualShown, setAllUsualShown] = useState(false)
+  const [usualOpen, setUsualOpen] = useState(true)
   // Opened with nothing chosen, the route is the last one used from here - most days the same as yesterday.
   const routed = useRef(false)
   useEffect(() => {
@@ -243,6 +244,11 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
   }
 
   const finder = useProductFinder(term, (product) => addProduct(product))
+  // Searching means they know what they want: the usual items fold away (not on focus - a laptop focuses
+  // the search as the panel opens).
+  useEffect(() => {
+    if (term.trim() !== '') setUsualOpen(false)
+  }, [term])
 
   /** A usual item (or all of them): the product, at the amount it went at last time on this route. */
   function addUsual(usualLines: AreaMove['lines']) {
@@ -420,42 +426,69 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
           </div>
         )}
 
-        {/* What usually goes this way: tap one to add it, or Add all. Gone once everything's on the move. */}
-        {usualLeft.length > 0 && !finder.search && usual && (
-          <section aria-label={usual.label} className="flex flex-col gap-1.5 rounded-lg border border-dashed border-neutral-300 px-3 py-2" data-usual>
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm text-neutral-600">{usual.label}</p>
+        {/* What usually goes this way: tap one to add it, or Add all. Typing a search folds it into its one-line
+            header (animated, so it's clear where it went); the header opens it again. Gone once all is on. */}
+        {usualLeft.length > 0 && usual && (
+          <section aria-label={usual.label} className="rounded-lg border border-dashed border-neutral-300 px-3" data-usual>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                aria-expanded={usualOpen}
+                aria-controls="move-usual-items"
+                onClick={() => setUsualOpen((open) => !open)}
+                className="flex min-h-11 min-w-0 flex-1 items-center gap-1.5 text-left text-sm text-neutral-600"
+              >
+                <ChevronDown
+                  className={`h-4 w-4 shrink-0 text-neutral-500 transition-transform duration-200 motion-reduce:transition-none ${usualOpen ? '' : '-rotate-90'}`}
+                  aria-hidden="true"
+                />
+                <span className="truncate">
+                  {usual.label}
+                  {!usualOpen && <span className="tabular-nums"> · {usualLeft.length}</span>}
+                </span>
+              </button>
               <button
                 type="button"
                 onClick={() => addUsual(usualLeft.map((item) => item.line))}
-                className="-my-1.5 inline-flex min-h-11 shrink-0 items-center px-1 text-sm font-medium text-primary-700 hover:underline"
+                className="inline-flex min-h-11 shrink-0 items-center px-1 text-sm font-medium text-primary-700 hover:underline"
               >
                 Add all
               </button>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {usualShown.map((item) => (
-                <button
-                  key={item.line.productId}
-                  type="button"
-                  onClick={() => addUsual([item.line])}
-                  aria-label={`Add ${item.line.productName}, ${typedAs(item.line)}`}
-                  className="inline-flex min-h-11 max-w-full items-center gap-1.5 rounded-full border border-neutral-300 bg-white px-3 text-sm text-neutral-800 hover:bg-neutral-50"
-                >
-                  <Plus className="h-3.5 w-3.5 shrink-0 text-neutral-500" aria-hidden="true" />
-                  <span className="truncate">{item.line.productName}</span>
-                  <span className="shrink-0 tabular-nums text-neutral-600">· {typedAs(item.line)}</span>
-                </button>
-              ))}
-              {usualLeft.length > usualShown.length && (
-                <button
-                  type="button"
-                  onClick={() => setAllUsualShown(true)}
-                  className="inline-flex min-h-11 items-center px-2 text-sm font-medium text-primary-700 hover:underline"
-                >
-                  + {usualLeft.length - usualShown.length} more
-                </button>
-              )}
+            {/* Height animates through grid rows (0fr ↔ 1fr), so the items slide up into the header. */}
+            <div
+              id="move-usual-items"
+              className={`grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none ${
+                usualOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+              }`}
+              inert={!usualOpen}
+            >
+              <div className="overflow-hidden">
+                <div className="flex flex-wrap gap-2 pb-2.5">
+                  {usualShown.map((item) => (
+                    <button
+                      key={item.line.productId}
+                      type="button"
+                      onClick={() => addUsual([item.line])}
+                      aria-label={`Add ${item.line.productName}, ${typedAs(item.line)}`}
+                      className="inline-flex min-h-11 max-w-full items-center gap-1.5 rounded-full border border-neutral-300 bg-white px-3 text-sm text-neutral-800 hover:bg-neutral-50"
+                    >
+                      <Plus className="h-3.5 w-3.5 shrink-0 text-neutral-500" aria-hidden="true" />
+                      <span className="truncate">{item.line.productName}</span>
+                      <span className="shrink-0 tabular-nums text-neutral-600">· {typedAs(item.line)}</span>
+                    </button>
+                  ))}
+                  {usualLeft.length > usualShown.length && (
+                    <button
+                      type="button"
+                      onClick={() => setAllUsualShown(true)}
+                      className="inline-flex min-h-11 items-center px-2 text-sm font-medium text-primary-700 hover:underline"
+                    >
+                      + {usualLeft.length - usualShown.length} more
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </section>
         )}
@@ -524,11 +557,11 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
                       <>
                         <dt className="text-neutral-600">{to.name}</dt>
                         <dd className="text-neutral-800">
-                          {to.keepsStock && toHas != null ? (
-                            <BeforeAfter before={toHas} after={short ? null : toHas + base} option={option} unit={unit} />
-                          ) : (
+                          {!to.keepsStock ? (
                             'used there'
-                          )}
+                          ) : toHas != null ? (
+                            <BeforeAfter before={toHas} after={short ? null : toHas + base} option={option} unit={unit} />
+                          ) : null}
                         </dd>
                       </>
                     )}
