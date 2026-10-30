@@ -7,7 +7,7 @@ import { Skeleton } from '@/components/Skeleton'
 import { useApiQuery } from '@/data/useApiQuery'
 import { formatDateTime } from '@/features/marketplace/formatters'
 import { movesApi } from '@/features/moves/movesApi'
-import { formatNumber } from '@/features/products/unitCopy'
+import { formatNumber, pluraliseUnitNoun } from '@/features/products/unitCopy'
 
 const PAGE_SIZE = 25
 
@@ -67,7 +67,7 @@ export function MovesList({ branchId }: { branchId: string }) {
                 .map((line) =>
                   `${line.productName} ${
                     line.enteredQuantity != null && line.enteredUnit
-                      ? `${formatNumber(line.enteredQuantity)} ${line.enteredUnit.toLowerCase()}`
+                      ? `${formatNumber(line.enteredQuantity)} ${pluraliseUnitNoun(line.enteredUnit.toLowerCase(), line.enteredQuantity)}`
                       : formatNumber(line.quantity)
                   }`,
                 )

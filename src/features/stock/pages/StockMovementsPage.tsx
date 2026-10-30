@@ -20,7 +20,7 @@ import { StatCard } from '@/components/analytics/StatCard'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
 import { formatDateTime } from '@/features/marketplace/formatters'
-import type { MovementType, OutReason } from '@/features/products/types'
+import type { MovementType, OutReason, StockMovement } from '@/features/products/types'
 import { useStockMovementReport } from '@/features/stock/hooks/useStockMovementReport'
 import { NO_REASON_LABEL, OUT_REASONS, outReasonLabel } from '@/features/stock/outReasons'
 import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
@@ -44,6 +44,7 @@ const MOVEMENT_BADGE: Record<MovementType, { label: string; variant: 'success' |
   ADJUSTMENT: { label: 'Adjustment', variant: 'neutral' },
   TRANSFER_OUT: { label: 'Sent', variant: 'neutral' },
   TRANSFER_IN: { label: 'Received', variant: 'neutral' },
+  MOVE: { label: 'Moved', variant: 'neutral' },
 }
 
 /**
@@ -480,6 +481,10 @@ export function StockMovementsPage() {
                             {movement.usedAreaId && areaName(movement.usedAreaId) ? ` at ${areaName(movement.usedAreaId)}` : ''}
                           </span>
                         )}
+                        {/* Where a move went, here when there is no Area column to say it (every branch). */}
+                        {movement.movementType === 'MOVE' && !areaBranch && (
+                          <span className="mt-1 block text-xs text-neutral-600">{routeOf(movement)}</span>
+                        )}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-neutral-900">
                         {formatNumber(movement.quantity)}
@@ -495,7 +500,11 @@ export function StockMovementsPage() {
                         {movement.lineValue == null ? '—' : formatCurrency(movement.lineValue)}
                       </td>
                       {showBranch && <td className="px-4 py-3 text-neutral-600">{nameOf(movement.branchId) ?? '—'}</td>}
-                      {areaBranch && <td className="px-4 py-3 text-neutral-600">{areaName(movement.areaId) ?? '—'}</td>}
+                      {areaBranch && (
+                        <td className="whitespace-nowrap px-4 py-3 text-neutral-600">
+                          {movement.movementType === 'MOVE' ? routeOf(movement) : (areaName(movement.areaId) ?? '—')}
+                        </td>
+                      )}
                       <td className="px-4 py-3 text-neutral-600">{movement.companyVendorName ?? '—'}</td>
                       <td className="max-w-xs px-4 py-3 text-neutral-500">{movement.note ?? '—'}</td>
                     </tr>
@@ -510,4 +519,9 @@ export function StockMovementsPage() {
       )}
     </div>
   )
+}
+
+/** A move's two areas: "Store → Kitchen". */
+function routeOf(movement: StockMovement): string {
+  return `${movement.areaName ?? '—'} → ${movement.toAreaName ?? '—'}`
 }

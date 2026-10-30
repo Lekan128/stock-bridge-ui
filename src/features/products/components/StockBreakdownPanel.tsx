@@ -62,6 +62,9 @@ function lastMovementLine(movement: StockMovement, unit: string): string {
   if (movement.movementType === 'OUT') {
     return `${amount} went out${movement.note ? ` · ${movement.note}` : ''} · ${when}`
   }
+  if (movement.movementType === 'MOVE') {
+    return `Moved ${amount}, ${movement.areaName ?? '—'} → ${movement.toAreaName ?? '—'} · ${when}`
+  }
   // The note names the other branch and the waybill: "Sent to Oshodi on WB-BOL-0042".
   if (movement.movementType === 'TRANSFER_OUT' || movement.movementType === 'TRANSFER_IN') {
     return `${movement.movementType === 'TRANSFER_OUT' ? '−' : '+'}${amount}${movement.note ? ` · ${movement.note}` : ''} · ${when}`

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, ArrowUpDown, Repeat, Search, X } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight, ArrowRight, ArrowUpDown, Repeat, Search, X } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { TextField } from '@/components/TextField'
 import { useApiQuery } from '@/data/useApiQuery'
@@ -17,8 +17,8 @@ import { applyMoveResult, submitMove } from '@/features/outbox/outboxStore'
 import { productsApi } from '@/features/products/api/productsApi'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import type { Product, UnitOption } from '@/features/products/types'
-import { formatNumber, stockUnitWord, unitNoun } from '@/features/products/unitCopy'
-import { resolveUnitSymbol, stockUnitOption, toBaseQuantity } from '@/features/products/unitSet'
+import { formatNumber, packRemainderPhrase, pluraliseUnitNoun, stockUnitWord, unitNoun } from '@/features/products/unitCopy'
+import { packRemainder, resolveUnitSymbol, stockUnitOption, toBaseQuantity } from '@/features/products/unitSet'
 import { unitsFor } from '@/features/selling/sale/saleLine'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
@@ -86,7 +86,6 @@ export function MoveStockPage() {
   const [moving, setMoving] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const [done, setDone] = useState<Done | null>(null)
-  const searchRef = useRef<HTMLInputElement>(null)
 
   // ------------------------------------------------------------------- usual routes, and the last one
   const recent = useApiQuery({
@@ -141,16 +140,17 @@ export function MoveStockPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [catalogue])
 
-  function addProduct(product: Product, quantity = '', unitLabel?: string) {
+  /** A new line goes at the top, just under the search, and its quantity is ready to type. */
+  function addProduct(product: Product, quantity = '', unitLabel?: string, focus = true) {
     setTerm('')
     setProblem(null)
     setLines((current) => {
       if (current.some((line) => line.product.id === product.id)) return current
       const options = unitsFor(product, catalogue)
       const option = options.find((o) => o.label === unitLabel) ?? openingOption(options)
-      return [...current, { key: product.id, product, unitLabel: option.label, quantity }]
+      return [{ key: product.id, product, unitLabel: option.label, quantity }, ...current]
     })
-    searchRef.current?.focus()
+    if (focus) window.requestAnimationFrame(() => document.getElementById(`move-qty-${product.id}`)?.focus())
   }
 
   const finder = useProductFinder(term, (product) => addProduct(product))
@@ -163,7 +163,7 @@ export function MoveStockPage() {
         .then((product) => {
           const options = unitsFor(product, catalogue)
           const typed = options.find((o) => o.code === line.enteredUnit && !o.isStockUnit)
-          addProduct(product, String(typed && line.enteredQuantity != null ? line.enteredQuantity : line.quantity), typed?.label)
+          addProduct(product, String(typed && line.enteredQuantity != null ? line.enteredQuantity : line.quantity), typed?.label, false)
         })
         .catch(() => undefined)
     }
@@ -295,32 +295,39 @@ export function MoveStockPage() {
           </div>
         )}
 
-        <section aria-label="From and to" className="flex flex-col gap-4 border-y border-neutral-200 py-4">
-          <AreaPicker
-            label="From"
-            areas={fromChoices}
-            chosen={fromAreaId}
-            onChoose={(id) => {
-              setFromChoice(id)
-              if (id === toAreaId) setToAreaId('')
-            }}
-          />
-          <div className="flex items-end justify-between gap-3">
-            <div className="min-w-0 flex-1">
+        <section aria-label="From and to" className="flex flex-col gap-3">
+          {/* One row on a wider screen - From, swap, To - and stacked on a phone. */}
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-start">
+            <div className="col-span-2 sm:col-span-1">
+              <AreaPicker
+                label="From"
+                areas={fromChoices}
+                chosen={fromAreaId}
+                onChoose={(id) => {
+                  setFromChoice(id)
+                  if (id === toAreaId) setToAreaId('')
+                }}
+              />
+            </div>
+            {/* Level with the choices, below their labels. */}
+            <div className="order-last sm:order-none sm:mt-7">
+              <Button
+                variant="secondary"
+                aria-label="Swap from and to"
+                disabled={!to || !to.keepsStock}
+                onClick={() => {
+                  const was = fromAreaId
+                  setFromChoice(toAreaId)
+                  setToAreaId(was)
+                }}
+              >
+                <ArrowUpDown className="h-4 w-4 sm:hidden" aria-hidden="true" />
+                <ArrowLeftRight className="hidden h-4 w-4 sm:block" aria-hidden="true" />
+              </Button>
+            </div>
+            <div className="min-w-0">
               <AreaPicker label="To" areas={toChoices} chosen={toAreaId} onChoose={setToAreaId} />
             </div>
-            <Button
-              variant="secondary"
-              aria-label="Swap from and to"
-              disabled={!to || !to.keepsStock}
-              onClick={() => {
-                const was = fromAreaId
-                setFromChoice(toAreaId)
-                setToAreaId(was)
-              }}
-            >
-              <ArrowUpDown className="h-4 w-4" aria-hidden="true" />
-            </Button>
           </div>
           {to && !to.keepsStock && (
             <p className="text-sm text-neutral-700">
@@ -343,104 +350,12 @@ export function MoveStockPage() {
             What's moving
           </h2>
 
-          {checked.length > 0 && (
-            <ul className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white" aria-label="On this move">
-              {checked.map(({ line, options, option, base, has, toHas, short }) => {
-                const unit = resolveUnitSymbol(line.product.unitOfMeasure, catalogue)
-                const inputId = `move-qty-${line.key}`
-                return (
-                  <li key={line.key} className="flex flex-col gap-2 px-4 py-3" data-move-line={line.product.id}>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-base font-medium text-neutral-900">{line.product.name}</p>
-                        {/* Both areas, before → after (§5.1): the storekeeper sees what's left behind. */}
-                        <p className="text-xs tabular-nums text-neutral-600" data-before-after>
-                          {from && has != null && (
-                            <span className={short ? 'font-medium text-danger-700' : ''}>
-                              {from.name} {formatNumber(has)}
-                              {base > 0 && !short && ` → ${formatNumber(has - base)}`}
-                            </span>
-                          )}
-                          {to && (
-                            <>
-                              {' · '}
-                              {to.keepsStock && toHas != null ? (
-                                <span>
-                                  {to.name} {formatNumber(toHas)}
-                                  {base > 0 && !short && ` → ${formatNumber(toHas + base)}`}
-                                </span>
-                              ) : (
-                                <span>used at {to.name}</span>
-                              )}
-                            </>
-                          )}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setLines((current) => current.filter((l) => l.key !== line.key))}
-                        aria-label={`Take ${line.product.name} off`}
-                        className="inline-flex h-11 w-11 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <label htmlFor={inputId} className="sr-only">
-                        How many {line.product.name}
-                      </label>
-                      <input
-                        id={inputId}
-                        inputMode="numeric"
-                        value={line.quantity}
-                        disabled={moving}
-                        aria-invalid={short || undefined}
-                        onChange={(event) => update(line.key, { quantity: event.target.value.replace(/[^0-9]/g, '') })}
-                        className={`h-11 w-24 rounded-md border bg-white px-3 text-base tabular-nums focus:ring-2 focus:outline-none ${
-                          short ? 'border-danger-500 focus:ring-danger-100' : 'border-neutral-300 focus:border-primary-500 focus:ring-primary-100'
-                        }`}
-                      />
-                      {options.length > 1 ? (
-                        <select
-                          aria-label={`Unit for ${line.product.name}`}
-                          value={option.label}
-                          disabled={moving}
-                          onChange={(event) => update(line.key, { unitLabel: event.target.value })}
-                          className="h-11 rounded-md border border-neutral-300 bg-white px-2 text-base sm:text-sm"
-                        >
-                          {options.map((o) => (
-                            <option key={o.label} value={o.label}>
-                              {o.isStockUnit ? unit : unitNoun(o)}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="text-sm text-neutral-600">{unit}</span>
-                      )}
-                      {!option.isStockUnit && base > 0 && (
-                        <span className="text-xs tabular-nums text-neutral-600">
-                          = {formatNumber(base)} {stockUnitWord(unit, base)}
-                        </span>
-                      )}
-                    </div>
-                    {short && has != null && from && (
-                      <p className="text-sm text-danger-700">
-                        The {from.name} has {formatNumber(has)} {stockUnitWord(unit, has)}.
-                      </p>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-
           <div className="relative">
             <Search className="pointer-events-none absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-neutral-500" aria-hidden="true" />
             <label htmlFor="move-search" className="sr-only">
               Scan or search to add an item
             </label>
             <input
-              ref={searchRef}
               id="move-search"
               type="search"
               autoComplete="off"
@@ -454,7 +369,7 @@ export function MoveStockPage() {
                   finder.onEnter()
                 }
               }}
-              placeholder={lines.length === 0 ? 'Scan or search to add the first item…' : 'Scan or search to add another item…'}
+              placeholder={lines.length === 0 ? 'Scan or search to add an item…' : 'Scan or search to add another item…'}
               className="h-12 w-full rounded-lg border-2 border-neutral-300 bg-white pr-3 pl-11 text-base text-neutral-900 placeholder:text-neutral-500 focus:border-primary-600 focus:outline-none"
             />
           </div>
@@ -476,6 +391,96 @@ export function MoveStockPage() {
               )}
             </div>
           )}
+          {checked.length > 0 && (
+            <ul className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white" aria-label="On this move">
+              {checked.map(({ line, options, option, base, has, toHas, short }) => {
+                const unit = resolveUnitSymbol(line.product.unitOfMeasure, catalogue)
+                const inputId = `move-qty-${line.key}`
+                return (
+                  <li
+                    key={line.key}
+                    className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start sm:justify-between"
+                    data-move-line={line.product.id}
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-base font-medium text-neutral-900">{line.product.name}</p>
+                      {/* Both areas, before → after (§5.1), in the unit being moved and in the stock unit:
+                          the storekeeper sees what's left behind, in packs and in all. */}
+                      <dl className="mt-1 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 text-sm tabular-nums" data-before-after>
+                        {from && has != null && (
+                          <>
+                            <dt className="text-neutral-600">{from.name}</dt>
+                            <dd className={short ? 'font-medium text-danger-700' : 'text-neutral-900'}>
+                              <BeforeAfter before={has} after={short ? null : has - base} option={option} unit={unit} />
+                            </dd>
+                          </>
+                        )}
+                        {to && (
+                          <>
+                            <dt className="text-neutral-600">{to.name}</dt>
+                            <dd className="text-neutral-900">
+                              {to.keepsStock && toHas != null ? (
+                                <BeforeAfter before={toHas} after={short ? null : toHas + base} option={option} unit={unit} />
+                              ) : (
+                                'used there'
+                              )}
+                            </dd>
+                          </>
+                        )}
+                      </dl>
+                      {short && has != null && from && (
+                        <p className="mt-1 text-sm text-danger-700">
+                          The {from.name} has {inUnit(has, option, unit)}.
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <label htmlFor={inputId} className="sr-only">
+                        How many {line.product.name}
+                      </label>
+                      <input
+                        id={inputId}
+                        inputMode="numeric"
+                        value={line.quantity}
+                        disabled={moving}
+                        aria-invalid={short || undefined}
+                        onChange={(event) => update(line.key, { quantity: event.target.value.replace(/[^0-9]/g, '') })}
+                        className={`h-11 w-20 rounded-md border bg-white px-3 text-base tabular-nums focus:ring-2 focus:outline-none ${
+                          short ? 'border-danger-500 focus:ring-danger-100' : 'border-neutral-300 focus:border-primary-500 focus:ring-primary-100'
+                        }`}
+                      />
+                      {options.length > 1 ? (
+                        <select
+                          aria-label={`Unit for ${line.product.name}`}
+                          value={option.label}
+                          disabled={moving}
+                          onChange={(event) => update(line.key, { unitLabel: event.target.value })}
+                          className="h-11 rounded-md border border-neutral-300 bg-white px-2 text-base sm:text-sm"
+                        >
+                          {options.map((o) => (
+                            <option key={o.label} value={o.label}>
+                              {o.isStockUnit ? unit : unitNoun(o)}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-sm text-neutral-600">{unit}</span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setLines((current) => current.filter((l) => l.key !== line.key))}
+                        aria-label={`Take ${line.product.name} off`}
+                        className="ml-auto inline-flex h-11 w-11 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 sm:ml-0"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+
         </section>
 
         <TextField id="move-note" label="Note (optional)" value={note} maxLength={1000} disabled={moving} onChange={(event) => setNote(event.target.value)} />
@@ -498,6 +503,42 @@ export function MoveStockPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+/**
+ * A figure in the unit being moved: "68 baskets", "68 baskets + 2 g" when a pack doesn't divide it, or
+ * "340 g" in the stock unit.
+ */
+function inUnit(base: number, option: UnitOption, unit: string): string {
+  if (option.isStockUnit) return `${formatNumber(base)} ${stockUnitWord(unit, base)}`
+  const split = packRemainderPhrase(packRemainder(base, option), option, unit)
+  return split ?? `0 ${pluraliseUnitNoun(unitNoun(option), 0)}`
+}
+
+/**
+ * One area's figure, before → after the move: "340 → 325 g", or in a pack "68 → 65 baskets · 340 →
+ * 325 g" - the packs left, and everything in the stock unit. Before a quantity is typed, just the figure.
+ */
+function BeforeAfter({ before, after, option, unit }: { before: number; after: number | null; option: UnitOption; unit: string }) {
+  const changes = after != null && after !== before
+  const stock = changes
+    ? `${formatNumber(before)} → ${formatNumber(after)} ${stockUnitWord(unit, after)}`
+    : `${formatNumber(before)} ${stockUnitWord(unit, before)}`
+  if (option.isStockUnit) return <>{stock}</>
+  const factor = option.factorToStockUnit
+  const whole = (n: number) => factor > 0 && Number.isInteger(n / factor)
+  // Whole packs either side read as one phrase, "68 → 65 baskets"; a part pack spells both out.
+  const packs = !changes
+    ? inUnit(before, option, unit)
+    : whole(before) && whole(after)
+      ? `${formatNumber(before / factor)} → ${formatNumber(after / factor)} ${pluraliseUnitNoun(unitNoun(option), after / factor)}`
+      : `${inUnit(before, option, unit)} → ${inUnit(after, option, unit)}`
+  return (
+    <>
+      {packs}
+      <span className="text-neutral-600"> · {stock}</span>
+    </>
   )
 }
 

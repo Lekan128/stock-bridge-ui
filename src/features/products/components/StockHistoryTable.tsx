@@ -7,7 +7,7 @@ import type { OutboxOp } from '@/features/outbox/types'
 import { useAuth } from '@/auth/useAuth'
 import { formatCurrency, formatDateTime } from '@/features/products/formatters'
 import type { MovementType, PageResponse, StockMovement, UnitOfMeasureOption } from '@/features/products/types'
-import { formatEnteredAndBase, formatPricePerOption } from '@/features/products/unitCopy'
+import { formatEnteredAndBase, formatNumber, formatPricePerOption, pluraliseUnitNoun } from '@/features/products/unitCopy'
 import { buildPackOption } from '@/features/products/unitSet'
 import { outReasonLabel } from '@/features/stock/outReasons'
 import { StockFigure } from '@/features/products/components/StockFigure'
@@ -18,6 +18,7 @@ const movementLabels: Record<MovementType, string> = {
   ADJUSTMENT: 'Adjustment',
   TRANSFER_OUT: 'Sent',
   TRANSFER_IN: 'Received',
+  MOVE: 'Moved',
 }
 const PENDING_LABEL: Record<OutboxOp['kind'], string> = {
   STOCK_IN: 'Stock in',
@@ -33,6 +34,7 @@ const movementVariants: Record<MovementType, BadgeVariant> = {
   ADJUSTMENT: 'neutral',
   TRANSFER_OUT: 'neutral',
   TRANSFER_IN: 'neutral',
+  MOVE: 'neutral',
 }
 
 /** The movement as a signed change in stock units: a stock-out is always a fall. */
@@ -40,6 +42,12 @@ function signedQuantity(movement: StockMovement): number {
   if (movement.movementType === 'OUT' || movement.movementType === 'TRANSFER_OUT') return -Math.abs(movement.quantity)
   if (movement.movementType === 'IN' || movement.movementType === 'TRANSFER_IN') return Math.abs(movement.quantity)
   return movement.quantity
+}
+
+/** What a move's line was typed as, when not in the stock unit: "3 baskets". */
+function movedAs(movement: StockMovement): string | null {
+  if (movement.enteredQuantity == null || !movement.enteredUnit) return null
+  return `${formatNumber(movement.enteredQuantity)} ${pluraliseUnitNoun(movement.enteredUnit.toLowerCase(), movement.enteredQuantity)}`
 }
 
 /**
@@ -232,11 +240,12 @@ export function StockHistoryTable({
                 <td className="border-b border-neutral-100 px-4 py-2.5 text-right">
                   {/* The same figure as everywhere else (B2), as a change: "+400 kg", "−100 kg",
                       with the pack it arrived in under it when it came in one. */}
+                  {/* A move changes no branch figure, so it has no sign: "15 g", with "3 basket" under it. */}
                   <StockFigure
                     quantity={signedQuantity(movement)}
                     unit={stockUnit}
-                    pack={enteredPackEcho(movement, stockUnit, unitOfMeasureOptions)}
-                    signed
+                    pack={movement.movementType === 'MOVE' ? movedAs(movement) : enteredPackEcho(movement, stockUnit, unitOfMeasureOptions)}
+                    signed={movement.movementType !== 'MOVE'}
                     align="end"
                   />
                   {movement.unitPriceAtTime != null && (
@@ -246,13 +255,19 @@ export function StockHistoryTable({
                   )}
                 </td>
                 <td className="max-w-xs truncate border-b border-neutral-100 px-4 py-2.5 text-neutral-600">
+                  {movement.movementType === 'MOVE' && (
+                    <span className="text-neutral-800">
+                      {movement.areaName} → {movement.toAreaName}
+                      {movement.note ? ' · ' : ''}
+                    </span>
+                  )}
                   {movement.saleAmount != null && (
                     <span className="tabular-nums text-neutral-800">
                       {movement.correctsMovementId ? 'Added' : 'Sold for'} {formatCurrency(movement.saleAmount)}
                       {movement.note ? ' · ' : ''}
                     </span>
                   )}
-                  {movement.note || (movement.saleAmount == null ? '—' : '')}
+                  {movement.note || (movement.saleAmount == null && movement.movementType !== 'MOVE' ? '—' : '')}
                 </td>
                 <td className="border-b border-neutral-100 px-4 py-2.5 text-neutral-600">{who(movement)}</td>
                 <td className="border-b border-neutral-100 px-4 py-2.5 whitespace-nowrap text-neutral-600">{when(movement)}</td>

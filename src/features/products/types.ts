@@ -402,8 +402,12 @@ export interface ProductUpdatePayload extends Partial<ProductFormPayload> {
   // has no use for it and `ProductFormPage` never populates it outside the create form.
 }
 
-/** TRANSFER_OUT / TRANSFER_IN: stock sent to, or received from, another branch (V53). */
-export type MovementType = 'IN' | 'OUT' | 'ADJUSTMENT' | 'TRANSFER_OUT' | 'TRANSFER_IN'
+/**
+ * TRANSFER_OUT / TRANSFER_IN: stock sent to, or received from, another branch (V53). MOVE: a line of a
+ * move between two areas of a branch (V63) - in the lists only, never a ledger row; it changes no
+ * branch figure.
+ */
+export type MovementType = 'IN' | 'OUT' | 'ADJUSTMENT' | 'TRANSFER_OUT' | 'TRANSFER_IN' | 'MOVE'
 
 export interface StockMovement {
   /** Where it happened (V51). Absent from an older API. */
@@ -412,6 +416,11 @@ export interface StockMovement {
   areaId?: string
   /** A give to an area that uses what it's given (V63): that area - "Used at Housekeeping". */
   usedAreaId?: string
+  /** A MOVE row: where it went (`areaId` is where it came from), the move, and both areas by name. */
+  toAreaId?: string
+  moveId?: string
+  areaName?: string
+  toAreaName?: string
   id: string
   productId: string
   /**

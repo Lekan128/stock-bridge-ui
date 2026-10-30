@@ -80,9 +80,9 @@ async function login(clientIdentifier, username) {
   return (await api('/api/auth/login', { method: 'POST', body: { clientIdentifier, username, password: PASSWORD } })).json
 }
 
-async function createProduct(token, unique, name) {
+async function createProduct(token, unique, name, extra = { unitOfMeasure: 'PIECE' }) {
   const form = new FormData()
-  form.append('product', new Blob([JSON.stringify({ name, sku: `AR-${name.slice(0, 4)}-${unique}`, unitOfMeasure: 'PIECE' })], { type: 'application/json' }))
+  form.append('product', new Blob([JSON.stringify({ name, sku: `AR-${name.slice(0, 4)}-${unique}`, ...extra })], { type: 'application/json' }))
   return (await api('/api/products', { token, method: 'POST', body: form })).json
 }
 
@@ -261,7 +261,7 @@ await check('Move stock: the morning move with before → after, then the route 
   await page.getByRole('radiogroup', { name: 'To' }).getByRole('radio', { name: 'Kitchen' }).click()
   await page.getByLabel('How many Rice').fill('4')
   const line = page.locator('[data-before-after]').first()
-  await waitFor(async () => /Store 10 → 6 · Kitchen 1 → 5/.test(await line.innerText()), 'the line to read Store 10 → 6 · Kitchen 1 → 5')
+  await waitFor(async () => /Store\s+10 → 6\b[\s\S]*Kitchen\s+1 → 5\b/.test(await line.innerText()), 'the line to read Store 10 → 6, Kitchen 1 → 5')
   await page.screenshot({ path: SHOTS + '7-move-stock.png' })
   await page.getByRole('button', { name: 'Move 1 item to Kitchen' }).click()
   await page.getByRole('heading', { name: 'Moved', level: 1 }).waitFor()
@@ -297,6 +297,24 @@ await check('more than the Store has turns the line red and holds the button', a
   assert(await page.getByRole('button', { name: 'Move 1 item to Kitchen' }).isDisabled(), 'the button is not held')
 })
 
+await check('moving in bags shows what is left in bags and in kg', async () => {
+  const flour = await createProduct(ownerToken, owner.unique, 'Flour', { unitOfMeasure: 'KG', packagingUnit: 'BAG', packagingSize: 50 })
+  await api(`/api/products/${flour.id}/stock/stock-in`, { token: ownerToken, method: 'POST', body: { quantity: 180 } })
+  await page.goto(`${UI}/app/move?product=${flour.id}`)
+  await page.getByRole('radiogroup', { name: 'To' }).getByRole('radio', { name: 'Kitchen' }).click()
+  await page.getByLabel('Unit for Flour').selectOption({ label: 'bag' })
+  await page.getByLabel('How many Flour').fill('2')
+  const line = page.locator('[data-move-line]', { hasText: 'Flour' }).locator('[data-before-after]')
+  await waitFor(
+    async () => /3 bags \+ 30 kg → 1 bag \+ 30 kg · 180 → 80 kg[\s\S]*Kitchen\s+0 → 2 bags · 0 → 100 kg/.test(await line.innerText()),
+    'the bag line to read 3 bags + 30 kg → 1 bag + 30 kg · 180 → 80 kg, Kitchen 0 → 2 bags',
+  )
+  await page.screenshot({ path: SHOTS + '7b-move-in-bags.png' })
+  await page.getByRole('button', { name: `Take Flour off` }).click()
+  await page.goto(`${UI}/app/move?product=${rice.id}`)
+  await page.getByRole('radiogroup', { name: 'To' }).getByRole('radio', { name: 'Kitchen' }).click()
+})
+
 await check('offline, a move is kept on the phone and goes once back online', async () => {
   await page.getByLabel('How many Rice').fill('2')
   await context.setOffline(true)
@@ -314,6 +332,11 @@ await check('Stock movements lists the moves, and says the area on each row', as
   await moves.getByText('undone').waitFor()
   assert((await moves.locator('[data-move-row]').count()) >= 3, 'fewer than three moves listed')
   await page.screenshot({ path: SHOTS + '8-moves-list.png' })
+  // …and among every movement, as rows of their own: "Moved", Store → Kitchen.
+  await page.goto(`${UI}/app/stock-movements`)
+  const moved = page.locator('tbody tr', { hasText: 'Moved' }).filter({ hasText: 'Store → Kitchen' })
+  await moved.first().waitFor()
+  await page.screenshot({ path: SHOTS + '9-moves-among-movements.png' })
 })
 
 // ------------------------------------------------------------------------------------------ 6
