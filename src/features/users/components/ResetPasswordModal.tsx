@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import { usersApi } from '@/features/users/api/usersApi'
 import { resetPasswordFormDefaults, resetPasswordSchema, type ResetPasswordFormValues } from '@/features/users/schemas'
@@ -39,7 +39,7 @@ export function ResetPasswordModal({ user, onClose, onSuccess }: ResetPasswordMo
   }
 
   return (
-    <Modal
+    <Sheet
       open
       onClose={onClose}
       title={`Reset password for ${user.username}`}
@@ -49,7 +49,7 @@ export function ResetPasswordModal({ user, onClose, onSuccess }: ResetPasswordMo
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
+          <Button variant="action" onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
             Reset password
           </Button>
         </>
@@ -70,6 +70,6 @@ export function ResetPasswordModal({ user, onClose, onSuccess }: ResetPasswordMo
         />
         <FormError message={formError} />
       </form>
-    </Modal>
+    </Sheet>
   )
 }

@@ -7,7 +7,7 @@ import { Controller, useForm } from 'react-hook-form'
 import { useAuth } from '@/auth/useAuth'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import { usersApi } from '@/features/users/api/usersApi'
 import { RoleSelectField } from '@/features/users/components/RoleSelectField'
@@ -85,17 +85,17 @@ export function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) 
   }
 
   return (
-    <Modal
+    <Sheet
       open
       onClose={onClose}
       title={`Edit ${formatDisplayName(user)}`}
-      size="lg"
+      size="md"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
+          <Button variant="action" onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
             Save changes
           </Button>
         </>
@@ -176,6 +176,6 @@ export function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) 
 
         <FormError message={formError} />
       </form>
-    </Modal>
+    </Sheet>
   )
 }

@@ -6,7 +6,7 @@ import { useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import { usersApi } from '@/features/users/api/usersApi'
 import { RoleSelectField } from '@/features/users/components/RoleSelectField'
@@ -68,17 +68,17 @@ export function AddUserModal({ onClose, onSuccess }: AddUserModalProps) {
   }
 
   return (
-    <Modal
+    <Sheet
       open
       onClose={onClose}
       title="Add user"
-      size="lg"
+      size="md"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
+          <Button variant="action" onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
             Add user
           </Button>
         </>
@@ -125,6 +125,6 @@ export function AddUserModal({ onClose, onSuccess }: AddUserModalProps) {
 
         <FormError message={formError} />
       </form>
-    </Modal>
+    </Sheet>
   )
 }
