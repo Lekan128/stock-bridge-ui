@@ -122,6 +122,7 @@ export function ApproveVendorDialog({
       <div className="mt-4 flex flex-col gap-4">
         <TextField
           label="Username"
+          autoComplete="off"
           name="vendor-username"
           value={username}
           onChange={(event) => setUsername(event.target.value)}

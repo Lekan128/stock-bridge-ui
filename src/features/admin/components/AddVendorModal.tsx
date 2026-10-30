@@ -271,6 +271,7 @@ export function AddVendorModal({ open, submitting, onCancel, onConfirm }: AddVen
           <div className="mt-3 flex flex-col gap-4">
             <TextField
               label="Username"
+          autoComplete="off"
               name="new-vendor-username"
               value={username}
               onChange={(event) => setUsername(event.target.value)}

@@ -59,12 +59,14 @@ export function ResetPasswordModal({ user, onClose, onSuccess }: ResetPasswordMo
         <TextField
           label="New password"
           type="password"
+          autoComplete="new-password"
           error={errors.newPassword?.message}
           {...register('newPassword')}
         />
         <TextField
           label="Confirm new password"
           type="password"
+          autoComplete="new-password"
           error={errors.confirmNewPassword?.message}
           {...register('confirmNewPassword')}
         />

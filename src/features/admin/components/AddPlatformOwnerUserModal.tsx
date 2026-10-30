@@ -110,14 +110,16 @@ export function AddPlatformOwnerUserModal({ isFirstUser, onClose, onSuccess }: A
 
         <TextField
           label="Username"
+          autoComplete="off"
           hint="Can be an email or any username — this is what they'll use to log in, alongside ProcurePal's company ID."
           error={errors.username?.message}
           {...register('username')}
         />
-        <TextField label="Password" type="password" error={errors.password?.message} {...register('password')} />
+        <TextField label="Password" type="password" autoComplete="new-password" error={errors.password?.message} {...register('password')} />
         <TextField
           label="Confirm password"
           type="password"
+          autoComplete="new-password"
           error={errors.confirmPassword?.message}
           {...register('confirmPassword')}
         />
@@ -146,7 +148,7 @@ export function AddPlatformOwnerUserModal({ isFirstUser, onClose, onSuccess }: A
               <TextField label="First name" error={errors.firstName?.message} {...register('firstName')} />
               <TextField label="Last name" error={errors.lastName?.message} {...register('lastName')} />
             </div>
-            <TextField label="Email" type="email" error={errors.email?.message} {...register('email')} />
+            <TextField label="Email" type="email" autoComplete="off" error={errors.email?.message} {...register('email')} />
             <TextField label="Phone" type="tel" error={errors.phone?.message} {...register('phone')} />
             <TextField label="Job title" error={errors.jobTitle?.message} {...register('jobTitle')} />
           </div>
