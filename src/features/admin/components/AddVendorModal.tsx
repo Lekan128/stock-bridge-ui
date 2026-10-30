@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/Button'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import type { CreateVendorPayload } from '@/features/admin/types'
 import { slugify } from '@/utils/slugify'
@@ -90,7 +90,7 @@ export function AddVendorModal({ open, submitting, onCancel, onConfirm }: AddVen
     !submitting
 
   return (
-    <Modal
+    <Sheet
       open={open}
       onClose={onCancel}
       size="lg"
@@ -101,7 +101,7 @@ export function AddVendorModal({ open, submitting, onCancel, onConfirm }: AddVen
             Cancel
           </Button>
           <Button
-            variant="primary"
+            variant="action"
             disabled={!canSubmit}
             loading={submitting}
             onClick={() =>
@@ -299,6 +299,6 @@ export function AddVendorModal({ open, submitting, onCancel, onConfirm }: AddVen
           </div>
         </div>
       </div>
-    </Modal>
+    </Sheet>
   )
 }

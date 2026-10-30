@@ -4,7 +4,7 @@ import { ShieldCheck } from 'lucide-react'
 import { Controller, useForm } from 'react-hook-form'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import { superAdminApiClient } from '@/features/admin/api/superAdminApi'
 import { AdminRoleSelectField } from '@/features/admin/components/AdminRoleSelectField'
@@ -79,17 +79,17 @@ export function AddPlatformOwnerUserModal({ isFirstUser, onClose, onSuccess }: A
   }
 
   return (
-    <Modal
+    <Sheet
       open
       onClose={onClose}
       title={isFirstUser ? "Create ProcurePal's account owner" : 'Add ProcurePal user'}
-      size="lg"
+      size="md"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
+          <Button variant="action" onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
             {isFirstUser ? 'Create account owner' : 'Add user'}
           </Button>
         </>
@@ -154,6 +154,6 @@ export function AddPlatformOwnerUserModal({ isFirstUser, onClose, onSuccess }: A
 
         <FormError message={formError} />
       </form>
-    </Modal>
+    </Sheet>
   )
 }

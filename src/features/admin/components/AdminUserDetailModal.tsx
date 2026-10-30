@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Lock } from 'lucide-react'
 import { Button } from '@/components/Button'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { Skeleton } from '@/components/Skeleton'
 import { superAdminApiClient } from '@/features/admin/api/superAdminApi'
 import type { SuperAdminUserSummary } from '@/features/admin/types'
@@ -57,7 +57,7 @@ export function AdminUserDetailModal({ clientId, clientName, user, onClose }: Ad
   }, [clientId, user.id])
 
   return (
-    <Modal
+    <Sheet
       open
       onClose={onClose}
       title={formatDisplayName(detail)}
@@ -108,7 +108,7 @@ export function AdminUserDetailModal({ clientId, clientName, user, onClose }: Ad
           </span>
         </p>
       </div>
-    </Modal>
+    </Sheet>
   )
 }
 

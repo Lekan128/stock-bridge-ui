@@ -4,7 +4,7 @@ import { KeyRound } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import { superAdminApiClient } from '@/features/admin/api/superAdminApi'
 import type { SuperAdminUserSummary } from '@/features/admin/types'
@@ -46,7 +46,7 @@ export function ResetPlatformOwnerPasswordModal({ user, onClose, onSuccess }: Re
   }
 
   return (
-    <Modal
+    <Sheet
       open
       onClose={onClose}
       title={`Reset password for ${user.username}`}
@@ -56,7 +56,7 @@ export function ResetPlatformOwnerPasswordModal({ user, onClose, onSuccess }: Re
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
+          <Button variant="action" onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
             Reset password
           </Button>
         </>
@@ -86,6 +86,6 @@ export function ResetPlatformOwnerPasswordModal({ user, onClose, onSuccess }: Re
         />
         <FormError message={formError} />
       </form>
-    </Modal>
+    </Sheet>
   )
 }
