@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, ArrowLeftRight, ArrowRight, ArrowUpDown, Repeat, Search, X } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight, Repeat, Search, X } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { TextField } from '@/components/TextField'
 import { useApiQuery } from '@/data/useApiQuery'
 import { hasAreas } from '@/features/branches/areas'
 import { useWorkArea } from '@/features/branches/workArea'
-import { SheetChoices } from '@/features/branches/SheetChoices'
 import type { Area } from '@/features/branches/types'
 import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { useProductFinder } from '@/features/catalog/useProductFinder'
@@ -66,7 +65,7 @@ function figureIn(product: Product, areaId: string): number | undefined {
 export function MoveStockPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { working, recordable } = useWorkingBranch()
+  const { working, recordable, isMultiBranch } = useWorkingBranch()
   const { options: catalogue } = useUnitOfMeasureOptions()
   const online = useOnlineStatus()
   const branch = working && recordable.some((entry) => entry.id === working.id) ? working : null
@@ -86,6 +85,7 @@ export function MoveStockPage() {
   const to = toChoices.find((area) => area.id === toAreaId)
   const [lines, setLines] = useState<MoveLine[]>([])
   const [note, setNote] = useState('')
+  const [noteOpen, setNoteOpen] = useState(false)
   const [term, setTerm] = useState('')
   const [moving, setMoving] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
@@ -105,11 +105,23 @@ export function MoveStockPage() {
       const key = `${move.fromAreaId}>${move.toAreaId}`
       if (!seen.has(key)) seen.set(key, move)
     }
-    return [...seen.values()]
-      .filter((move) => fromChoices.some((area) => area.id === move.fromAreaId) && allOpen.some((area) => area.id === move.toAreaId))
-      .slice(0, 3)
+    return [...seen.values()].filter(
+      (move) => fromChoices.some((area) => area.id === move.fromAreaId) && allOpen.some((area) => area.id === move.toAreaId),
+    )
   }, [recent.data, fromChoices, allOpen])
   const lastOnRoute = routes.find((move) => move.fromAreaId === fromAreaId && move.toAreaId === toAreaId)
+  // Opened with nothing chosen, the route is the last one used from here - most days the same as yesterday.
+  const routed = useRef(searchParams.get('to') != null)
+  useEffect(() => {
+    if (routed.current || recent.data == null) return
+    routed.current = true
+    if (toAreaId) return
+    const last = routes.find((move) => !searchParams.get('from') || move.fromAreaId === searchParams.get('from'))
+    if (!last) return
+    setFromChoice(last.fromAreaId)
+    setToAreaId(last.toAreaId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recent.data])
 
   // ------------------------------------------------------------------------------ the draft (A5)
   const draft = useDraft<MoveDraft>(`move:${branch?.id ?? 'none'}`, branch != null)
@@ -119,7 +131,8 @@ export function MoveStockPage() {
     if (!initial) return
     const saved = initial.value
     setFromChoice(saved.fromAreaId)
-    setToAreaId((current) => current || saved.toAreaId)
+    // Unfinished work wins over the last route; a link that named where it goes wins over both.
+    setToAreaId((current) => (searchParams.get('to') ? current : saved.toAreaId || current))
     setLines((current) => [...current, ...saved.lines.filter((line) => !current.some((c) => c.product.id === line.product.id))])
     setNote(saved.note)
     setRestored(true)
@@ -247,6 +260,7 @@ export function MoveStockPage() {
     setDone(null)
     setLines([])
     setNote('')
+    setNoteOpen(false)
     setRestored(false)
   }
 
@@ -271,15 +285,21 @@ export function MoveStockPage() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5">
-        <div className="flex items-start gap-3">
-          <button type="button" onClick={() => navigate(-1)} aria-label="Back" className="mt-1 rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100">
+      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-3 sm:gap-4">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            aria-label="Back"
+            className="-ml-2 inline-flex h-11 w-11 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100"
+          >
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <div>
-            <h1 className="text-2xl font-semibold text-neutral-900">Move stock</h1>
-            <p className="mt-1 text-sm text-neutral-600">at {branch.name}</p>
-          </div>
+          <h1 className="text-xl font-semibold text-neutral-900 sm:text-2xl">
+            Move stock
+            {/* The branch only where there's more than one; the top bar says it too. */}
+            {isMultiBranch && <span className="font-normal text-neutral-600"> · {branch.name}</span>}
+          </h1>
         </div>
 
         <DraftNote
@@ -293,221 +313,199 @@ export function MoveStockPage() {
           }}
         />
 
-        {routes.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2">
-            <span id="usual-routes-label" className="text-sm text-neutral-700">
-              Usual
-            </span>
-            <div role="group" aria-labelledby="usual-routes-label" className="flex flex-wrap gap-2">
-              {routes.map((route) => (
-                <button
-                  key={route.id}
-                  type="button"
-                  onClick={() => {
-                    setFromChoice(route.fromAreaId)
-                    setToAreaId(route.toAreaId)
-                  }}
-                  className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-neutral-300 bg-white px-3 text-sm text-neutral-800 hover:bg-neutral-50"
-                >
-                  {route.fromAreaName}
-                  <ArrowRight className="h-3.5 w-3.5 text-neutral-500" aria-label="to" />
-                  {route.toAreaName}
-                </button>
-              ))}
-            </div>
+        {/* The route, one row: From ⇄ To. It opens on the last route used, so most days it isn't touched;
+            the phone's own picker changes it. */}
+        <section aria-label="From and to" className="rounded-lg border border-neutral-200 bg-white p-2" data-route>
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-end gap-1.5">
+            <RouteEnd
+              label="From"
+              areas={fromChoices}
+              chosen={fromAreaId}
+              onChoose={(id) => {
+                setFromChoice(id)
+                if (id === toAreaId) setToAreaId('')
+              }}
+            />
+            <button
+              type="button"
+              aria-label="Swap from and to"
+              disabled={!to || !to.keepsStock || !fromChoices.some((area) => area.id === to.id)}
+              onClick={() => {
+                const was = fromAreaId
+                setFromChoice(toAreaId)
+                setToAreaId(was)
+              }}
+              className="inline-flex h-11 w-10 items-center justify-center rounded-md text-neutral-600 hover:bg-neutral-100 disabled:text-neutral-300"
+            >
+              <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <RouteEnd label="To" areas={toChoices} chosen={toAreaId} onChoose={setToAreaId} />
+          </div>
+          {to && !to.keepsStock && (
+            <p className="px-1 pt-1.5 text-xs text-neutral-600">{to.name} uses what it's given: it's recorded as used there.</p>
+          )}
+        </section>
+
+        <div className="relative">
+          <Search className="pointer-events-none absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-neutral-500" aria-hidden="true" />
+          <label htmlFor="move-search" className="sr-only">
+            Scan or search to add an item
+          </label>
+          <input
+            ref={searchRef}
+            id="move-search"
+            type="search"
+            autoComplete="off"
+            enterKeyHint="search"
+            value={term}
+            disabled={moving}
+            onChange={(event) => setTerm(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                finder.onEnter()
+              }
+            }}
+            placeholder={lines.length === 0 ? 'Scan or search an item' : 'Add another item'}
+            className="h-12 w-full rounded-lg border border-neutral-300 bg-white pr-3 pl-11 text-base text-neutral-900 placeholder:text-neutral-500 focus:border-primary-600 focus:ring-2 focus:ring-primary-100 focus:outline-none"
+          />
+        </div>
+        {finder.search && (
+          <div className="flex flex-col gap-1">
+            {finder.results.map((product) => (
+              <button
+                key={product.id}
+                type="button"
+                onClick={() => addProduct(product)}
+                className="flex min-h-12 w-full items-center justify-between gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-2 text-left hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              >
+                <span className="truncate text-base font-medium text-neutral-900">{product.name}</span>
+                <span className="shrink-0 text-sm tabular-nums text-neutral-500">{product.sku}</span>
+              </button>
+            ))}
+            {finder.answered && finder.results.length === 0 && (
+              <p className="px-1 text-sm text-neutral-600">Nothing matches “{finder.search}”.</p>
+            )}
           </div>
         )}
 
-        <section aria-label="From and to" className="flex flex-col gap-3">
-          {/* One row on a wider screen - From, swap, To - and stacked on a phone. */}
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-start">
-            <div className="col-span-2 sm:col-span-1">
-              <AreaPicker
-                label="From"
-                areas={fromChoices}
-                chosen={fromAreaId}
-                onChoose={(id) => {
-                  setFromChoice(id)
-                  if (id === toAreaId) setToAreaId('')
-                }}
-              />
-            </div>
-            {/* Level with the choices, below their labels. */}
-            <div className="order-last sm:order-none sm:mt-7">
-              <Button
-                variant="secondary"
-                aria-label="Swap from and to"
-                disabled={!to || !to.keepsStock}
-                onClick={() => {
-                  const was = fromAreaId
-                  setFromChoice(toAreaId)
-                  setToAreaId(was)
-                }}
-              >
-                <ArrowUpDown className="h-4 w-4 sm:hidden" aria-hidden="true" />
-                <ArrowLeftRight className="hidden h-4 w-4 sm:block" aria-hidden="true" />
-              </Button>
-            </div>
-            <div className="min-w-0">
-              <AreaPicker label="To" areas={toChoices} chosen={toAreaId} onChoose={setToAreaId} />
-            </div>
-          </div>
-          {to && !to.keepsStock && (
-            <p className="text-sm text-neutral-700">
-              {to.name} uses what it's given: what you give it is recorded as used there.
+        {/* Nothing added yet: the morning move is usually last time's again - one tap. */}
+        {lines.length === 0 && !finder.search && lastOnRoute && (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-neutral-300 px-3 py-2.5" data-last-time>
+            <p className="min-w-0 text-sm text-neutral-700">
+              <span className="text-neutral-600">
+                Last time, {new Date(lastOnRoute.movedAt).toLocaleDateString(undefined, { weekday: 'short' })}:{' '}
+              </span>
+              <span className="line-clamp-2">{lastOnRoute.lines.map((line) => `${line.productName} ${typedAs(line)}`).join(' · ')}</span>
             </p>
-          )}
-          {lastOnRoute && (
-            <div>
-              <Button variant="quiet" className="-ml-2" onClick={() => repeatLast(lastOnRoute)}>
-                <Repeat className="h-4 w-4" aria-hidden="true" />
-                Repeat the last one ({lastOnRoute.lines.length} {lastOnRoute.lines.length === 1 ? 'item' : 'items'},{' '}
-                {new Date(lastOnRoute.movedAt).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })})
-              </Button>
-            </div>
-          )}
-        </section>
-
-        <section aria-labelledby="move-lines-heading" className="flex flex-col gap-3">
-          <h2 id="move-lines-heading" className="text-sm font-semibold text-neutral-900">
-            What's moving
-          </h2>
-
-          <div className="relative">
-            <Search className="pointer-events-none absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-neutral-500" aria-hidden="true" />
-            <label htmlFor="move-search" className="sr-only">
-              Scan or search to add an item
-            </label>
-            <input
-              ref={searchRef}
-              id="move-search"
-              type="search"
-              autoComplete="off"
-              enterKeyHint="search"
-              value={term}
-              disabled={moving}
-              onChange={(event) => setTerm(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault()
-                  finder.onEnter()
-                }
-              }}
-              placeholder={lines.length === 0 ? 'Scan or search to add an item…' : 'Scan or search to add another item…'}
-              className="h-12 w-full rounded-lg border-2 border-neutral-300 bg-white pr-3 pl-11 text-base text-neutral-900 placeholder:text-neutral-500 focus:border-primary-600 focus:outline-none"
-            />
+            <Button variant="secondary" className="shrink-0" onClick={() => repeatLast(lastOnRoute)}>
+              <Repeat className="h-4 w-4" aria-hidden="true" />
+              Add the same
+            </Button>
           </div>
-          {finder.search && (
-            <div className="flex flex-col gap-1">
-              {finder.results.map((product) => (
-                <button
-                  key={product.id}
-                  type="button"
-                  onClick={() => addProduct(product)}
-                  className="flex min-h-12 w-full items-center justify-between gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-2 text-left hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-                >
-                  <span className="truncate text-base font-medium text-neutral-900">{product.name}</span>
-                  <span className="shrink-0 text-sm tabular-nums text-neutral-500">{product.sku}</span>
-                </button>
-              ))}
-              {finder.answered && finder.results.length === 0 && (
-                <p className="px-1 text-sm text-neutral-600">Nothing matches “{finder.search}”.</p>
-              )}
-            </div>
-          )}
-          {checked.length > 0 && (
-            <ul className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white" aria-label="On this move">
-              {checked.map(({ line, options, option, base, has, toHas, short }) => {
-                const unit = resolveUnitSymbol(line.product.unitOfMeasure, catalogue)
-                const inputId = `move-qty-${line.key}`
-                return (
-                  <li
-                    key={line.key}
-                    className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start sm:justify-between"
-                    data-move-line={line.product.id}
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-base font-medium text-neutral-900">{line.product.name}</p>
-                      {/* Both areas, before → after (§5.1), in the unit being moved and in the stock unit:
-                          the storekeeper sees what's left behind, in packs and in all. */}
-                      <dl className="mt-1 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 text-sm tabular-nums" data-before-after>
-                        {from && has != null && (
-                          <>
-                            <dt className="text-neutral-600">{from.name}</dt>
-                            <dd className={short ? 'font-medium text-danger-700' : 'text-neutral-900'}>
-                              <BeforeAfter before={has} after={short ? null : has - base} option={option} unit={unit} />
-                            </dd>
-                          </>
-                        )}
-                        {to && (
-                          <>
-                            <dt className="text-neutral-600">{to.name}</dt>
-                            <dd className="text-neutral-900">
-                              {to.keepsStock && toHas != null ? (
-                                <BeforeAfter before={toHas} after={short ? null : toHas + base} option={option} unit={unit} />
-                              ) : (
-                                'used there'
-                              )}
-                            </dd>
-                          </>
-                        )}
-                      </dl>
-                      {short && has != null && from && (
-                        <p className="mt-1 text-sm text-danger-700">
-                          The {from.name} has {inUnit(has, option, unit)}.
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <label htmlFor={inputId} className="sr-only">
-                        How many {line.product.name}
-                      </label>
-                      <input
-                        id={inputId}
-                        inputMode="numeric"
-                        value={line.quantity}
+        )}
+
+        {checked.length > 0 && (
+          <ul className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white" aria-label="On this move">
+            {checked.map(({ line, options, option, base, has, toHas, short }) => {
+              const unit = resolveUnitSymbol(line.product.unitOfMeasure, catalogue)
+              const inputId = `move-qty-${line.key}`
+              return (
+                <li key={line.key} className="flex flex-col gap-1 px-3 py-2.5" data-move-line={line.product.id}>
+                  {/* One row: what, how many, in what; the figures under it, small. */}
+                  <div className="flex items-center gap-2">
+                    <p className="line-clamp-2 min-w-0 flex-1 text-base font-medium leading-snug text-neutral-900">{line.product.name}</p>
+                    <label htmlFor={inputId} className="sr-only">
+                      How many {line.product.name}
+                    </label>
+                    <input
+                      id={inputId}
+                      inputMode="numeric"
+                      value={line.quantity}
+                      disabled={moving}
+                      aria-invalid={short || undefined}
+                      onChange={(event) => update(line.key, { quantity: event.target.value.replace(/[^0-9]/g, '') })}
+                      className={`h-11 w-16 shrink-0 rounded-md border bg-white px-2 text-center text-base tabular-nums focus:ring-2 focus:outline-none ${
+                        short ? 'border-danger-500 focus:ring-danger-100' : 'border-neutral-300 focus:border-primary-500 focus:ring-primary-100'
+                      }`}
+                    />
+                    {options.length > 1 ? (
+                      <select
+                        aria-label={`Unit for ${line.product.name}`}
+                        value={option.label}
                         disabled={moving}
-                        aria-invalid={short || undefined}
-                        onChange={(event) => update(line.key, { quantity: event.target.value.replace(/[^0-9]/g, '') })}
-                        className={`h-11 w-20 rounded-md border bg-white px-3 text-base tabular-nums focus:ring-2 focus:outline-none ${
-                          short ? 'border-danger-500 focus:ring-danger-100' : 'border-neutral-300 focus:border-primary-500 focus:ring-primary-100'
-                        }`}
-                      />
-                      {options.length > 1 ? (
-                        <select
-                          aria-label={`Unit for ${line.product.name}`}
-                          value={option.label}
-                          disabled={moving}
-                          onChange={(event) => update(line.key, { unitLabel: event.target.value })}
-                          className="h-11 rounded-md border border-neutral-300 bg-white px-2 text-base sm:text-sm"
-                        >
-                          {options.map((o) => (
-                            <option key={o.label} value={o.label}>
-                              {o.isStockUnit ? unit : unitNoun(o)}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="text-sm text-neutral-600">{unit}</span>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => setLines((current) => current.filter((l) => l.key !== line.key))}
-                        aria-label={`Take ${line.product.name} off`}
-                        className="ml-auto inline-flex h-11 w-11 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 sm:ml-0"
+                        onChange={(event) => update(line.key, { unitLabel: event.target.value })}
+                        className="h-11 max-w-[6.5rem] shrink-0 rounded-md border border-neutral-300 bg-white px-1.5 text-base sm:text-sm"
                       >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
+                        {options.map((o) => (
+                          <option key={o.label} value={o.label}>
+                            {o.isStockUnit ? unit : unitNoun(o)}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="shrink-0 text-sm text-neutral-600">{stockUnitWord(unit, Number(line.quantity) || 2)}</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setLines((current) => current.filter((l) => l.key !== line.key))}
+                      aria-label={`Take ${line.product.name} off`}
+                      className="-mr-2 inline-flex h-11 w-9 shrink-0 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  {/* Both areas, before → after (§5.1), in the unit being moved and in the stock unit. */}
+                  <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 text-xs tabular-nums" data-before-after>
+                    {from && has != null && (
+                      <>
+                        <dt className="text-neutral-600">{from.name}</dt>
+                        <dd className={short ? 'font-medium text-danger-700' : 'text-neutral-800'}>
+                          <BeforeAfter before={has} after={short ? null : has - base} option={option} unit={unit} />
+                        </dd>
+                      </>
+                    )}
+                    {to && (
+                      <>
+                        <dt className="text-neutral-600">{to.name}</dt>
+                        <dd className="text-neutral-800">
+                          {to.keepsStock && toHas != null ? (
+                            <BeforeAfter before={toHas} after={short ? null : toHas + base} option={option} unit={unit} />
+                          ) : (
+                            'used there'
+                          )}
+                        </dd>
+                      </>
+                    )}
+                  </dl>
+                  {short && has != null && from && (
+                    <p className="text-sm text-danger-700">
+                      The {from.name} has {inUnit(has, option, unit)}.
+                    </p>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        )}
 
-        </section>
-
-        <TextField id="move-note" label="Note (optional)" value={note} maxLength={1000} disabled={moving} onChange={(event) => setNote(event.target.value)} />
+        {/* A note is rare: a link until it's wanted. */}
+        {noteOpen || note ? (
+          <TextField id="move-note" label="Note" value={note} maxLength={1000} disabled={moving} onChange={(event) => setNote(event.target.value)} />
+        ) : (
+          lines.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setNoteOpen(true)
+                window.requestAnimationFrame(() => document.getElementById('move-note')?.focus())
+              }}
+              className="-my-1 inline-flex min-h-11 items-center self-start text-sm font-medium text-primary-700 hover:underline"
+            >
+              Add a note
+            </button>
+          )
+        )}
 
         {problem && (
           <p role="alert" className="rounded-md border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700">
@@ -516,10 +514,10 @@ export function MoveStockPage() {
         )}
       </div>
 
-      <div className="sticky -bottom-6 z-10 -mx-6 mt-6 -mb-6 border-t border-neutral-200 bg-white/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur">
+      <div className="sticky -bottom-6 z-10 -mx-6 mt-4 -mb-6 border-t border-neutral-200 bg-white/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur">
         <div className="mx-auto flex max-w-2xl flex-col gap-2">
           <Button variant="action" className="w-full" disabled={!canMove} loading={moving} onClick={() => void move()}>
-            {ready.length === 0 ? 'Add something to move' : !to ? 'Choose where it goes' : `${verb} ${items} to ${to.name}`}
+            {!to ? 'Choose where it goes' : ready.length === 0 ? `${verb} to ${to.name}` : `${verb} ${items} to ${to.name}`}
           </Button>
           {!online && ready.length > 0 && (
             <p className="text-center text-xs text-neutral-600">You're offline. It's kept on this phone and goes when you're connected.</p>
@@ -528,6 +526,13 @@ export function MoveStockPage() {
       </div>
     </div>
   )
+}
+
+/** How a move's line was typed: "2 bags", or the stock-unit figure. */
+function typedAs(line: AreaMove['lines'][number]): string {
+  return line.enteredQuantity != null && line.enteredUnit
+    ? `${formatNumber(line.enteredQuantity)} ${pluraliseUnitNoun(line.enteredUnit.toLowerCase(), line.enteredQuantity)}`
+    : formatNumber(line.quantity)
 }
 
 /**
@@ -566,8 +571,11 @@ function BeforeAfter({ before, after, option, unit }: { before: number; after: n
   )
 }
 
-/** "From" or "To": the areas as chips (DESIGN.md's choice for a few options), a select past six. */
-function AreaPicker({
+/**
+ * One end of the route, "From" or "To": the phone's own picker, which is the quickest on a phone and the
+ * smallest on the page. With one choice (the cook's Kitchen) it's just the name.
+ */
+function RouteEnd({
   label,
   areas,
   chosen,
@@ -578,27 +586,28 @@ function AreaPicker({
   chosen: string
   onChoose: (id: string) => void
 }) {
-  const labelId = `move-${label.toLowerCase()}-label`
-  // The chip says what an area that uses what it's given will do with it.
-  const options = areas.map((area) => ({ ...area, name: area.keepsStock ? area.name : `${area.name} · uses it` }))
+  const id = `move-${label.toLowerCase()}`
+  const name = (area: Area) => (area.keepsStock ? area.name : `${area.name} (uses it)`)
   return (
-    <div>
-      <p id={labelId} className="mb-1.5 text-sm font-medium text-neutral-800">
+    <div className="min-w-0">
+      <label htmlFor={id} className="block px-1 text-xs text-neutral-600">
         {label}
-      </p>
-      {options.length <= 6 ? (
-        <SheetChoices labelledBy={labelId} options={options} chosen={chosen || null} onChoose={onChoose} />
+      </label>
+      {areas.length === 1 && chosen === areas[0].id ? (
+        <output id={id} className="flex h-11 items-center truncate px-1 text-base font-medium text-neutral-900">
+          {name(areas[0])}
+        </output>
       ) : (
         <select
-          aria-labelledby={labelId}
+          id={id}
           value={chosen}
           onChange={(event) => onChoose(event.target.value)}
-          className="min-h-11 w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
+          className={`h-11 w-full min-w-0 rounded-md border border-neutral-300 bg-white px-2 text-base font-medium ${chosen ? 'text-neutral-900' : 'text-neutral-500'}`}
         >
-          <option value="">Choose an area</option>
-          {options.map((area) => (
+          {!chosen && <option value="">Choose…</option>}
+          {areas.map((area) => (
             <option key={area.id} value={area.id}>
-              {area.name}
+              {name(area)}
             </option>
           ))}
         </select>
@@ -655,7 +664,7 @@ function MoveDone({ done, onMoreMoves, onDone }: { done: Done; onMoreMoves: () =
                 <li key={line.productId} className="flex justify-between gap-3 py-0.5">
                   <span className="truncate">{line.productName}</span>
                   <span className="shrink-0 tabular-nums">
-                    {line.enteredQuantity != null && line.enteredUnit ? `${formatNumber(line.enteredQuantity)} ${line.enteredUnit.toLowerCase()}` : formatNumber(line.quantity)}
+                    {typedAs(line)}
                   </span>
                 </li>
               ))}

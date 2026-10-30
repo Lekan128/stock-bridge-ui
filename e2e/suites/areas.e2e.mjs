@@ -9,7 +9,7 @@
 //      reopens; the Store, where deliveries arrive, can't close.
 //   6. A company without areas sees no area word on its sheets or its product page (rule 1), and can
 //      rename its Store from Branches.
-//  5b. Move stock: before → after, Usual and Repeat, a give to Housekeeping and Undo, too much, offline,
+//  5b. Move stock: before → after, the route kept and "Add the same", a give to Housekeeping and Undo, too much, offline,
 //      and the Moves list in Stock movements (STOCK_AREAS_PART_2.md).
 //   7. axe on Branches with areas, and on the Add areas sheet (phone).
 import { chromium } from 'playwright'
@@ -98,6 +98,11 @@ async function contextFor(session, viewport = { width: 1280, height: 900 }) {
     [session.tokens.refreshToken],
   )
   return context
+}
+
+/** The name chosen in a select. */
+async function chosenIn(page, selector) {
+  return page.locator(selector).evaluate((select) => select.options[select.selectedIndex]?.text ?? '')
 }
 
 /** The product's figure in each area, by area name. */
@@ -256,26 +261,29 @@ await check('Move stock: the morning move with before → after, then the route 
   await page.getByRole('heading', { name: 'Rice', level: 1 }).waitFor()
   await page.getByRole('link', { name: 'Move', exact: true }).click()
   await page.getByRole('heading', { name: 'Move stock', level: 1 }).waitFor()
-  const from = page.getByRole('radiogroup', { name: 'From' })
-  assert((await from.getByRole('radio', { name: 'Store' }).getAttribute('aria-checked')) === 'true', 'does not start from the Store')
-  await page.getByRole('radiogroup', { name: 'To' }).getByRole('radio', { name: 'Kitchen' }).click()
+  assert((await chosenIn(page, '#move-from')) === 'Store', 'does not start from the Store')
+  await page.locator('#move-to').selectOption({ label: 'Kitchen' })
   await page.getByLabel('How many Rice').fill('4')
   const line = page.locator('[data-before-after]').first()
   await waitFor(async () => /Store\s+10 → 6\b[\s\S]*Kitchen\s+1 → 5\b/.test(await line.innerText()), 'the line to read Store 10 → 6, Kitchen 1 → 5')
   await page.screenshot({ path: SHOTS + '7-move-stock.png' })
+  await page.setViewportSize({ width: 360, height: 740 })
+  await page.screenshot({ path: SHOTS + '7-move-stock-phone.png' })
+  await page.setViewportSize({ width: 1280, height: 900 })
   await page.getByRole('button', { name: 'Move 1 item to Kitchen' }).click()
   await page.getByRole('heading', { name: 'Moved', level: 1 }).waitFor()
   let at = await areaFigures(ownerToken, rice.id)
   assert(at.Store === 6 && at.Kitchen === 5, `figures ${JSON.stringify(at)}`)
 
   await page.getByRole('button', { name: 'Move more' }).click()
-  await page.getByRole('group', { name: 'Usual' }).getByRole('button', { name: /Store.*Kitchen/ }).click()
-  await page.getByRole('button', { name: /Repeat the last one/ }).click()
+  // The route stays Store → Kitchen, and last time's items are one tap away.
+  assert((await chosenIn(page, '#move-to')) === 'Kitchen', 'the route was not kept')
+  await page.getByRole('button', { name: 'Add the same' }).click()
   await waitFor(async () => (await page.getByLabel('How many Rice').inputValue().catch(() => '')) === '4', 'the last move to be repeated')
 })
 
 await check('a give to Housekeeping is recorded as used there, and Undo puts it back', async () => {
-  await page.getByRole('radiogroup', { name: 'To' }).getByRole('radio', { name: 'Housekeeping · uses it' }).click()
+  await page.locator('#move-to').selectOption({ label: 'Housekeeping (uses it)' })
   await page.getByText("Housekeeping uses what it's given").waitFor()
   await page.getByLabel('How many Rice').fill('1')
   await page.getByRole('button', { name: 'Give 1 item to Housekeeping' }).click()
@@ -291,7 +299,7 @@ await check('a give to Housekeeping is recorded as used there, and Undo puts it 
 await check('more than the Store has turns the line red and holds the button', async () => {
   await page.getByRole('button', { name: 'Move more' }).click()
   await page.goto(`${UI}/app/move?product=${rice.id}`)
-  await page.getByRole('radiogroup', { name: 'To' }).getByRole('radio', { name: 'Kitchen' }).click()
+  await page.locator('#move-to').selectOption({ label: 'Kitchen' })
   await page.getByLabel('How many Rice').fill('99')
   await page.getByText('The Store has 6').waitFor()
   assert(await page.getByRole('button', { name: 'Move 1 item to Kitchen' }).isDisabled(), 'the button is not held')
@@ -301,7 +309,7 @@ await check('moving in bags shows what is left in bags and in kg', async () => {
   const flour = await createProduct(ownerToken, owner.unique, 'Flour', { unitOfMeasure: 'KG', packagingUnit: 'BAG', packagingSize: 50 })
   await api(`/api/products/${flour.id}/stock/stock-in`, { token: ownerToken, method: 'POST', body: { quantity: 180 } })
   await page.goto(`${UI}/app/move?product=${flour.id}`)
-  await page.getByRole('radiogroup', { name: 'To' }).getByRole('radio', { name: 'Kitchen' }).click()
+  await page.locator('#move-to').selectOption({ label: 'Kitchen' })
   await page.getByLabel('Unit for Flour').selectOption({ label: 'bag' })
   await page.getByLabel('How many Flour').fill('2')
   const line = page.locator('[data-move-line]', { hasText: 'Flour' }).locator('[data-before-after]')
@@ -312,7 +320,7 @@ await check('moving in bags shows what is left in bags and in kg', async () => {
   await page.screenshot({ path: SHOTS + '7b-move-in-bags.png' })
   await page.getByRole('button', { name: `Take Flour off` }).click()
   await page.goto(`${UI}/app/move?product=${rice.id}`)
-  await page.getByRole('radiogroup', { name: 'To' }).getByRole('radio', { name: 'Kitchen' }).click()
+  await page.locator('#move-to').selectOption({ label: 'Kitchen' })
 })
 
 await check('offline, a move is kept on the phone and goes once back online', async () => {
@@ -337,6 +345,13 @@ await check('Inventory opens Move stock ready for a list, and moves the products
   await page.goto(`${UI}/app/products`)
   await page.getByRole('region', { name: 'Inventory actions' }).getByRole('button', { name: 'Move' }).waitFor()
   await page.screenshot({ path: SHOTS + '7d-phone-inventory-bar.png' })
+  // …and opens on the last route, with last time's items one tap away.
+  await page.getByRole('region', { name: 'Inventory actions' }).getByRole('button', { name: 'Move' }).click()
+  await page.locator('[data-last-time]').waitFor()
+  await page.screenshot({ path: SHOTS + '7e-phone-move-empty.png' })
+  await page.getByRole('button', { name: 'Add the same' }).click()
+  await page.locator('[data-move-line]').first().waitFor()
+  await page.screenshot({ path: SHOTS + '7f-phone-move-lines.png' })
   await page.setViewportSize({ width: 1280, height: 900 })
 
   await page.goto(`${UI}/app/products`)
@@ -419,10 +434,10 @@ await check('the owner places a cook in the Kitchen; the cook records there with
 
   // Move stock: from the Kitchen, the only area they take from.
   await cookPage.goto(`${UI}/app/move`)
-  const from = cookPage.getByRole('radiogroup', { name: 'From' })
+  // One place to take from, so no picker: just the name.
+  const from = cookPage.locator('output#move-from')
   await from.waitFor()
-  assert((await from.getByRole('radio').count()) === 1, 'the cook can move from more than the Kitchen')
-  assert((await from.getByRole('radio', { name: 'Kitchen' }).getAttribute('aria-checked')) === 'true', 'Move does not start from the Kitchen')
+  assert((await from.innerText()) === 'Kitchen', `Move starts from ${await from.innerText()}`)
   await cookContext.close()
 })
 
