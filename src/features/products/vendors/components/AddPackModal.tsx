@@ -107,7 +107,7 @@ export function AddPackModal({ productId, vendor, stockUnit, onClose, onSuccess 
       open
       onClose={onClose}
       title={`Add pack — ${vendor.companyVendorName}`}
-      size="sm"
+      size="md"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>

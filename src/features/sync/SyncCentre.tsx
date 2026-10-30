@@ -226,6 +226,7 @@ function CatalogSection({ online }: { online: boolean }) {
   if (catalog.phase === 'off' || catalog.phase === 'starting') return null
 
   const count = catalog.loaded.toLocaleString()
+  const onPhone = `${count} ${catalog.loaded === 1 ? 'product' : 'products'} on this phone`
   let sentence: string
   if (catalog.phase === 'unavailable') {
     sentence = "This phone doesn't have room for a copy of your products, so the list comes from the server and needs a connection."
@@ -235,9 +236,9 @@ function CatalogSection({ online }: { online: boolean }) {
         ? `Downloading your products: ${count} of ${catalog.total.toLocaleString()}. Until it's done, the list comes from the server.`
         : `Downloading your products: ${count} so far.`
   } else if (catalog.behind) {
-    sentence = `${count} products on this phone. The server couldn't be reached to check for changes, so they're as of ${catalog.syncedAt != null ? at(catalog.syncedAt) : 'the last check'}.`
+    sentence = `${onPhone}. The server couldn't be reached to check for changes, so they're as of ${catalog.syncedAt != null ? at(catalog.syncedAt) : 'the last check'}.`
   } else {
-    sentence = `${count} products on this phone, up to date as of ${catalog.syncedAt != null ? at(catalog.syncedAt) : 'now'}.`
+    sentence = `${onPhone}, up to date as of ${catalog.syncedAt != null ? at(catalog.syncedAt) : 'now'}.`
   }
 
   return (

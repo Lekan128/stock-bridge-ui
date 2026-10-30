@@ -174,7 +174,7 @@ export function AddPriceTierModal({
       open
       onClose={onClose}
       title={`Add price break — ${vendor.companyVendorName} (${pack.label})`}
-      size="sm"
+      size="md"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>

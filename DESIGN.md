@@ -207,6 +207,17 @@ sits beside the screen's action.
 | `Sheet` | Task flows: stock in, stock out, count, a new supplier — anything with a form | A bottom sheet on a phone (in reach of the thumb, the page still showing above), a side panel from the right on a laptop (the product or list stays in view beside the work). Sizes `sm`–`xl` set the panel width. |
 | `Modal` | Short confirmations only | Centred. |
 
+Where it isn't obvious (`SURFACES_AUDIT.md` at the project root has every case):
+
+- A search or picker that starts a task ("Add a product"), and a panel opened to read or act on one
+  thing (a sale, a user, "On this phone"), are Sheets too.
+- A confirmation may carry what it needs to be sure — a reason, a password, a tick, the counts it
+  will change — and stays a Modal. Anything more is a form, so a Sheet.
+- A task of several steps runs in one Sheet, each step's buttons in its footer. It never replaces
+  the page it was opened from.
+- Renaming one thing in its own row (one field) may stay inline; more fields than that is a Sheet.
+- A sheet's confirm is `action`, Cancel `secondary`.
+
 Both use `useDialogBehaviour`: initial focus (whatever autofocused, else `[data-autofocus]`, else
 the first field), a focus trap, `inert` on everything behind, Escape closes only the top dialog,
 and focus returns to whatever opened it. A new dialog-like surface must use the hook too.
