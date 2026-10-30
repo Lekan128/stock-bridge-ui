@@ -12,6 +12,7 @@ import { StockReceipt } from '@/features/products/components/StockReceipt'
 import { submitStockWrite } from '@/features/outbox/outboxStore'
 import { stockCountSchema, type StockCountFormValues } from '@/features/products/schemas'
 import type { StockMutationResponse } from '@/features/products/types'
+import type { AreaFigure } from '@/features/branches/types'
 import { formatQuantity } from '@/features/products/unitCopy'
 import { isAppError } from '@/types/api'
 
@@ -19,6 +20,8 @@ export interface StockAdjustmentModalProps {
   productId: string
   productName: string
   currentQuantity: number
+  /** The product in each area (V60), so a count of the Kitchen is judged against the Kitchen's figure. */
+  areaStock?: AreaFigure[]
   /** The stock unit's short form ("kg"), for every figure on screen. */
   stockUnit: string
   onClose: () => void
@@ -38,7 +41,8 @@ export interface StockAdjustmentModalProps {
 export function StockAdjustmentModal({
   productId,
   productName,
-  currentQuantity,
+  currentQuantity: branchQuantity,
+  areaStock,
   stockUnit,
   onClose,
   onSuccess,
@@ -47,9 +51,14 @@ export function StockAdjustmentModal({
   // Which branch's shelf is counted (MULTI_BRANCH_UX_PLAN.md §5.2).
   const sheetBranch = useSheetBranch()
   const branchContext = useOptionalWorkingBranch()
-  const countedAt = branchContext?.isMultiBranch
-    ? branchContext.nameOf(sheetBranch.branchId ?? branchContext.working?.id)
-    : undefined
+  // The area counted, at a branch with a choice of them (V60): its books are the Kitchen's, not the branch's.
+  const areaFigure = sheetBranch.areaId ? areaStock?.find((figure) => figure.areaId === sheetBranch.areaId) : undefined
+  const currentQuantity = sheetBranch.areaId ? (areaFigure?.quantityOnHand ?? 0) : branchQuantity
+  const countedAt = sheetBranch.areaId
+    ? sheetBranch.areaName
+    : branchContext?.isMultiBranch
+      ? branchContext.nameOf(sheetBranch.branchId ?? branchContext.working?.id)
+      : undefined
   const [formError, setFormError] = useState<string | null>(null)
   const [queuedSentence, setQueuedSentence] = useState<string | null>(null)
   const [queuedOpId, setQueuedOpId] = useState<string | null>(null)
@@ -77,7 +86,7 @@ export function StockAdjustmentModal({
         productId,
         productName,
         summary: formatQuantity(countedQuantity, stockUnit),
-        payload: { countedQuantity, note: values.note || undefined, branchId: sheetBranch.branchId },
+        payload: { countedQuantity, note: values.note || undefined, branchId: sheetBranch.branchId, areaId: sheetBranch.areaId },
       })
       sheetBranch.remember()
       if (outcome.status === 'sent') onSuccess(outcome.response)

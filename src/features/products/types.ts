@@ -1,4 +1,4 @@
-import type { BranchFigure } from '@/features/branches/types'
+import type { AreaFigure, BranchFigure } from '@/features/branches/types'
 export interface Product {
   id: string
   name: string
@@ -121,6 +121,11 @@ export interface Product {
    * a company with more than one branch. Absent otherwise (`== null`).
    */
   branchStock?: BranchFigure[]
+  /**
+   * Areas inside a branch (V60): this product in each area that keeps stock, at each branch the person
+   * sees that has areas - "Store 30 · Kitchen 6". Absent otherwise (`== null`).
+   */
+  areaStock?: AreaFigure[]
   warnings?: string[] | null
   /**
    * True when `packagingUnit`/`packagingSize` above are the DEFAULT among more than one distinct
@@ -502,6 +507,11 @@ export interface StockInPayload {
    * company: the server's only branch, and the request exactly what it was before branches.
    */
   branchId?: string
+  /**
+   * The area of that branch it happened in (V60): chosen on the sheet at a branch with two or more
+   * areas that keep stock. Absent otherwise - the server's only area, or its delivery area for stock in.
+   */
+  areaId?: string
   quantity: number
   /** Which of the product's configured units the quantity was entered in — omit for base unit. */
   unit?: string
@@ -528,6 +538,11 @@ export interface StockOutPayload {
    * company: the server's only branch, and the request exactly what it was before branches.
    */
   branchId?: string
+  /**
+   * The area of that branch it happened in (V60): chosen on the sheet at a branch with two or more
+   * areas that keep stock. Absent otherwise - the server's only area, or its delivery area for stock in.
+   */
+  areaId?: string
   quantity: number
   unit?: string
   /** Omitted (simple path) = server computes FIFO. Present = manual per-lot override. */

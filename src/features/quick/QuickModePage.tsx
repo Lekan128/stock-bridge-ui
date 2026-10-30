@@ -1,4 +1,5 @@
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
+import { useSheetArea } from '@/features/branches/useSheetBranch'
 import { usePendingStock } from '@/features/outbox/useOutbox'
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { Delete, Search, X } from 'lucide-react'
@@ -101,6 +102,9 @@ export function QuickModePage() {
   const navigate = useNavigate()
   const branch = useOptionalWorkingBranch()
   const branchHere = branch?.isMultiBranch && !branch.isAll ? branch.working?.name : undefined
+  // Where in the branch every scan lands, at a branch with a choice of areas (V60). Chosen once for the
+  // session, like the reason; a sale chooses its own on the basket.
+  const area = useSheetArea(branch && !branch.isAll ? branch.working : null)
   const [params, setParams] = useSearchParams()
   const { user } = useAuth()
   const permissions = user?.type === 'tenant' ? user.permissions : []
@@ -168,6 +172,7 @@ export function QuickModePage() {
   }
 
   function recorded(entry: SessionEntry, kind: StampKind) {
+    area.remember()
     setSession((current) => [entry, ...current])
     setProduct(null)
     setFlash({ kind, text: entry.sale ? `Sale · ${entry.summary}` : `${entry.summary} · ${entry.productName}` })
@@ -198,7 +203,7 @@ export function QuickModePage() {
         </button>
         <h1 id="quick-mode-title" className="text-base font-semibold">
           {/* Where every scan here lands (UX §5.2): "Quick mode · Oshodi". */}
-          Quick mode{branchHere ? ` · ${branchHere}` : ''}
+          Quick mode{branchHere ? ` · ${branchHere}` : ''}{area.titleSuffix}
         </h1>
         <SyncPill large />
       </header>
@@ -230,6 +235,7 @@ export function QuickModePage() {
           </p>
           {mode === 'sell' && <MySalesToday refreshKey={salesRecorded} />}
           {mode === 'out' && <QuickReason value={outReason} onChange={setOutReason} />}
+          {mode !== 'sell' && area.field}
         </div>
 
         {flash ? (
@@ -244,6 +250,7 @@ export function QuickModePage() {
             mode={mode}
             product={product}
             reason={mode === 'out' ? outReason : null}
+            areaId={area.areaId}
             onBack={() => setProduct(null)}
             onRecorded={recorded}
           />
@@ -333,6 +340,7 @@ function AmountStep({
   mode,
   product,
   reason,
+  areaId,
   onBack,
   onRecorded,
 }: {
@@ -340,6 +348,8 @@ function AmountStep({
   product: Product
   /** The session's stock-out reason, or null for none given. */
   reason: OutReason | null
+  /** The session's area (V60), at a branch with a choice of them. */
+  areaId: string | undefined
   onBack: () => void
   onRecorded: (entry: SessionEntry, kind: StampKind) => void
 }) {
@@ -409,7 +419,7 @@ function AmountStep({
               productId: product.id,
               productName: product.name,
               summary: `${formatNumber(exactBaseQuantity(quantity, option))} ${stockUnitWord(symbol, exactBaseQuantity(quantity, option))}`,
-              payload: { countedQuantity: exactBaseQuantity(quantity, option) },
+              payload: { countedQuantity: exactBaseQuantity(quantity, option), areaId },
             })
           : mode === 'in'
             ? await submitStockWrite({
@@ -424,6 +434,7 @@ function AmountStep({
                   packagingUnit: option.isPack ? option.code : undefined,
                   packagingSize: option.isPack ? option.factorToStockUnit : undefined,
                   companyVendorId: chosenVendor?.companyVendorId,
+                  areaId,
                 },
                 baseDelta: base,
               })
@@ -432,7 +443,7 @@ function AmountStep({
                 productId: product.id,
                 productName: product.name,
                 summary,
-                payload: { quantity, unit: option.code || undefined, reason: reason ?? undefined },
+                payload: { quantity, unit: option.code || undefined, reason: reason ?? undefined, areaId },
                 baseDelta: -base,
               })
       const entry: SessionEntry = {

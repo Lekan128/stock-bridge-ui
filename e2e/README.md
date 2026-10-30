@@ -76,6 +76,7 @@ Screenshots — the ones suites take on purpose, and one per page whenever a che
 | `price-sheets` | Selling prices on spreadsheets: a bare "Price" column is asked about and holds the file; a sheet's selling prices offered to an owner who doesn't sell yet; below cost as a grid warning; "Add prices in a sheet" downloads; a delivery that now costs more than the price says so on the receipt and the bulk result; axe on the question and the result. |
 | `sales-report` | The Sales page against a hand-worked day: today's list, the one gaps sentence, a by-product footer equal to its rows, a leak filter, Fix these → Add price, Cancel sale (struck through, with who), export; the same figures on the dashboard's Sales today, the Movements split and the product page; no Sales nav when selling is off; axe throughout. |
 | `dashboard` | Stock health, Needs you today, the chart, offline. |
+| `areas` | Areas inside a branch (STOCK_AREAS_PART_1.md): adding Store/Kitchen/Bar/Housekeeping, the "Store 10 · Kitchen 3" line, sheets asking which area, a stock-out judged against its area, closing, and nothing changing for a company without areas. |
 | `chaos` | Zero lost writes with the tab killed; a lost reply recorded once; two phones counting and selling; a permission removed while offline. |
 | `metrics` | Taps to record a stock-in, time to first product row cold and warm (targets in the plan). |
 | `a11y` | axe on the key screens at phone and laptop size; sheet focus; announcements; 44 px targets in quick mode. |

@@ -125,6 +125,7 @@ export function BranchProvider({ children }: { children: ReactNode }) {
       recordable,
       needsChoice,
       mayAddBranch: list?.mayAddBranch ?? false,
+      mayAddArea: list?.mayAddArea ?? false,
       openBranches: list?.openBranches ?? open.length,
       sendTo: list?.sendTo ?? [],
       loading: query.loading,

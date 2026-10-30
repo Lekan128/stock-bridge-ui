@@ -3,6 +3,7 @@ import { Minus, Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { expectedCopy } from '@/features/expected/copy'
 import { LowAtBranches } from '@/features/branches/LowAtBranches'
+import { AreaBreakdown } from '@/features/branches/AreaBreakdown'
 import { IncomingStockBadge } from '@/features/products/components/IncomingStockBadge'
 import { StockBar } from '@/features/products/components/StockBar'
 import { StockFigure } from '@/features/products/components/StockFigure'
@@ -131,6 +132,7 @@ export function ProductCard({ product, incoming = 0, quickActions, selection }: 
               never be misread as 32. The figure is the same component as the table's (B2). */}
           <div className="flex flex-col gap-1">
             <StockFigure quantity={product.quantityOnHand} unit={unit} pack={packLine} productId={product.id} label="usable" />
+            <AreaBreakdown product={product} unitLabel={unit} compact />
             {/* On an open expected delivery (task 3.1) — a promise, not stock. Quiet, and never
                 summed into the figure above. */}
             {product.expectedQuantity != null && product.expectedQuantity > 0 && (

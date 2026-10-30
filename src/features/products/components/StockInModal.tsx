@@ -550,7 +550,7 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
         productId: product.id,
         productName: product.name,
         summary: quantityBothWays,
-        payload: { ...payload, branchId: sheetBranch.branchId },
+        payload: { ...payload, branchId: sheetBranch.branchId, areaId: sheetBranch.areaId },
         baseDelta: baseQuantity,
       })
       sheetBranch.remember()

@@ -14,6 +14,7 @@ import type { Product } from '@/features/products/types'
 import { packEquivalent } from '@/features/products/packEquivalent'
 import { formatNumber } from '@/features/products/unitCopy'
 import { LowAtBranches } from '@/features/branches/LowAtBranches'
+import { AreaBreakdown } from '@/features/branches/AreaBreakdown'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { listPriceText } from '@/features/selling/priceText'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
@@ -289,6 +290,7 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
                     productId={product.id}
                     align="end"
                   />
+                  <AreaBreakdown product={product} unitLabel={null} compact />
                   {/* What is on an open expected delivery — task 3.1. Understated on purpose and
                       never added to the figure: a promise a supplier made, not stock anybody can
                       pick today. Absent, not zero, when nothing is coming. */}

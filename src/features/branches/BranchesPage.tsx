@@ -10,6 +10,8 @@ import { branchesApi } from '@/features/branches/branchesApi'
 import { BRANCHES_KEY } from '@/features/branches/BranchProvider'
 import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { AddBranchFlow } from '@/features/branches/AddBranchFlow'
+import { AddAreasFlow } from '@/features/branches/AddAreasFlow'
+import { BranchAreas } from '@/features/branches/BranchAreas'
 import type { Branch } from '@/features/branches/types'
 
 /**
@@ -18,11 +20,12 @@ import type { Branch } from '@/features/branches/types'
  * is online only (Pattern C.5), and every refusal is the server's own sentence with the way out in it.
  */
 export function BranchesPage() {
-  const { branches, mayAddBranch, isMultiBranch, recordable, choose } = useWorkingBranch()
+  const { branches, mayAddBranch, mayAddArea, isMultiBranch, recordable, choose } = useWorkingBranch()
   const navigate = useNavigate()
   const online = useOnlineStatus()
   const queryClient = useQueryClient()
   const [adding, setAdding] = useState(false)
+  const [addingAreasTo, setAddingAreasTo] = useState<Branch | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [problem, setProblem] = useState<{ branchId: string; message: string } | null>(null)
@@ -43,6 +46,9 @@ export function BranchesPage() {
 
   if (adding) {
     return <AddBranchFlow onDone={() => setAdding(false)} />
+  }
+  if (addingAreasTo) {
+    return <AddAreasFlow branch={addingAreasTo} onDone={() => setAddingAreasTo(null)} />
   }
 
   return (
@@ -117,6 +123,9 @@ export function BranchesPage() {
                   )}
                 </div>
               </div>
+            )}
+            {editing !== branch.id && (
+              <BranchAreas branch={branch} online={online} mayAddArea={mayAddArea} onAddAreas={() => setAddingAreasTo(branch)} />
             )}
             {problem?.branchId === branch.id && (
               <p role="alert" className="text-sm text-danger-700">

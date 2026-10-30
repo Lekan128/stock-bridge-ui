@@ -15,6 +15,33 @@ export interface Branch {
   stockWorth?: number
   /** How many people work there. Only for people who can manage branches. */
   people?: number
+  /**
+   * Its areas (STOCK_AREAS_PLAN.md §4), open ones first: just its Store at a branch that hasn't added
+   * any, and then the app shows no area word (rule 1). Absent from an older API, and on the answer to a
+   * change (the list is read again).
+   */
+  areas?: Area[]
+}
+
+/** One place inside a branch where stock is kept or used: Store, Kitchen, Bar. */
+export interface Area {
+  id: string
+  name: string
+  /** False: it uses what it's given (Housekeeping). It never holds a figure, and no sheet records there. */
+  keepsStock: boolean
+  /** Where deliveries arrive. One per branch. */
+  delivery: boolean
+  active: boolean
+  closedAt?: string
+  /** How many products it holds any of - people who manage branches, at a branch with areas. */
+  productsInStock?: number
+}
+
+/** A product in one area - the product page's and the sync rows' `areaStock` (V60). */
+export interface AreaFigure {
+  areaId: string
+  branchId: string
+  quantityOnHand: number
 }
 
 export interface BranchList {
@@ -34,6 +61,8 @@ export interface BranchList {
   sendTo?: { id: string; name: string }[]
   /** How many open branches the company has, whether or not this person sees them. Absent from an older API. */
   openBranches?: number
+  /** May add areas inside a branch now: can manage branches, and the areas pilot lets this company. */
+  mayAddArea?: boolean
 }
 
 /** A product at one branch — the sync rows' and the product page's `branchStock`. */

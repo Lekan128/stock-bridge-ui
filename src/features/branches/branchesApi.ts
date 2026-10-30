@@ -1,5 +1,5 @@
 import { api } from '@/api/client'
-import type { Branch, BranchList } from '@/features/branches/types'
+import type { Area, Branch, BranchList } from '@/features/branches/types'
 
 export interface BranchPayload {
   name?: string
@@ -18,4 +18,20 @@ export const branchesApi = {
   /** One low-stock level for many products at a branch; null takes them back to their own (Phase 4). */
   setThresholds: (id: string, body: { productIds: string[]; lowStockThreshold: number | null }) =>
     api.put<{ updated: number }>(`/api/branches/${id}/thresholds`, body).then((r) => r.data),
+}
+
+/** A new area: `keepsStock` false for one that uses what it's given. */
+export interface NewArea {
+  name: string
+  keepsStock: boolean
+}
+
+/** A branch's areas (STOCK_AREAS_PART_1.md). Shared records, so online only, like branches. */
+export const areasApi = {
+  add: (branchId: string, areas: NewArea[]) =>
+    api.post<Area[]>(`/api/branches/${branchId}/areas`, { areas }).then((r) => r.data),
+  update: (id: string, payload: { name?: string; keepsStock?: boolean; delivery?: boolean }) =>
+    api.patch<Area>(`/api/areas/${id}`, payload).then((r) => r.data),
+  close: (id: string) => api.post<Area>(`/api/areas/${id}/close`).then((r) => r.data),
+  reopen: (id: string) => api.post<Area>(`/api/areas/${id}/reopen`).then((r) => r.data),
 }

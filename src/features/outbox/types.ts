@@ -12,6 +12,11 @@ export interface StockCountPayload {
    * company: the server's only branch, and the request exactly what it was before branches.
    */
   branchId?: string
+  /**
+   * The area of that branch it happened in (V60): chosen on the sheet at a branch with two or more
+   * areas that keep stock. Absent otherwise - the server's only area, or its delivery area for stock in.
+   */
+  areaId?: string
 }
 
 /**

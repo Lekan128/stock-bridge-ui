@@ -1,4 +1,4 @@
-import type { BranchFigure } from '@/features/branches/types'
+import type { AreaFigure, BranchFigure } from '@/features/branches/types'
 import type { StockStatusFilter } from '@/features/products/types'
 
 /**
@@ -37,6 +37,8 @@ export interface CatalogRow {
    * them offline. The fields above stay the company's. Absent at a one-branch company (`== null`).
    */
   branchStock?: BranchFigure[]
+  /** Areas inside a branch (V60): this product in each area of those branches that have areas. */
+  areaStock?: AreaFigure[]
 }
 
 export interface SnapshotPage {

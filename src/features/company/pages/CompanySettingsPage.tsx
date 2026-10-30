@@ -1,3 +1,4 @@
+import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { PERMISSIONS } from '@/auth/permissions'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
@@ -28,6 +29,7 @@ export function CompanySettingsPage() {
   const canEdit = permissions.includes(PERMISSIONS.MANAGE_COMPANY_PROFILE)
   // The one branch word a one-branch company sees (MULTI_BRANCH_UX_PLAN.md rule 1).
   const canManageBranches = permissions.includes(PERMISSIONS.MANAGE_BRANCHES)
+  const mayAddArea = useOptionalWorkingBranch()?.mayAddArea ?? false
 
   return (
     <div className="flex flex-col gap-6">
@@ -47,7 +49,11 @@ export function CompanySettingsPage() {
         >
           <span>
             <span className="block font-medium text-neutral-900">Branches</span>
-            <span className="block text-sm text-neutral-600">Add a branch, or rename and close the ones you have.</span>
+            <span className="block text-sm text-neutral-600">
+              {mayAddArea
+                ? 'Add a branch, or areas inside one (Store, Kitchen, Bar). Rename and close the ones you have.'
+                : 'Add a branch, or rename and close the ones you have.'}
+            </span>
           </span>
           <span aria-hidden className="text-neutral-400">›</span>
         </Link>

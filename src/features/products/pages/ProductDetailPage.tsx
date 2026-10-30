@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { carryBranchStock, scopeProduct } from '@/features/branches/scopeProduct'
 import { OtherBranchesList } from '@/features/branches/OtherBranchesList'
+import { AreaBreakdown } from '@/features/branches/AreaBreakdown'
 import { ArrowLeft, Minus, Pencil, Plus, ShoppingBag, Truck } from 'lucide-react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
@@ -84,7 +85,8 @@ export function ProductDetailPage() {
       // The write's answer carries the company figure only: keep the branch list, moved by the same
       // amount at the branch written to, and read the product again for the truth.
       setProduct((previous) => carryBranchStock(previous, changed, working?.id ?? null))
-      if (isMultiBranch) refetchProduct()
+      // Areas (V60): which area moved isn't in the answer either, so its line is read again too.
+      if (isMultiBranch || wholeProduct?.areaStock != null) refetchProduct()
       setHistoryPage(0)
       refetchHistory()
       refetchLowStockAlerts()
@@ -331,6 +333,7 @@ export function ProductDetailPage() {
         lastMovement={lastMovement}
         sellingPrice={showsSellingPrice ? sellingPriceText(product, stockUnitText, packOption) : null}
       />
+      <AreaBreakdown product={product} unitLabel={stockUnitText} />
 
       {wholeProduct && <OtherBranchesList product={wholeProduct} unitLabel={stockUnitText} />}
 

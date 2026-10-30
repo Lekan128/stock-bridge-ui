@@ -441,7 +441,7 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
         productId: product.id,
         productName: product.name,
         summary: reason ? `${quantityBothWays} · ${outReasonLabel(reason)}` : quantityBothWays,
-        payload: { ...payload, branchId: sheetBranch.branchId },
+        payload: { ...payload, branchId: sheetBranch.branchId, areaId: sheetBranch.areaId },
         baseDelta: -baseQuantity,
       })
       sheetBranch.remember()
@@ -511,8 +511,11 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
               the pack equivalent beside it so the balance is legible to someone counting bags on a
               shelf as well as to the ledger. See `onHandInPacks`. */}
           <p className="text-sm text-neutral-500">
-            Current {UNIT_COPY.ON_HAND.toLowerCase()}: {formatQuantity(product.quantityOnHand, stockUnitText)}
-            {onHandInPacks && ` (${onHandInPacks})`}
+            {/* At a branch with areas, the figure of the area chosen above (V60): the Kitchen can only
+                give out what the Kitchen has. */}
+            {sheetBranch.areaName ? `In the ${sheetBranch.areaName}` : `Current ${UNIT_COPY.ON_HAND.toLowerCase()}`}:{' '}
+            {formatQuantity(sheetBranch.onHand(product), stockUnitText)}
+            {!sheetBranch.areaId && onHandInPacks && ` (${onHandInPacks})`}
           </p>
 
           <div>

@@ -37,6 +37,7 @@ const SUITES = [
   'owner-view',
   'chain',
   'branch-gaps',
+  'areas',
   'chaos',
   'metrics',
   'a11y',

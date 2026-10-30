@@ -127,6 +127,7 @@ export function useStockActions({ onChanged }: { onChanged?: (product: Product) 
         productId={active.product.id}
         productName={active.product.name}
         currentQuantity={active.product.quantityOnHand + pending.delta}
+        areaStock={active.product.areaStock}
         stockUnit={resolveUnitSymbol(active.product.unitOfMeasure, options)}
         onClose={close}
         onSuccess={(result) => succeeded('count', result)}

@@ -26,6 +26,8 @@ import {
 } from '@/features/selling/sale/saleLine'
 import type { RecordedSale, useSaleBasket } from '@/features/selling/sale/useSaleBasket'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
+import { useSheetArea } from '@/features/branches/useSheetBranch'
+import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 
 type Basket = ReturnType<typeof useSaleBasket>
 
@@ -64,6 +66,9 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct }: SaleBaske
     searchRef.current?.focus()
   }
   const finder = useProductFinder(term, addProduct)
+  // Where in the branch this sale comes from, at a branch with a choice of areas (V60): the Bar, not the Store.
+  const branchHere = useOptionalWorkingBranch()
+  const area = useSheetArea(branchHere && !branchHere.isAll ? branchHere.working : null)
 
   const started = useRef(false)
   useEffect(() => {
@@ -92,7 +97,8 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct }: SaleBaske
     setRecording(true)
     setAskUnpriced(false)
     const usualToSet = basket.lines.filter((line) => makeUsual.has(line.key))
-    const sale = await basket.record()
+    const sale = await basket.record(area.areaId)
+    area.remember()
     setRecording(false)
     setOpenKey(null)
     setMakeUsual(new Set())
@@ -112,6 +118,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct }: SaleBaske
 
   return (
     <>
+      {area.field}
       <div className="relative">
         <Search className="pointer-events-none absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-neutral-500" aria-hidden="true" />
         <label htmlFor="sale-search" className="sr-only">
