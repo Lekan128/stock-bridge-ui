@@ -9,7 +9,7 @@
 //      reopens; the Store, where deliveries arrive, can't close.
 //   6. A company without areas sees no area word on its sheets or its product page (rule 1), and can
 //      rename its Store from Branches.
-//  5b. Move stock: before → after, the route kept and "Add the same", a give to Housekeeping and Undo, too much, offline,
+//  5b. Move stock: before → after, the route kept and last time’s items, a give to Housekeeping and Undo, too much, offline,
 //      and the Moves list in Stock movements (STOCK_AREAS_PART_2.md).
 //   7. axe on Branches with areas, and on the Add areas sheet (phone).
 import { chromium } from 'playwright'
@@ -259,7 +259,7 @@ await check('the empty Bar closes and reopens from its menu; the Store, where de
 /** The Move panel: a Sheet, like Stock in and Stock out. */
 const moveSheet = page.getByRole('dialog', { name: /Move stock/ })
 
-await check('Move stock opens in a panel like the other actions: before → after, then the route kept and "Add the same"', async () => {
+await check('Move stock opens in a panel like the other actions: before → after, then the route kept and last time’s items', async () => {
   await page.goto(`${UI}/app/products/${rice.id}`)
   await page.getByRole('heading', { name: 'Rice', level: 1 }).waitFor()
   await page.getByRole('button', { name: 'Move', exact: true }).click()
@@ -283,7 +283,7 @@ await check('Move stock opens in a panel like the other actions: before → afte
   await page.getByRole('button', { name: 'Move stock' }).click()
   await moveSheet.waitFor()
   await waitFor(async () => (await chosenIn(page, '#move-to')) === 'Kitchen', 'the route to be kept')
-  await page.getByRole('button', { name: 'Add the same' }).click()
+  await page.getByRole('button', { name: 'Add all' }).click()
   await waitFor(async () => (await page.getByLabel('How many Rice').inputValue().catch(() => '')) === '4', 'the last move to be repeated')
 })
 
@@ -365,9 +365,10 @@ await check('Inventory opens Move stock in a panel, and moves the products selec
   await page.getByRole('region', { name: 'Inventory actions' }).getByRole('button', { name: 'Move' }).waitFor()
   await page.screenshot({ path: SHOTS + '7d-phone-inventory-bar.png' })
   await page.getByRole('region', { name: 'Inventory actions' }).getByRole('button', { name: 'Move' }).click()
-  await page.locator('[data-last-time]').waitFor()
+  await page.locator('[data-usual]').waitFor()
+  await page.waitForTimeout(500)
   await page.screenshot({ path: SHOTS + '7e-phone-move-empty.png' })
-  await page.getByRole('button', { name: 'Add the same' }).click()
+  await page.getByRole('button', { name: 'Add all' }).click()
   await page.locator('[data-move-line]').first().waitFor()
   await page.screenshot({ path: SHOTS + '7f-phone-move-lines.png' })
   await page.getByRole('button', { name: 'Take Rice off' }).click()
@@ -415,7 +416,7 @@ await check('quick mode at a branch with areas: Move in the row, Count a link be
   await page.getByRole('button', { name: 'Done counting' }).click()
   // Move is a tab like the others: moved, the stamp, and the move in This session with Undo.
   await row.getByRole('button', { name: 'Move' }).click()
-  await page.getByRole('button', { name: 'Add the same' }).click()
+  await page.getByRole('button', { name: 'Add all' }).click()
   await page.getByLabel('How many Rice').waitFor()
   await page.screenshot({ path: SHOTS + '14-quick-move-phone.png' })
   await page.getByRole('button', { name: /^Move 1 item to / }).click()
@@ -428,6 +429,40 @@ await check('quick mode at a branch with areas: Move in the row, Count a link be
 })
 
 // ------------------------------------------------------------------------------------- 5c (Part 3)
+await check('a route used a few times offers its usual items, most often first, each one tap', async () => {
+  const flourId = (await api(`/api/products?search=Flour`, { token: ownerToken })).json.content?.find?.((p) => p.name === 'Flour')?.id
+  const areaIds = Object.fromEntries((await api('/api/branches', { token: ownerToken })).json.branches[0].areas.map((a) => [a.name, a.id]))
+  await api(`/api/products/${rice.id}/stock/stock-in`, { token: ownerToken, method: 'POST', body: { quantity: 20, areaId: areaIds.Store } })
+  // Three moves Store → Bar: rice every time, flour twice, nothing else more than once.
+  const lines = [[rice.id, flourId], [rice.id, flourId], [rice.id]]
+  for (const [index, ids] of lines.entries()) {
+    const sent = await api('/api/area-moves', {
+      token: ownerToken,
+      method: 'POST',
+      body: { id: randomUUID(), fromAreaId: areaIds.Store, toAreaId: areaIds.Bar, lines: ids.map((productId) => ({ productId, quantity: index + 1 })) },
+    })
+    assert(sent.status === 201, `move ${index}: ${sent.status} ${JSON.stringify(sent.json)}`)
+  }
+  await page.goto(`${UI}/app/products`)
+  await page.getByRole('button', { name: 'Move stock' }).click()
+  await moveSheet.waitFor()
+  await page.locator('#move-to').selectOption({ label: 'Bar' })
+  const usual = page.getByRole('region', { name: 'Usual to Bar' })
+  await usual.waitFor()
+  const chips = await usual.getByRole('button', { name: /^Add (?!all)/ }).allInnerTexts()
+  assert(chips.length === 2 && /Rice/.test(chips[0]) && /Flour/.test(chips[1]), `usual: ${JSON.stringify(chips)}`)
+  // The amount it went at last time: rice 3 (the newest move), flour 2.
+  assert(/3/.test(chips[0]) && /2/.test(chips[1]), `amounts: ${JSON.stringify(chips)}`)
+  await page.waitForTimeout(500)
+  await page.screenshot({ path: SHOTS + '16-usual-items.png' })
+  await usual.getByRole('button', { name: /^Add Flour/ }).click()
+  await waitFor(async () => (await page.getByLabel('How many Flour').inputValue().catch(() => '')) === '2', 'flour to be added at 2')
+  assert((await usual.getByRole('button', { name: /^Add (?!all)/ }).count()) === 1, 'flour is still offered')
+  await page.getByRole('button', { name: 'Take Flour off' }).click()
+  await page.keyboard.press('Escape')
+  await moveSheet.waitFor({ state: 'hidden' })
+})
+
 await check('the owner places a cook in the Kitchen; the cook records there without being asked, and sees only the Kitchen', async () => {
   await page.setViewportSize({ width: 1280, height: 900 })
   await page.goto(`${UI}/app/users`)

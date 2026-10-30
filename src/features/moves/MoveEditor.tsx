@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ArrowLeftRight, Repeat, Search, X } from 'lucide-react'
+import { ArrowLeftRight, Plus, Search, X } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { TextField } from '@/components/TextField'
 import { useApiQuery } from '@/data/useApiQuery'
@@ -21,6 +21,9 @@ import { packRemainder, resolveUnitSymbol, stockUnitOption, toBaseQuantity } fro
 import { unitsFor } from '@/features/selling/sale/saleLine'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
+
+/** How many usual items show before "+ N more". */
+const USUAL_AT_FIRST = 6
 
 /** One product on the move being written. */
 interface MoveLine {
@@ -107,7 +110,7 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
   // ------------------------------------------------------------------- usual routes, and the last one
   const recent = useApiQuery({
     queryKey: ['area-moves', 'recent', branch?.id],
-    queryFn: () => movesApi.list({ branchId: branch!.id, size: 30 }),
+    queryFn: () => movesApi.list({ branchId: branch!.id, size: 50 }),
     fallbackError: "Couldn't load recent moves.",
     enabled: branch != null,
   })
@@ -122,7 +125,36 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
       (move) => fromChoices.some((area) => area.id === move.fromAreaId) && allOpen.some((area) => area.id === move.toAreaId),
     )
   }, [recent.data, fromChoices, allOpen])
-  const lastOnRoute = routes.find((move) => move.fromAreaId === fromAreaId && move.toAreaId === toAreaId)
+
+  /**
+   * What usually goes on this route (owner, 2026-10-30): across its recent moves, the items that come up
+   * again and again, most often first, each at the amount it went at last time. A route used fewer than
+   * three times has no "usual" yet, so it offers last time's items instead.
+   */
+  const usual = useMemo(() => {
+    const onRoute = (recent.data?.content ?? []).filter(
+      (move) => move.status === 'DONE' && move.fromAreaId === fromAreaId && move.toAreaId === toAreaId,
+    )
+    if (onRoute.length === 0) return null
+    const lastTime = {
+      label: `Last time, ${new Date(onRoute[0].movedAt).toLocaleDateString(undefined, { weekday: 'short' })}`,
+      items: onRoute[0].lines.map((line) => ({ line, times: 1 })),
+    }
+    if (onRoute.length < 3) return lastTime
+    // Newest first, so the first time an item is seen is the amount it went at last.
+    const byProduct = new Map<string, { line: AreaMove['lines'][number]; times: number }>()
+    for (const move of onRoute) {
+      for (const line of move.lines) {
+        const seen = byProduct.get(line.productId)
+        if (seen) seen.times += 1
+        else byProduct.set(line.productId, { line, times: 1 })
+      }
+    }
+    const items = [...byProduct.values()].filter((item) => item.times >= 2).sort((a, b) => b.times - a.times)
+    const toName = allOpen.find((area) => area.id === toAreaId)?.name ?? ''
+    return items.length > 0 ? { label: `Usual to ${toName}`, items } : lastTime
+  }, [recent.data, fromAreaId, toAreaId, allOpen])
+  const [allUsualShown, setAllUsualShown] = useState(false)
   // Opened with nothing chosen, the route is the last one used from here - most days the same as yesterday.
   const routed = useRef(false)
   useEffect(() => {
@@ -212,9 +244,9 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
 
   const finder = useProductFinder(term, (product) => addProduct(product))
 
-  /** "Repeat the last one": the same items, in the same amounts, as the last move on this route. */
-  function repeatLast(move: AreaMove) {
-    for (const line of move.lines) {
+  /** A usual item (or all of them): the product, at the amount it went at last time on this route. */
+  function addUsual(usualLines: AreaMove['lines']) {
+    for (const line of usualLines) {
       void productsApi
         .get(line.productId)
         .then((product) => {
@@ -296,6 +328,9 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
     })
   }
 
+  // The usual items not on this move yet; six at first, so a phone keeps room for the list being built.
+  const usualLeft = (usual?.items ?? []).filter((item) => !lines.some((line) => line.product.id === item.line.productId))
+  const usualShown = allUsualShown ? usualLeft : usualLeft.slice(0, USUAL_AT_FIRST)
   const body = (
       <div className="flex flex-col gap-3">
         <DraftNote
@@ -385,20 +420,44 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
           </div>
         )}
 
-        {/* Nothing added yet: the morning move is usually last time's again - one tap. */}
-        {lines.length === 0 && !finder.search && lastOnRoute && (
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-neutral-300 px-3 py-2.5" data-last-time>
-            <p className="min-w-0 text-sm text-neutral-700">
-              <span className="text-neutral-600">
-                Last time, {new Date(lastOnRoute.movedAt).toLocaleDateString(undefined, { weekday: 'short' })}:{' '}
-              </span>
-              <span className="line-clamp-2">{lastOnRoute.lines.map((line) => `${line.productName} ${typedAs(line)}`).join(' · ')}</span>
-            </p>
-            <Button variant="secondary" className="shrink-0" onClick={() => repeatLast(lastOnRoute)}>
-              <Repeat className="h-4 w-4" aria-hidden="true" />
-              Add the same
-            </Button>
-          </div>
+        {/* What usually goes this way: tap one to add it, or Add all. Gone once everything's on the move. */}
+        {usualLeft.length > 0 && !finder.search && usual && (
+          <section aria-label={usual.label} className="flex flex-col gap-1.5 rounded-lg border border-dashed border-neutral-300 px-3 py-2" data-usual>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-neutral-600">{usual.label}</p>
+              <button
+                type="button"
+                onClick={() => addUsual(usualLeft.map((item) => item.line))}
+                className="-my-1.5 inline-flex min-h-11 shrink-0 items-center px-1 text-sm font-medium text-primary-700 hover:underline"
+              >
+                Add all
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {usualShown.map((item) => (
+                <button
+                  key={item.line.productId}
+                  type="button"
+                  onClick={() => addUsual([item.line])}
+                  aria-label={`Add ${item.line.productName}, ${typedAs(item.line)}`}
+                  className="inline-flex min-h-11 max-w-full items-center gap-1.5 rounded-full border border-neutral-300 bg-white px-3 text-sm text-neutral-800 hover:bg-neutral-50"
+                >
+                  <Plus className="h-3.5 w-3.5 shrink-0 text-neutral-500" aria-hidden="true" />
+                  <span className="truncate">{item.line.productName}</span>
+                  <span className="shrink-0 tabular-nums text-neutral-600">· {typedAs(item.line)}</span>
+                </button>
+              ))}
+              {usualLeft.length > usualShown.length && (
+                <button
+                  type="button"
+                  onClick={() => setAllUsualShown(true)}
+                  className="inline-flex min-h-11 items-center px-2 text-sm font-medium text-primary-700 hover:underline"
+                >
+                  + {usualLeft.length - usualShown.length} more
+                </button>
+              )}
+            </div>
+          </section>
         )}
 
         {checked.length > 0 && (
