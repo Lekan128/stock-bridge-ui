@@ -363,6 +363,23 @@ await check('Stock movements lists the moves, and says the area on each row', as
 })
 
 // ------------------------------------------------------------------------------------------ 6
+await check('quick mode at a branch with areas: Move in the row, Count a link beside the explanation', async () => {
+  await page.setViewportSize({ width: 360, height: 780 })
+  await page.goto(`${UI}/app/quick`)
+  const row = page.getByRole('group', { name: 'What are you doing?' })
+  await row.getByRole('button', { name: 'Move' }).waitFor()
+  assert((await row.getByRole('button', { name: 'Count' }).count()) === 0, 'Count is still in the row')
+  await row.getByRole('button', { name: 'Stock out' }).click()
+  await page.getByText('To another area, use Move.', { exact: false }).waitFor()
+  await page.screenshot({ path: SHOTS + '13-quick-mode-phone.png' })
+  await page.getByRole('button', { name: 'Count stock' }).click()
+  await page.getByText("Count what's on the shelf.", { exact: false }).waitFor()
+  await page.getByRole('button', { name: 'Done counting' }).click()
+  await row.getByRole('button', { name: 'Move' }).click()
+  await page.getByRole('heading', { name: 'Move stock', level: 1 }).waitFor()
+  await page.setViewportSize({ width: 1280, height: 900 })
+})
+
 // ------------------------------------------------------------------------------------- 5c (Part 3)
 await check('the owner places a cook in the Kitchen; the cook records there without being asked, and sees only the Kitchen', async () => {
   await page.setViewportSize({ width: 1280, height: 900 })

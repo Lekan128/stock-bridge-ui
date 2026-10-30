@@ -1,5 +1,7 @@
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { useSheetArea } from '@/features/branches/useSheetBranch'
+import { hasAreas } from '@/features/branches/areas'
+import { useWorkArea } from '@/features/branches/workArea'
 import { usePendingStock } from '@/features/outbox/useOutbox'
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { Delete, Search, X } from 'lucide-react'
@@ -66,6 +68,9 @@ const MODES: { value: Mode; label: string; verb: string; meaning: string }[] = [
 ]
 /** Where sales are recorded, Stock out is for everything else - and says so (§6.3). */
 const OUT_MEANING_WHEN_SELLING = 'Goods going out without a sale: used, spoilt or sent away. For a customer, use Sell.'
+/** At a branch with areas, giving to the kitchen or bar is a move, not stock leaving (STOCK_AREAS_PART_3.md). */
+const OUT_MEANING_WITH_AREAS = 'Used, sold or thrown away. To another area, use Move.'
+const OUT_MEANING_WITH_AREAS_SELLING = 'Used or thrown away, not sold. To another area, use Move.'
 /** The Record button says what it will do: "Stock in 2 bags (100 kg)". */
 const ACTION: Record<Exclude<Mode, 'sell'>, string> = { in: 'Stock in', out: 'Stock out', count: 'Record count:' }
 const GRID_COLS = ['', 'grid-cols-1', 'grid-cols-2', 'grid-cols-3', 'grid-cols-4']
@@ -115,6 +120,12 @@ export function QuickModePage() {
     out: permissions.includes(PERMISSIONS.STOCK_OUT),
     count: permissions.includes(PERMISSIONS.MANAGE_INVENTORY),
   }
+  // At a branch with areas a move is done every day and a count once in a while: Move takes Count's place
+  // in the row (it opens the Move stock screen), and Count becomes a small link beside the line below.
+  const working = branch && !branch.isAll ? branch.working : null
+  const work = useWorkArea(working)
+  const movesHere = allowed.out && hasAreas(working) && work.areas.length > 0
+  const tabs = MODES.filter((m) => allowed[m.value] && !(movesHere && m.value === 'count'))
   const requested = params.get('mode') as Mode | null
   const mode: Mode = requested && allowed[requested] ? requested : (MODES.find((m) => allowed[m.value])?.value ?? 'in')
 
@@ -214,9 +225,9 @@ export function QuickModePage() {
             role="group"
             aria-label="What are you doing?"
             aria-describedby="quick-mode-meaning"
-            className={`grid ${GRID_COLS[MODES.filter((m) => allowed[m.value]).length]} gap-1 rounded-lg bg-neutral-100 p-1`}
+            className={`grid ${GRID_COLS[tabs.length + (movesHere ? 1 : 0)]} gap-1 rounded-lg bg-neutral-100 p-1`}
           >
-            {MODES.filter((m) => allowed[m.value]).map((m) => (
+            {tabs.map((m) => (
               <button
                 key={m.value}
                 type="button"
@@ -229,10 +240,40 @@ export function QuickModePage() {
                 {m.label}
               </button>
             ))}
+            {movesHere && (
+              <button
+                type="button"
+                onClick={() => navigate('/app/move')}
+                className="h-12 rounded-md text-base font-semibold text-neutral-600"
+              >
+                Move
+              </button>
+            )}
           </div>
-          <p id="quick-mode-meaning" className="text-sm text-neutral-600">
-            {mode === 'out' && allowed.sell ? OUT_MEANING_WHEN_SELLING : MODES.find((m) => m.value === mode)?.meaning}
-          </p>
+          {/* Count shares the explanation's line, so it costs no height above the keyboard. */}
+          <div className="flex items-start justify-between gap-3">
+            <p id="quick-mode-meaning" className="text-sm text-neutral-600">
+              {mode === 'out'
+                ? movesHere
+                  ? allowed.sell
+                    ? OUT_MEANING_WITH_AREAS_SELLING
+                    : OUT_MEANING_WITH_AREAS
+                  : allowed.sell
+                    ? OUT_MEANING_WHEN_SELLING
+                    : MODES.find((m) => m.value === 'out')?.meaning
+                : MODES.find((m) => m.value === mode)?.meaning}
+            </p>
+            {movesHere && allowed.count && (
+              <button
+                type="button"
+                aria-pressed={mode === 'count'}
+                onClick={() => chooseMode(mode === 'count' ? (tabs[0]?.value ?? 'in') : 'count')}
+                className="-my-3 inline-flex min-h-11 shrink-0 items-center px-1 text-sm font-medium whitespace-nowrap text-primary-700 hover:underline"
+              >
+                {mode === 'count' ? 'Done counting' : 'Count stock'}
+              </button>
+            )}
+          </div>
           {mode === 'sell' && <MySalesToday refreshKey={salesRecorded} />}
           {mode === 'out' && <QuickReason value={outReason} onChange={setOutReason} />}
           {mode !== 'sell' && area.field}
