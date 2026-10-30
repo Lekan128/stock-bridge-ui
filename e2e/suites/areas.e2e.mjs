@@ -9,6 +9,8 @@
 //      reopens; the Store, where deliveries arrive, can't close.
 //   6. A company without areas sees no area word on its sheets or its product page (rule 1), and can
 //      rename its Store from Branches.
+//  5b. Move stock: before → after, Usual and Repeat, a give to Housekeeping and Undo, too much, offline,
+//      and the Moves list in Stock movements (STOCK_AREAS_PART_2.md).
 //   7. axe on Branches with areas, and on the Add areas sheet (phone).
 import { chromium } from 'playwright'
 import { createRequire } from 'node:module'
@@ -246,6 +248,72 @@ await check('the empty Bar closes and reopens from its menu; the Store, where de
   await kitchen.getByRole('button', { name: 'Change Kitchen' }).click()
   await page.getByRole('menuitem', { name: 'Close' }).click()
   await kitchen.getByRole('alert').getByText('Kitchen still has 1 item.').waitFor()
+})
+
+// ----------------------------------------------------------------------------------------- 5b
+await check('Move stock: the morning move with before → after, then the route is usual and repeats', async () => {
+  await page.goto(`${UI}/app/products/${rice.id}`)
+  await page.getByRole('heading', { name: 'Rice', level: 1 }).waitFor()
+  await page.getByRole('link', { name: 'Move', exact: true }).click()
+  await page.getByRole('heading', { name: 'Move stock', level: 1 }).waitFor()
+  const from = page.getByRole('radiogroup', { name: 'From' })
+  assert((await from.getByRole('radio', { name: 'Store' }).getAttribute('aria-checked')) === 'true', 'does not start from the Store')
+  await page.getByRole('radiogroup', { name: 'To' }).getByRole('radio', { name: 'Kitchen' }).click()
+  await page.getByLabel('How many Rice').fill('4')
+  const line = page.locator('[data-before-after]').first()
+  await waitFor(async () => /Store 10 → 6 · Kitchen 1 → 5/.test(await line.innerText()), 'the line to read Store 10 → 6 · Kitchen 1 → 5')
+  await page.screenshot({ path: SHOTS + '7-move-stock.png' })
+  await page.getByRole('button', { name: 'Move 1 item to Kitchen' }).click()
+  await page.getByRole('heading', { name: 'Moved', level: 1 }).waitFor()
+  let at = await areaFigures(ownerToken, rice.id)
+  assert(at.Store === 6 && at.Kitchen === 5, `figures ${JSON.stringify(at)}`)
+
+  await page.getByRole('button', { name: 'Move more' }).click()
+  await page.getByRole('group', { name: 'Usual' }).getByRole('button', { name: /Store.*Kitchen/ }).click()
+  await page.getByRole('button', { name: /Repeat the last one/ }).click()
+  await waitFor(async () => (await page.getByLabel('How many Rice').inputValue().catch(() => '')) === '4', 'the last move to be repeated')
+})
+
+await check('a give to Housekeeping is recorded as used there, and Undo puts it back', async () => {
+  await page.getByRole('radiogroup', { name: 'To' }).getByRole('radio', { name: 'Housekeeping · uses it' }).click()
+  await page.getByText("Housekeeping uses what it's given").waitFor()
+  await page.getByLabel('How many Rice').fill('1')
+  await page.getByRole('button', { name: 'Give 1 item to Housekeeping' }).click()
+  await page.getByRole('heading', { name: 'Given', level: 1 }).waitFor()
+  let at = await areaFigures(ownerToken, rice.id)
+  assert(at.Store === 5, `the Store holds ${at.Store}, expected 5`)
+  await page.getByRole('button', { name: 'Undo' }).click()
+  await page.getByRole('heading', { name: 'Undone', level: 1 }).waitFor()
+  at = await areaFigures(ownerToken, rice.id)
+  assert(at.Store === 6, `the Store holds ${at.Store} after Undo, expected 6`)
+})
+
+await check('more than the Store has turns the line red and holds the button', async () => {
+  await page.getByRole('button', { name: 'Move more' }).click()
+  await page.goto(`${UI}/app/move?product=${rice.id}`)
+  await page.getByRole('radiogroup', { name: 'To' }).getByRole('radio', { name: 'Kitchen' }).click()
+  await page.getByLabel('How many Rice').fill('99')
+  await page.getByText('The Store has 6').waitFor()
+  assert(await page.getByRole('button', { name: 'Move 1 item to Kitchen' }).isDisabled(), 'the button is not held')
+})
+
+await check('offline, a move is kept on the phone and goes once back online', async () => {
+  await page.getByLabel('How many Rice').fill('2')
+  await context.setOffline(true)
+  await page.getByRole('button', { name: 'Move 1 item to Kitchen' }).click()
+  await page.getByRole('heading', { name: 'Saved on this phone', level: 1 }).waitFor()
+  await context.setOffline(false)
+  await page.evaluate(() => window.dispatchEvent(new Event('online')))
+  await waitFor(async () => (await areaFigures(ownerToken, rice.id)).Kitchen === 7, 'the queued move to arrive (Kitchen 7)')
+})
+
+await check('Stock movements lists the moves, and says the area on each row', async () => {
+  await page.goto(`${UI}/app/stock-movements?moves=1`)
+  const moves = page.getByRole('list', { name: 'Moves between areas' })
+  await moves.waitFor()
+  await moves.getByText('undone').waitFor()
+  assert((await moves.locator('[data-move-row]').count()) >= 3, 'fewer than three moves listed')
+  await page.screenshot({ path: SHOTS + '8-moves-list.png' })
 })
 
 // ------------------------------------------------------------------------------------------ 6

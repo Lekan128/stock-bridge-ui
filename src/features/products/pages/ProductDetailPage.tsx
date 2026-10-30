@@ -4,7 +4,8 @@ import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { carryBranchStock, scopeProduct } from '@/features/branches/scopeProduct'
 import { OtherBranchesList } from '@/features/branches/OtherBranchesList'
 import { AreaBreakdown } from '@/features/branches/AreaBreakdown'
-import { ArrowLeft, Minus, Pencil, Plus, ShoppingBag, Truck } from 'lucide-react'
+import { hasAreas } from '@/features/branches/areas'
+import { ArrowLeft, ArrowLeftRight, Minus, Pencil, Plus, ShoppingBag, Truck } from 'lucide-react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { PERMISSIONS } from '@/auth/permissions'
@@ -333,7 +334,21 @@ export function ProductDetailPage() {
         lastMovement={lastMovement}
         sellingPrice={showsSellingPrice ? sellingPriceText(product, stockUnitText, packOption) : null}
       />
-      <AreaBreakdown product={product} unitLabel={stockUnitText} />
+      {/* Where in the branch it is, and moving it between areas (STOCK_AREAS_PART_2.md). */}
+      {hasAreas(working) && (
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <AreaBreakdown product={product} unitLabel={stockUnitText} />
+          {canStockOut && (
+            <Link
+              to={`/app/move?product=${product.id}`}
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-neutral-300 bg-white px-3 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
+            >
+              <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
+              Move
+            </Link>
+          )}
+        </div>
+      )}
 
       {wholeProduct && <OtherBranchesList product={wholeProduct} unitLabel={stockUnitText} />}
 

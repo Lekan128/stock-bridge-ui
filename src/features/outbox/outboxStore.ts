@@ -8,6 +8,8 @@ import type { OutboxOp, OutboxProblem, StockCountPayload, SubmitOutcome } from '
 import { stockApi, type StockInRequestPayload } from '@/features/products/api/stockApi'
 import type { StockMutationResponse, StockOutPayload } from '@/features/products/types'
 import { transfersApi } from '@/features/transfers/transfersApi'
+import { movesApi } from '@/features/moves/movesApi'
+import type { AreaMove, AreaMovePayload } from '@/features/moves/types'
 import type { ReceiptPayload, SendPayload, Transfer } from '@/features/transfers/types'
 import { isAppError } from '@/types/api'
 
@@ -170,7 +172,7 @@ function isTransient(error: unknown): boolean {
   return isAppError(error) && (error.status === 0 || error.status >= 500)
 }
 
-type Answer = StockMutationResponse | Transfer
+type Answer = StockMutationResponse | Transfer | AreaMove
 
 function send(op: OutboxOp, { late }: { late: boolean }): Promise<Answer> {
   // A write sent the moment it is entered is dated by the server, as always. One sent later
@@ -182,6 +184,9 @@ function send(op: OutboxOp, { late }: { late: boolean }): Promise<Answer> {
       return transfersApi.send({ ...op.payload, occurredAt: new Date(op.createdAt).toISOString() })
     case 'TRANSFER_RECEIVE':
       return transfersApi.receive(op.transferId, { ...op.payload, occurredAt: new Date(op.createdAt).toISOString() })
+    // A move keeps the moment it was made too; one sent late says so, so a later count isn't doubled.
+    case 'AREA_MOVE':
+      return movesApi.move({ ...op.payload, occurredAt: new Date(op.createdAt).toISOString(), ...(late ? { recordedOffline: true } : {}) })
     case 'STOCK_IN':
       return stockApi.stockIn(op.productId, { ...op.payload, ...timing } as StockInRequestPayload, op.id)
     case 'STOCK_OUT':
@@ -238,8 +243,25 @@ function applyTransferResult(transfer: Transfer): void {
   void syncCatalog()
 }
 
+/**
+ * A move has landed: two areas' figures changed (a give also the branch's). The catalogue hears from its
+ * next delta (the server logs every product on it); the products' pages, histories and the moves list
+ * are out of date.
+ */
+export function applyMoveResult(move: AreaMove): void {
+  void queryClient.invalidateQueries({ queryKey: ['area-moves'] })
+  void queryClient.invalidateQueries({ queryKey: queryKeys.products.lowStock })
+  for (const line of move.lines) {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.products.detail(line.productId) })
+    void queryClient.invalidateQueries({ queryKey: ['products', 'history', line.productId] })
+  }
+  void invalidateInventory(queryClient)
+  void syncCatalog()
+}
+
 function applyResult(op: OutboxOp, response: Answer): void {
-  if (op.kind === 'TRANSFER_SEND' || op.kind === 'TRANSFER_RECEIVE') applyTransferResult(response as Transfer)
+  if (op.kind === 'AREA_MOVE') applyMoveResult(response as AreaMove)
+  else if (op.kind === 'TRANSFER_SEND' || op.kind === 'TRANSFER_RECEIVE') applyTransferResult(response as Transfer)
   else applyStockResult(op.productId, response as StockMutationResponse)
 }
 
@@ -388,6 +410,39 @@ export async function submitTransfer(input: NewTransferOp): Promise<SubmitOutcom
     try {
       const response = (await send(op, { late: false })) as Transfer
       applyTransferResult(response)
+      return { status: 'sent', response }
+    } catch (error) {
+      if (!isTransient(error)) throw error
+    }
+  }
+  await save({ ...op, attempts: 1, nextAttemptAt: Date.now() + backoff(1) })
+  void processOutbox()
+  return { status: 'queued', op }
+}
+
+/**
+ * Sends a move between areas the way `submitTransfer` sends a waybill: now if the server can be reached,
+ * otherwise kept on this phone and sent in order behind any earlier write for one of its products.
+ */
+export async function submitMove(payload: AreaMovePayload, summary: string): Promise<SubmitOutcome<AreaMove>> {
+  const op: OutboxOp = {
+    id: crypto.randomUUID(),
+    productId: `move:${payload.id}`,
+    keys: [`move:${payload.id}`, ...payload.lines.map((line) => line.productId)],
+    productName: summary,
+    summary,
+    createdAt: Date.now(),
+    status: 'pending',
+    attempts: 0,
+    nextAttemptAt: 0,
+    kind: 'AREA_MOVE',
+    payload,
+    baseDelta: null,
+  }
+  if (!isBehind(op)) {
+    try {
+      const response = (await send(op, { late: false })) as AreaMove
+      applyMoveResult(response)
       return { status: 'sent', response }
     } catch (error) {
       if (!isTransient(error)) throw error

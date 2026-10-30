@@ -25,6 +25,7 @@ const PENDING_LABEL: Record<OutboxOp['kind'], string> = {
   COUNT: 'Count',
   TRANSFER_SEND: 'Send stock',
   TRANSFER_RECEIVE: 'Receive stock',
+  AREA_MOVE: 'Move stock',
 }
 const movementVariants: Record<MovementType, BadgeVariant> = {
   IN: 'success',

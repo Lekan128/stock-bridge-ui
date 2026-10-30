@@ -1,6 +1,7 @@
 import type { StockInRequestPayload } from '@/features/products/api/stockApi'
 import type { StockOutPayload } from '@/features/products/types'
 import type { ReceiptPayload, SendPayload } from '@/features/transfers/types'
+import type { AreaMovePayload } from '@/features/moves/types'
 
 /** A stock count as the API takes it (A4): what was on the shelf, in stock units. */
 export interface StockCountPayload {
@@ -56,6 +57,8 @@ export type OutboxOp = {
   | { kind: 'TRANSFER_SEND'; payload: SendPayload; baseDelta: null }
   /** Stock off a waybill (UX §5.5). `payload.id` is the receipt's id; `transferId` the waybill's. */
   | { kind: 'TRANSFER_RECEIVE'; transferId: string; payload: ReceiptPayload; baseDelta: null }
+  /** Stock moved between two areas of a branch (STOCK_AREAS_PART_2.md). `payload.id` is the move's own id. */
+  | { kind: 'AREA_MOVE'; payload: AreaMovePayload; baseDelta: null }
 )
 
 export type OutboxProblem =

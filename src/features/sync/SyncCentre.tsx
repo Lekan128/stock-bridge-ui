@@ -21,6 +21,7 @@ const KIND_LABEL: Record<OutboxOp['kind'], string> = {
   COUNT: 'Count',
   TRANSFER_SEND: 'Send stock',
   TRANSFER_RECEIVE: 'Receive stock',
+  AREA_MOVE: 'Move stock',
 }
 
 /** "10:42" today, "3 Oct, 10:42" otherwise. */

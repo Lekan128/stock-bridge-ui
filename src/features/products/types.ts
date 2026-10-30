@@ -408,6 +408,10 @@ export type MovementType = 'IN' | 'OUT' | 'ADJUSTMENT' | 'TRANSFER_OUT' | 'TRANS
 export interface StockMovement {
   /** Where it happened (V51). Absent from an older API. */
   branchId?: string
+  /** Areas (V60): the area of that branch it happened in; absent on rows from before areas. */
+  areaId?: string
+  /** A give to an area that uses what it's given (V63): that area - "Used at Housekeeping". */
+  usedAreaId?: string
   id: string
   productId: string
   /**

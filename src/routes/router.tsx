@@ -151,6 +151,7 @@ const SalesPage = lazy(() =>
 // which only a company with two branches ever opens - one, so Send can move to the waybill offline.
 const TransfersPage = lazy(() => import('@/features/transfers/screens').then((m) => ({ default: m.TransfersPage })))
 const SendStockPage = lazy(() => import('@/features/transfers/screens').then((m) => ({ default: m.SendStockPage })))
+const MoveStockPage = lazy(() => import('@/features/moves/MoveStockPage').then((m) => ({ default: m.MoveStockPage })))
 const TransferDetailPage = lazy(() => import('@/features/transfers/screens').then((m) => ({ default: m.TransferDetailPage })))
 // What has been ordered from a supplier off the platform and not received yet (task 3.1). Two
 // chunks, like the import screens: the list is read by anyone who can see products, while the
@@ -690,6 +691,14 @@ export function AppRoutes() {
             element={
               <RequirePermission anyOf={[PERMISSIONS.STOCK_IN, PERMISSIONS.STOCK_OUT, PERMISSIONS.SEND_STOCK, PERMISSIONS.MANAGE_INVENTORY]}>
                 <TransfersPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="move"
+            element={
+              <RequirePermission permission={PERMISSIONS.STOCK_OUT}>
+                <MoveStockPage />
               </RequirePermission>
             }
           />
