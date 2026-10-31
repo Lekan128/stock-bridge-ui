@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { setViewingBranch } from '@/features/branches/viewingBranch'
+import { setViewingAreas, setViewingBranch } from '@/features/branches/viewingBranch'
+import { useWorkArea } from '@/features/branches/workArea'
 import { useToast } from '@/components/useToast'
 import { queryKeys } from '@/data/queryKeys'
 import { track } from '@/marketing/analytics'
@@ -224,6 +225,21 @@ export function BranchProvider({ children }: { children: ReactNode }) {
     }
     lastViewAt.current = viewAt
   }, [viewAt, queryClient])
+
+  // …and the areas being viewed (STOCK_AREAS_PART_3_6.md): the top bar's area chooser. A change drops the same
+  // report answers, for the same reason - a Kitchen figure must never show under All areas.
+  const work = useWorkArea(value.isAll ? null : value.working)
+  const viewAreas = work.viewAreaIds?.join(',') ?? null
+  const lastViewAreas = useRef<string | null | undefined>(undefined)
+  useEffect(() => {
+    setViewingAreas(viewAreas ? viewAreas.split(',') : null)
+    if (lastViewAreas.current !== undefined && lastViewAreas.current !== viewAreas) {
+      for (const key of [['analytics'], ['stock-movements'], ['sales-report'], ['sold-this-month'], ['stock-worth']]) {
+        queryClient.removeQueries({ queryKey: key })
+      }
+    }
+    lastViewAreas.current = viewAreas
+  }, [viewAreas, queryClient])
 
   // Writes are stamped with where this phone is (rule 3) - only at a multi-branch company, so a single
   // shop's requests stay exactly as they were.

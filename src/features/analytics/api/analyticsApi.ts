@@ -1,5 +1,5 @@
 import { api } from '@/api/client'
-import { viewingBranchId } from '@/features/branches/viewingBranch'
+import { viewingAreaParams, viewingBranchId } from '@/features/branches/viewingBranch'
 import type {
   AnalyticsDateRangeParams,
   AnalyticsSummary,
@@ -12,12 +12,12 @@ import type {
 
 export const analyticsApi = {
   summary: (params: AnalyticsDateRangeParams) =>
-    api.get<AnalyticsSummary>('/api/analytics/summary', { params: { branchId: viewingBranchId(), ...params } }).then((r) => r.data),
+    api.get<AnalyticsSummary>('/api/analytics/summary', { params: { branchId: viewingBranchId(), ...viewingAreaParams(), ...params } }).then((r) => r.data),
 
   movementsOverTime: (params: AnalyticsDateRangeParams & { granularity: Granularity }) =>
-    api.get<MovementsOverTimePoint[]>('/api/analytics/movements-over-time', { params: { branchId: viewingBranchId(), ...params } }).then((r) => r.data),
+    api.get<MovementsOverTimePoint[]>('/api/analytics/movements-over-time', { params: { branchId: viewingBranchId(), ...viewingAreaParams(), ...params } }).then((r) => r.data),
 
   topProducts: (
     params: AnalyticsDateRangeParams & { by: TopProductsMetric; direction: TopProductsDirection; limit?: number },
-  ) => api.get<TopProductEntry[]>('/api/analytics/top-products', { params: { branchId: viewingBranchId(), ...params } }).then((r) => r.data),
+  ) => api.get<TopProductEntry[]>('/api/analytics/top-products', { params: { branchId: viewingBranchId(), ...viewingAreaParams(), ...params } }).then((r) => r.data),
 }

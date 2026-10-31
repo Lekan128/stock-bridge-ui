@@ -4,12 +4,12 @@ import { hasAreas, stockAreas } from '@/features/branches/areas'
 import type { Area, Branch } from '@/features/branches/types'
 
 /**
- * Where a person is working inside a branch (STOCK_AREAS_PART_3.md, STOCK_AREAS_PLAN.md §4.2):
+ * Where a person is inside a branch (STOCK_AREAS_PART_3.md, STOCK_AREAS_PART_3_6.md): the top bar's area
+ * chooser, which - like the branch chooser - decides what the app shows and where it records.
  *
- * - **All areas** (managers, procurement, the owner): nowhere in particular. Each sheet asks, pre-filled.
  * - **One area that keeps stock** (the cook): that area, fixed.
- * - **Several** (the barman in the Bar and at the front desk): the one this phone last chose for them,
- *   remembered per person and branch; none until they choose, from the top bar or the first sheet.
+ * - **Several, or every area**: *All my areas* / *All areas* (the default), or one of them, remembered per
+ *   person and branch on this phone. On *All…* each sheet asks which area; on one area it records there.
  *
  * Read from the branch list's `worksHere`, which the server works out from the database. The server checks
  * every write again, so this decides what the phone offers, never what is allowed.
@@ -59,13 +59,21 @@ export interface WorkArea {
   limited: boolean
   /** The areas they can record in here (stock-keeping, theirs). */
   areas: Area[]
-  /** Where this phone is for them: their only area, or the one chosen. Undefined: not chosen, or all areas. */
+  /** Where this phone is for them: their only area, or the one chosen. Undefined: all of them. */
   area: Area | undefined
   /** Only one area: nothing to switch. */
   fixed: boolean
-  /** Remember `areaId` as where this phone is, for this person at this branch. */
+  /**
+   * What the app shows (Part 3.6): the chosen area, or - for someone placed in areas, on *All my areas* - theirs;
+   * undefined for the whole branch (no areas, or *All areas*).
+   */
+  viewAreaIds: string[] | undefined
+  /** Remember `areaId` - or ALL_AREAS - as where this phone is, for this person at this branch. */
   choose: (areaId: string) => void
 }
+
+/** The chooser's "All my areas" / "All areas". */
+export const ALL_AREAS = 'all'
 
 export function useWorkArea(branch: Branch | null | undefined): WorkArea {
   const { user } = useAuth()
@@ -85,8 +93,11 @@ export function useWorkArea(branch: Branch | null | undefined): WorkArea {
   )
   const limited = isLimited(branch)
   const areas = limited ? myStockAreas(branch) : stockAreas(branch)
-  if (!limited) return { limited, areas, area: undefined, fixed: false, choose }
-  const fixed = areas.length === 1
+  if (!hasAreas(branch) || areas.length === 0) {
+    return { limited, areas, area: undefined, fixed: false, viewAreaIds: undefined, choose }
+  }
+  const fixed = limited && areas.length === 1
   const area = fixed ? areas[0] : areas.find((candidate) => candidate.id === chosenId)
-  return { limited, areas, area, fixed, choose }
+  const viewAreaIds = area ? [area.id] : limited ? areas.map((candidate) => candidate.id) : undefined
+  return { limited, areas, area, fixed, viewAreaIds, choose }
 }

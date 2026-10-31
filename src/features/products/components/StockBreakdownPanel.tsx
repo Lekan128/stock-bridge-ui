@@ -37,6 +37,8 @@ export interface StockBreakdownPanelProps {
    * §6.6). Absent when the company does not sell or the product has no price.
    */
   sellingPrice?: string | null
+  /** Whose figure the headline is, when the top bar names areas (Part 3.6): "in the Kitchen", "in your areas". */
+  where?: string | null
 }
 
 /** "today 10:42", "yesterday 18:05", "Tue 09:30", "3 Oct" — close enough to place it, no further. */
@@ -99,7 +101,7 @@ function lastMovementLine(movement: StockMovement, unit: string): string {
  * treatment, and it is why the caption line above stays plain prose: the unit belongs to the
  * number, not to the heading.
  */
-export function StockBreakdownPanel({ product, incoming, actions, lastMovement, sellingPrice }: StockBreakdownPanelProps) {
+export function StockBreakdownPanel({ product, incoming, actions, lastMovement, sellingPrice, where }: StockBreakdownPanelProps) {
   const { options: unitOfMeasureOptions } = useUnitOfMeasureOptions()
   const hasIncoming = incoming.quantity > 0
 
@@ -161,7 +163,7 @@ export function StockBreakdownPanel({ product, incoming, actions, lastMovement, 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="grid flex-1 grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <p className="text-sm text-neutral-500">On hand — usable now</p>
+            <p className="text-sm text-neutral-500">On hand {where ? where : '— usable now'}</p>
             {/* The hero figure (plan §2: "the number is the hero"), the same component as every
                 list row, at its largest (B2). The stock-unit figure stays the headline: it is the
                 auditable number. Under it, the packs it is bought and sold in — the default pack in

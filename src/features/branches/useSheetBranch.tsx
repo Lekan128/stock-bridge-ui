@@ -225,10 +225,11 @@ export function useSheetArea(branch: Branch | null): {
       if (work.limited) work.choose(current.id)
     },
     choices: areas,
+    // Quick mode's title (Part 3.6): picking an area there makes it where you are, for everyone.
     choose: (areaId: string) => {
       setChosen({ branchId: branch.id, areaId })
       if (user?.id) write(lastAreaKey(user.id, branch.id), areaId)
-      if (work.limited) work.choose(areaId)
+      work.choose(areaId)
     },
   }
 }

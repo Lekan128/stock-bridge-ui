@@ -1,7 +1,8 @@
 import { useRecordsHere } from '@/features/branches/useRecordsHere'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
-import { carryBranchStock, scopeProduct } from '@/features/branches/scopeProduct'
+import { carryBranchStock, scopeProduct, scopeToAreas } from '@/features/branches/scopeProduct'
+import { useWorkArea } from '@/features/branches/workArea'
 import { OtherBranchesList } from '@/features/branches/OtherBranchesList'
 import { AreaBreakdown } from '@/features/branches/AreaBreakdown'
 import { hasAreas } from '@/features/branches/areas'
@@ -69,7 +70,11 @@ export function ProductDetailPage() {
   // At a branch, the page reads that branch's figure (MULTI_BRANCH_UX_PLAN.md §5.9); the whole product,
   // with every branch's figure, stays for the "At other branches" list.
   const { working, isMultiBranch, recordable } = useWorkingBranch()
-  const product = wholeProduct ? scopeProduct(wholeProduct, working) : wholeProduct
+  // As the branch holds it, then as the areas chosen in the top bar hold it (Part 3.6).
+  const work = useWorkArea(working)
+  const viewAreas = work.viewAreaIds
+  const where = work.area ? `in the ${work.area.name}` : viewAreas ? 'in your areas' : null
+  const product = wholeProduct ? scopeToAreas(scopeProduct(wholeProduct, working), viewAreas) : wholeProduct
   const { options: unitOfMeasureOptions } = useUnitOfMeasureOptions()
   const { refetch: refetchLowStockAlerts } = useLowStockAlerts()
   // A single-element array so the hook's "does the API send incomingQuantity?" check works the
@@ -336,6 +341,7 @@ export function ProductDetailPage() {
         actions={stockButtons ?? undefined}
         lastMovement={lastMovement}
         sellingPrice={showsSellingPrice ? sellingPriceText(product, stockUnitText, packOption) : null}
+        where={where}
       />
       {/* Where in the branch it is, and moving it between areas (STOCK_AREAS_PART_2.md). */}
       {hasAreas(working) && (

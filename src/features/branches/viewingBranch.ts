@@ -13,3 +13,18 @@ export function setViewingBranch(branchId: string | null) {
 export function viewingBranchId(): string | undefined {
   return viewingBranch ?? undefined
 }
+
+/**
+ * The areas this phone is looking at (STOCK_AREAS_PART_3_6.md) - the top bar's area chooser; null for the
+ * whole branch. Kept in step by `BranchProvider`, read by the same report calls.
+ */
+let viewingAreas: string[] | null = null
+
+export function setViewingAreas(areaIds: string[] | null) {
+  viewingAreas = areaIds
+}
+
+/** `{ areaIds: "a,b" }` for a report's params, or nothing for the whole branch. */
+export function viewingAreaParams(): { areaIds?: string } {
+  return viewingAreas && viewingAreas.length > 0 ? { areaIds: viewingAreas.join(',') } : {}
+}

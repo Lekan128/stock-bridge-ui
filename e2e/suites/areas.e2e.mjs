@@ -468,6 +468,11 @@ await check('quick mode at a branch with areas: Move in the row, Count a link be
   await session.getByRole('button', { name: 'Undo' }).click()
   await session.getByText('Undone').waitFor()
   await page.setViewportSize({ width: 1280, height: 900 })
+  // Picking an area in quick mode made it where the owner is (Part 3.6): back to All areas for what follows.
+  await page.getByRole('button', { name: 'Exit' }).click()
+  await page.getByRole('button', { name: /^Area: .+\. Change area$/ }).click()
+  await page.getByRole('menuitemradio', { name: 'All areas' }).click()
+  await page.getByRole('button', { name: 'Area: All areas. Change area' }).waitFor()
 })
 
 // ------------------------------------------------------------------------------------- 5c (Part 3)
@@ -569,7 +574,11 @@ await check('a barman in the Bar and the Kitchen chooses where this phone is, an
   const barPage = await barContext.newPage()
   await barPage.goto(`${UI}/app/products/${rice.id}`)
   await barPage.getByRole('heading', { name: 'Rice', level: 1 }).waitFor()
-  await barPage.getByRole('button', { name: 'Choose area' }).click()
+  // On "All my areas" (the default, Part 3.6), a panel asks which of his areas.
+  await barPage.getByRole('button', { name: 'Stock in' }).first().click()
+  await barPage.getByRole('dialog').getByText('Which area?').waitFor()
+  await barPage.keyboard.press('Escape')
+  await barPage.getByRole('button', { name: 'Area: All my areas. Change area' }).click()
   await barPage.getByRole('menuitemradio', { name: 'Bar' }).click()
   await barPage.getByRole('button', { name: 'Area: Bar. Change area' }).waitFor()
   await barPage.getByRole('button', { name: 'Stock in' }).first().click()
@@ -592,6 +601,55 @@ await check('a barman in the Bar and the Kitchen chooses where this phone is, an
   await barPage.getByRole('button', { name: 'Exit' }).click()
   await barPage.locator('[data-area-chip]').getByText('Bar').waitFor()
   await barContext.close()
+})
+
+// ------------------------------------------------------------------------------------- Part 3.6
+await check('the top bar is where you are: All my areas sums his areas, one area shows only its own, Out but never Low', async () => {
+  const barName = `barman-${owner.unique}`
+  const at = await areaFigures(ownerToken, rice.id)
+  const barContext = await contextFor(await login(owner.user.clientIdentifier, barName))
+  const barPage = await barContext.newPage()
+  await barPage.goto(`${UI}/app/products/${rice.id}`)
+  await barPage.getByRole('heading', { name: 'Rice', level: 1 }).waitFor()
+  const headline = barPage.locator('[data-stock-figure]').first()
+  // Back to All my areas: the headline is the Bar and the Kitchen together.
+  await barPage.getByRole('button', { name: /^Area: .+\. Change area$/ }).click()
+  await barPage.getByRole('menuitemradio', { name: 'All my areas' }).click()
+  await barPage.getByText('On hand in your areas').waitFor()
+  await waitFor(async () => (await headline.innerText()).startsWith(String(at.Bar + at.Kitchen)), `the headline to read ${at.Bar + at.Kitchen}`)
+  await barPage.screenshot({ path: SHOTS + '24-all-my-areas.png' })
+  // One area: only its own figure.
+  await barPage.getByRole('button', { name: 'Area: All my areas. Change area' }).click()
+  await barPage.getByRole('menu', { name: 'Showing and recording' }).waitFor()
+  await barPage.getByRole('menuitemradio', { name: 'Bar' }).click()
+  await barPage.getByText('On hand in the Bar').waitFor()
+  await waitFor(async () => (await headline.innerText()).startsWith(String(at.Bar)), `the headline to read ${at.Bar}`)
+  // Inventory: the Bar's figure; a product the Bar has none of is Out, nothing is Low.
+  await barPage.goto(`${UI}/app/products`)
+  const row = barPage.locator(`[data-product-row="${rice.id}"]`).locator('visible=true').first()
+  await waitFor(async () => (await row.innerText().catch(() => '')).includes(String(at.Bar)), 'the Inventory row to show the Bar figure')
+  const lowChip = barPage.getByRole('group', { name: 'Stock level' }).getByRole('button', { name: /^Low/ })
+  assert(/Low\s*0/.test(await lowChip.innerText()), `Low in an area view: ${await lowChip.innerText()}`)
+  await barPage.screenshot({ path: SHOTS + '25-inventory-bar.png' })
+  await barContext.close()
+
+  // The owner: All areas is the whole branch, as before; one area shows that area.
+  await page.goto(`${UI}/app/products/${rice.id}`)
+  await page.getByRole('heading', { name: 'Rice', level: 1 }).waitFor()
+  await page.getByRole('button', { name: 'Area: All areas. Change area' }).waitFor()
+  assert((await page.getByText(/^On hand in /).count()) === 0, 'All areas names an area')
+  await page.getByRole('button', { name: 'Area: All areas. Change area' }).click()
+  await page.getByRole('menuitemradio', { name: 'Store' }).click()
+  await page.getByText('On hand in the Store').waitFor()
+  await waitFor(async () => (await page.locator('[data-stock-figure]').first().innerText()).startsWith(String(at.Store)), `the Store's ${at.Store}`)
+  // …and records there without asking.
+  await page.getByRole('button', { name: 'Stock in' }).first().click()
+  await page.getByRole('dialog').getByRole('heading', { name: /Stock in · Store/ }).waitFor()
+  assert((await page.getByRole('dialog').getByText('Which area?').count()) === 0, 'the owner on the Store is asked which area')
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: 'Area: Store. Change area' }).click()
+  await page.getByRole('menuitemradio', { name: 'All areas' }).click()
+  await page.getByRole('button', { name: 'Area: All areas. Change area' }).waitFor()
 })
 
 // ------------------------------------------------------------------------------------- Part 3.5

@@ -35,3 +35,16 @@ export function carryBranchStock(previous: Product | null | undefined, changed: 
   )
   return { ...changed, branchStock }
 }
+
+/**
+ * The product as the areas chosen in the top bar hold it (STOCK_AREAS_PART_3_6.md): their figures summed for
+ * the headline - the breakdown under it still lists each - out when they hold none, never "low" until areas
+ * have levels (Part 8). Unchanged for the whole branch, or without the product's area figures.
+ */
+export function scopeToAreas(product: Product, areaIds: string[] | undefined): Product {
+  if (!areaIds || areaIds.length === 0 || product.areaStock == null) return product
+  const quantity = product.areaStock
+    .filter((figure) => areaIds.includes(figure.areaId))
+    .reduce((sum, figure) => sum + figure.quantityOnHand, 0)
+  return { ...product, quantityOnHand: quantity, isLowStock: false }
+}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
+import { useWorkArea } from '@/features/branches/workArea'
 import { getCatalogState, queryCatalog, subscribeCatalog, toProduct, type CatalogState } from '@/features/catalog/catalogStore'
 import type { CatalogQuery, CatalogQueryResult } from '@/features/catalog/types'
 import type { Product } from '@/features/products/types'
@@ -41,10 +42,13 @@ const NO_INCOMING = { units: 0, productCount: 0 }
 export function useCatalogList(asked: CatalogFilters, enabled: boolean): CatalogList {
   // Rows read as the phone's branch holds them, or as "All branches" (MULTI_BRANCH_UX_PLAN.md §4.3).
   const branch = useOptionalWorkingBranch()
-  const filters: CatalogFilters =
+  // …and as the areas chosen in the top bar hold them (Part 3.6).
+  const work = useWorkArea(branch && !branch.isAll ? branch.working : null)
+  const atBranch: CatalogFilters =
     branch?.isMultiBranch && (branch.working || branch.isAll)
       ? { ...asked, branchId: branch.isAll ? undefined : branch.working?.id, allBranches: branch.isAll }
       : asked
+  const filters: CatalogFilters = work.viewAreaIds ? { ...atBranch, areaIds: work.viewAreaIds } : atBranch
   const { version } = useCatalogState()
   const key = JSON.stringify(filters)
   const [summary, setSummary] = useState<Omit<CatalogQueryResult, 'rows'> | null>(null)

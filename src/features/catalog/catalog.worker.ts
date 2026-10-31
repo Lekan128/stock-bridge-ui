@@ -83,6 +83,19 @@ function sortedRows(field: CatalogSortField, direction: 'asc' | 'desc'): StoredR
  * read as holding none there - never as the company's figure, which would overstate the shelf.
  */
 function asSeen(row: StoredRow, q: CatalogQuery): StoredRow {
+  return inAreas(atBranch(row, q), q)
+}
+
+/** The row as the areas chosen in the top bar hold it (Part 3.6); unchanged for the whole branch. */
+function inAreas(row: StoredRow, q: CatalogQuery): StoredRow {
+  if (!q.areaIds || q.areaIds.length === 0 || row.areaStock == null) return row
+  const quantity = row.areaStock
+    .filter((figure) => q.areaIds!.includes(figure.areaId))
+    .reduce((sum, figure) => sum + figure.quantityOnHand, 0)
+  return { ...row, quantityOnHand: quantity, isLowStock: false, stockStatus: quantity > 0 ? 'OK' : 'OUT' }
+}
+
+function atBranch(row: StoredRow, q: CatalogQuery): StoredRow {
   if (row.branchStock == null) return row
   if (q.branchId) {
     const figure = row.branchStock.find((entry) => entry.branchId === q.branchId)
@@ -105,7 +118,7 @@ function query(q: CatalogQuery): CatalogQueryResult {
   const matching: StoredRow[] = []
 
   // A branch's own figures sort differently from the company's: sorted here, after the filters.
-  const byBranchQuantity = q.branchId != null && q.sort.field === 'quantityOnHand'
+  const byBranchQuantity = (q.branchId != null || (q.areaIds?.length ?? 0) > 0) && q.sort.field === 'quantityOnHand'
   for (const stored of sortedRows(byBranchQuantity ? 'name' : q.sort.field, q.sort.direction)) {
     const row = asSeen(stored, q)
     if (q.status === 'active' && !row.active) continue

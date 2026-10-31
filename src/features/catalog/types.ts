@@ -80,6 +80,11 @@ export interface CatalogQuery {
    */
   branchId?: string
   allBranches?: boolean
+  /**
+   * Areas (STOCK_AREAS_PART_3_6.md): read every row as these areas of the branch hold it - their figures
+   * summed; out when they hold none, never "low" (an area has no level of its own until Part 8).
+   */
+  areaIds?: string[]
 }
 
 export interface CatalogQueryResult {
