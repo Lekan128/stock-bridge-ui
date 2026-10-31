@@ -7,7 +7,7 @@ import { TextField } from '@/components/TextField'
 import { isAppError } from '@/types/api'
 import { areasApi } from '@/features/branches/branchesApi'
 import { BRANCHES_KEY } from '@/features/branches/BranchProvider'
-import { hasAreas } from '@/features/branches/areas'
+import { AREA_KIND_LABEL, hasAreas, kindFlags, kindOf } from '@/features/branches/areas'
 import type { Area, Branch } from '@/features/branches/types'
 
 /**
@@ -70,20 +70,31 @@ export function BranchAreas({
     if (!withAreas) return 'where all your stock is now · deliveries arrive here'
     const parts: string[] = []
     if (!area.active) parts.push('Closed')
-    if (!area.keepsStock) parts.push("Uses what it's given")
-    else if (area.productsInStock != null) parts.push(`${area.productsInStock} ${area.productsInStock === 1 ? 'product' : 'products'}`)
+    // What happens there (D-A12), in its few words; "stored", the plain case, goes unsaid.
+    if (kindOf(area) !== 'STORED') parts.push(AREA_KIND_LABEL[kindOf(area)])
+    if (area.keepsStock && area.productsInStock != null) {
+      parts.push(`${area.productsInStock} ${area.productsInStock === 1 ? 'product' : 'products'}`)
+    }
     return parts.join(' · ')
   }
 
   function menu(area: Area): OverflowMenuItem[] {
     const items: OverflowMenuItem[] = [{ label: 'Rename', onSelect: () => setRenaming(area.id), disabled: !online }]
     if (!withAreas) return items
+    if (area.active) {
+      // The other answers to "What happens here?" - where deliveries arrive, never "used up".
+      const others = (['STORED', 'WORKED', 'USED_UP'] as const).filter(
+        (kind) => kind !== kindOf(area) && !(area.delivery && kind === 'USED_UP'),
+      )
+      for (const kind of others) {
+        items.push({
+          label: `Change to: ${AREA_KIND_LABEL[kind].toLowerCase()}`,
+          onSelect: () => void act(area, () => areasApi.update(area.id, kindFlags(kind))),
+          disabled: !online,
+        })
+      }
+    }
     if (area.active && !area.delivery) {
-      items.push({
-        label: area.keepsStock ? "Change to: uses what it's given" : 'Change to: keeps stock',
-        onSelect: () => void act(area, () => areasApi.update(area.id, { keepsStock: !area.keepsStock })),
-        disabled: !online,
-      })
       items.push({ label: 'Close', tone: 'danger', onSelect: () => void act(area, () => areasApi.close(area.id)), disabled: !online })
     }
     if (!area.active) {

@@ -234,7 +234,12 @@ export function StockHistoryTable({
                     <Badge variant={movementVariants[movement.movementType]}>{labelOf(movement)}</Badge>
                     {/* Why it went out, when somebody said (API V46) - plain text beside the badge, not
                         a second badge: one signal for the kind of movement, words for the reason. */}
-                    {movement.outReason && <span className="text-sm text-neutral-600">{outReasonLabel(movement.outReason)}</span>}
+                    {movement.outReason && (
+                      <span className="text-sm text-neutral-600">
+                        {outReasonLabel(movement.outReason)}
+                        {movement.count ? ' · count' : ''}
+                      </span>
+                    )}
                   </span>
                 </td>
                 <td className="border-b border-neutral-100 px-4 py-2.5 text-right">

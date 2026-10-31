@@ -20,17 +20,18 @@ export const branchesApi = {
     api.put<{ updated: number }>(`/api/branches/${id}/thresholds`, body).then((r) => r.data),
 }
 
-/** A new area: `keepsStock` false for one that uses what it's given. */
+/** A new area: `keepsStock` false for one that uses what it's given; `shortIsUsed` where stock is worked with. */
 export interface NewArea {
   name: string
   keepsStock: boolean
+  shortIsUsed?: boolean
 }
 
 /** A branch's areas (STOCK_AREAS_PART_1.md). Shared records, so online only, like branches. */
 export const areasApi = {
   add: (branchId: string, areas: NewArea[]) =>
     api.post<Area[]>(`/api/branches/${branchId}/areas`, { areas }).then((r) => r.data),
-  update: (id: string, payload: { name?: string; keepsStock?: boolean; delivery?: boolean }) =>
+  update: (id: string, payload: { name?: string; keepsStock?: boolean; delivery?: boolean; shortIsUsed?: boolean }) =>
     api.patch<Area>(`/api/areas/${id}`, payload).then((r) => r.data),
   close: (id: string) => api.post<Area>(`/api/areas/${id}/close`).then((r) => r.data),
   reopen: (id: string) => api.post<Area>(`/api/areas/${id}/reopen`).then((r) => r.data),

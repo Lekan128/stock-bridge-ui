@@ -18,6 +18,8 @@ export interface StockCountPayload {
    * areas that keep stock. Absent otherwise - the server's only area, or its delivery area for stock in.
    */
   areaId?: string
+  /** What a shortfall is, for this count only (Part 3.5); absent: what the area says. */
+  shortAs?: 'USED' | 'MISSING'
 }
 
 /**

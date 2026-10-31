@@ -479,6 +479,9 @@ export function StockMovementsPage() {
                           <span className="mt-1 block text-xs text-neutral-600">
                             {outReasonLabel(movement.outReason)}
                             {movement.usedAreaId && areaName(movement.usedAreaId) ? ` at ${areaName(movement.usedAreaId)}` : ''}
+                            {/* A kitchen's count found it short (Part 3.5): used there, learned from the count. */}
+                            {movement.count && !movement.usedAreaId && areaName(movement.areaId) ? ` at ${areaName(movement.areaId)}` : ''}
+                            {movement.count ? ' · count' : ''}
                           </span>
                         )}
                         {/* Where a move went, here when there is no Area column to say it (every branch). */}

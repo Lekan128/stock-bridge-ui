@@ -1,6 +1,8 @@
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { useSheetArea } from '@/features/branches/useSheetBranch'
 import { hasAreas } from '@/features/branches/areas'
+import { CountShortfall } from '@/features/branches/CountShortfall'
+import { areaShortAs, type ShortAs } from '@/features/branches/areas'
 import { useWorkArea } from '@/features/branches/workArea'
 import { MoveEditor, type Moved } from '@/features/moves/MoveEditor'
 import { movesApi } from '@/features/moves/movesApi'
@@ -434,6 +436,10 @@ function AmountStep({
   const [typed, setTyped] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  // A count at a branch with areas (Part 3.5): what a shortfall becomes - the area's answer, or this count's.
+  const branches = useOptionalWorkingBranch()?.branches ?? []
+  const countedArea = mode === 'count' && areaId ? branches.flatMap((b) => b.areas ?? []).find((a) => a.id === areaId) : undefined
+  const [shortChosen, setShortChosen] = useState<ShortAs | null>(null)
 
   // A delivery from a product with suppliers must name one; the preferred one is the default.
   const vendors = useProductVendors(mode === 'in' ? product.id : undefined)
@@ -486,7 +492,7 @@ function AmountStep({
               productId: product.id,
               productName: product.name,
               summary: `${formatNumber(exactBaseQuantity(quantity, option))} ${stockUnitWord(symbol, exactBaseQuantity(quantity, option))}`,
-              payload: { countedQuantity: exactBaseQuantity(quantity, option), areaId },
+              payload: { countedQuantity: exactBaseQuantity(quantity, option), areaId, shortAs: shortChosen ?? undefined },
             })
           : mode === 'in'
             ? await submitStockWrite({
@@ -596,6 +602,16 @@ function AmountStep({
                 <span className="text-base text-neutral-600">vs what the app says</span>
               </>
             )}
+          </div>
+        )}
+        {countedArea && (
+          <div className="mt-1">
+            <CountShortfall
+              area={countedArea}
+              shortAs={shortChosen ?? areaShortAs(countedArea)}
+              short={difference != null && difference < 0 ? `${formatNumber(-difference)} ${stockUnitWord(symbol, -difference)}` : null}
+              onChange={setShortChosen}
+            />
           </div>
         )}
       </div>

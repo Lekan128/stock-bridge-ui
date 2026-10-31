@@ -32,6 +32,8 @@ interface MoveLine {
   /** The unit counted in, by its label - unique within a product's set. */
   unitLabel: string
   quantity: string
+  /** Used straight away where it goes (Part 3.5): a crate of tomatoes for today's stew. */
+  usedNow?: boolean
 }
 
 interface MoveDraft {
@@ -286,6 +288,8 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
   const canMove = !moving && from != null && to != null && ready.length > 0 && !anyShort && !anyInvalid
   const items = `${ready.length} ${ready.length === 1 ? 'item' : 'items'}`
   const verb = to && !to.keepsStock ? 'Give' : 'Move'
+  // Lines used straight away, said on the button: "Move 3 items to Kitchen (1 used)".
+  const usedNowCount = to?.keepsStock ? ready.filter((entry) => entry.line.usedNow).length : 0
 
   async function move() {
     if (!canMove || !branch || !to || !from) return
@@ -304,6 +308,7 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
             productId: entry.line.product.id,
             quantity: entry.quantity,
             unit: entry.option.isStockUnit ? undefined : entry.option.code || undefined,
+            usedNow: to.keepsStock && entry.line.usedNow ? true : undefined,
           })),
         },
         summary,
@@ -556,12 +561,27 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
                     {to && (
                       <>
                         <dt className="text-neutral-600">{to.name}</dt>
-                        <dd className="text-neutral-800">
-                          {!to.keepsStock ? (
-                            'used there'
-                          ) : toHas != null ? (
-                            <BeforeAfter before={toHas} after={short ? null : toHas + base} option={option} unit={unit} />
-                          ) : null}
+                        <dd className="flex flex-wrap items-center justify-between gap-x-3 text-neutral-800">
+                          <span>
+                            {!to.keepsStock || line.usedNow ? (
+                              'used there'
+                            ) : toHas != null ? (
+                              <BeforeAfter before={toHas} after={short ? null : toHas + base} option={option} unit={unit} />
+                            ) : null}
+                          </span>
+                          {/* On the destination's own line, so it costs no height (Part 3.5). */}
+                          {to.keepsStock && (
+                            <label className="-my-2 inline-flex min-h-9 items-center gap-1.5 text-neutral-700">
+                              <input
+                                type="checkbox"
+                                checked={line.usedNow ?? false}
+                                disabled={moving}
+                                onChange={(event) => update(line.key, { usedNow: event.target.checked })}
+                                aria-label={`${line.product.name} used straight away at the ${to.name}`}
+                              />
+                              Used straight away
+                            </label>
+                          )}
                         </dd>
                       </>
                     )}
@@ -605,7 +625,11 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
   const action = (
     <div className="flex w-full flex-col gap-2">
       <Button variant="action" className="w-full" disabled={!canMove} loading={moving} onClick={() => void move()}>
-        {!to ? 'Choose where it goes' : ready.length === 0 ? `${verb} to ${to.name}` : `${verb} ${items} to ${to.name}`}
+        {!to
+          ? 'Choose where it goes'
+          : ready.length === 0
+            ? `${verb} to ${to.name}`
+            : `${verb} ${items} to ${to.name}${usedNowCount > 0 ? ` (${usedNowCount} used)` : ''}`}
       </Button>
       {!online && ready.length > 0 && (
         <p className="text-center text-xs text-neutral-600">You're offline. It's kept on this phone and goes when you're connected.</p>

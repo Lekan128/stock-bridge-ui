@@ -8,7 +8,7 @@ import { useToast } from '@/components/useToast'
 import { isAppError } from '@/types/api'
 import { areasApi } from '@/features/branches/branchesApi'
 import { BRANCHES_KEY } from '@/features/branches/BranchProvider'
-import { hasAreas } from '@/features/branches/areas'
+import { AREA_KIND_LABEL, hasAreas, kindFlags, suggestedKind, type AreaKind } from '@/features/branches/areas'
 import type { Branch } from '@/features/branches/types'
 
 /** The quick picks (STOCK_AREAS_PLAN.md §4.1): the places our restaurants, hotels and shops name. */
@@ -16,14 +16,14 @@ const SUGGESTIONS = ['Kitchen', 'Bar', 'Front desk', 'Shop floor', 'Housekeeping
 
 interface Wanted {
   name: string
-  keepsStock: boolean
+  kind: AreaKind
 }
 
 /**
  * Adding areas to a branch (STOCK_AREAS_PLAN.md §4.1, STOCK_AREAS_PART_1.md): a task flow, so a `Sheet`
  * (DESIGN.md) - a side panel on a laptop with the branch still in view, a bottom sheet on a phone. One
  * screen: the Store as it is (with "Rename it"), quick picks or a typed name, and each new area with a
- * small "Keeps stock / Uses what it's given" choice - explained once above the list, not under every
+ * small "Stored / Worked with / Used up" choice (D-A12) - explained once above the list, not under every
  * row. Where deliveries arrive is not asked: it stays the Store, and moves from an area's "⋯" (owner's
  * comments, 2026-10-30). Online only, like every branch change.
  */
@@ -50,7 +50,7 @@ export function AddAreasSheet({ branch, onClose }: { branch: Branch; onClose: ()
   function addWanted(name: string) {
     const clean = name.trim().replace(/\s+/g, ' ')
     if (!clean || taken(clean)) return
-    setWanted((all) => [...all, { name: clean, keepsStock: true }])
+    setWanted((all) => [...all, { name: clean, kind: suggestedKind(clean) }])
     setTyped('')
   }
 
@@ -61,7 +61,7 @@ export function AddAreasSheet({ branch, onClose }: { branch: Branch; onClose: ()
       if (first && store && currentName !== store.name) {
         await areasApi.update(store.id, { name: currentName })
       }
-      await areasApi.add(branch.id, wanted)
+      await areasApi.add(branch.id, wanted.map((area) => ({ name: area.name, ...kindFlags(area.kind) })))
       await queryClient.invalidateQueries({ queryKey: BRANCHES_KEY })
       const total = (branch.areas?.length ?? 1) + wanted.length
       showToast(
@@ -165,30 +165,27 @@ export function AddAreasSheet({ branch, onClose }: { branch: Branch; onClose: ()
           <div className="flex flex-col gap-2">
             {/* Said once, for every row below (owner's comment: not repeated under each one). */}
             <p className="text-sm text-neutral-600">
-              An area that <span className="font-medium text-neutral-800">keeps stock</span> has its own figure, and you
-              count it. One that <span className="font-medium text-neutral-800">uses what it's given</span>, like
-              Housekeeping, records stock as used the moment it gets it. Not sure? Keep stock: you can change it later.
+              What happens there? Stock is <span className="font-medium text-neutral-800">stored</span> (a store, a cold
+              room: anything short at a count is missing), <span className="font-medium text-neutral-800">worked with</span>{' '}
+              (a kitchen, a bar: anything short at a count was used), or what it's given is{' '}
+              <span className="font-medium text-neutral-800">used up</span> as it arrives (housekeeping). You can change it
+              later.
             </p>
             <ul aria-label="Areas to add" className="divide-y divide-neutral-100 border-y border-neutral-100">
               {wanted.map((area, index) => (
                 <li key={area.name} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2">
                   <span className="min-w-0 truncate text-sm font-medium text-neutral-900">{area.name}</span>
                   <div className="flex items-center gap-1">
-                    <div role="radiogroup" aria-label={`What ${area.name} does with stock`} className="flex rounded-md border border-neutral-300 p-0.5">
-                      {[
-                        { keepsStock: true, label: 'Keeps stock' },
-                        { keepsStock: false, label: "Uses what it's given" },
-                      ].map((option) => (
+                    <div role="radiogroup" aria-label={`What happens at ${area.name}`} className="flex rounded-md border border-neutral-300 p-0.5">
+                      {(['STORED', 'WORKED', 'USED_UP'] as const).map((kind) => ({ kind, label: AREA_KIND_LABEL[kind] })).map((option) => (
                         <button
                           key={option.label}
                           type="button"
                           role="radio"
-                          aria-checked={area.keepsStock === option.keepsStock}
-                          onClick={() =>
-                            setWanted((all) => all.map((other, at) => (at === index ? { ...other, keepsStock: option.keepsStock } : other)))
-                          }
+                          aria-checked={area.kind === option.kind}
+                          onClick={() => setWanted((all) => all.map((other, at) => (at === index ? { ...other, kind: option.kind } : other)))}
                           className={`min-h-9 rounded px-2.5 text-sm ${
-                            area.keepsStock === option.keepsStock
+                            area.kind === option.kind
                               ? 'bg-primary-100 font-medium text-primary-900'
                               : 'text-neutral-700 hover:bg-neutral-50'
                           }`}

@@ -416,6 +416,11 @@ export interface StockMovement {
   areaId?: string
   /** A give to an area that uses what it's given (V63): that area - "Used at Housekeeping". */
   usedAreaId?: string
+  /**
+   * Written by a stock count (Part 3.5): a kitchen's count records what it found short as a Used stock-out,
+   * which reads "Used at Kitchen · count". Absent on everything else.
+   */
+  count?: boolean
   /** A MOVE row: where it went (`areaId` is where it came from), the move, and both areas by name. */
   toAreaId?: string
   moveId?: string

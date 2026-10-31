@@ -37,6 +37,11 @@ export interface Area {
   productsInStock?: number
   /** Whether the signed-in person works here (V64, STOCK_AREAS_PART_3.md). Absent from an older API: yes. */
   worksHere?: boolean
+  /**
+   * Stock is worked with here (Kitchen, Bar - Part 3.5): a count that comes up short is what was used. False
+   * where it's stored (a count's shortfall is missing), and where it keeps no stock.
+   */
+  shortIsUsed?: boolean
 }
 
 /** A product in one area - the product page's and the sync rows' `areaStock` (V60). */
@@ -44,6 +49,8 @@ export interface AreaFigure {
   areaId: string
   branchId: string
   quantityOnHand: number
+  /** The product page only (Part 3.5): when this area last counted it. */
+  lastCountedAt?: string
 }
 
 export interface BranchList {

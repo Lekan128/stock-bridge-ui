@@ -149,15 +149,20 @@ await check('the owner adds Kitchen, Bar and Housekeeping in one sheet; everythi
   await dialog.getByRole('heading', { name: `Add areas to ${branchName}` }).waitFor()
   await dialog.getByText(/Your stock is in the Store\./).waitFor()
   for (const name of ['Kitchen', 'Bar', 'Housekeeping']) await dialog.getByRole('button', { name, exact: true }).click()
-  await dialog.getByRole('radiogroup', { name: 'What Housekeeping does with stock' }).getByRole('radio', { name: "Uses what it's given" }).click()
-  // The two kinds are explained once, not under every row (owner's comment).
-  assert((await dialog.getByText('has its own figure').count()) === 1, 'the explanation is repeated')
+  // What happens there (D-A12): the quick picks start sensibly - the Kitchen and Bar work with stock,
+  // Housekeeping uses it up - and each is one tap to change.
+  const kindOf = (name) => dialog.getByRole('radiogroup', { name: `What happens at ${name}` })
+  assert((await kindOf('Kitchen').getByRole('radio', { name: 'Worked with' }).getAttribute('aria-checked')) === 'true', 'the Kitchen does not start as worked with')
+  assert((await kindOf('Housekeeping').getByRole('radio', { name: 'Used up' }).getAttribute('aria-checked')) === 'true', 'Housekeeping does not start as used up')
+  // The three answers are explained once, not under every row (owner's comment).
+  assert((await dialog.getByText('What happens there?').count()) === 1, 'the explanation is repeated')
   await dialog.screenshot({ path: SHOTS + '2-add-areas-sheet.png' })
   await dialog.getByRole('button', { name: 'Add 3 areas' }).click()
   await page.getByRole('status').filter({ hasText: `${branchName} now has 4 areas. Everything you have is in the Store.` }).waitFor()
 
   const areas = page.getByRole('region', { name: `Areas at ${branchName}` })
-  await areas.locator('[data-area="Housekeeping"]').getByText("Uses what it's given").waitFor()
+  await areas.locator('[data-area="Housekeeping"]').getByText('Used up').waitFor()
+  await areas.locator('[data-area="Kitchen"]').getByText('Worked with').waitFor()
   // Where deliveries arrive is a setting of its own, by the heading - said once (owner's comment).
   const deliveries = areas.getByLabel('Deliveries arrive in')
   assert((await deliveries.locator('option:checked').innerText()) === 'Store', 'deliveries do not arrive in the Store')
@@ -544,6 +549,75 @@ await check('a barman in the Bar and the Kitchen chooses where this phone is, an
   await barContext.close()
 })
 
+// ------------------------------------------------------------------------------------- Part 3.5
+await check("the Kitchen's closing count records what's short as used there, and counting again adds nothing", async () => {
+  await page.setViewportSize({ width: 1280, height: 900 })
+  const kitchenBefore = (await areaFigures(ownerToken, rice.id)).Kitchen
+  assert(kitchenBefore >= 2, `the Kitchen holds ${kitchenBefore}`)
+  await page.goto(`${UI}/app/products/${rice.id}`)
+  await page.getByRole('heading', { name: 'Rice', level: 1 }).waitFor()
+  await page.getByRole('button', { name: 'Count', exact: true }).first().click()
+  const sheet = page.getByRole('dialog')
+  await sheet.getByRole('radio', { name: 'Kitchen' }).click()
+  await sheet.getByText('Anything short is recorded as used at the Kitchen.').waitFor()
+  await sheet.getByLabel(/How much is on the shelf now/).fill(String(kitchenBefore - 2))
+  await sheet.getByText('2 pieces short: recorded as used at the Kitchen.').waitFor()
+  await page.screenshot({ path: SHOTS + '17-kitchen-count.png' })
+  await sheet.getByRole('button', { name: 'Record count' }).click()
+  await sheet.waitFor({ state: 'hidden' })
+  await waitFor(async () => (await areaFigures(ownerToken, rice.id)).Kitchen === kitchenBefore - 2, 'the Kitchen to hold 2 fewer')
+  const rows = (await api(`/api/stock/movements?productId=${rice.id}`, { token: ownerToken })).json.content
+  assert(rows[0].movementType === 'OUT' && rows[0].outReason === 'USED' && rows[0].count === true, `latest row: ${JSON.stringify(rows[0])}`)
+
+  // Counting the same shelf again: nothing more used; the sheet says when it was last counted.
+  await page.getByRole('button', { name: 'Count', exact: true }).first().click()
+  await sheet.getByRole('radio', { name: 'Kitchen' }).click()
+  await sheet.getByText(/Last counted today/).waitFor()
+  await sheet.getByLabel(/How much is on the shelf now/).fill(String(kitchenBefore - 2))
+  await sheet.getByRole('button', { name: 'Record count' }).click()
+  await sheet.waitFor({ state: 'hidden' })
+  const after = (await api(`/api/stock/movements?productId=${rice.id}`, { token: ownerToken })).json.content
+  assert(after.filter((r) => r.count && r.movementType === 'OUT').length === 1, 'counting again recorded more use')
+
+  await page.goto(`${UI}/app/stock-movements`)
+  await page.locator('tbody tr').filter({ hasText: 'Used at Kitchen · count' }).first().waitFor()
+  await page.screenshot({ path: SHOTS + '18-used-at-kitchen-count.png' })
+})
+
+await check('a count can record its shortfall as missing instead, for that count only', async () => {
+  const kitchenBefore = (await areaFigures(ownerToken, rice.id)).Kitchen
+  await page.goto(`${UI}/app/products/${rice.id}`)
+  await page.getByRole('heading', { name: 'Rice', level: 1 }).waitFor()
+  await page.getByRole('button', { name: 'Count', exact: true }).first().click()
+  const sheet = page.getByRole('dialog')
+  await sheet.getByRole('radio', { name: 'Kitchen' }).click()
+  await sheet.getByLabel(/How much is on the shelf now/).fill(String(kitchenBefore - 1))
+  await sheet.getByRole('button', { name: 'Change: record it as missing' }).click()
+  await sheet.getByText('1 piece short: recorded as missing from the Kitchen.').waitFor()
+  await sheet.getByRole('button', { name: 'Record count' }).click()
+  await sheet.waitFor({ state: 'hidden' })
+  await waitFor(async () => (await areaFigures(ownerToken, rice.id)).Kitchen === kitchenBefore - 1, 'the Kitchen to hold 1 fewer')
+  const rows = (await api(`/api/stock/movements?productId=${rice.id}`, { token: ownerToken })).json.content
+  assert(rows[0].movementType === 'ADJUSTMENT' && rows[0].quantity === -1, `latest row: ${JSON.stringify(rows[0])}`)
+})
+
+await check('a move line used straight away is used at the Kitchen and never joins its stock', async () => {
+  const before = await areaFigures(ownerToken, rice.id)
+  await page.goto(`${UI}/app/products/${rice.id}`)
+  await page.getByRole('heading', { name: 'Rice', level: 1 }).waitFor()
+  await page.getByRole('button', { name: 'Move', exact: true }).click()
+  await moveSheet.waitFor()
+  await page.locator('#move-to').selectOption({ label: 'Kitchen' })
+  await page.getByLabel('How many Rice').fill('1')
+  await page.getByRole('checkbox', { name: 'Rice used straight away at the Kitchen' }).check()
+  await page.screenshot({ path: SHOTS + '19-used-straight-away.png' })
+  await moveSheet.getByRole('button', { name: 'Move 1 item to Kitchen (1 used)' }).click()
+  await moveSheet.waitFor({ state: 'hidden' })
+  await waitFor(async () => (await areaFigures(ownerToken, rice.id)).Store === before.Store - 1, 'the Store to give 1')
+  const at = await areaFigures(ownerToken, rice.id)
+  assert(at.Kitchen === before.Kitchen, `the Kitchen went from ${before.Kitchen} to ${at.Kitchen}`)
+})
+
 await check('a company without areas sees no area word on its sheets or product page, and renames its Store', async () => {
   const shop = await signup('noareas')
   const beans = await createProduct(shop.tokens.accessToken, shop.unique, 'Beans')
@@ -581,7 +655,7 @@ await check('axe: Branches with areas and the add-areas steps have no WCAG 2.2 A
   const sheet = phonePage.getByRole('dialog')
   await sheet.getByRole('heading', { name: `Add areas to ${branchName}` }).waitFor()
   await sheet.getByRole('button', { name: 'Front desk', exact: true }).click()
-  await sheet.getByRole('radiogroup', { name: 'What Front desk does with stock' }).waitFor()
+  await sheet.getByRole('radiogroup', { name: 'What happens at Front desk' }).waitFor()
   await phonePage.waitForTimeout(300)
   await phonePage.screenshot({ path: SHOTS + '6-phone-add-sheet.png' })
   found.push(...(await axe(phonePage)).map((v) => `Add sheet: ${v}`))

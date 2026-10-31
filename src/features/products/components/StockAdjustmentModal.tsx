@@ -14,6 +14,8 @@ import { stockCountSchema, type StockCountFormValues } from '@/features/products
 import type { StockMutationResponse } from '@/features/products/types'
 import type { AreaFigure } from '@/features/branches/types'
 import { formatQuantity } from '@/features/products/unitCopy'
+import { CountShortfall } from '@/features/branches/CountShortfall'
+import { areaShortAs, lastCountedPhrase, type ShortAs } from '@/features/branches/areas'
 import { isAppError } from '@/types/api'
 
 export interface StockAdjustmentModalProps {
@@ -59,6 +61,14 @@ export function StockAdjustmentModal({
     : branchContext?.isMultiBranch
       ? branchContext.nameOf(sheetBranch.branchId ?? branchContext.working?.id)
       : undefined
+  // What a shortfall becomes (Part 3.5): the area's answer - used in a kitchen, missing in a store - unless
+  // changed for this count.
+  const area = sheetBranch.areaId
+    ? branchContext?.branches.flatMap((branch) => branch.areas ?? []).find((candidate) => candidate.id === sheetBranch.areaId)
+    : undefined
+  const [shortChosen, setShortChosen] = useState<ShortAs | null>(null)
+  const shortAs = shortChosen ?? (area ? areaShortAs(area) : 'MISSING')
+  const lastCounted = lastCountedPhrase(areaFigure?.lastCountedAt)
   const [formError, setFormError] = useState<string | null>(null)
   const [queuedSentence, setQueuedSentence] = useState<string | null>(null)
   const [queuedOpId, setQueuedOpId] = useState<string | null>(null)
@@ -86,7 +96,13 @@ export function StockAdjustmentModal({
         productId,
         productName,
         summary: formatQuantity(countedQuantity, stockUnit),
-        payload: { countedQuantity, note: values.note || undefined, branchId: sheetBranch.branchId, areaId: sheetBranch.areaId },
+        payload: {
+          countedQuantity,
+          note: values.note || undefined,
+          branchId: sheetBranch.branchId,
+          areaId: sheetBranch.areaId,
+          shortAs: shortChosen ?? undefined,
+        },
       })
       sheetBranch.remember()
       if (outcome.status === 'sent') onSuccess(outcome.response)
@@ -148,9 +164,12 @@ export function StockAdjustmentModal({
           error={errors.countedQuantity?.message}
           hint={
             // At a branch the figure is that branch's, so say whose (UX §5.2: "Oshodi's books say 40").
-            countedAt
-              ? `${countedAt}'s books say ${formatQuantity(currentQuantity, stockUnit)}.`
-              : `The app says ${formatQuantity(currentQuantity, stockUnit)}.`
+            // …and when it was last counted there (Part 3.5), so nobody counts what's just been counted.
+            `${
+              countedAt
+                ? `${countedAt}'s books say ${formatQuantity(currentQuantity, stockUnit)}.`
+                : `The app says ${formatQuantity(currentQuantity, stockUnit)}.`
+            }${lastCounted ? ` ${lastCounted}.` : ''}`
           }
           {...register('countedQuantity')}
         />
@@ -167,6 +186,14 @@ export function StockAdjustmentModal({
               </>
             )}
           </div>
+        )}
+        {area && (
+          <CountShortfall
+            area={area}
+            shortAs={shortAs}
+            short={difference != null && difference < 0 ? formatQuantity(-difference, stockUnit) : null}
+            onChange={setShortChosen}
+          />
         )}
         <div>
           <label htmlFor="count-note" className="mb-1.5 block text-sm font-medium text-neutral-700">
