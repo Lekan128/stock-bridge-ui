@@ -171,12 +171,12 @@ export function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) 
           <p className="mt-0.5 text-xs text-neutral-500">Leave a field empty to clear it.</p>
           <div className="mt-3 flex flex-col gap-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <TextField label="First name" error={errors.firstName?.message} {...register('firstName')} />
-              <TextField label="Last name" error={errors.lastName?.message} {...register('lastName')} />
+              <TextField label="First name" autoComplete="off" error={errors.firstName?.message} {...register('firstName')} />
+              <TextField label="Last name" autoComplete="off" error={errors.lastName?.message} {...register('lastName')} />
             </div>
-            <TextField label="Email" type="email" error={errors.email?.message} {...register('email')} />
-            <TextField label="Phone" type="tel" error={errors.phone?.message} {...register('phone')} />
-            <TextField label="Job title" error={errors.jobTitle?.message} {...register('jobTitle')} />
+            <TextField label="Email" type="email" autoComplete="off" error={errors.email?.message} {...register('email')} />
+            <TextField label="Phone" autoComplete="off" type="tel" error={errors.phone?.message} {...register('phone')} />
+            <TextField label="Job title" autoComplete="off" error={errors.jobTitle?.message} {...register('jobTitle')} />
           </div>
         </div>
 
