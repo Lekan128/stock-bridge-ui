@@ -68,7 +68,8 @@ export function BranchesPage() {
       <ul className="divide-y divide-neutral-100 rounded-xl border border-neutral-200 bg-white">
         {branches.map((branch) => (
           <li key={branch.id} className="flex flex-col gap-2 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            {/* The branch and its actions side by side, on a phone too: Edit stays by the name it edits. */}
+            <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="flex items-center gap-2 font-medium text-neutral-900">
                   <span className="truncate">{branch.name}</span>
@@ -89,7 +90,7 @@ export function BranchesPage() {
                 </p>
                 {branch.address && <p className="text-sm text-neutral-500">{branch.address}</p>}
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex shrink-0 flex-wrap justify-end gap-2">
                 <Button variant="quiet" onClick={() => setEditing(branch.id)} disabled={!online}>
                   Edit
                 </Button>

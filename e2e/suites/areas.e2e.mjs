@@ -161,8 +161,10 @@ await check('the owner adds Kitchen, Bar and Housekeeping in one sheet; everythi
   await page.getByRole('status').filter({ hasText: `${branchName} now has 4 areas. Everything you have is in the Store.` }).waitFor()
 
   const areas = page.getByRole('region', { name: `Areas at ${branchName}` })
-  await areas.locator('[data-area="Housekeeping"]').getByText('Used up').waitFor()
-  await areas.locator('[data-area="Kitchen"]').getByText('Worked with').waitFor()
+  // What happens in each area is on its row, as a choice (owner's comment, 2026-10-31).
+  await waitFor(async () => (await areas.getByLabel('What happens at Housekeeping').inputValue()) === 'USED_UP', 'Housekeeping to read used up')
+  assert((await areas.getByLabel('What happens at Kitchen').inputValue()) === 'WORKED', 'the Kitchen does not read worked with')
+  assert((await areas.getByLabel('What happens at Store').inputValue()) === 'STORED', 'the Store does not read stored')
   // Where deliveries arrive is a setting of its own, by the heading - said once (owner's comment).
   const deliveries = areas.getByLabel('Deliveries arrive in')
   assert((await deliveries.locator('option:checked').innerText()) === 'Store', 'deliveries do not arrive in the Store')

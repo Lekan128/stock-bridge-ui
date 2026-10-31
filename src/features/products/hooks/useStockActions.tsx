@@ -33,10 +33,22 @@ export interface StockActions {
  * screen shows it (the product page's history, its low-stock alerts). The caches and the device
  * catalogue are already brought up to date by the outbox (`applyStockResult`).
  */
-export function useStockActions({ onChanged }: { onChanged?: (product: Product) => void } = {}): StockActions {
+export function useStockActions({
+  onChanged,
+  current,
+}: {
+  onChanged?: (product: Product) => void
+  /**
+   * The screen's latest copy of the product, when it shows one (the product page). An open sheet follows it:
+   * opened from the phone's saved copy, it must not keep judging against figures the page has since read
+   * again ("Kitchen's books say 7" beside a page saying 6).
+   */
+  current?: Product | null
+} = {}): StockActions {
   const { showToast } = useToast()
   const { options } = useUnitOfMeasureOptions()
-  const [active, setActive] = useState<{ kind: StockActionKind; product: Product } | null>(null)
+  const [opened, setActive] = useState<{ kind: StockActionKind; product: Product } | null>(null)
+  const active = opened && current && current.id === opened.product.id ? { ...opened, product: current } : opened
   // This phone's changes not yet folded into the figure: a count compares against the stock after
   // them, as the list shows it ("−3 kg waiting"), not before.
   const pending = usePendingStock(active?.product.id)

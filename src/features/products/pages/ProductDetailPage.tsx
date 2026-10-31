@@ -84,6 +84,7 @@ export function ProductDetailPage() {
   // Stock in / out / count, and the toast with Undo after — shared with the Inventory list (C1).
   const moveSheet = useMoveSheet()
   const stockActions = useStockActions({
+    current: product,
     onChanged: (changed) => {
       // The write's answer carries the company figure only: keep the branch list, moved by the same
       // amount at the branch written to, and read the product again for the truth.

@@ -7,7 +7,7 @@ import { TextField } from '@/components/TextField'
 import { isAppError } from '@/types/api'
 import { areasApi } from '@/features/branches/branchesApi'
 import { BRANCHES_KEY } from '@/features/branches/BranchProvider'
-import { AREA_KIND_LABEL, hasAreas, kindFlags, kindOf } from '@/features/branches/areas'
+import { AREA_KIND_LABEL, hasAreas, kindFlags, kindOf, type AreaKind } from '@/features/branches/areas'
 import type { Area, Branch } from '@/features/branches/types'
 
 /**
@@ -65,13 +65,11 @@ export function BranchAreas({
     }
   }
 
-  /** What the area is, in one line: "25 products", "Uses what it's given". */
+  /** What the area holds, in one line: "25 products", "Closed"; what happens there is its own choice beside it. */
   function describe(area: Area): string {
     if (!withAreas) return 'where all your stock is now · deliveries arrive here'
     const parts: string[] = []
     if (!area.active) parts.push('Closed')
-    // What happens there (D-A12), in its few words; "stored", the plain case, goes unsaid.
-    if (kindOf(area) !== 'STORED') parts.push(AREA_KIND_LABEL[kindOf(area)])
     if (area.keepsStock && area.productsInStock != null) {
       parts.push(`${area.productsInStock} ${area.productsInStock === 1 ? 'product' : 'products'}`)
     }
@@ -81,19 +79,6 @@ export function BranchAreas({
   function menu(area: Area): OverflowMenuItem[] {
     const items: OverflowMenuItem[] = [{ label: 'Rename', onSelect: () => setRenaming(area.id), disabled: !online }]
     if (!withAreas) return items
-    if (area.active) {
-      // The other answers to "What happens here?" - where deliveries arrive, never "used up".
-      const others = (['STORED', 'WORKED', 'USED_UP'] as const).filter(
-        (kind) => kind !== kindOf(area) && !(area.delivery && kind === 'USED_UP'),
-      )
-      for (const kind of others) {
-        items.push({
-          label: `Change to: ${AREA_KIND_LABEL[kind].toLowerCase()}`,
-          onSelect: () => void act(area, () => areasApi.update(area.id, kindFlags(kind))),
-          disabled: !online,
-        })
-      }
-    }
     if (area.active && !area.delivery) {
       items.push({ label: 'Close', tone: 'danger', onSelect: () => void act(area, () => areasApi.close(area.id)), disabled: !online })
     }
@@ -149,6 +134,14 @@ export function BranchAreas({
           )}
         </div>
       )}
+      {/* What the three answers mean, said once for every row (D-A12). */}
+      {withAreas && (
+        <p className="mt-2 text-xs text-neutral-600">
+          <span className="font-medium text-neutral-800">Stored</span>: counted, anything short is missing ·{' '}
+          <span className="font-medium text-neutral-800">Worked with</span>: counted, anything short was used ·{' '}
+          <span className="font-medium text-neutral-800">Used up</span>: used as it arrives, no figure
+        </p>
+      )}
       <ul className="mt-2 divide-y divide-neutral-100">
         {areas.map((area) => (
           <li key={area.id} className="py-2" data-area={area.name}>
@@ -160,14 +153,33 @@ export function BranchAreas({
                 onSave={(name) => void act(area, () => areasApi.update(area.id, { name }))}
               />
             ) : (
-              <div className="flex items-center justify-between gap-3">
-                <p className={`min-w-0 text-sm ${area.active ? '' : 'opacity-70'}`}>
+              <div className="flex items-center gap-2">
+                <p className={`min-w-0 flex-1 text-sm ${area.active ? '' : 'opacity-70'}`}>
                   <span className="font-medium text-neutral-900">{area.name}</span>
-                  <span className="text-neutral-600"> · {describe(area)}</span>
+                  {describe(area) && <span className="block text-xs text-neutral-600 sm:inline sm:text-sm"><span className="hidden sm:inline"> · </span>{describe(area)}</span>}
                 </p>
-                {mayChange && (
-                  <OverflowMenu label={`Change ${area.name}`} items={menu(area)} />
-                )}
+                {/* What happens there (D-A12): visible on the row, changed with the phone's own picker. */}
+                {withAreas && area.active && mayChange ? (
+                  <select
+                    aria-label={`What happens at ${area.name}`}
+                    value={kindOf(area)}
+                    disabled={!online || busy === area.id}
+                    onChange={(event) => void act(area, () => areasApi.update(area.id, kindFlags(event.target.value as AreaKind)))}
+                    className="min-h-11 shrink-0 rounded-md border border-neutral-300 bg-white px-2 text-sm text-neutral-900"
+                  >
+                    {(['STORED', 'WORKED', 'USED_UP'] as const)
+                      // Where deliveries arrive keeps stock.
+                      .filter((kind) => !(area.delivery && kind === 'USED_UP'))
+                      .map((kind) => (
+                        <option key={kind} value={kind}>
+                          {AREA_KIND_LABEL[kind]}
+                        </option>
+                      ))}
+                  </select>
+                ) : withAreas ? (
+                  <span className="shrink-0 text-sm text-neutral-700">{AREA_KIND_LABEL[kindOf(area)]}</span>
+                ) : null}
+                {mayChange && <OverflowMenu label={`Change ${area.name}`} items={menu(area)} quiet />}
               </div>
             )}
             {busy === area.id && renaming !== area.id && <p className="text-xs text-neutral-600">Saving…</p>}
