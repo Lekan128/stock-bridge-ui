@@ -71,7 +71,7 @@ export function AreaChip() {
               showToast(`Now showing ${allLabel.toLowerCase()}`, 'info')
             },
           }}
-          className="absolute right-0 mt-2 w-64 max-w-[calc(100vw-2rem)]"
+          className="fixed inset-x-4 top-[4.5rem] sm:absolute sm:inset-x-auto sm:top-full sm:right-0 sm:mt-2 sm:w-64"
           onPick={(area) => {
             setOpen(false)
             if (area.id === work.area?.id) return
