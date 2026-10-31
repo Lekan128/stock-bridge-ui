@@ -7,8 +7,7 @@ export interface AreaMovePayload {
   toAreaId: string
   note?: string
   /** Whole numbers in `unit`, or the stock unit when `unit` is absent, as on every sheet. */
-  /** `usedNow`: used straight away where it goes (Part 3.5), not added to its stock. */
-  lines: { productId: string; quantity: number; unit?: string; usedNow?: boolean }[]
+  lines: { productId: string; quantity: number; unit?: string }[]
   /** Set by the outbox when the move goes late: when it happened on the phone, and that it was offline. */
   occurredAt?: string
   recordedOffline?: boolean

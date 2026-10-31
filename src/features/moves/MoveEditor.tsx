@@ -32,8 +32,6 @@ interface MoveLine {
   /** The unit counted in, by its label - unique within a product's set. */
   unitLabel: string
   quantity: string
-  /** Used straight away where it goes (Part 3.5): a crate of tomatoes for today's stew. */
-  usedNow?: boolean
 }
 
 interface MoveDraft {
@@ -290,8 +288,6 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
   const canMove = !moving && from != null && to != null && ready.length > 0 && !anyShort && !anyInvalid
   const items = `${ready.length} ${ready.length === 1 ? 'item' : 'items'}`
   const verb = to && !to.keepsStock ? 'Give' : 'Move'
-  // Lines used straight away, said on the button: "Move 3 items to Kitchen (1 used)".
-  const usedNowCount = to?.keepsStock ? ready.filter((entry) => entry.line.usedNow).length : 0
 
   async function move() {
     if (!canMove || !branch || !to || !from) return
@@ -310,7 +306,6 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
             productId: entry.line.product.id,
             quantity: entry.quantity,
             unit: entry.option.isStockUnit ? undefined : entry.option.code || undefined,
-            usedNow: to.keepsStock && entry.line.usedNow ? true : undefined,
           })),
         },
         summary,
@@ -568,31 +563,18 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
                     {to && (
                       <>
                         <dt className="text-neutral-600">{to.name}</dt>
-                        <dd className="flex flex-wrap items-center justify-between gap-x-3 text-neutral-800">
-                          <span>
-                            {!to.keepsStock || line.usedNow ? (
-                              to.confirms ? 'used there, once confirmed' : 'used there'
-                            ) : toHas != null ? (
-                              <>
-                                <BeforeAfter before={toHas} after={short ? null : toHas + base} option={option} unit={unit} />
-                                {/* Part 4: it waits for the area to confirm it. */}
-                                {to.confirms && <span className="text-neutral-600"> once confirmed</span>}
-                              </>
-                            ) : null}
-                          </span>
-                          {/* On the destination's own line, so it costs no height (Part 3.5). */}
-                          {to.keepsStock && (
-                            <label className="-my-2 inline-flex min-h-9 items-center gap-1.5 text-neutral-700">
-                              <input
-                                type="checkbox"
-                                checked={line.usedNow ?? false}
-                                disabled={moving}
-                                onChange={(event) => update(line.key, { usedNow: event.target.checked })}
-                                aria-label={`${line.product.name} used straight away at the ${to.name}`}
-                              />
-                              Used straight away
-                            </label>
-                          )}
+                        {/* What's used there is learned from its closing count (Part 3.5), not ticked here
+                            (owner, 2026-10-31: the person moving it doesn't know). */}
+                        <dd className="text-neutral-800">
+                          {!to.keepsStock ? (
+                            to.confirms ? 'used there, once confirmed' : 'used there'
+                          ) : toHas != null ? (
+                            <>
+                              <BeforeAfter before={toHas} after={short ? null : toHas + base} option={option} unit={unit} />
+                              {/* Part 4: it waits for the area to confirm it. */}
+                              {to.confirms && <span className="text-neutral-600"> once confirmed</span>}
+                            </>
+                          ) : null}
                         </dd>
                       </>
                     )}
@@ -643,7 +625,7 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
             : to.confirms
               ? // Names what happens next (Part 4), short enough for a phone's button.
                 `${verb} ${items} · ${to.name} will confirm`
-              : `${verb} ${items} to ${to.name}${usedNowCount > 0 ? ` (${usedNowCount} used)` : ''}`}
+              : `${verb} ${items} to ${to.name}`}
       </Button>
       {!online && ready.length > 0 && (
         <p className="text-center text-xs text-neutral-600">You're offline. It's kept on this phone and goes when you're connected.</p>

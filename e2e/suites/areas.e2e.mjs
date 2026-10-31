@@ -763,23 +763,6 @@ await check('a count can record its shortfall as missing instead, for that count
   assert(rows[0].movementType === 'ADJUSTMENT' && rows[0].quantity === -1, `latest row: ${JSON.stringify(rows[0])}`)
 })
 
-await check('a move line used straight away is used at the Kitchen and never joins its stock', async () => {
-  const before = await areaFigures(ownerToken, rice.id)
-  await page.goto(`${UI}/app/products/${rice.id}`)
-  await page.getByRole('heading', { name: 'Rice', level: 1 }).waitFor()
-  await page.getByRole('button', { name: 'Move', exact: true }).click()
-  await moveSheet.waitFor()
-  await page.locator('#move-to').selectOption({ label: 'Kitchen' })
-  await page.getByLabel('How many Rice').fill('1')
-  await page.getByRole('checkbox', { name: 'Rice used straight away at the Kitchen' }).check()
-  await page.screenshot({ path: SHOTS + '19-used-straight-away.png' })
-  await moveSheet.getByRole('button', { name: 'Move 1 item to Kitchen (1 used)' }).click()
-  await moveSheet.waitFor({ state: 'hidden' })
-  await waitFor(async () => (await areaFigures(ownerToken, rice.id)).Store === before.Store - 1, 'the Store to give 1')
-  const at = await areaFigures(ownerToken, rice.id)
-  assert(at.Kitchen === before.Kitchen, `the Kitchen went from ${before.Kitchen} to ${at.Kitchen}`)
-})
-
 await check('an area\'s Edit asks what happens there in words, and the row says the new answer', async () => {
   await page.setViewportSize({ width: 1280, height: 900 })
   await page.goto(`${UI}/app/company/branches`)
