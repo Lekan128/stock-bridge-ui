@@ -51,6 +51,8 @@ export interface AreaFigure {
   quantityOnHand: number
   /** The product page only (Part 3.5): when this area last counted it. */
   lastCountedAt?: string
+  /** The area has had this product - holds it, or ran out of it (Part 3.6). Absent from an older API. */
+  carried?: boolean
 }
 
 export interface BranchList {

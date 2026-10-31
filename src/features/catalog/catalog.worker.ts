@@ -15,6 +15,8 @@ import type { CatalogMeta, CatalogQuery, CatalogQueryResult, CatalogRow, Catalog
  */
 
 interface StoredRow extends CatalogRow {
+  /** In an area view: the chosen areas have never had it (Part 3.6). */
+  _elsewhere?: boolean
   /** Lower-cased once, for search. */
   _name: string
   _sku: string
@@ -89,10 +91,12 @@ function asSeen(row: StoredRow, q: CatalogQuery): StoredRow {
 /** The row as the areas chosen in the top bar hold it (Part 3.6); unchanged for the whole branch. */
 function inAreas(row: StoredRow, q: CatalogQuery): StoredRow {
   if (!q.areaIds || q.areaIds.length === 0 || row.areaStock == null) return row
-  const quantity = row.areaStock
-    .filter((figure) => q.areaIds!.includes(figure.areaId))
-    .reduce((sum, figure) => sum + figure.quantityOnHand, 0)
-  return { ...row, quantityOnHand: quantity, isLowStock: false, stockStatus: quantity > 0 ? 'OK' : 'OUT' }
+  const figures = row.areaStock.filter((figure) => q.areaIds!.includes(figure.areaId))
+  const quantity = figures.reduce((sum, figure) => sum + figure.quantityOnHand, 0)
+  // Out only where it was had and ran out; a product these areas never had isn't theirs (an older API, which
+  // doesn't say, counts as had).
+  const carried = figures.some((figure) => figure.carried !== false || figure.quantityOnHand !== 0)
+  return { ...row, quantityOnHand: quantity, isLowStock: false, stockStatus: quantity > 0 ? 'OK' : 'OUT', _elsewhere: !carried }
 }
 
 function atBranch(row: StoredRow, q: CatalogQuery): StoredRow {
@@ -116,6 +120,7 @@ function query(q: CatalogQuery): CatalogQueryResult {
   const priceCounts = { has: 0, none: 0 }
   const price = q.price ?? 'all'
   const matching: StoredRow[] = []
+  let elsewhere = 0
 
   // A branch's own figures sort differently from the company's: sorted here, after the filters.
   const byBranchQuantity = (q.branchId != null || (q.areaIds?.length ?? 0) > 0) && q.sort.field === 'quantityOnHand'
@@ -125,6 +130,17 @@ function query(q: CatalogQuery): CatalogQueryResult {
     if (q.status === 'inactive' && row.active) continue
     if (q.categoryId && row.categoryId !== q.categoryId) continue
     if (term && !row._name.includes(term) && !row._sku.includes(term) && !row._barcode.includes(term)) continue
+    // Not the chosen areas' product: counted for "N other products", listed only when searched for or shown,
+    // and never in the stock chips - it isn't out there, it just isn't theirs.
+    if (row._elsewhere) {
+      if (!term && !q.showOthers) {
+        elsewhere += 1
+        continue
+      }
+      if (q.stockStatus !== 'all') continue
+      matching.push(row)
+      continue
+    }
     const priced = row.unitPrice != null
     // Each census is counted under every filter but its own, so a chip says what picking it shows.
     if (q.stockStatus === 'all' || row.stockStatus === q.stockStatus) {
@@ -162,10 +178,11 @@ function query(q: CatalogQuery): CatalogQueryResult {
     incoming: { units: incomingUnits, productCount: incomingProducts },
     catalogSize: rows.size,
     activeCount,
+    elsewhere,
   }
 }
 
-function strip({ _name: _n, _sku: _s, _barcode: _b, ...row }: StoredRow): CatalogRow {
+function strip({ _name: _n, _sku: _s, _barcode: _b, _elsewhere: _e, ...row }: StoredRow): CatalogRow {
   return row
 }
 

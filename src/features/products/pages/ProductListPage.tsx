@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowLeftRight, PackagePlus, Truck, X, Zap } from 'lucide-react'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { hasAreas } from '@/features/branches/areas'
+import { useWorkArea } from '@/features/branches/workArea'
 import { useMoveSheet } from '@/features/moves/useMoveSheet'
 import { BranchLevelDialog } from '@/features/branches/BranchLevelDialog'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -209,8 +210,20 @@ export function ProductListPage() {
   const categoryList = useCompanyCategories(true)
 
   const online = useOnlineStatus()
+  // In an area view (Part 3.6) the list is the area's products; the rest are one tap away.
+  const [showOthers, setShowOthers] = useState(false)
+  const areaView = useWorkArea(branch && !branch.isAll ? branch.working : null)
+  const whereShown = areaView.area ? `the ${areaView.area.name}` : areaView.viewAreaIds ? 'your areas' : null
   const catalogList = useCatalogList(
-    { search: committedSearch, status: statusFilter, categoryId: categoryFilter, stockStatus: stockLevelFilter, price: priceFilter, sort },
+    {
+      search: committedSearch,
+      status: statusFilter,
+      categoryId: categoryFilter,
+      stockStatus: stockLevelFilter,
+      price: priceFilter,
+      sort,
+      showOthers: whereShown ? showOthers : undefined,
+    },
     onDevice,
   )
   const [renderedProducts, setRenderedProducts] = useState<Product[]>([])
@@ -557,6 +570,9 @@ export function ProductListPage() {
           canManageProducts={canManageProducts}
           onBulkUpload={() => navigate('/app/products/import')}
           onShowAll={() => handleStatusFilterChange('all')}
+          whereShown={whereShown}
+          showOthers={showOthers}
+          onShowOthers={setShowOthers}
           selection={canSelect ? { selectedIds, onToggle: toggleSelected, onToggleAll: toggleAllOnPage } : undefined}
           selectionBar={
             canSelect && selectedIds.length > 0 ? (
@@ -798,6 +814,10 @@ interface OnDeviceListProps {
   canManageProducts: boolean
   onBulkUpload: () => void
   onShowAll: () => void
+  /** In an area view: "the Kitchen" / "your areas" (Part 3.6); null otherwise. */
+  whereShown: string | null
+  showOthers: boolean
+  onShowOthers: (show: boolean) => void
   selection?: ProductTableSelection
   selectionBar: ReactNode
   onRenderedChange: (products: Product[]) => void
@@ -821,6 +841,9 @@ function OnDeviceList({
   canManageProducts,
   onBulkUpload,
   onShowAll,
+  whereShown,
+  showOthers,
+  onShowOthers,
   selection,
   selectionBar,
   onRenderedChange,
@@ -831,6 +854,17 @@ function OnDeviceList({
   if (!list.ready) return <ProductListSkeleton />
   if (list.catalogSize === 0) {
     return <EmptyProductsState canManageProducts={canManageProducts} onBulkUpload={onBulkUpload} />
+  }
+  // The area holds none of the catalogue yet: say so, with the rest one tap away.
+  if (list.total === 0 && whereShown && list.elsewhere > 0 && !committedSearch) {
+    return (
+      <div className="flex flex-col items-center gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-10 text-center text-sm text-neutral-600">
+        <p>Nothing in {whereShown} yet. Move stock here, or stock it in.</p>
+        <Button variant="secondary" onClick={() => onShowOthers(true)}>
+          Show the other {list.elsewhere} {list.elsewhere === 1 ? 'product' : 'products'}
+        </Button>
+      </div>
+    )
   }
   if (list.total === 0) {
     const onlyInactiveExist = isDefaultView && statusFilter === 'active' && list.activeCount === 0
@@ -864,6 +898,25 @@ function OnDeviceList({
         cardSelection={cardSelection}
         byBranch={byBranch}
       />
+      {/* An area view lists the area's products; the others are counted here, one tap away (Part 3.6). */}
+      {whereShown && !committedSearch && (list.elsewhere > 0 || showOthers) && (
+        <p className="text-sm text-neutral-600" data-elsewhere>
+          {showOthers ? (
+            <>Also showing products that aren't in {whereShown}. </>
+          ) : (
+            <>
+              {list.elsewhere} other {list.elsewhere === 1 ? "product isn't" : "products aren't"} in {whereShown}.{' '}
+            </>
+          )}
+          <button
+            type="button"
+            onClick={() => onShowOthers(!showOthers)}
+            className="-my-3 inline-flex min-h-11 items-center font-medium text-primary-700 hover:underline"
+          >
+            {showOthers ? 'Hide them' : 'Show them'}
+          </button>
+        </p>
+      )}
     </div>
   )
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react'
+import { useNotHere } from '@/features/branches/workArea'
 import { ArrowDown, ArrowUp, ArrowUpDown, Minus, Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
@@ -102,6 +103,7 @@ const UNIT_PRICE_COLUMN: { field: ProductSortField; label: string; align?: 'righ
 export function ProductTable({ products, sort, onSortChange, incomingFor, selection, virtual, quickActions, byBranch }: ProductTableProps) {
   const hasQuickActions = quickActions != null && (quickActions.canStockIn || quickActions.canStockOut)
   const { isVendor } = useAuth()
+  const notHere = useNotHere()
   // The price column follows the selling policy (a vendor, ProcurePal, or a company that sells
   // from its stock); the pack subtitle stays a company's, as before.
   const { showsSellingPrice } = useSellingPolicy()
@@ -310,6 +312,7 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
                     threshold={product.lowStockThreshold}
                     low={product.isLowStock}
                     unit={resolveUnitSymbol(product.unitOfMeasure, unitOfMeasureOptions)}
+                    notHere={notHere(product)}
                   />
                   <LowAtBranches product={product} />
                   {/* On its own line, never summed into the figure above. */}

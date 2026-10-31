@@ -2,6 +2,8 @@ import { useCallback, useSyncExternalStore } from 'react'
 import { useAuth } from '@/auth/useAuth'
 import { hasAreas, stockAreas } from '@/features/branches/areas'
 import type { Area, Branch } from '@/features/branches/types'
+import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
+import type { Product } from '@/features/products/types'
 
 /**
  * Where a person is inside a branch (STOCK_AREAS_PART_3.md, STOCK_AREAS_PART_3_6.md): the top bar's area
@@ -100,4 +102,19 @@ export function useWorkArea(branch: Branch | null | undefined): WorkArea {
   const area = fixed ? areas[0] : areas.find((candidate) => candidate.id === chosenId)
   const viewAreaIds = area ? [area.id] : limited ? areas.map((candidate) => candidate.id) : undefined
   return { limited, areas, area, fixed, viewAreaIds, choose }
+}
+
+/**
+ * In an area view (Part 3.6), whether a product is one the chosen areas have never had - the Inventory row
+ * says "Not here" for it rather than "Out". False outside an area view, or without the product's area figures.
+ */
+export function useNotHere(): (product: Product) => boolean {
+  const branch = useOptionalWorkingBranch()
+  const viewAreaIds = useWorkArea(branch && !branch.isAll ? branch.working : null).viewAreaIds
+  return (product) =>
+    viewAreaIds != null &&
+    product.areaStock != null &&
+    !product.areaStock.some(
+      (figure) => viewAreaIds.includes(figure.areaId) && (figure.carried !== false || figure.quantityOnHand !== 0),
+    )
 }

@@ -85,9 +85,16 @@ export interface CatalogQuery {
    * summed; out when they hold none, never "low" (an area has no level of its own until Part 8).
    */
   areaIds?: string[]
+  /** In an area view, list the products those areas have never had as well ("Show them"). */
+  showOthers?: boolean
 }
 
 export interface CatalogQueryResult {
+  /**
+   * In an area view (Part 3.6): how many products matching the other filters the chosen areas have never had -
+   * left out of the list and the chips unless searched for or shown ("14 other products aren't in the Kitchen").
+   */
+  elsewhere?: number
   rows: CatalogRow[]
   /** How many rows match every filter. */
   total: number

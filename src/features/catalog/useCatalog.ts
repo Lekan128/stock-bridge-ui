@@ -22,6 +22,8 @@ export interface CatalogList {
   incoming: CatalogQueryResult['incoming']
   catalogSize: number
   activeCount: number
+  /** In an area view: products the chosen areas have never had, left out of the list (Part 3.6). */
+  elsewhere: number
   /** The first answer for these filters has arrived. */
   ready: boolean
   /** The row at a position in the filtered, sorted list, or undefined until it is loaded. */
@@ -112,6 +114,7 @@ export function useCatalogList(asked: CatalogFilters, enabled: boolean): Catalog
     incoming: summary?.incoming ?? NO_INCOMING,
     catalogSize: summary?.catalogSize ?? 0,
     activeCount: summary?.activeCount ?? 0,
+    elsewhere: summary?.elsewhere ?? 0,
     ready: summary != null,
     rowAt,
     loadRange,

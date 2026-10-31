@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import { useNotHere } from '@/features/branches/workArea'
 import { Minus, Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { expectedCopy } from '@/features/expected/copy'
@@ -39,6 +40,7 @@ const PRESS_SLOP_PX = 10
 export function ProductCard({ product, incoming = 0, quickActions, selection }: ProductCardProps) {
   // Module-cached list (see the hook), so a page of cards shares one fetch.
   const { options: unitOfMeasureOptions } = useUnitOfMeasureOptions()
+  const notHere = useNotHere()
   const packLine = packEquivalent(product, unitOfMeasureOptions)
   const unit = resolveUnitSymbol(product.unitOfMeasure, unitOfMeasureOptions)
   const label = (code: string | undefined) => unitOfMeasureOptions.find((option) => option.code === code)?.label
@@ -142,7 +144,13 @@ export function ProductCard({ product, incoming = 0, quickActions, selection }: 
               </span>
             )}
           </div>
-          <StockBar quantity={product.quantityOnHand} threshold={product.lowStockThreshold} low={product.isLowStock} unit={unit} />
+          <StockBar
+            quantity={product.quantityOnHand}
+            threshold={product.lowStockThreshold}
+            low={product.isLowStock}
+            unit={unit}
+            notHere={notHere(product)}
+          />
           <LowAtBranches product={product} />
           <IncomingStockBadge quantity={incoming} />
         </div>

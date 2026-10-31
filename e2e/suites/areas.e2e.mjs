@@ -631,6 +631,20 @@ await check('the top bar is where you are: All my areas sums his areas, one area
   const lowChip = barPage.getByRole('group', { name: 'Stock level' }).getByRole('button', { name: /^Low/ })
   assert(/Low\s*0/.test(await lowChip.innerText()), `Low in an area view: ${await lowChip.innerText()}`)
   await barPage.screenshot({ path: SHOTS + '25-inventory-bar.png' })
+  // The Kitchen never had flour: it isn't listed or counted as Out there, just counted as "not in the Kitchen",
+  // and Show them lists it as "Not here".
+  const flourId = (await api(`/api/products?search=Flour`, { token: ownerToken })).json.content.find((p) => p.name === 'Flour').id
+  await barPage.getByRole('button', { name: 'Area: Bar. Change area' }).click()
+  await barPage.getByRole('menuitemradio', { name: 'Kitchen' }).click()
+  const elsewhereLine = barPage.locator('[data-elsewhere]')
+  await elsewhereLine.getByText("1 other product isn't in the Kitchen.").waitFor()
+  await barPage.locator(`[data-product-row="${rice.id}"]`).locator('visible=true').first().waitFor()
+  assert((await barPage.locator(`[data-product-row="${flourId}"]`).locator('visible=true').count()) === 0, 'flour is listed in the Kitchen')
+  await barPage.screenshot({ path: SHOTS + '26-inventory-kitchen.png' })
+  await elsewhereLine.getByRole('button', { name: 'Show them' }).click()
+  const flourRow = barPage.locator(`[data-product-row="${flourId}"]`).locator('visible=true').first()
+  await flourRow.getByText('Not here').waitFor()
+  await elsewhereLine.getByRole('button', { name: 'Hide them' }).click()
   await barContext.close()
 
   // The owner: All areas is the whole branch, as before; one area shows that area.
