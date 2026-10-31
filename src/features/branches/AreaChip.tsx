@@ -57,8 +57,7 @@ export function AreaChip() {
           areas={work.areas}
           currentId={work.area?.id}
           usesOnly={usesOnly}
-          desktopClassName="sm:absolute sm:right-0 sm:mt-2"
-          onClose={() => setOpen(false)}
+          className="absolute right-0 mt-2 w-64 max-w-[calc(100vw-2rem)]"
           onPick={(area) => {
             setOpen(false)
             if (area.id === work.area?.id) return
