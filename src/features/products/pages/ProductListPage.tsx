@@ -48,6 +48,7 @@ import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import type { PriceFilter } from '@/features/catalog/types'
 import { PriceSheetLink } from '@/features/selling/components/PriceSheetLink'
 import { SellingStaffNotice } from '@/features/selling/components/SellingStaffNotice'
+import { WaitingMovesLine } from '@/features/moves/WaitingMovesLine'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { StockWorthLine } from '@/features/selling/components/StockWorthLine'
 import { downloadBlob } from '@/utils/downloadBlob'
@@ -522,6 +523,9 @@ export function ProductListPage() {
       <SavedDataNote showing={showingSaved} updatedAt={updatedAt} subject="stock levels" onRetry={retryRefresh} />
 
       <SellingStaffNotice />
+
+      {/* Moves waiting for this person to confirm (Part 4): the same line as quick mode's, on a laptop too. */}
+      <WaitingMovesLine />
 
       {/* The first full download, on a catalogue big enough for it to take a moment. Smaller ones
           finish before this could be read. */}

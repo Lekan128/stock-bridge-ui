@@ -7,10 +7,7 @@ import { useWorkArea } from '@/features/branches/workArea'
 import { QuickAreaTitle } from '@/features/quick/QuickAreaTitle'
 import { MoveEditor, type Moved } from '@/features/moves/MoveEditor'
 import { movesApi } from '@/features/moves/movesApi'
-import { MoveSheet } from '@/features/moves/MoveSheet'
-import { itemsWord } from '@/features/moves/moveWords'
-import type { AreaMove } from '@/features/moves/types'
-import { useWaitingMoves } from '@/features/moves/useWaitingMoves'
+import { WaitingMovesLine } from '@/features/moves/WaitingMovesLine'
 import { usePendingStock } from '@/features/outbox/useOutbox'
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { Delete, Search, X } from 'lucide-react'
@@ -125,9 +122,6 @@ export function QuickModePage() {
   // Where in the branch every scan lands, at a branch with a choice of areas (V60). Chosen once for the
   // session, like the reason; a sale chooses its own on the basket.
   const area = useSheetArea(branch && !branch.isAll ? branch.working : null)
-  // Areas that confirm (Part 4): what's waiting for this person, one line under the title - nothing otherwise.
-  const waitingMoves = useWaitingMoves().moves
-  const [openMove, setOpenMove] = useState<AreaMove | null>(null)
   const [params, setParams] = useSearchParams()
   const { user } = useAuth()
   const permissions = user?.type === 'tenant' ? user.permissions : []
@@ -262,22 +256,8 @@ export function QuickModePage() {
         </h1>
         <SyncPill large />
       </header>
-      {waitingMoves.length > 0 && (
-        <button
-          type="button"
-          onClick={() => setOpenMove(waitingMoves[0])}
-          data-waiting-line
-          className="flex min-h-11 w-full items-center justify-between gap-3 border-b border-primary-100 bg-primary-50 px-4 text-left text-sm text-primary-900"
-        >
-          <span className="truncate">
-            {waitingMoves.length === 1
-              ? `${itemsWord(waitingMoves[0].lines.length)} from the ${waitingMoves[0].fromAreaName} to confirm`
-              : `${waitingMoves.length} moves to confirm`}
-          </span>
-          <span className="shrink-0 font-semibold text-primary-700">Confirm</span>
-        </button>
-      )}
-      {openMove && <MoveSheet key={openMove.id} move={openMove} onClose={() => setOpenMove(null)} />}
+      {/* Areas that confirm (Part 4): what's waiting for this person, one line under the title. */}
+      <WaitingMovesLine bar />
 
       <div className="mx-auto flex w-full max-w-md min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
         <div className="flex flex-col gap-2">
