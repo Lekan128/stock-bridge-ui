@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import Dexie, { type Table } from 'dexie'
-import type { CatalogMeta, CatalogQuery, CatalogQueryResult, CatalogRow, CatalogSortField } from '@/features/catalog/types'
+import { CATALOG_ROW_FORMAT, type CatalogMeta, type CatalogQuery, type CatalogQueryResult, type CatalogRow, type CatalogSortField } from '@/features/catalog/types'
 
 /**
  * The on-device catalogue (INVENTORY_OFFLINE_AND_CHARACTER_PLAN.md, A3), off the main thread.
@@ -248,7 +248,7 @@ async function handle(request: Request): Promise<unknown> {
       })
     }
     case 'finishSnapshot':
-      return saveMeta({ phase: 'ready', afterId: null, syncedAt: request.syncedAt })
+      return saveMeta({ phase: 'ready', afterId: null, syncedAt: request.syncedAt, rowFormat: CATALOG_ROW_FORMAT })
     case 'applyChanges': {
       await upsert(request.products)
       await remove(request.removedIds)

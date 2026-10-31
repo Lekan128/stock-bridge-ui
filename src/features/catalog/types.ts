@@ -119,4 +119,13 @@ export interface CatalogMeta {
   total: number | null
   syncedAt: number | null
   count: number
+  /** The row shape the copy was taken in; absent for copies older than formats. */
+  rowFormat?: number
 }
+
+/**
+ * The row shape this app reads. Raise it when rows gain a field the app relies on, so a phone's copy taken
+ * before is downloaded afresh: the change feed only sends products that changed, so old rows never gain it.
+ * 2: area figures say whether the area has had the product (`carried`, Part 3.6).
+ */
+export const CATALOG_ROW_FORMAT = 2

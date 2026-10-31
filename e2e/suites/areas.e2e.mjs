@@ -645,6 +645,38 @@ await check('the top bar is where you are: All my areas sums his areas, one area
   const flourRow = barPage.locator(`[data-product-row="${flourId}"]`).locator('visible=true').first()
   await flourRow.getByText('Not here').waitFor()
   await elsewhereLine.getByRole('button', { name: 'Hide them' }).click()
+  // A phone whose copy was taken before areas said what they've had: it downloads a fresh copy once, and the
+  // Kitchen still lists only its own (owner, 2026-10-31: an old copy showed every product as Out).
+  await barPage.evaluate(async () => {
+    const name = (await indexedDB.databases()).map((d) => d.name).find((n) => n?.startsWith('procurepaddy-catalog:'))
+    const db = await new Promise((resolve, reject) => {
+      const open = indexedDB.open(name)
+      open.onsuccess = () => resolve(open.result)
+      open.onerror = () => reject(open.error)
+    })
+    const tx = db.transaction(['products', 'meta'], 'readwrite')
+    const products = tx.objectStore('products')
+    products.openCursor().onsuccess = (event) => {
+      const cursor = event.target.result
+      if (!cursor) return
+      const row = cursor.value
+      cursor.update({ ...row, areaStock: row.areaStock?.map(({ carried: _c, ...figure }) => figure) })
+      cursor.continue()
+    }
+    const meta = tx.objectStore('meta')
+    meta.get('state').onsuccess = (event) => {
+      const { rowFormat: _f, ...old } = event.target.result
+      meta.put(old, 'state')
+    }
+    await new Promise((resolve, reject) => {
+      tx.oncomplete = resolve
+      tx.onerror = () => reject(tx.error)
+    })
+    db.close()
+  })
+  await barPage.reload()
+  await elsewhereLine.getByText("1 other product isn't in the Kitchen.").waitFor({ timeout: 20000 })
+  assert((await barPage.locator(`[data-product-row="${flourId}"]`).locator('visible=true').count()) === 0, 'an old copy lists flour in the Kitchen')
   await barContext.close()
 
   // The owner: All areas is the whole branch, as before; one area shows that area.

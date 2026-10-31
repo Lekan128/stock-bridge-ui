@@ -1,6 +1,6 @@
 import Dexie from 'dexie'
 import { catalogApi } from '@/features/catalog/catalogApi'
-import type { CatalogMeta, CatalogQuery, CatalogQueryResult, CatalogRow } from '@/features/catalog/types'
+import { CATALOG_ROW_FORMAT, type CatalogMeta, type CatalogQuery, type CatalogQueryResult, type CatalogRow } from '@/features/catalog/types'
 import type { Product } from '@/features/products/types'
 import { isAppError } from '@/types/api'
 
@@ -225,7 +225,12 @@ export async function resyncCatalog(): Promise<boolean> {
 /** The first full copy, resuming from where an interrupted one stopped. */
 async function loadSnapshotIfNeeded(name: string): Promise<CatalogMeta | null> {
   let meta = await currentMeta()
-  if (meta.phase === 'ready') return meta
+  // A copy in an older row shape is taken again - online only: offline it's still the best there is.
+  if (meta.phase === 'ready' && (meta.rowFormat === CATALOG_ROW_FORMAT || !navigator.onLine)) return meta
+  if (meta.phase === 'ready') {
+    meta = await call<CatalogMeta>({ type: 'reset' })
+    setState({ phase: 'loading', loaded: 0, total: null, version: state.version + 1 })
+  }
 
   let afterId = meta.phase === 'snapshot' ? meta.afterId : null
   if (afterId == null && meta.phase !== 'empty') {
