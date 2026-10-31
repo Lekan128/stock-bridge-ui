@@ -527,7 +527,7 @@ await check('a barman in the Bar and the Kitchen chooses where this phone is, an
   const barPage = await barContext.newPage()
   await barPage.goto(`${UI}/app/products/${rice.id}`)
   await barPage.getByRole('heading', { name: 'Rice', level: 1 }).waitFor()
-  await barPage.getByRole('button', { name: 'Choose your area' }).click()
+  await barPage.getByRole('button', { name: 'Choose area' }).click()
   await barPage.getByRole('menuitemradio', { name: 'Bar' }).click()
   await barPage.getByRole('button', { name: 'Area: Bar. Change area' }).waitFor()
   await barPage.getByRole('button', { name: 'Stock in' }).first().click()

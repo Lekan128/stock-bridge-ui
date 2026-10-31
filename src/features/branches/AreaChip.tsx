@@ -3,7 +3,7 @@ import { Check, ChevronDown, LayoutGrid } from 'lucide-react'
 import { useClickOutside } from '@/hooks/useClickOutside'
 import { useToast } from '@/components/useToast'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
-import { useWorkArea } from '@/features/branches/workArea'
+import { myAreas, useWorkArea } from '@/features/branches/workArea'
 
 const itemClassName =
   'flex min-h-11 w-full items-center gap-2 px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50 focus-visible:bg-neutral-50'
@@ -23,7 +23,10 @@ export function AreaChip() {
   useClickOutside(ref, () => setOpen(false))
 
   if (!work.limited || work.areas.length === 0) return null
-  const label = work.area?.name ?? 'Choose your area'
+  const label = work.area?.name ?? 'Choose area'
+  // Areas they work in that keep no figure (Housekeeping, or a Kitchen set that way): nothing to record
+  // there, so not a choice - but said, so it doesn't look as if they were forgotten.
+  const usesOnly = myAreas(working).filter((area) => !area.keepsStock)
 
   if (work.fixed) {
     return (
@@ -44,7 +47,7 @@ export function AreaChip() {
         }`}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={work.area ? `Area: ${label}. Change area` : 'Choose your area'}
+        aria-label={work.area ? `Area: ${label}. Change area` : 'Choose area'}
         data-area-chip
       >
         <LayoutGrid className="h-4 w-4 shrink-0 text-neutral-500" aria-hidden />
@@ -80,6 +83,12 @@ export function AreaChip() {
               </button>
             )
           })}
+          {usesOnly.length > 0 && (
+            <p role="none" className="border-t border-neutral-100 px-3 pt-2 pb-2.5 text-xs text-neutral-600">
+              {usesOnly.map((area) => area.name).join(' and ')}{' '}
+              {usesOnly.length === 1 ? "uses what it's given" : "use what they're given"}, so there's nothing to record there.
+            </p>
+          )}
         </div>
       )}
     </div>

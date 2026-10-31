@@ -146,7 +146,8 @@ function BranchAreasChoice({
                 checked={ticked.includes(area.id)}
                 onChange={() => set(ticked.includes(area.id) ? ticked.filter((id) => id !== area.id) : [...ticked, area.id])}
               />
-              {area.name}
+              {/* The same words as Move's picker: an area that keeps no figure says so. */}
+              {area.keepsStock ? area.name : `${area.name} (uses it)`}
             </label>
           ))}
           {ticked.length === 0 && (
