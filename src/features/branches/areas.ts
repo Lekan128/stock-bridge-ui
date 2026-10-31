@@ -53,26 +53,23 @@ export function figureInArea(product: Product, areaId: string | undefined): numb
 export type AreaKind = 'STORED' | 'WORKED' | 'USED_UP'
 
 /**
- * The three answers in the words people use (owner, 2026-10-31: not "stored / worked with / used up"):
- * `title` where it's chosen, `like` an example, `means` what it does, and `short` on the area's row.
+ * The three answers in the words people use (owner, 2026-10-31: not "stored / worked with / used up", and
+ * no examples beside them): `title` where it's chosen, `means` what it does, and `short` on the area's row.
  */
-export const AREA_KINDS: Record<AreaKind, { title: string; short: string; like: string; means: string }> = {
+export const AREA_KINDS: Record<AreaKind, { title: string; short: string; means: string }> = {
   STORED: {
     title: 'Stock is kept here',
     short: 'stock is kept here',
-    like: 'like a store or cold room',
     means: "Counted. If a count finds less, it's recorded as missing.",
   },
   WORKED: {
     title: 'Stock is used here',
     short: 'stock is used here',
-    like: 'like a kitchen or bar',
-    means: "Counted. If a count finds less, it's recorded as used (cooked, served), so nobody records every use.",
+    means: "Counted. If a count finds less, it's recorded as used, so nobody records every use.",
   },
   USED_UP: {
     title: "It uses what it's given",
     short: "uses what it's given",
-    like: 'like housekeeping or cleaning',
     means: 'Not counted. Whatever is sent here is recorded as used the moment it arrives.',
   },
 }

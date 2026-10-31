@@ -161,11 +161,12 @@ await check('the owner adds Kitchen, Bar and Housekeeping in one sheet; everythi
   await page.getByRole('status').filter({ hasText: `${branchName} now has 4 areas. Everything you have is in the Store.` }).waitFor()
 
   const areas = page.getByRole('region', { name: `Areas at ${branchName}` })
-  // Each row says the area in words: what happens there, and where deliveries arrive (owner, 2026-10-31).
+  // Each row says the area in words: what happens there (owner, 2026-10-31).
   await areas.locator('[data-area="Housekeeping"]').getByText("uses what it's given").waitFor()
   await areas.locator('[data-area="Kitchen"]').getByText('stock is used here').waitFor()
-  await areas.locator('[data-area="Store"]').getByText('stock is kept here · deliveries arrive here').waitFor()
-  assert((await areas.getByText('deliveries arrive here').count()) === 1, 'more than one row says deliveries arrive there')
+  await areas.locator('[data-area="Store"]').getByText('stock is kept here').waitFor()
+  // Where deliveries arrive is the branch's default, set by the areas on this page.
+  assert((await areas.getByLabel('Deliveries arrive in').locator('option:checked').innerText()) === 'Store', 'deliveries do not arrive in the Store')
   await page.screenshot({ path: SHOTS + '3-branches-with-areas.png' })
   const at = await areaFigures(ownerToken, rice.id)
   assert(at.Store === 10 && at.Kitchen === 0 && at.Bar === 0, `figures ${JSON.stringify(at)}`)
@@ -232,21 +233,16 @@ await check('a stock-out from the Kitchen is judged against the Kitchen, and the
 })
 
 // ------------------------------------------------------------------------------------------ 5
-await check("deliveries are the branch's setting; the empty Bar closes and reopens from its Edit; the Store offers no Close", async () => {
+await check('deliveries move from their setting; the empty Bar closes and reopens from its Edit; the Store offers no Close', async () => {
   await page.goto(`${UI}/app/company/branches`)
   const areas = page.getByRole('region', { name: `Areas at ${branchName}` })
-  // Where deliveries arrive is the branch's default, in the branch's Edit (owner, 2026-10-31).
-  const editBranch = async (deliveriesTo) => {
-    await page.getByRole('button', { name: 'Edit', exact: true }).first().click()
-    const sheet = page.getByRole('dialog', { name: `Edit ${branchName}` })
-    await sheet.getByLabel('Deliveries arrive in').selectOption({ label: deliveriesTo })
-    await sheet.getByRole('button', { name: 'Save' }).click()
-    await sheet.waitFor({ state: 'hidden' })
-  }
-  await editBranch('Bar')
-  await areas.locator('[data-area="Bar"]').getByText('deliveries arrive here').waitFor()
-  await editBranch('Store')
-  await areas.locator('[data-area="Store"]').getByText('deliveries arrive here').waitFor()
+  // Where deliveries arrive: the branch's default, set by the areas, and back.
+  const deliveries = areas.getByLabel('Deliveries arrive in')
+  const deliveryArea = async () => (await api('/api/branches', { token: ownerToken })).json.branches[0].areas.find((a) => a.delivery)?.name
+  await deliveries.selectOption({ label: 'Bar' })
+  await waitFor(async () => (await deliveryArea()) === 'Bar', 'deliveries to arrive in the Bar')
+  await deliveries.selectOption({ label: 'Store' })
+  await waitFor(async () => (await deliveryArea()) === 'Store', 'deliveries to arrive in the Store again')
 
   // One way to change an area: tap its row, and everything about it is in one Edit panel.
   const edit = page.getByRole('dialog', { name: 'Edit Bar' })

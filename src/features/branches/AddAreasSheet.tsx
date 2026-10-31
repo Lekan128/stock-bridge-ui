@@ -188,7 +188,7 @@ export function AddAreasSheet({ branch, onClose }: { branch: Branch; onClose: ()
                   >
                     {AREA_KIND_ORDER.map((kind) => (
                       <option key={kind} value={kind}>
-                        {AREA_KINDS[kind].title} ({AREA_KINDS[kind].like})
+                        {AREA_KINDS[kind].title}
                       </option>
                     ))}
                   </select>

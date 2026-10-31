@@ -106,10 +106,7 @@ export function AreaEditSheet({ area, withAreas, onClose }: { area: Area; withAr
                     className="mt-1 h-4 w-4 shrink-0"
                   />
                   <span className="flex min-w-0 flex-col gap-0.5">
-                    <span className="flex flex-wrap items-baseline gap-x-2">
-                      <span className="text-base font-medium text-neutral-900">{answer.title}</span>
-                      <span className="text-sm text-neutral-600">{answer.like}</span>
-                    </span>
+                    <span className="text-base font-medium text-neutral-900">{answer.title}</span>
                     <span className="text-sm text-neutral-700">{off ? 'Deliveries arrive here, so it keeps stock.' : answer.means}</span>
                   </span>
                 </label>
