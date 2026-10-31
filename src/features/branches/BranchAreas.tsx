@@ -7,7 +7,8 @@ import { TextField } from '@/components/TextField'
 import { isAppError } from '@/types/api'
 import { areasApi } from '@/features/branches/branchesApi'
 import { BRANCHES_KEY } from '@/features/branches/BranchProvider'
-import { AREA_KIND_LABEL, hasAreas, kindFlags, kindOf, type AreaKind } from '@/features/branches/areas'
+import { AREA_KINDS, hasAreas, kindOf } from '@/features/branches/areas'
+import { AreaKindSheet } from '@/features/branches/AreaKindSheet'
 import type { Area, Branch } from '@/features/branches/types'
 
 /**
@@ -37,6 +38,7 @@ export function BranchAreas({
 }) {
   const queryClient = useQueryClient()
   const [renaming, setRenaming] = useState<string | null>(null)
+  const [kindOfArea, setKindOf] = useState<Area | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [problem, setProblem] = useState<{ areaId: string; message: string } | null>(null)
   // Changing an area is for someone who works at the branch (the server checks it again).
@@ -65,7 +67,7 @@ export function BranchAreas({
     }
   }
 
-  /** What the area holds, in one line: "25 products", "Closed"; what happens there is its own choice beside it. */
+  /** The area in a line: "25 products · stock is kept here", "uses what it's given", "Closed". */
   function describe(area: Area): string {
     if (!withAreas) return 'where all your stock is now · deliveries arrive here'
     const parts: string[] = []
@@ -73,12 +75,15 @@ export function BranchAreas({
     if (area.keepsStock && area.productsInStock != null) {
       parts.push(`${area.productsInStock} ${area.productsInStock === 1 ? 'product' : 'products'}`)
     }
+    // What happens there (D-A12), in plain words; changed from "⋯ → What happens here?".
+    parts.push(AREA_KINDS[kindOf(area)].short)
     return parts.join(' · ')
   }
 
   function menu(area: Area): OverflowMenuItem[] {
     const items: OverflowMenuItem[] = [{ label: 'Rename', onSelect: () => setRenaming(area.id), disabled: !online }]
     if (!withAreas) return items
+    if (area.active) items.push({ label: 'What happens here?', onSelect: () => setKindOf(area), disabled: !online })
     if (area.active && !area.delivery) {
       items.push({ label: 'Close', tone: 'danger', onSelect: () => void act(area, () => areasApi.close(area.id)), disabled: !online })
     }
@@ -134,14 +139,6 @@ export function BranchAreas({
           )}
         </div>
       )}
-      {/* What the three answers mean, said once for every row (D-A12). */}
-      {withAreas && (
-        <p className="mt-2 text-xs text-neutral-600">
-          <span className="font-medium text-neutral-800">Stored</span>: counted, anything short is missing ·{' '}
-          <span className="font-medium text-neutral-800">Worked with</span>: counted, anything short was used ·{' '}
-          <span className="font-medium text-neutral-800">Used up</span>: used as it arrives, no figure
-        </p>
-      )}
       <ul className="mt-2 divide-y divide-neutral-100">
         {areas.map((area) => (
           <li key={area.id} className="py-2" data-area={area.name}>
@@ -156,29 +153,13 @@ export function BranchAreas({
               <div className="flex items-center gap-2">
                 <p className={`min-w-0 flex-1 text-sm ${area.active ? '' : 'opacity-70'}`}>
                   <span className="font-medium text-neutral-900">{area.name}</span>
-                  {describe(area) && <span className="block text-xs text-neutral-600 sm:inline sm:text-sm"><span className="hidden sm:inline"> · </span>{describe(area)}</span>}
+                  {describe(area) && (
+                    <span className="block text-sm text-neutral-600 sm:inline">
+                      <span className="hidden sm:inline"> · </span>
+                      {describe(area)}
+                    </span>
+                  )}
                 </p>
-                {/* What happens there (D-A12): visible on the row, changed with the phone's own picker. */}
-                {withAreas && area.active && mayChange ? (
-                  <select
-                    aria-label={`What happens at ${area.name}`}
-                    value={kindOf(area)}
-                    disabled={!online || busy === area.id}
-                    onChange={(event) => void act(area, () => areasApi.update(area.id, kindFlags(event.target.value as AreaKind)))}
-                    className="min-h-11 shrink-0 rounded-md border border-neutral-300 bg-white px-2 text-sm text-neutral-900"
-                  >
-                    {(['STORED', 'WORKED', 'USED_UP'] as const)
-                      // Where deliveries arrive keeps stock.
-                      .filter((kind) => !(area.delivery && kind === 'USED_UP'))
-                      .map((kind) => (
-                        <option key={kind} value={kind}>
-                          {AREA_KIND_LABEL[kind]}
-                        </option>
-                      ))}
-                  </select>
-                ) : withAreas ? (
-                  <span className="shrink-0 text-sm text-neutral-700">{AREA_KIND_LABEL[kindOf(area)]}</span>
-                ) : null}
                 {mayChange && <OverflowMenu label={`Change ${area.name}`} items={menu(area)} quiet />}
               </div>
             )}
@@ -191,6 +172,7 @@ export function BranchAreas({
           </li>
         ))}
       </ul>
+      {kindOfArea && <AreaKindSheet area={kindOfArea} onClose={() => setKindOf(null)} />}
     </section>
   )
 }

@@ -151,20 +151,20 @@ await check('the owner adds Kitchen, Bar and Housekeeping in one sheet; everythi
   for (const name of ['Kitchen', 'Bar', 'Housekeeping']) await dialog.getByRole('button', { name, exact: true }).click()
   // What happens there (D-A12): the quick picks start sensibly - the Kitchen and Bar work with stock,
   // Housekeeping uses it up - and each is one tap to change.
-  const kindOf = (name) => dialog.getByRole('radiogroup', { name: `What happens at ${name}` })
-  assert((await kindOf('Kitchen').getByRole('radio', { name: 'Worked with' }).getAttribute('aria-checked')) === 'true', 'the Kitchen does not start as worked with')
-  assert((await kindOf('Housekeeping').getByRole('radio', { name: 'Used up' }).getAttribute('aria-checked')) === 'true', 'Housekeeping does not start as used up')
-  // The three answers are explained once, not under every row (owner's comment).
-  assert((await dialog.getByText('What happens there?').count()) === 1, 'the explanation is repeated')
+  const kindOf = (name) => dialog.getByLabel(`What happens at ${name}`)
+  assert((await kindOf('Kitchen').inputValue()) === 'WORKED', 'the Kitchen does not start as "stock is used here"')
+  assert((await kindOf('Housekeeping').inputValue()) === 'USED_UP', "Housekeeping does not start as \"uses what it's given\"")
+  // What the chosen answer does, right under it, in words (owner, 2026-10-31).
+  await dialog.locator('li', { hasText: 'Housekeeping' }).getByText('Not counted. Whatever is sent here is recorded as used').waitFor()
   await dialog.screenshot({ path: SHOTS + '2-add-areas-sheet.png' })
   await dialog.getByRole('button', { name: 'Add 3 areas' }).click()
   await page.getByRole('status').filter({ hasText: `${branchName} now has 4 areas. Everything you have is in the Store.` }).waitFor()
 
   const areas = page.getByRole('region', { name: `Areas at ${branchName}` })
   // What happens in each area is on its row, as a choice (owner's comment, 2026-10-31).
-  await waitFor(async () => (await areas.getByLabel('What happens at Housekeeping').inputValue()) === 'USED_UP', 'Housekeeping to read used up')
-  assert((await areas.getByLabel('What happens at Kitchen').inputValue()) === 'WORKED', 'the Kitchen does not read worked with')
-  assert((await areas.getByLabel('What happens at Store').inputValue()) === 'STORED', 'the Store does not read stored')
+  await areas.locator('[data-area="Housekeeping"]').getByText("uses what it's given").waitFor()
+  await areas.locator('[data-area="Kitchen"]').getByText('stock is used here').waitFor()
+  await areas.locator('[data-area="Store"]').getByText('stock is kept here').waitFor()
   // Where deliveries arrive is a setting of its own, by the heading - said once (owner's comment).
   const deliveries = areas.getByLabel('Deliveries arrive in')
   assert((await deliveries.locator('option:checked').innerText()) === 'Store', 'deliveries do not arrive in the Store')
@@ -620,6 +620,37 @@ await check('a move line used straight away is used at the Kitchen and never joi
   assert(at.Kitchen === before.Kitchen, `the Kitchen went from ${before.Kitchen} to ${at.Kitchen}`)
 })
 
+await check('"What happens here?" asks in words, explains each answer, and the row says the new one', async () => {
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.goto(`${UI}/app/company/branches`)
+  const areas = page.getByRole('region', { name: `Areas at ${branchName}` })
+  await areas.locator('[data-area="Bar"]').getByRole('button', { name: 'Change Bar' }).click()
+  await page.getByRole('menuitem', { name: 'What happens here?' }).click()
+  const sheet = page.getByRole('dialog', { name: 'What happens at the Bar?' })
+  await sheet.getByText('If a count finds less, it\'s recorded as used').waitFor()
+  await page.waitForTimeout(400)
+  await page.screenshot({ path: SHOTS + '20-what-happens-here.png' })
+  await sheet.getByLabel(/Stock is kept here/).check()
+  await sheet.getByRole('button', { name: 'Save' }).click()
+  await sheet.waitFor({ state: 'hidden' })
+  await areas.locator('[data-area="Bar"]').getByText('stock is kept here').waitFor()
+  await page.screenshot({ path: SHOTS + '21-branches-rows.png' })
+
+  // The same on a phone: the rows, then the panel from the bottom.
+  await page.setViewportSize({ width: 360, height: 780 })
+  await page.goto(`${UI}/app/company/branches`)
+  await areas.locator('[data-area="Bar"]').waitFor()
+  await areas.locator('[data-area="Kitchen"]').scrollIntoViewIfNeeded()
+  await page.screenshot({ path: SHOTS + '22-phone-branches-rows.png' })
+  await areas.locator('[data-area="Kitchen"]').getByRole('button', { name: 'Change Kitchen' }).click()
+  await page.getByRole('menuitem', { name: 'What happens here?' }).click()
+  await page.getByRole('dialog', { name: 'What happens at the Kitchen?' }).waitFor()
+  await page.waitForTimeout(400)
+  await page.screenshot({ path: SHOTS + '23-phone-what-happens-here.png' })
+  await page.keyboard.press('Escape')
+  await page.setViewportSize({ width: 1280, height: 900 })
+})
+
 await check('a company without areas sees no area word on its sheets or product page, and renames its Store', async () => {
   const shop = await signup('noareas')
   const beans = await createProduct(shop.tokens.accessToken, shop.unique, 'Beans')
@@ -657,7 +688,7 @@ await check('axe: Branches with areas and the add-areas steps have no WCAG 2.2 A
   const sheet = phonePage.getByRole('dialog')
   await sheet.getByRole('heading', { name: `Add areas to ${branchName}` }).waitFor()
   await sheet.getByRole('button', { name: 'Front desk', exact: true }).click()
-  await sheet.getByRole('radiogroup', { name: 'What happens at Front desk' }).waitFor()
+  await sheet.getByLabel('What happens at Front desk').waitFor()
   await phonePage.waitForTimeout(300)
   await phonePage.screenshot({ path: SHOTS + '6-phone-add-sheet.png' })
   found.push(...(await axe(phonePage)).map((v) => `Add sheet: ${v}`))

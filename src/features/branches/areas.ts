@@ -52,7 +52,33 @@ export function figureInArea(product: Product, areaId: string | undefined): numb
  */
 export type AreaKind = 'STORED' | 'WORKED' | 'USED_UP'
 
-export const AREA_KIND_LABEL: Record<AreaKind, string> = { STORED: 'Stored', WORKED: 'Worked with', USED_UP: 'Used up' }
+/**
+ * The three answers in the words people use (owner, 2026-10-31: not "stored / worked with / used up"):
+ * `title` where it's chosen, `like` an example, `means` what it does, and `short` on the area's row.
+ */
+export const AREA_KINDS: Record<AreaKind, { title: string; short: string; like: string; means: string }> = {
+  STORED: {
+    title: 'Stock is kept here',
+    short: 'stock is kept here',
+    like: 'like a store or cold room',
+    means: "Counted. If a count finds less, it's recorded as missing.",
+  },
+  WORKED: {
+    title: 'Stock is used here',
+    short: 'stock is used here',
+    like: 'like a kitchen or bar',
+    means: "Counted. If a count finds less, it's recorded as used (cooked, served), so nobody records every use.",
+  },
+  USED_UP: {
+    title: "It uses what it's given",
+    short: "uses what it's given",
+    like: 'like housekeeping or cleaning',
+    means: 'Not counted. Whatever is sent here is recorded as used the moment it arrives.',
+  },
+}
+
+/** The three answers, in the order they're offered. */
+export const AREA_KIND_ORDER: AreaKind[] = ['STORED', 'WORKED', 'USED_UP']
 
 export function kindOf(area: Pick<Area, 'keepsStock' | 'shortIsUsed'>): AreaKind {
   return !area.keepsStock ? 'USED_UP' : area.shortIsUsed ? 'WORKED' : 'STORED'
