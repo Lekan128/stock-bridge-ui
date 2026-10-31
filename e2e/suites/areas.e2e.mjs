@@ -802,7 +802,7 @@ await check('an area\'s Edit asks what happens there in words, and the row says 
   await areas.locator('[data-area="Kitchen"]').scrollIntoViewIfNeeded()
   await page.screenshot({ path: SHOTS + '22-phone-branches-rows.png' })
   await areas.getByRole('button', { name: 'Edit Kitchen' }).click()
-  await page.getByRole('dialog', { name: 'Edit Kitchen' }).waitFor()
+  await page.getByRole('dialog', { name: 'Edit Kitchen' }).getByRole('group', { name: 'When stock is moved here' }).waitFor()
   await page.waitForTimeout(400)
   await page.screenshot({ path: SHOTS + '23-phone-what-happens-here.png' })
   await page.keyboard.press('Escape')
@@ -816,7 +816,9 @@ await check('the Kitchen confirms what arrives: a move waits, the cook confirms 
   const areas = page.getByRole('region', { name: `Areas at ${branchName}` })
   await areas.getByRole('button', { name: 'Edit Kitchen' }).click()
   const sheet = page.getByRole('dialog', { name: 'Edit Kitchen' })
-  await sheet.getByLabel(/Confirms what arrives/).check()
+  // Its own question, in its own box (owner, 2026-10-31): any kind of area can confirm.
+  await sheet.getByRole('group', { name: 'When stock is moved here' }).getByLabel('Someone here confirms it').check()
+  await sheet.getByText('It waits until someone in the Kitchen says they got it.').waitFor()
   await page.waitForTimeout(300)
   await page.screenshot({ path: SHOTS + '28-confirms-what-arrives.png' })
   await sheet.getByRole('button', { name: 'Save' }).click()
@@ -896,7 +898,7 @@ await check('the Kitchen confirms what arrives: a move waits, the cook confirms 
   // Switched off again: the rest of the suite moves instantly.
   await page.goto(`${UI}/app/company/branches`)
   await areas.getByRole('button', { name: 'Edit Kitchen' }).click()
-  await sheet.getByLabel(/Confirms what arrives/).uncheck()
+  await sheet.getByLabel('It arrives straight away').check()
   await sheet.getByRole('button', { name: 'Save' }).click()
   await sheet.waitFor({ state: 'hidden' })
 })

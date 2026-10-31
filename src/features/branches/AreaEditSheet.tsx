@@ -13,8 +13,10 @@ import { isAppError } from '@/types/api'
 /**
  * Editing one area (owner, 2026-10-31: "renaming takes 3 steps, choosing what is done takes 3 different
  * steps"): everything about it in one Sheet, opened by tapping its row - the way the branch's own Edit
- * works. Its name; what happens there, asked in words with each answer explained (D-A12); and, at the
- * bottom, closing it (or reopening it); and whether it confirms what arrives (Part 4). Save applies the lot. A side panel on a laptop, a bottom sheet on a
+ * works. Its name; two questions, each in its own box with only the chosen answer explained (owner,
+ * 2026-10-31: a fourth card under the three read as a fourth answer) - what happens there (D-A12), and what
+ * happens when stock is moved there (Part 4); and, at the bottom, closing it (or reopening it). Save applies
+ * the lot. A side panel on a laptop, a bottom sheet on a
  * phone. Where deliveries arrive is the branch's setting, in the branch's Edit.
  *
  * @param withAreas false for the Store of a branch that hasn't added areas: only its name is asked.
@@ -90,60 +92,48 @@ export function AreaEditSheet({ area, withAreas, onClose }: { area: Area; withAr
         <TextField id={`area-${area.id}-name`} label="Name" value={name} onChange={(event) => setName(event.target.value)} />
 
         {withAreas && area.active && (
-          <fieldset className="flex flex-col gap-2">
-            <legend className="mb-1 text-sm font-medium text-neutral-800">What happens here?</legend>
-            {AREA_KIND_ORDER.map((option) => {
-              const answer = AREA_KINDS[option]
+          <ChoiceList
+            legend="What happens here?"
+            name={`area-kind-${area.id}`}
+            value={kind}
+            onChange={setKind}
+            disabled={busy != null}
+            options={AREA_KIND_ORDER.map((option) => ({
+              value: option,
+              title: AREA_KINDS[option].title,
+              means: AREA_KINDS[option].means,
               // Where deliveries arrive keeps stock: it can't be an area that uses what it's given.
-              const off = area.delivery && option === 'USED_UP'
-              return (
-                <label
-                  key={option}
-                  className={`flex gap-3 rounded-lg border p-3 ${
-                    kind === option ? 'border-primary-500 bg-primary-50' : 'border-neutral-200 bg-white'
-                  } ${off ? 'opacity-60' : 'cursor-pointer hover:border-neutral-300'}`}
-                >
-                  <input
-                    type="radio"
-                    name={`area-kind-${area.id}`}
-                    value={option}
-                    checked={kind === option}
-                    disabled={off || busy != null}
-                    onChange={() => setKind(option)}
-                    className="mt-1 h-4 w-4 shrink-0"
-                  />
-                  <span className="flex min-w-0 flex-col gap-0.5">
-                    <span className="text-base font-medium text-neutral-900">{answer.title}</span>
-                    <span className="text-sm text-neutral-700">{off ? 'Deliveries arrive here, so it keeps stock.' : answer.means}</span>
-                  </span>
-                </label>
-              )
-            })}
-          </fieldset>
+              ...(area.delivery && option === 'USED_UP' ? { off: 'Deliveries arrive here, so it keeps stock.' } : {}),
+            }))}
+          />
         )}
 
-        {/* Two names on every move, for an area away from the Store (Part 4). Its own question, after what
-            happens there: it's about arriving, not about what's done with it. */}
+        {/* Two names on every move (Part 4): its own question, about arriving - any kind of area can ask it. */}
         {withAreas && area.active && (
-          <label
-            className={`flex cursor-pointer gap-3 rounded-lg border p-3 hover:border-neutral-300 ${
-              confirms ? 'border-primary-500 bg-primary-50' : 'border-neutral-200 bg-white'
-            }`}
-          >
-            <input
-              type="checkbox"
-              checked={confirms}
-              disabled={busy != null}
-              onChange={(event) => setConfirms(event.target.checked)}
-              className="mt-1 h-4 w-4 shrink-0"
-            />
-            <span className="flex min-w-0 flex-col gap-0.5">
-              <span className="text-base font-medium text-neutral-900">Confirms what arrives</span>
-              <span className="text-sm text-neutral-700">
-                Moves to the {name.trim() || area.name} wait until someone there says they got them.
-              </span>
-            </span>
-          </label>
+          <ChoiceList
+            legend="When stock is moved here"
+            name={`area-confirms-${area.id}`}
+            value={confirms ? 'CONFIRM' : 'NOW'}
+            onChange={(value) => setConfirms(value === 'CONFIRM')}
+            disabled={busy != null}
+            options={[
+              {
+                value: 'NOW',
+                title: 'It arrives straight away',
+                means:
+                  kind === 'USED_UP'
+                    ? "It's recorded as used as soon as it's moved."
+                    : `The ${name.trim() || area.name}'s figure goes up as soon as it's moved.`,
+              },
+              {
+                value: 'CONFIRM',
+                title: 'Someone here confirms it',
+                means: `It waits until someone in the ${name.trim() || area.name} says they got it${
+                  kind === 'USED_UP' ? ", then it's recorded as used" : ''
+                }.`,
+              },
+            ]}
+          />
         )}
 
         {problem && (
@@ -183,5 +173,59 @@ export function AreaEditSheet({ area, withAreas, onClose }: { area: Area; withAr
         )}
       </form>
     </Sheet>
+  )
+}
+
+/**
+ * One question as one box: a line per answer, and only the chosen answer explained, under it - short on a phone,
+ * and plainly one question, not a list of separate switches.
+ */
+function ChoiceList<T extends string>({
+  legend,
+  name,
+  value,
+  onChange,
+  disabled,
+  options,
+}: {
+  legend: string
+  name: string
+  value: T
+  onChange: (value: T) => void
+  disabled: boolean
+  /** `off`: why it can't be chosen here, said on its line. */
+  options: { value: T; title: string; means: string; off?: string }[]
+}) {
+  return (
+    <fieldset>
+      <legend className="mb-1.5 text-sm font-medium text-neutral-800">{legend}</legend>
+      <div className="divide-y divide-neutral-100 overflow-hidden rounded-lg border border-neutral-200 bg-white">
+        {options.map((option) => {
+          const chosen = option.value === value
+          return (
+            <label
+              key={option.value}
+              className={`flex gap-3 px-3 py-2.5 ${chosen ? 'bg-primary-50' : ''} ${
+                option.off ? 'opacity-60' : 'cursor-pointer hover:bg-neutral-50'
+              }`}
+            >
+              <input
+                type="radio"
+                name={name}
+                value={option.value}
+                checked={chosen}
+                disabled={option.off != null || disabled}
+                onChange={() => onChange(option.value)}
+                className="mt-1 h-4 w-4 shrink-0"
+              />
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span className={`text-base text-neutral-900 ${chosen ? 'font-medium' : ''}`}>{option.title}</span>
+                {(chosen || option.off) && <span className="text-sm text-neutral-700">{option.off ?? option.means}</span>}
+              </span>
+            </label>
+          )
+        })}
+      </div>
+    </fieldset>
   )
 }
