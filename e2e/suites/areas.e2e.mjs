@@ -584,8 +584,13 @@ await check('a barman in the Bar and the Kitchen chooses where this phone is, an
   await barPage.getByRole('button', { name: 'Stock in' }).first().click()
   const barSheet = barPage.getByRole('dialog')
   await barSheet.getByRole('heading', { name: /Stock in · Bar/ }).waitFor()
-  assert((await barSheet.getByText('Which area?').count()) === 0, 'the barman is asked which area')
+  // The question stays, the Bar already picked; another area is one tap, for this record only (owner,
+  // 2026-10-31: no going back and forth to the top bar).
+  assert((await barSheet.getByRole('radio', { name: 'Bar' }).getAttribute('aria-checked')) === 'true', 'the Bar is not picked')
+  await barSheet.getByRole('radio', { name: 'Kitchen' }).click()
+  await barSheet.getByRole('heading', { name: /Stock in · Kitchen/ }).waitFor()
   await barPage.keyboard.press('Escape')
+  await barPage.getByRole('button', { name: 'Area: Bar. Change area' }).waitFor()
   await barPage.getByRole('button', { name: 'Area: Bar. Change area' }).click()
   await barPage.getByRole('menuitemradio', { name: 'Kitchen' }).click()
   await barPage.getByRole('button', { name: 'Stock in' }).first().click()
@@ -688,10 +693,10 @@ await check('the top bar is where you are: All my areas sums his areas, one area
   await page.getByRole('menuitemradio', { name: 'Store' }).click()
   await page.getByText('On hand in the Store').waitFor()
   await waitFor(async () => (await page.locator('[data-stock-figure]').first().innerText()).startsWith(String(at.Store)), `the Store's ${at.Store}`)
-  // …and records there without asking.
+  // …and records there: the Store already picked.
   await page.getByRole('button', { name: 'Stock in' }).first().click()
   await page.getByRole('dialog').getByRole('heading', { name: /Stock in · Store/ }).waitFor()
-  assert((await page.getByRole('dialog').getByText('Which area?').count()) === 0, 'the owner on the Store is asked which area')
+  assert((await page.getByRole('dialog').getByRole('radio', { name: 'Store' }).getAttribute('aria-checked')) === 'true', 'the Store is not picked')
   await page.keyboard.press('Escape')
   await page.getByRole('button', { name: 'Area: Store. Change area' }).click()
   await page.getByRole('menuitemradio', { name: 'All areas' }).click()

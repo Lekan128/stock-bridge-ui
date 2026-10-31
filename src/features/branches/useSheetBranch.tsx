@@ -168,23 +168,25 @@ export function useSheetArea(branch: Branch | null): {
   if (!branch || !hasAreas(branch) || areas.length === 0 || (!work.limited && areas.length < 2)) {
     return { titleSuffix: '', field: null, areaId: undefined, areaName: undefined, remember: () => {}, choices: [], choose: () => {} }
   }
-  // Where this phone is for them (the cook's Kitchen, the barman's Bar): no question, the title says it.
-  if (work.area) {
-    const here = work.area
+  // The area chosen in the top bar is where it records, said in the title - one area to choose from, no
+  // question. With more, the question stays, that area already picked: stocking in at the Store from the
+  // Kitchen is one tap here, not a trip to the top bar and back (owner, 2026-10-31).
+  const last = read(user?.id ? lastAreaKey(user.id, branch.id) : null)
+  const fallback =
+    work.area ?? areas.find((area) => area.id === last) ?? (work.limited ? undefined : deliveryArea(branch)) ?? areas[0]
+  const current =
+    chosen?.branchId === branch.id ? (areas.find((area) => area.id === chosen.areaId) ?? fallback) : fallback
+  if (areas.length < 2) {
     return {
-      titleSuffix: ` · ${here.name}`,
+      titleSuffix: ` · ${current.name}`,
       field: null,
-      areaId: here.id,
-      areaName: here.name,
+      areaId: current.id,
+      areaName: current.name,
       remember: () => {},
       choices: areas,
       choose: work.choose,
     }
   }
-  const last = read(user?.id ? lastAreaKey(user.id, branch.id) : null)
-  const fallback = areas.find((area) => area.id === last) ?? (work.limited ? undefined : deliveryArea(branch)) ?? areas[0]
-  const current =
-    chosen?.branchId === branch.id ? (areas.find((area) => area.id === chosen.areaId) ?? fallback) : fallback
   const labelId = `sheet-area-label-${branch.id}`
   const field = (
     <div>
@@ -219,10 +221,9 @@ export function useSheetArea(branch: Branch | null): {
     field,
     areaId: current.id,
     areaName: current.name,
+    // A panel's answer is for that record only: where you are stays as the top bar says (Part 3.6).
     remember: () => {
       if (user?.id) write(lastAreaKey(user.id, branch.id), current.id)
-      // Someone in a few areas answers "Which area?" once: the answer is where this phone is for them.
-      if (work.limited) work.choose(current.id)
     },
     choices: areas,
     // Quick mode's title (Part 3.6): picking an area there makes it where you are, for everyone.
