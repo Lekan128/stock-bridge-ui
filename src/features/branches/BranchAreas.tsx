@@ -30,13 +30,15 @@ export function BranchAreas({
   onAddAreas: () => void
 }) {
   const queryClient = useQueryClient()
-  const [editing, setEditing] = useState<Area | null>(null)
+  // By id, so the open panel follows the area as the list is read again (a change just made elsewhere).
+  const [editingId, setEditing] = useState<string | null>(null)
   const [savingDelivery, setSavingDelivery] = useState(false)
   const [deliveryProblem, setDeliveryProblem] = useState<string | null>(null)
   // Changing an area is for someone who works at the branch (the server checks it again).
   const mayChange = branch.active && branch.canRecord
   const areas = branch.areas ?? []
   const withAreas = hasAreas(branch)
+  const editing = areas.find((area) => area.id === editingId)
   const delivery = areas.find((area) => area.delivery)
   // Where deliveries could arrive: open areas that keep stock.
   const stocking = areas.filter((area) => area.active && area.keepsStock)
@@ -129,7 +131,7 @@ export function BranchAreas({
                 // The whole row opens the area's Edit: one way to change it.
                 <button
                   type="button"
-                  onClick={() => setEditing(area)}
+                  onClick={() => setEditing(area.id)}
                   disabled={!online}
                   aria-label={`Edit ${area.name}`}
                   className="-mx-2 flex min-h-12 w-[calc(100%+1rem)] items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-neutral-50 disabled:cursor-not-allowed"

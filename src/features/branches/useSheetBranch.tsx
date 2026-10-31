@@ -3,7 +3,7 @@ import { useAuth } from '@/auth/useAuth'
 import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { deliveryArea, figureInArea, hasAreas, stockAreas } from '@/features/branches/areas'
 import { useWorkArea } from '@/features/branches/workArea'
-import type { Branch } from '@/features/branches/types'
+import type { Area, Branch } from '@/features/branches/types'
 import { SheetChoices } from '@/features/branches/SheetChoices'
 import type { Product } from '@/features/products/types'
 
@@ -154,6 +154,10 @@ export function useSheetArea(branch: Branch | null): {
   areaId: string | undefined
   areaName: string | undefined
   remember: () => void
+  /** The areas there's a choice of here (quick mode's title offers them); empty or one: no choice. */
+  choices: Area[]
+  /** Choose `areaId` and remember it - for someone placed in areas, as where this phone is for them. */
+  choose: (areaId: string) => void
 } {
   const { user } = useAuth()
   const work = useWorkArea(branch)
@@ -162,12 +166,20 @@ export function useSheetArea(branch: Branch | null): {
   // The choice is per branch: switching the sheet's branch must never carry the Kitchen of one to the next.
   const [chosen, setChosen] = useState<{ branchId: string; areaId: string } | null>(null)
   if (!branch || !hasAreas(branch) || areas.length === 0 || (!work.limited && areas.length < 2)) {
-    return { titleSuffix: '', field: null, areaId: undefined, areaName: undefined, remember: () => {} }
+    return { titleSuffix: '', field: null, areaId: undefined, areaName: undefined, remember: () => {}, choices: [], choose: () => {} }
   }
   // Where this phone is for them (the cook's Kitchen, the barman's Bar): no question, the title says it.
   if (work.area) {
     const here = work.area
-    return { titleSuffix: ` · ${here.name}`, field: null, areaId: here.id, areaName: here.name, remember: () => {} }
+    return {
+      titleSuffix: ` · ${here.name}`,
+      field: null,
+      areaId: here.id,
+      areaName: here.name,
+      remember: () => {},
+      choices: areas,
+      choose: work.choose,
+    }
   }
   const last = read(user?.id ? lastAreaKey(user.id, branch.id) : null)
   const fallback = areas.find((area) => area.id === last) ?? (work.limited ? undefined : deliveryArea(branch)) ?? areas[0]
@@ -211,6 +223,12 @@ export function useSheetArea(branch: Branch | null): {
       if (user?.id) write(lastAreaKey(user.id, branch.id), current.id)
       // Someone in a few areas answers "Which area?" once: the answer is where this phone is for them.
       if (work.limited) work.choose(current.id)
+    },
+    choices: areas,
+    choose: (areaId: string) => {
+      setChosen({ branchId: branch.id, areaId })
+      if (user?.id) write(lastAreaKey(user.id, branch.id), areaId)
+      if (work.limited) work.choose(areaId)
     },
   }
 }

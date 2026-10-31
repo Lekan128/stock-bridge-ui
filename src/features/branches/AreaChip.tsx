@@ -1,12 +1,10 @@
 import { useRef, useState } from 'react'
-import { Check, ChevronDown, LayoutGrid } from 'lucide-react'
+import { ChevronDown, LayoutGrid } from 'lucide-react'
 import { useClickOutside } from '@/hooks/useClickOutside'
 import { useToast } from '@/components/useToast'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
+import { AreaMenu } from '@/features/branches/AreaMenu'
 import { myAreas, useWorkArea } from '@/features/branches/workArea'
-
-const itemClassName =
-  'flex min-h-11 w-full items-center gap-2 px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50 focus-visible:bg-neutral-50'
 
 /**
  * Where in the branch this phone is, for someone placed in particular areas (STOCK_AREAS_PART_3.md,
@@ -55,41 +53,18 @@ export function AreaChip() {
         <ChevronDown className="h-4 w-4 shrink-0 text-neutral-500" aria-hidden />
       </button>
       {open && (
-        <div
-          role="menu"
-          aria-label="Where are you working on this phone?"
-          className="absolute right-0 z-50 mt-2 w-64 max-w-[calc(100vw-2rem)] rounded-lg border border-neutral-200 bg-white py-1 shadow-lg"
-        >
-          <p role="none" className="px-3 pt-2 pb-1 text-xs font-medium text-neutral-600">
-            Where are you working on this phone?
-          </p>
-          {work.areas.map((area) => {
-            const current = work.area?.id === area.id
-            return (
-              <button
-                key={area.id}
-                type="button"
-                role="menuitemradio"
-                aria-checked={current}
-                onClick={() => {
-                  setOpen(false)
-                  work.choose(area.id)
-                  if (!current) showToast(`Now in the ${area.name}`, 'info')
-                }}
-                className={itemClassName}
-              >
-                <Check className={`h-4 w-4 shrink-0 ${current ? 'text-primary-600' : 'invisible'}`} aria-hidden />
-                <span className="min-w-0 break-words">{area.name}</span>
-              </button>
-            )
-          })}
-          {usesOnly.length > 0 && (
-            <p role="none" className="border-t border-neutral-100 px-3 pt-2 pb-2.5 text-xs text-neutral-600">
-              {usesOnly.map((area) => area.name).join(' and ')}{' '}
-              {usesOnly.length === 1 ? "uses what it's given" : "use what they're given"}, so there's nothing to record there.
-            </p>
-          )}
-        </div>
+        <AreaMenu
+          areas={work.areas}
+          currentId={work.area?.id}
+          usesOnly={usesOnly}
+          className="absolute right-0 mt-2 w-64 max-w-[calc(100vw-2rem)]"
+          onPick={(area) => {
+            setOpen(false)
+            if (area.id === work.area?.id) return
+            work.choose(area.id)
+            showToast(`Now in the ${area.name}`, 'info')
+          }}
+        />
       )}
     </div>
   )

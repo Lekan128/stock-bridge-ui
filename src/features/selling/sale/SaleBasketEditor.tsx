@@ -37,6 +37,11 @@ export interface SaleBasketEditorProps {
   onRecorded: (sale: RecordedSale) => void
   /** A product to start with - the product page's Sell button. Added once. */
   startProduct?: Product | null
+  /**
+   * Where the sale comes from when the screen already says (quick mode's title, owner 2026-10-31): the basket
+   * then asks nothing. `null`: no area at this branch. Absent: the basket asks "Which area?" itself.
+   */
+  areaId?: string | null
 }
 
 /**
@@ -44,7 +49,7 @@ export interface SaleBasketEditorProps {
  * scan or search to add, one row a line until tapped open, one button to record it all. Shaped like
  * a till slip; nothing about cost or profit on it, ever (plan principle 11).
  */
-export function SaleBasketEditor({ basket, onRecorded, startProduct }: SaleBasketEditorProps) {
+export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId }: SaleBasketEditorProps) {
   const { user } = useAuth()
   const { showToast } = useToast()
   const online = useOnlineStatus()
@@ -97,8 +102,9 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct }: SaleBaske
     setRecording(true)
     setAskUnpriced(false)
     const usualToSet = basket.lines.filter((line) => makeUsual.has(line.key))
-    const sale = await basket.record(area.areaId)
-    area.remember()
+    const sale = await basket.record(areaId !== undefined ? (areaId ?? undefined) : area.areaId)
+    // The screen chose the area (quick mode): it remembers it, not the basket's own question.
+    if (areaId === undefined) area.remember()
     setRecording(false)
     setOpenKey(null)
     setMakeUsual(new Set())
@@ -118,7 +124,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct }: SaleBaske
 
   return (
     <>
-      {area.field}
+      {areaId === undefined && area.field}
       <div className="relative">
         <Search className="pointer-events-none absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-neutral-500" aria-hidden="true" />
         <label htmlFor="sale-search" className="sr-only">

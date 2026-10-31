@@ -315,7 +315,9 @@ await check('money is exact: 24 pieces of a ₦5,000 carton record as ₦5,000, 
   await page.getByLabel('How many Peak (sa)').fill('24')
   await line(peak).getByText('₦5,000', { exact: true }).waitFor()
   await scan(rice)
-  await page.getByLabel(/Price each/).fill('1,500')
+  // Rice's own price, once its line has opened - not whichever line is still open from before (a race that
+  // typed the price into Peak's line now and then).
+  await line(rice).getByLabel(/Price each/).fill('1,500')
   await line(rice).getByText('₦1,500', { exact: true }).waitFor()
   await page.getByRole('button', { name: 'Record sale ₦6,500' }).click()
   await page.locator('[data-receipt="synced"]').waitFor()

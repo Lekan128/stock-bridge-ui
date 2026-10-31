@@ -4,6 +4,7 @@ import { hasAreas } from '@/features/branches/areas'
 import { CountShortfall } from '@/features/branches/CountShortfall'
 import { areaShortAs, type ShortAs } from '@/features/branches/areas'
 import { useWorkArea } from '@/features/branches/workArea'
+import { QuickAreaTitle } from '@/features/quick/QuickAreaTitle'
 import { MoveEditor, type Moved } from '@/features/moves/MoveEditor'
 import { movesApi } from '@/features/moves/movesApi'
 import { usePendingStock } from '@/features/outbox/useOutbox'
@@ -241,7 +242,11 @@ export function QuickModePage() {
         </button>
         <h1 id="quick-mode-title" className="text-base font-semibold">
           {/* Where every scan here lands (UX §5.2): "Quick mode · Oshodi". */}
-          Quick mode{branchHere ? ` · ${branchHere}` : ''}{mode === 'move' ? '' : area.titleSuffix}
+          Quick mode{branchHere ? ` · ${branchHere}` : ''}
+          {/* Where every scan lands, changed right here (Move has its own From and To). */}
+          {mode !== 'move' && (
+            <QuickAreaTitle areaId={area.areaId} areaName={area.areaName} choices={area.choices} onChoose={area.choose} />
+          )}
         </h1>
         <SyncPill large />
       </header>
@@ -294,14 +299,13 @@ export function QuickModePage() {
           </div>
           {mode === 'sell' && <MySalesToday refreshKey={salesRecorded} />}
           {mode === 'out' && <QuickReason value={outReason} onChange={setOutReason} />}
-          {mode !== 'sell' && mode !== 'move' && area.field}
         </div>
 
         {flash ? (
           <StampFlash kind={flash.kind} text={flash.text} next={mode === 'sell' ? 'Next customer…' : 'Next item…'} />
         ) : mode === 'sell' ? (
           <div className="flex flex-col gap-4">
-            <SaleBasketEditor basket={basket} onRecorded={saleRecorded} />
+            <SaleBasketEditor basket={basket} onRecorded={saleRecorded} areaId={area.areaId ?? null} />
           </div>
         ) : mode === 'move' ? (
           // A fresh editor after each move: the stamp, then the next one.
