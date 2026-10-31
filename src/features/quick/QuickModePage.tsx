@@ -96,6 +96,8 @@ interface SessionEntry {
   sale?: RecordedSale
   /** A move between areas that reached the server, for Undo (a queued one is `opId`). */
   moveId?: string
+  /** Where it was recorded, as the title said at the time (owner, 2026-10-31): "Stock in · 1 set · Store". */
+  areaName?: string
   undone?: boolean
 }
 
@@ -210,11 +212,14 @@ export function QuickModePage() {
     )
   }
 
-  function recorded(entry: SessionEntry, kind: StampKind) {
+  function recorded(recordedEntry: SessionEntry, kind: StampKind) {
     area.remember()
+    // A move says its own route; everything else lands in the area in the title.
+    const entry = recordedEntry.mode === 'move' || !area.areaName ? recordedEntry : { ...recordedEntry, areaName: area.areaName }
+    const where = entry.areaName ? ` · ${entry.areaName}` : ''
     setSession((current) => [entry, ...current])
     setProduct(null)
-    setFlash({ kind, text: entry.sale ? `Sale · ${entry.summary}` : `${entry.summary} · ${entry.productName}` })
+    setFlash({ kind, text: entry.sale ? `Sale · ${entry.summary}${where}` : `${entry.summary} · ${entry.productName}${where}` })
     window.setTimeout(() => {
       setFlash(null)
       searchRef.current?.focus()
@@ -799,6 +804,7 @@ function SessionList({ entries, onUndone }: { entries: SessionEntry[]; onUndone:
               <span className={`block truncate text-base font-medium ${entry.undone ? 'line-through' : ''}`}>{entry.productName}</span>
               <span className="block truncate text-sm text-neutral-500 tabular-nums">
                 {MODES.find((m) => m.value === entry.mode)?.verb} · {entry.summary}
+                {entry.areaName ? ` · ${entry.areaName}` : ''}
               </span>
             </span>
             {entry.undone ? (

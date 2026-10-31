@@ -442,12 +442,20 @@ await check('quick mode at a branch with areas: Move in the row, Count a link be
   await page.screenshot({ path: SHOTS + '13c-quick-mode-area-menu-laptop.png' })
   // Escape closes the menu, not quick mode.
   await page.keyboard.press('Escape')
-  await page.getByRole('menu', { name: 'Where are you working on this phone?' }).waitFor({ state: 'hidden' })
+  await page.getByRole('menu', { name: 'Record in' }).waitFor({ state: 'hidden' })
   await page.getByRole('heading', { name: /Quick mode/ }).waitFor()
   await page.setViewportSize({ width: 360, height: 780 })
   await page.getByRole('button', { name: 'Count stock' }).click()
   await page.getByText("Count what's on the shelf.", { exact: false }).waitFor()
   await page.getByRole('button', { name: 'Done counting' }).click()
+  // What's recorded says where it went: "Stock in · 1 piece · Kitchen" (owner, 2026-10-31).
+  await row.getByRole('button', { name: 'Stock in' }).click()
+  await page.locator('#quick-search').fill('Rice')
+  await page.getByRole('button', { name: /^Rice/ }).first().click()
+  await page.getByRole('group', { name: 'Keypad' }).getByRole('button', { name: '1', exact: true }).click()
+  await page.getByRole('button', { name: /^Stock in 1 / }).click()
+  await page.getByRole('region', { name: /This session/ }).getByText(/Stock in · 1 piece · Kitchen/).waitFor()
+  await page.screenshot({ path: SHOTS + '13d-quick-session-area.png' })
   // Move is a tab like the others: moved, the stamp, and the move in This session with Undo.
   await row.getByRole('button', { name: 'Move' }).click()
   await page.getByRole('button', { name: 'Add all' }).click()

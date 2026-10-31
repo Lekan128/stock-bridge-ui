@@ -55,9 +55,8 @@ export function QuickAreaTitle({
         <AreaMenu
           areas={choices}
           currentId={areaId}
-          // A phone: the screen's width, just under the header (centred under a short name it would run off
-          // the edge). Wider: under the name.
-          className="fixed inset-x-4 top-[calc(4rem+env(safe-area-inset-top))] text-left font-normal sm:absolute sm:inset-x-auto sm:top-full sm:left-1/2 sm:mt-2 sm:w-64 sm:-translate-x-1/2"
+          desktopClassName="sm:absolute sm:top-full sm:left-1/2 sm:mt-2 sm:-translate-x-1/2"
+          onClose={() => setOpen(false)}
           onPick={(area) => {
             setOpen(false)
             if (area.id !== areaId) onChoose(area.id)
