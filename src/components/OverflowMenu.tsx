@@ -18,8 +18,6 @@ export interface OverflowMenuProps {
   align?: 'left' | 'right'
   /** `above` for a "⋯" in a bar along the bottom of the screen, whose menu would otherwise open off it. */
   side?: 'below' | 'above'
-  /** No border: a "⋯" on every row of a list, where a column of boxes would be louder than the rows. */
-  quiet?: boolean
 }
 
 /**
@@ -27,7 +25,7 @@ export interface OverflowMenuProps {
  * header carries its main action and nothing loud beside it. Arrow keys move between items,
  * Escape closes and puts focus back on the button.
  */
-export function OverflowMenu({ items, label = 'More actions', align = 'right', side = 'below', quiet = false }: OverflowMenuProps) {
+export function OverflowMenu({ items, label = 'More actions', align = 'right', side = 'below' }: OverflowMenuProps) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -67,9 +65,7 @@ export function OverflowMenu({ items, label = 'More actions', align = 'right', s
             setOpen(true)
           }
         }}
-        className={`inline-flex items-center justify-center rounded-md text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 focus-visible:ring-offset-2 ${
-          quiet ? 'h-11 w-11 hover:bg-neutral-100' : 'h-10 w-10 border border-neutral-200 bg-white hover:bg-neutral-50'
-        }`}
+        className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 focus-visible:ring-offset-2"
       >
         <MoreHorizontal className="h-5 w-5" aria-hidden="true" />
       </button>

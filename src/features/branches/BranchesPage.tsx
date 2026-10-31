@@ -7,7 +7,8 @@ import { TextField } from '@/components/TextField'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
 import { formatNairaWhole } from '@/utils/money'
-import { branchesApi } from '@/features/branches/branchesApi'
+import { areasApi, branchesApi } from '@/features/branches/branchesApi'
+import { hasAreas } from '@/features/branches/areas'
 import { BRANCHES_KEY } from '@/features/branches/BranchProvider'
 import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { AddBranchFlow } from '@/features/branches/AddBranchFlow'
@@ -158,8 +159,13 @@ export function BranchesPage() {
           busy={busy === editingBranch.id}
           problem={problem?.branchId === editingBranch.id ? problem.message : null}
           onCancel={() => setEditing(null)}
-          onSave={(name, phone, address) =>
-            void act(editingBranch, () => branchesApi.update(editingBranch.id, { name, phone, address }))
+          onSave={(name, phone, address, deliveryAreaId) =>
+            void act(editingBranch, async () => {
+              await branchesApi.update(editingBranch.id, { name, phone, address })
+              // Where deliveries arrive (the branch's default for every delivery), when it changed.
+              const current = editingBranch.areas?.find((area) => area.delivery)
+              if (deliveryAreaId && deliveryAreaId !== current?.id) await areasApi.update(deliveryAreaId, { delivery: true })
+            })
           }
         />
       )}
@@ -167,7 +173,11 @@ export function BranchesPage() {
   )
 }
 
-/** A branch's name, phone and address: three fields, so a `Sheet` (DESIGN.md) rather than a form in its row. */
+/**
+ * A branch's name, phone and address, and - once it has areas - where deliveries arrive (owner, 2026-10-31:
+ * one default for the branch, set here; a single delivery can still go elsewhere from its own sheet). A
+ * `Sheet` (DESIGN.md) rather than a form in its row.
+ */
 function BranchEditor({
   branch,
   busy,
@@ -179,8 +189,10 @@ function BranchEditor({
   busy: boolean
   problem: string | null
   onCancel: () => void
-  onSave: (name: string, phone: string, address: string) => void
+  onSave: (name: string, phone: string, address: string, deliveryAreaId: string | undefined) => void
 }) {
+  const stocking = hasAreas(branch) ? (branch.areas ?? []).filter((area) => area.active && area.keepsStock) : []
+  const [deliveryAreaId, setDeliveryAreaId] = useState(branch.areas?.find((area) => area.delivery)?.id)
   const [name, setName] = useState(branch.name)
   const [phone, setPhone] = useState(branch.phone ?? '')
   const [address, setAddress] = useState(branch.address ?? '')
@@ -206,12 +218,32 @@ function BranchEditor({
         className="flex flex-col gap-4"
         onSubmit={(event) => {
           event.preventDefault()
-          onSave(name.trim(), phone.trim(), address.trim())
+          onSave(name.trim(), phone.trim(), address.trim(), deliveryAreaId)
         }}
       >
         <TextField id={`branch-${branch.id}-name`} label="Name" value={name} onChange={(event) => setName(event.target.value)} />
         <TextField id={`branch-${branch.id}-phone`} label="Phone (optional)" value={phone} onChange={(event) => setPhone(event.target.value)} />
         <TextField id={`branch-${branch.id}-address`} label="Address (optional)" value={address} onChange={(event) => setAddress(event.target.value)} />
+        {stocking.length > 1 && (
+          <div>
+            <label htmlFor={`branch-${branch.id}-deliveries`} className="mb-1.5 block text-sm font-medium text-neutral-700">
+              Deliveries arrive in
+            </label>
+            <select
+              id={`branch-${branch.id}-deliveries`}
+              value={deliveryAreaId ?? ''}
+              onChange={(event) => setDeliveryAreaId(event.target.value)}
+              className="min-h-11 w-full rounded-md border border-neutral-300 bg-white px-3 text-base text-neutral-900 sm:text-sm"
+            >
+              {stocking.map((area) => (
+                <option key={area.id} value={area.id}>
+                  {area.name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1.5 text-xs text-neutral-600">Where a delivery goes unless whoever records it picks another area.</p>
+          </div>
+        )}
         {problem && (
           <p role="alert" className="text-sm text-danger-700">
             {problem}

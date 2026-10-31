@@ -161,14 +161,11 @@ await check('the owner adds Kitchen, Bar and Housekeeping in one sheet; everythi
   await page.getByRole('status').filter({ hasText: `${branchName} now has 4 areas. Everything you have is in the Store.` }).waitFor()
 
   const areas = page.getByRole('region', { name: `Areas at ${branchName}` })
-  // What happens in each area is on its row, as a choice (owner's comment, 2026-10-31).
+  // Each row says the area in words: what happens there, and where deliveries arrive (owner, 2026-10-31).
   await areas.locator('[data-area="Housekeeping"]').getByText("uses what it's given").waitFor()
   await areas.locator('[data-area="Kitchen"]').getByText('stock is used here').waitFor()
-  await areas.locator('[data-area="Store"]').getByText('stock is kept here').waitFor()
-  // Where deliveries arrive is a setting of its own, by the heading - said once (owner's comment).
-  const deliveries = areas.getByLabel('Deliveries arrive in')
-  assert((await deliveries.locator('option:checked').innerText()) === 'Store', 'deliveries do not arrive in the Store')
-  assert((await areas.getByText('deliveries arrive here').count()) === 0, 'the delivery area is also noted on its row')
+  await areas.locator('[data-area="Store"]').getByText('stock is kept here · deliveries arrive here').waitFor()
+  assert((await areas.getByText('deliveries arrive here').count()) === 1, 'more than one row says deliveries arrive there')
   await page.screenshot({ path: SHOTS + '3-branches-with-areas.png' })
   const at = await areaFigures(ownerToken, rice.id)
   assert(at.Store === 10 && at.Kitchen === 0 && at.Bar === 0, `figures ${JSON.stringify(at)}`)
@@ -235,31 +232,45 @@ await check('a stock-out from the Kitchen is judged against the Kitchen, and the
 })
 
 // ------------------------------------------------------------------------------------------ 5
-await check('the empty Bar closes and reopens from its menu; the Store, where deliveries arrive, offers no Close', async () => {
+await check("deliveries are the branch's setting; the empty Bar closes and reopens from its Edit; the Store offers no Close", async () => {
   await page.goto(`${UI}/app/company/branches`)
   const areas = page.getByRole('region', { name: `Areas at ${branchName}` })
-  // Deliveries move from the setting, and back.
-  const deliveries = areas.getByLabel('Deliveries arrive in')
-  await deliveries.selectOption({ label: 'Bar' })
-  await waitFor(async () => (await api('/api/branches', { token: ownerToken })).json.branches[0].areas.find((a) => a.delivery)?.name === 'Bar', 'deliveries to arrive in the Bar')
-  await deliveries.selectOption({ label: 'Store' })
-  await waitFor(async () => (await api('/api/branches', { token: ownerToken })).json.branches[0].areas.find((a) => a.delivery)?.name === 'Store', 'deliveries to arrive in the Store again')
-  const bar = areas.locator('[data-area="Bar"]')
-  await bar.getByRole('button', { name: 'Change Bar' }).click()
-  await page.screenshot({ path: SHOTS + '4-area-menu.png' })
-  await page.getByRole('menuitem', { name: 'Close' }).click()
-  await bar.getByText('Closed').waitFor()
-  await bar.getByRole('button', { name: 'Change Bar' }).click()
-  await page.getByRole('menuitem', { name: 'Reopen' }).click()
-  await bar.getByText('0 products').waitFor()
-  await areas.locator('[data-area="Store"]').getByRole('button', { name: 'Change Store' }).click()
-  assert((await page.getByRole('menuitem', { name: 'Close' }).count()) === 0, 'the Store offers Close')
+  // Where deliveries arrive is the branch's default, in the branch's Edit (owner, 2026-10-31).
+  const editBranch = async (deliveriesTo) => {
+    await page.getByRole('button', { name: 'Edit', exact: true }).first().click()
+    const sheet = page.getByRole('dialog', { name: `Edit ${branchName}` })
+    await sheet.getByLabel('Deliveries arrive in').selectOption({ label: deliveriesTo })
+    await sheet.getByRole('button', { name: 'Save' }).click()
+    await sheet.waitFor({ state: 'hidden' })
+  }
+  await editBranch('Bar')
+  await areas.locator('[data-area="Bar"]').getByText('deliveries arrive here').waitFor()
+  await editBranch('Store')
+  await areas.locator('[data-area="Store"]').getByText('deliveries arrive here').waitFor()
+
+  // One way to change an area: tap its row, and everything about it is in one Edit panel.
+  const edit = page.getByRole('dialog', { name: 'Edit Bar' })
+  await areas.getByRole('button', { name: 'Edit Bar' }).click()
+  await page.waitForTimeout(300)
+  await page.screenshot({ path: SHOTS + '4-area-edit.png' })
+  await edit.getByRole('button', { name: 'Close Bar' }).click()
+  await edit.waitFor({ state: 'hidden' })
+  await areas.locator('[data-area="Bar"]').getByText('Closed').waitFor()
+  await areas.getByRole('button', { name: 'Edit Bar' }).click()
+  await edit.getByRole('button', { name: 'Reopen Bar' }).click()
+  await edit.waitFor({ state: 'hidden' })
+  await areas.locator('[data-area="Bar"]').getByText('0 products').waitFor()
+  await areas.getByRole('button', { name: 'Edit Store' }).click()
+  const store = page.getByRole('dialog', { name: 'Edit Store' })
+  await store.getByLabel('Name').waitFor()
+  assert((await store.getByRole('button', { name: /^Close Store/ }).count()) === 0, 'the Store offers Close')
   await page.keyboard.press('Escape')
-  // The Kitchen holds 1: the server refuses, in its own words.
-  const kitchen = areas.locator('[data-area="Kitchen"]')
-  await kitchen.getByRole('button', { name: 'Change Kitchen' }).click()
-  await page.getByRole('menuitem', { name: 'Close' }).click()
+  // The Kitchen holds 1: the server refuses, in its own words, in the panel.
+  await areas.getByRole('button', { name: 'Edit Kitchen' }).click()
+  const kitchen = page.getByRole('dialog', { name: 'Edit Kitchen' })
+  await kitchen.getByRole('button', { name: 'Close Kitchen' }).click()
   await kitchen.getByRole('alert').getByText('Kitchen still has 1 item.').waitFor()
+  await page.keyboard.press('Escape')
 })
 
 // ----------------------------------------------------------------------------------------- 5b
@@ -620,13 +631,12 @@ await check('a move line used straight away is used at the Kitchen and never joi
   assert(at.Kitchen === before.Kitchen, `the Kitchen went from ${before.Kitchen} to ${at.Kitchen}`)
 })
 
-await check('"What happens here?" asks in words, explains each answer, and the row says the new one', async () => {
+await check('an area\'s Edit asks what happens there in words, and the row says the new answer', async () => {
   await page.setViewportSize({ width: 1280, height: 900 })
   await page.goto(`${UI}/app/company/branches`)
   const areas = page.getByRole('region', { name: `Areas at ${branchName}` })
-  await areas.locator('[data-area="Bar"]').getByRole('button', { name: 'Change Bar' }).click()
-  await page.getByRole('menuitem', { name: 'What happens here?' }).click()
-  const sheet = page.getByRole('dialog', { name: 'What happens at the Bar?' })
+  await areas.getByRole('button', { name: 'Edit Bar' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Edit Bar' })
   await sheet.getByText('If a count finds less, it\'s recorded as used').waitFor()
   await page.waitForTimeout(400)
   await page.screenshot({ path: SHOTS + '20-what-happens-here.png' })
@@ -642,9 +652,8 @@ await check('"What happens here?" asks in words, explains each answer, and the r
   await areas.locator('[data-area="Bar"]').waitFor()
   await areas.locator('[data-area="Kitchen"]').scrollIntoViewIfNeeded()
   await page.screenshot({ path: SHOTS + '22-phone-branches-rows.png' })
-  await areas.locator('[data-area="Kitchen"]').getByRole('button', { name: 'Change Kitchen' }).click()
-  await page.getByRole('menuitem', { name: 'What happens here?' }).click()
-  await page.getByRole('dialog', { name: 'What happens at the Kitchen?' }).waitFor()
+  await areas.getByRole('button', { name: 'Edit Kitchen' }).click()
+  await page.getByRole('dialog', { name: 'Edit Kitchen' }).waitFor()
   await page.waitForTimeout(400)
   await page.screenshot({ path: SHOTS + '23-phone-what-happens-here.png' })
   await page.keyboard.press('Escape')
@@ -666,11 +675,12 @@ await check('a company without areas sees no area word on its sheets or product 
   assert((await shopPage.locator('[data-area-breakdown]').count()) === 0, 'an area line on the product page')
   await shopPage.keyboard.press('Escape')
   await shopPage.goto(`${UI}/app/company/branches`)
-  const store = shopPage.locator('[data-area="Store"]')
-  await store.getByRole('button', { name: 'Change Store' }).click()
-  await shopPage.getByRole('menuitem', { name: 'Rename' }).click()
-  await shopPage.getByLabel('Area name').fill('Shop floor')
-  await shopPage.getByRole('button', { name: 'Save' }).click()
+  await shopPage.getByRole('button', { name: 'Edit Store' }).click()
+  const storeSheet = shopPage.getByRole('dialog', { name: 'Edit Store' })
+  // Before areas, only its name: nothing about counts or closing.
+  assert((await storeSheet.getByText('What happens here?').count()) === 0, 'the lone Store is asked what happens there')
+  await storeSheet.getByLabel('Name').fill('Shop floor')
+  await storeSheet.getByRole('button', { name: 'Save' }).click()
   await shopPage.locator('[data-area="Shop floor"]').getByText('where all your stock is now').waitFor()
   await shopContext.close()
 })
