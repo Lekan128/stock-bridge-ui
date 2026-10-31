@@ -809,6 +809,98 @@ await check('an area\'s Edit asks what happens there in words, and the row says 
   await page.setViewportSize({ width: 1280, height: 900 })
 })
 
+// ------------------------------------------------------------------------------------- Part 4
+await check('the Kitchen confirms what arrives: a move waits, the cook confirms it short from quick mode, offline too', async () => {
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.goto(`${UI}/app/company/branches`)
+  const areas = page.getByRole('region', { name: `Areas at ${branchName}` })
+  await areas.getByRole('button', { name: 'Edit Kitchen' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Edit Kitchen' })
+  await sheet.getByLabel(/Confirms what arrives/).check()
+  await page.waitForTimeout(300)
+  await page.screenshot({ path: SHOTS + '28-confirms-what-arrives.png' })
+  await sheet.getByRole('button', { name: 'Save' }).click()
+  await sheet.waitFor({ state: 'hidden' })
+  await areas.locator('[data-area="Kitchen"]').getByText('confirms what arrives').waitFor()
+
+  // The owner moves 3: they leave the Store now and wait; the button and the toast said so.
+  const before = await areaFigures(ownerToken, rice.id)
+  async function moveToKitchen(quantity) {
+    await page.goto(`${UI}/app/products/${rice.id}`)
+    await page.getByRole('heading', { name: 'Rice', level: 1 }).waitFor()
+    await page.getByRole('button', { name: 'Move', exact: true }).click()
+    await moveSheet.waitFor()
+    await page.locator('#move-to').selectOption({ label: 'Kitchen' })
+    await page.getByLabel('How many Rice').fill(String(quantity))
+    await moveSheet.getByText('once confirmed').waitFor()
+    await moveSheet.getByRole('button', { name: 'Move 1 item · Kitchen will confirm' }).click()
+    await moveSheet.waitFor({ state: 'hidden' })
+    await page.getByText(/waiting for the Kitchen/).first().waitFor()
+  }
+  await moveToKitchen(3)
+  await page.locator('[data-area-waiting]').getByText(/3 .*waiting for Kitchen/).waitFor()
+  const held = await areaFigures(ownerToken, rice.id)
+  assert(held.Store === before.Store - 3 && held.Kitchen === before.Kitchen, `held ${JSON.stringify(held)}, was ${JSON.stringify(before)}`)
+  await page.screenshot({ path: SHOTS + '29-waiting-for-kitchen.png' })
+
+  // The cook, on a phone: one line at the top of quick mode; got 2 of 3, the other still in the Store.
+  const cookContext = await contextFor(await login(owner.user.clientIdentifier, `cook-${owner.unique}`), { width: 390, height: 844 })
+  const cookPage = await cookContext.newPage()
+  await cookPage.goto(`${UI}/app/quick?mode=out`)
+  const line = cookPage.locator('[data-waiting-line]')
+  await line.getByText('1 item from the Store to confirm').waitFor()
+  await cookPage.screenshot({ path: SHOTS + '30-quick-waiting-line.png' })
+  await line.click()
+  const confirmSheet = cookPage.getByRole('dialog', { name: '1 item from the Store' })
+  await confirmSheet.getByRole('button', { name: 'Got everything' }).waitFor()
+  await confirmSheet.getByRole('button', { name: 'Decrease got of rice' }).click()
+  await confirmSheet.getByText("It's still in the Store").waitFor()
+  await cookPage.waitForTimeout(300)
+  await cookPage.screenshot({ path: SHOTS + '31-confirm-short.png' })
+  await confirmSheet.getByRole('button', { name: /^Confirm · 1 .*short$/ }).click()
+  await confirmSheet.waitFor({ state: 'hidden' })
+  await waitFor(async () => (await areaFigures(ownerToken, rice.id)).Kitchen === before.Kitchen + 2, 'the Kitchen to get 2')
+  // 3 left the Store; the 1 that didn't arrive is back there.
+  assert((await areaFigures(ownerToken, rice.id)).Store === before.Store - 2, 'the other 1 is not back in the Store')
+  await line.waitFor({ state: 'detached' })
+
+  // Confirmed offline: kept on the phone, the line gone at once, and it lands once back online.
+  await moveToKitchen(1)
+  await cookPage.reload()
+  await line.getByText('1 item from the Store to confirm').waitFor()
+  await cookContext.setOffline(true)
+  await line.click()
+  await confirmSheet.getByRole('button', { name: 'Got everything' }).click()
+  await cookPage.getByText(/Saved on this phone/).first().waitFor()
+  await line.waitFor({ state: 'detached' })
+  await cookContext.setOffline(false)
+  await cookPage.evaluate(() => window.dispatchEvent(new Event('online')))
+  await waitFor(async () => (await areaFigures(ownerToken, rice.id)).Kitchen === before.Kitchen + 3, 'the offline confirmation to land')
+  await cookContext.close()
+
+  // One more, taken back by the owner from the Moves list; the list says how each went.
+  await moveToKitchen(2)
+  await page.goto(`${UI}/app/stock-movements?moves=1`)
+  const moves = page.getByRole('list', { name: 'Moves between areas' })
+  await moves.locator('[data-move-state]').getByText('Waiting for the Kitchen').waitFor()
+  await moves.locator('[data-move-state]').getByText('The Kitchen got 2 of 3').waitFor()
+  await moves.locator('[data-move-state]').getByText('The Kitchen got everything').waitFor()
+  await page.screenshot({ path: SHOTS + '32-moves-states.png' })
+  await moves.getByRole('button', { name: 'Confirm' }).first().click()
+  await page.getByRole('dialog', { name: '1 item from the Store' }).getByRole('button', { name: 'Take it back to the Store' }).click()
+  await page.getByText(/Taken back · in the Store again/).first().waitFor()
+  await moves.locator('[data-move-state]').getByText('Taken back').waitFor()
+  const end = await areaFigures(ownerToken, rice.id)
+  assert(end.Store === before.Store - 3 && end.Kitchen === before.Kitchen + 3, `ended ${JSON.stringify(end)}, began ${JSON.stringify(before)}`)
+
+  // Switched off again: the rest of the suite moves instantly.
+  await page.goto(`${UI}/app/company/branches`)
+  await areas.getByRole('button', { name: 'Edit Kitchen' }).click()
+  await sheet.getByLabel(/Confirms what arrives/).uncheck()
+  await sheet.getByRole('button', { name: 'Save' }).click()
+  await sheet.waitFor({ state: 'hidden' })
+})
+
 await check('a company without areas sees no area word on its sheets or product page, and renames its Store', async () => {
   const shop = await signup('noareas')
   const beans = await createProduct(shop.tokens.accessToken, shop.unique, 'Beans')

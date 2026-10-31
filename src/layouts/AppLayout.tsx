@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { BranchProvider } from '@/features/branches/BranchProvider'
 import { BranchQuestion } from '@/features/branches/BranchQuestion'
+import { MoveFromLink } from '@/features/moves/MoveFromLink'
 import { Outlet } from 'react-router-dom'
 import { EmailVerificationBanner } from '@/features/profile/components/EmailVerificationBanner'
 import { Sidebar } from '@/layouts/Sidebar'
@@ -63,6 +64,8 @@ export function AppLayout() {
       </div>
       <UpdatePrompt />
       <BranchQuestion />
+      {/* The bell's "2 items from the Store to confirm" opens the move over whatever page it lands on. */}
+      <MoveFromLink />
       {DesignPreviewChip && (
         <Suspense fallback={null}>
           <DesignPreviewChip />

@@ -22,6 +22,10 @@ import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
 import { formatNumber } from '@/features/products/unitCopy'
 import { useTransfers } from '@/features/transfers/useTransfers'
+import { MoveSheet } from '@/features/moves/MoveSheet'
+import { itemsWord } from '@/features/moves/moveWords'
+import type { AreaMove } from '@/features/moves/types'
+import { useWaitingMoves } from '@/features/moves/useWaitingMoves'
 
 const SHOWN_PER_KIND = 4
 
@@ -94,6 +98,10 @@ export function NeedsYouToday({ canStockIn, canReceive }: NeedsYouTodayProps) {
   const arriving = (openTransfers.data?.content ?? []).filter((t) => here == null || t.toBranchId === here)
   const unchecked = (recentTransfers.data?.content ?? []).filter((t) => t.missing > 0)
 
+  // Areas that confirm (STOCK_AREAS_PART_4.md): moves waiting for an area this person works in.
+  const waitingMoves = useWaitingMoves().moves
+  const [openMove, setOpenMove] = useState<AreaMove | null>(null)
+
   const rows: ReactNode[] = []
   if (refused > 0) {
     rows.push(
@@ -106,6 +114,21 @@ export function NeedsYouToday({ canStockIn, canReceive }: NeedsYouTodayProps) {
         action={
           <button type="button" onClick={() => setSyncOpen(true)} className={buttonClassName('secondary', 'whitespace-nowrap')}>
             Review
+          </button>
+        }
+      />,
+    )
+  }
+  for (const move of waitingMoves.slice(0, SHOWN_PER_KIND)) {
+    rows.push(
+      <NeedRow
+        key={`move-${move.id}`}
+        icon={<ClipboardList className="h-5 w-5 text-neutral-500" aria-hidden="true" />}
+        title={`${itemsWord(move.lines.length)} from the ${move.fromAreaName} to confirm`}
+        detail={`To the ${move.toAreaName}${move.movedByName ? ` · moved by ${move.movedByName}` : ''}`}
+        action={
+          <button type="button" onClick={() => setOpenMove(move)} className={buttonClassName('secondary', 'whitespace-nowrap')}>
+            Confirm
           </button>
         }
       />,
@@ -250,6 +273,7 @@ export function NeedsYouToday({ canStockIn, canReceive }: NeedsYouTodayProps) {
         <ul className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">{rows}</ul>
       )}
       {stockActions.sheet}
+      {openMove && <MoveSheet key={openMove.id} move={openMove} onClose={() => setOpenMove(null)} />}
       <SyncCentre open={syncOpen} onClose={() => setSyncOpen(false)} />
     </section>
   )

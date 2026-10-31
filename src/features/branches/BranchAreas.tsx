@@ -68,6 +68,7 @@ export function BranchAreas({
       parts.push(`${area.productsInStock} ${area.productsInStock === 1 ? 'product' : 'products'}`)
     }
     parts.push(AREA_KINDS[kindOf(area)].short)
+    if (area.confirms) parts.push('confirms what arrives')
     return parts.join(' · ')
   }
 

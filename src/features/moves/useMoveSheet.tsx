@@ -21,7 +21,7 @@ export function useMoveSheet(): { open: (productIds?: string[]) => void; sheet: 
     setOpened(null)
     if (result.status === 'sent') {
       const move = result.move
-      showToast(`${result.verb} · ${result.items} · ${result.route}`, 'success', {
+      showToast(`${result.verb} · ${result.items} · ${result.route}${result.waitingFor ? ` · waiting for the ${result.waitingFor}` : ''}`, 'success', {
         action: { label: 'Undo', onAction: () => void undo(move.id, move.fromAreaName) },
       })
       return

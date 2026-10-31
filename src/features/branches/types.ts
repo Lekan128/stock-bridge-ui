@@ -42,6 +42,8 @@ export interface Area {
    * where it's stored (a count's shortfall is missing), and where it keeps no stock.
    */
   shortIsUsed?: boolean
+  /** Moves here wait until someone here confirms what arrived (Part 4). Absent from an older API: no. */
+  confirms?: boolean
 }
 
 /** A product in one area - the product page's and the sync rows' `areaStock` (V60). */
@@ -53,6 +55,8 @@ export interface AreaFigure {
   lastCountedAt?: string
   /** The area has had this product - holds it, or ran out of it (Part 3.6). Absent from an older API. */
   carried?: boolean
+  /** Moved here and not confirmed yet (Part 4): in the branch's figure, in no area's. Absent: none. */
+  waiting?: number
 }
 
 export interface BranchList {

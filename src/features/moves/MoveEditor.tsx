@@ -51,6 +51,8 @@ export type Moved = ({ status: 'sent'; move: AreaMove } | { status: 'queued'; op
   items: string
   /** "Store → Kitchen". */
   route: string
+  /** The area it waits for, when that area confirms what arrives (Part 4): "waiting for the Kitchen". */
+  waitingFor?: string
 }
 
 export interface MoveEditorProps {
@@ -315,7 +317,12 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
       )
       finished.current = true
       await draft.finish()
-      const said = { verb: verb === 'Give' ? 'Given' : 'Moved', items, route: `${from.name} → ${to.name}` }
+      const said = {
+        verb: verb === 'Give' ? 'Given' : 'Moved',
+        items,
+        route: `${from.name} → ${to.name}`,
+        ...(to.confirms ? { waitingFor: to.name } : {}),
+      }
       onMoved(outcome.status === 'sent' ? { status: 'sent', move: outcome.response, ...said } : { status: 'queued', opId: outcome.op.id, ...said })
     } catch (error) {
       setProblem(isAppError(error) ? error.message : "Couldn't move this. Try again.")
@@ -564,9 +571,13 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
                         <dd className="flex flex-wrap items-center justify-between gap-x-3 text-neutral-800">
                           <span>
                             {!to.keepsStock || line.usedNow ? (
-                              'used there'
+                              to.confirms ? 'used there, once confirmed' : 'used there'
                             ) : toHas != null ? (
-                              <BeforeAfter before={toHas} after={short ? null : toHas + base} option={option} unit={unit} />
+                              <>
+                                <BeforeAfter before={toHas} after={short ? null : toHas + base} option={option} unit={unit} />
+                                {/* Part 4: it waits for the area to confirm it. */}
+                                {to.confirms && <span className="text-neutral-600"> once confirmed</span>}
+                              </>
                             ) : null}
                           </span>
                           {/* On the destination's own line, so it costs no height (Part 3.5). */}
@@ -629,7 +640,10 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
           ? 'Choose where it goes'
           : ready.length === 0
             ? `${verb} to ${to.name}`
-            : `${verb} ${items} to ${to.name}${usedNowCount > 0 ? ` (${usedNowCount} used)` : ''}`}
+            : to.confirms
+              ? // Names what happens next (Part 4), short enough for a phone's button.
+                `${verb} ${items} · ${to.name} will confirm`
+              : `${verb} ${items} to ${to.name}${usedNowCount > 0 ? ` (${usedNowCount} used)` : ''}`}
       </Button>
       {!online && ready.length > 0 && (
         <p className="text-center text-xs text-neutral-600">You're offline. It's kept on this phone and goes when you're connected.</p>

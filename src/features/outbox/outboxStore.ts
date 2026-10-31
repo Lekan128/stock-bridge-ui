@@ -9,7 +9,7 @@ import { stockApi, type StockInRequestPayload } from '@/features/products/api/st
 import type { StockMutationResponse, StockOutPayload } from '@/features/products/types'
 import { transfersApi } from '@/features/transfers/transfersApi'
 import { movesApi } from '@/features/moves/movesApi'
-import type { AreaMove, AreaMovePayload } from '@/features/moves/types'
+import type { AreaMove, AreaMoveConfirmPayload, AreaMovePayload } from '@/features/moves/types'
 import type { ReceiptPayload, SendPayload, Transfer } from '@/features/transfers/types'
 import { isAppError } from '@/types/api'
 
@@ -187,6 +187,9 @@ function send(op: OutboxOp, { late }: { late: boolean }): Promise<Answer> {
     // A move keeps the moment it was made too; one sent late says so, so a later count isn't doubled.
     case 'AREA_MOVE':
       return movesApi.move({ ...op.payload, occurredAt: new Date(op.createdAt).toISOString(), ...(late ? { recordedOffline: true } : {}) })
+    // A confirmation sent late keeps when it was made, so a count taken since isn't doubled (Part 4).
+    case 'AREA_MOVE_CONFIRM':
+      return movesApi.confirm(op.moveId, { ...op.payload, ...timing })
     case 'STOCK_IN':
       return stockApi.stockIn(op.productId, { ...op.payload, ...timing } as StockInRequestPayload, op.id)
     case 'STOCK_OUT':
@@ -260,7 +263,7 @@ export function applyMoveResult(move: AreaMove): void {
 }
 
 function applyResult(op: OutboxOp, response: Answer): void {
-  if (op.kind === 'AREA_MOVE') applyMoveResult(response as AreaMove)
+  if (op.kind === 'AREA_MOVE' || op.kind === 'AREA_MOVE_CONFIRM') applyMoveResult(response as AreaMove)
   else if (op.kind === 'TRANSFER_SEND' || op.kind === 'TRANSFER_RECEIVE') applyTransferResult(response as Transfer)
   else applyStockResult(op.productId, response as StockMutationResponse)
 }
@@ -436,6 +439,46 @@ export async function submitMove(payload: AreaMovePayload, summary: string): Pro
     attempts: 0,
     nextAttemptAt: 0,
     kind: 'AREA_MOVE',
+    payload,
+    baseDelta: null,
+  }
+  if (!isBehind(op)) {
+    try {
+      const response = (await send(op, { late: false })) as AreaMove
+      applyMoveResult(response)
+      return { status: 'sent', response }
+    } catch (error) {
+      if (!isTransient(error)) throw error
+    }
+  }
+  await save({ ...op, attempts: 1, nextAttemptAt: Date.now() + backoff(1) })
+  void processOutbox()
+  return { status: 'queued', op }
+}
+
+/**
+ * Sends what an area got of a move (STOCK_AREAS_PART_4.md) the way `submitMove` sends the move: now if the
+ * server can be reached, otherwise kept on this phone and sent in order behind any earlier write for one of
+ * its products - and behind the move itself, if that is still on this phone too.
+ */
+export async function submitMoveConfirm(
+  moveId: string,
+  payload: AreaMoveConfirmPayload,
+  productIds: string[],
+  summary: string,
+): Promise<SubmitOutcome<AreaMove>> {
+  const op: OutboxOp = {
+    id: crypto.randomUUID(),
+    productId: `move:${moveId}`,
+    keys: [`move:${moveId}`, ...productIds],
+    productName: summary,
+    summary,
+    createdAt: Date.now(),
+    status: 'pending',
+    attempts: 0,
+    nextAttemptAt: 0,
+    kind: 'AREA_MOVE_CONFIRM',
+    moveId,
     payload,
     baseDelta: null,
   }

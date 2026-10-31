@@ -31,7 +31,10 @@ export interface NewArea {
 export const areasApi = {
   add: (branchId: string, areas: NewArea[]) =>
     api.post<Area[]>(`/api/branches/${branchId}/areas`, { areas }).then((r) => r.data),
-  update: (id: string, payload: { name?: string; keepsStock?: boolean; delivery?: boolean; shortIsUsed?: boolean }) =>
+  update: (
+    id: string,
+    payload: { name?: string; keepsStock?: boolean; delivery?: boolean; shortIsUsed?: boolean; confirms?: boolean },
+  ) =>
     api.patch<Area>(`/api/areas/${id}`, payload).then((r) => r.data),
   close: (id: string) => api.post<Area>(`/api/areas/${id}/close`).then((r) => r.data),
   reopen: (id: string) => api.post<Area>(`/api/areas/${id}/reopen`).then((r) => r.data),

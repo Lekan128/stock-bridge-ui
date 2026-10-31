@@ -14,6 +14,17 @@ export interface AreaMovePayload {
   recordedOffline?: boolean
 }
 
+/** What an area that confirms got of a move (Part 4). */
+export interface AreaMoveConfirmPayload {
+  /** What arrived of each line, in the product's stock unit; a line left out arrived whole. */
+  lines: { productId: string; got: number }[]
+  /** What happened to whatever didn't arrive: still where it was moved from (the default), or damaged. */
+  rest?: 'BACK' | 'DAMAGED'
+  /** Set by the outbox when it goes late: when it was confirmed on the phone, and that it was offline. */
+  occurredAt?: string
+  recordedOffline?: boolean
+}
+
 /** One move, as the screens and the Moves list show it. */
 export interface AreaMove {
   id: string
@@ -39,5 +50,19 @@ export interface AreaMove {
     enteredQuantity?: number
     enteredUnit?: string
     used: boolean
+    /** What arrived, once a move that waited is confirmed (Part 4); absent before. */
+    got?: number
+    /** Of what didn't arrive, what was recorded as damaged. */
+    damaged?: number
+    /** The product's stock unit, which `quantity` and `got` are in. Absent from an older API. */
+    unitOfMeasure?: string
   }[]
+  /** It went to an area that confirms, so it waited (Part 4). Absent from an older API: no. */
+  waits?: boolean
+  confirmedByName?: string
+  confirmedAt?: string
+  /** This person may confirm it: it waits for an area they work in. */
+  canConfirm?: boolean
+  /** This person may take it back while it waits: they moved it, or work where it left from. */
+  canCancel?: boolean
 }

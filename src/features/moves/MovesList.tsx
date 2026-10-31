@@ -7,6 +7,10 @@ import { Skeleton } from '@/components/Skeleton'
 import { useApiQuery } from '@/data/useApiQuery'
 import { formatDateTime } from '@/features/marketplace/formatters'
 import { movesApi } from '@/features/moves/movesApi'
+import { MoveSheet } from '@/features/moves/MoveSheet'
+import { moveState } from '@/features/moves/moveWords'
+import type { AreaMove } from '@/features/moves/types'
+import { buttonClassName } from '@/components/Button'
 import { formatNumber, pluraliseUnitNoun } from '@/features/products/unitCopy'
 
 const PAGE_SIZE = 25
@@ -14,10 +18,12 @@ const PAGE_SIZE = 25
 /**
  * Stock movements' Moves filter (STOCK_AREAS_PART_2.md): every move between the branch's areas, newest
  * first - when, from → to, what, and who. A move is not a ledger row (it changes no branch figure), so it
- * is its own list rather than rows among the deliveries and issues.
+ * is its own list rather than rows among the deliveries and issues. A move to an area that confirms (Part 4)
+ * says where it stands, and opens to be confirmed, or taken back, while it waits.
  */
 export function MovesList({ branchId }: { branchId: string }) {
   const [page, setPage] = useState(0)
+  const [openMove, setOpenMove] = useState<AreaMove | null>(null)
   const { data, loading, error, refetch } = useApiQuery({
     queryKey: ['area-moves', 'list', branchId, page],
     queryFn: () => movesApi.list({ branchId, page, size: PAGE_SIZE }),
@@ -56,6 +62,11 @@ export function MovesList({ branchId }: { branchId: string }) {
                 {move.toAreaName}
                 {!move.toKeepsStock && <span className="font-normal text-neutral-600">(used there)</span>}
                 {move.status === 'VOIDED' && <span className="font-normal text-neutral-600">· undone</span>}
+                {move.status !== 'VOIDED' && moveState(move) && (
+                  <span className={`font-normal ${move.status === 'WAITING' ? 'text-primary-700' : 'text-neutral-600'}`} data-move-state>
+                    · {moveState(move)}
+                  </span>
+                )}
               </p>
               <p className="text-xs text-neutral-600">
                 {formatDateTime(move.movedAt)}
@@ -74,10 +85,16 @@ export function MovesList({ branchId }: { branchId: string }) {
                 .join(' · ')}
             </p>
             {move.note && <p className="text-xs text-neutral-600">{move.note}</p>}
+            {move.status === 'WAITING' && (move.canConfirm || move.canCancel) && (
+              <button type="button" onClick={() => setOpenMove(move)} className={buttonClassName('secondary', 'mt-1 self-start')}>
+                {move.canConfirm ? 'Confirm' : 'Take it back'}
+              </button>
+            )}
           </li>
         ))}
       </ul>
       <Pagination page={page} totalPages={data?.totalPages ?? 1} onPageChange={setPage} />
+      {openMove && <MoveSheet key={openMove.id} move={openMove} onClose={() => setOpenMove(null)} />}
     </>
   )
 }

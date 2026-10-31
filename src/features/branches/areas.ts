@@ -39,6 +39,18 @@ export function areaBreakdown(product: Product, branch: Branch | null | undefine
     .filter((entry) => limited || entry.quantity !== 0)
 }
 
+/**
+ * What's on its way into the branch's areas and not confirmed yet (Part 4): "2 waiting for Kitchen". In the
+ * branch's figure, in no area's.
+ */
+export function areaWaiting(product: Product, branch: Branch | null | undefined): { area: Area; quantity: number }[] {
+  if (!hasAreas(branch) || product.areaStock == null) return []
+  const waiting = new Map(product.areaStock.map((figure) => [figure.areaId, figure.waiting ?? 0]))
+  return stockAreas(branch)
+    .map((area) => ({ area, quantity: waiting.get(area.id) ?? 0 }))
+    .filter((entry) => entry.quantity > 0)
+}
+
 /** How many of the product one area holds, when the product says; undefined when it doesn't. */
 export function figureInArea(product: Product, areaId: string | undefined): number | undefined {
   if (!areaId || product.areaStock == null) return undefined

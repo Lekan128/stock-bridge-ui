@@ -187,6 +187,14 @@ export function StockAdjustmentModal({
             )}
           </div>
         )}
+        {/* Moved here and not confirmed yet (Part 4): counted now, it would be counted again on confirming. */}
+        {areaFigure?.waiting != null && areaFigure.waiting > 0 && (
+          <p className="text-sm text-primary-800" data-count-waiting>
+            {formatQuantity(areaFigure.waiting, stockUnit)} more {areaFigure.waiting === 1 ? 'is' : 'are'} waiting for you to
+            confirm. Confirm {areaFigure.waiting === 1 ? 'it' : 'them'} first, so {areaFigure.waiting === 1 ? "it isn't" : "they aren't"}{' '}
+            counted twice.
+          </p>
+        )}
         {area && (
           <CountShortfall
             area={area}

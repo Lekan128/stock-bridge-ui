@@ -14,7 +14,7 @@ import { isAppError } from '@/types/api'
  * Editing one area (owner, 2026-10-31: "renaming takes 3 steps, choosing what is done takes 3 different
  * steps"): everything about it in one Sheet, opened by tapping its row - the way the branch's own Edit
  * works. Its name; what happens there, asked in words with each answer explained (D-A12); and, at the
- * bottom, closing it (or reopening it). Save applies the lot. A side panel on a laptop, a bottom sheet on a
+ * bottom, closing it (or reopening it); and whether it confirms what arrives (Part 4). Save applies the lot. A side panel on a laptop, a bottom sheet on a
  * phone. Where deliveries arrive is the branch's setting, in the branch's Edit.
  *
  * @param withAreas false for the Store of a branch that hasn't added areas: only its name is asked.
@@ -24,6 +24,7 @@ export function AreaEditSheet({ area, withAreas, onClose }: { area: Area; withAr
   const { showToast } = useToast()
   const [name, setName] = useState(area.name)
   const [kind, setKind] = useState<AreaKind>(kindOf(area))
+  const [confirms, setConfirms] = useState(area.confirms ?? false)
   const [busy, setBusy] = useState<'save' | 'close' | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
 
@@ -45,13 +46,19 @@ export function AreaEditSheet({ area, withAreas, onClose }: { area: Area; withAr
   function save() {
     const renamed = name.trim() !== area.name
     const changedKind = kind !== kindOf(area)
-    if (!renamed && !changedKind) {
+    const changedConfirms = confirms !== (area.confirms ?? false)
+    if (!renamed && !changedKind && !changedConfirms) {
       onClose()
       return
     }
     void run(
       'save',
-      () => areasApi.update(area.id, { ...(renamed ? { name: name.trim() } : {}), ...(changedKind ? kindFlags(kind) : {}) }),
+      () =>
+        areasApi.update(area.id, {
+          ...(renamed ? { name: name.trim() } : {}),
+          ...(changedKind ? kindFlags(kind) : {}),
+          ...(changedConfirms ? { confirms } : {}),
+        }),
       `${name.trim()} saved`,
     )
   }
@@ -113,6 +120,30 @@ export function AreaEditSheet({ area, withAreas, onClose }: { area: Area; withAr
               )
             })}
           </fieldset>
+        )}
+
+        {/* Two names on every move, for an area away from the Store (Part 4). Its own question, after what
+            happens there: it's about arriving, not about what's done with it. */}
+        {withAreas && area.active && (
+          <label
+            className={`flex cursor-pointer gap-3 rounded-lg border p-3 hover:border-neutral-300 ${
+              confirms ? 'border-primary-500 bg-primary-50' : 'border-neutral-200 bg-white'
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={confirms}
+              disabled={busy != null}
+              onChange={(event) => setConfirms(event.target.checked)}
+              className="mt-1 h-4 w-4 shrink-0"
+            />
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span className="text-base font-medium text-neutral-900">Confirms what arrives</span>
+              <span className="text-sm text-neutral-700">
+                Moves to the {name.trim() || area.name} wait until someone there says they got them.
+              </span>
+            </span>
+          </label>
         )}
 
         {problem && (

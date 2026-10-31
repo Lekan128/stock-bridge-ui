@@ -1,4 +1,4 @@
-import { areaBreakdown } from '@/features/branches/areas'
+import { areaBreakdown, areaWaiting } from '@/features/branches/areas'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { formatNumber, formatQuantity } from '@/features/products/unitCopy'
 import type { Product } from '@/features/products/types'
@@ -8,7 +8,8 @@ import type { Product } from '@/features/products/types'
  * product is, under its figure. Areas holding none are left out. Nothing at a branch without areas, or
  * in "All branches" - the breakdown is of one building.
  *
- * `compact` is the Inventory row's form: names and numbers only, the row already says the unit.
+ * `compact` is the Inventory row's form: names and numbers only, the row already says the unit. What waits
+ * for an area to confirm it (Part 4) follows: "· 2 waiting for Kitchen".
  */
 export function AreaBreakdown({
   product,
@@ -22,12 +23,16 @@ export function AreaBreakdown({
   // Optional: the Inventory table is also drawn where no branch is known, and shows no areas there.
   const working = useOptionalWorkingBranch()?.working ?? null
   const parts = areaBreakdown(product, working)
-  if (parts.length === 0) return null
+  const waiting = areaWaiting(product, working)
+  if (parts.length === 0 && waiting.length === 0) return null
   const unit = unitLabel ?? undefined
   if (compact) {
     return (
       <p className="truncate text-xs tabular-nums text-neutral-600" data-area-breakdown>
-        {parts.map(({ area, quantity }) => `${area.name} ${formatNumber(quantity)}`).join(' · ')}
+        {[
+          ...parts.map(({ area, quantity }) => `${area.name} ${formatNumber(quantity)}`),
+          ...waiting.map(({ area, quantity }) => `${formatNumber(quantity)} waiting for ${area.name}`),
+        ].join(' · ')}
       </p>
     )
   }
@@ -37,6 +42,12 @@ export function AreaBreakdown({
         <span key={area.id}>
           {index > 0 && <span className="text-neutral-500"> · </span>}
           <span className="text-neutral-600">{area.name}</span> {formatQuantity(quantity, unit)}
+        </span>
+      ))}
+      {waiting.map(({ area, quantity }, index) => (
+        <span key={`waiting-${area.id}`} className="text-primary-700" data-area-waiting={area.id}>
+          {parts.length + index > 0 && <span className="text-neutral-500"> · </span>}
+          {formatQuantity(quantity, unit)} waiting for {area.name}
         </span>
       ))}
     </p>
