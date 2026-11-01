@@ -556,15 +556,12 @@ await check('the owner places a cook in the Kitchen; the cook records there with
   await waitFor(async () => (await areaFigures(ownerToken, rice.id)).Kitchen === before - 1, 'the Kitchen to hold one fewer')
   await cookPage.screenshot({ path: SHOTS + '11-cook-product.png' })
 
-  // Move stock: the Store, asked (Part 5) - where a cook's stock comes from; the Kitchen to take from, the
-  // Bar to ask too.
+  // Move stock: from the Kitchen, the only area they take from - and asking is one quiet link away (Part 5).
   await cookPage.goto(`${UI}/app/move`)
-  await cookPage.locator('select#move-from').waitFor()
-  assert((await chosenIn(cookPage, 'select#move-from')) === 'Store', `Move starts from ${await chosenIn(cookPage, 'select#move-from')}`)
-  await cookPage.locator('[data-asking]').waitFor()
-  const own = await cookPage.locator('select#move-from optgroup[label="Your areas"] option').allInnerTexts()
-  const askGroup = await cookPage.locator('select#move-from optgroup[label="Ask another area"] option').allInnerTexts()
-  assert(own.join() === 'Kitchen' && askGroup.includes('Store') && askGroup.includes('Bar'), `own: ${own}, to ask: ${askGroup}`)
+  const from = cookPage.locator('output#move-from')
+  await from.waitFor()
+  assert((await from.innerText()) === 'Kitchen', `Move starts from ${await from.innerText()}`)
+  await cookPage.getByRole('button', { name: 'Ask for it instead' }).waitFor()
   await cookContext.close()
 })
 
@@ -924,9 +921,10 @@ await check('the cook asks the Store from Move; the storekeeper moves part, says
   const cookContext = await contextFor(await login(owner.user.clientIdentifier, `cook-${owner.unique}`), { width: 390, height: 844 })
   const cookPage = await cookContext.newPage()
   await cookPage.goto(`${UI}/app/quick`)
-  await cookPage.getByRole('group', { name: 'What are you doing?' }).getByRole('button', { name: 'Move' }).click()
-  await cookPage.locator('#move-from').selectOption({ label: 'Store' })
-  await cookPage.locator('[data-asking]').getByText("You don't work in the Store, so this asks the people there to move it.").waitFor()
+  // Ask is its own button for a cook (owner, 2026-11-01), opening on the Store.
+  await cookPage.getByRole('group', { name: 'What are you doing?' }).getByRole('button', { name: 'Ask' }).click()
+  assert((await chosenIn(cookPage, 'select#move-from')) === 'Store', `Ask starts from ${await chosenIn(cookPage, 'select#move-from')}`)
+  await cookPage.locator('[data-asking]').getByText("The Store's people move it to you.").waitFor()
   for (const [name, quantity] of [['Rice', '2'], ['Tomato paste', '3']]) {
     // A product made moments ago may still be reaching the phone's copy of the catalogue: type again once.
     const result = cookPage.getByRole('button', { name: new RegExp(`^${name}`) }).first()
@@ -1025,12 +1023,12 @@ await check("quick mode's buttons: the usual ones for where each works, a person
   assert(JSON.stringify(await labels(keeperPage)) === JSON.stringify(['Stock in', 'Move', 'Count']), `keeper: ${await labels(keeperPage)}`)
   await keeperContext.close()
 
-  // The cook: Stock out, Move, Count - Count a button, so no link.
+  // The cook: Stock out, Ask, Count - Count a button, so no link.
   const cookContext = await contextFor(await login(owner.user.clientIdentifier, `cook-${owner.unique}`), { width: 390, height: 844 })
   const cookPage = await cookContext.newPage()
   await cookPage.goto(`${UI}/app/quick`)
-  await row(cookPage).getByRole('button', { name: 'Move' }).waitFor()
-  assert(JSON.stringify(await labels(cookPage)) === JSON.stringify(['Stock out', 'Move', 'Count']), `cook: ${await labels(cookPage)}`)
+  await row(cookPage).getByRole('button', { name: 'Ask' }).waitFor()
+  assert(JSON.stringify(await labels(cookPage)) === JSON.stringify(['Stock out', 'Ask', 'Count']), `cook: ${await labels(cookPage)}`)
   assert((await cookPage.getByRole('button', { name: 'Count stock' }).count()) === 0, 'a Count link beside a Count button')
   await cookPage.screenshot({ path: SHOTS + '40-cook-quick-buttons.png' })
 
@@ -1039,7 +1037,7 @@ await check("quick mode's buttons: the usual ones for where each works, a person
   const panel = cookPage.getByRole('region', { name: 'Quick mode buttons' })
   await panel.getByLabel(/^Stock in/).check()
   await panel.getByLabel(/^Count/).uncheck()
-  assert(JSON.stringify(await panel.locator('[data-quick-preview] span').allInnerTexts()) === JSON.stringify(['Stock in', 'Stock out', 'Move']), 'preview')
+  assert(JSON.stringify(await panel.locator('[data-quick-preview] span').allInnerTexts()) === JSON.stringify(['Stock in', 'Stock out', 'Ask']), 'preview')
   await cookPage.waitForTimeout(300)
   await cookPage.screenshot({ path: SHOTS + '41-profile-quick-buttons.png', fullPage: true })
   await panel.getByRole('button', { name: 'Save' }).click()
@@ -1050,14 +1048,14 @@ await check("quick mode's buttons: the usual ones for where each works, a person
   const otherPage = await otherContext.newPage()
   await otherPage.goto(`${UI}/app/quick`)
   await row(otherPage).getByRole('button', { name: 'Stock in' }).waitFor()
-  assert(JSON.stringify(await labels(otherPage)) === JSON.stringify(['Stock in', 'Stock out', 'Move']), `chosen: ${await labels(otherPage)}`)
+  assert(JSON.stringify(await labels(otherPage)) === JSON.stringify(['Stock in', 'Stock out', 'Ask']), `chosen: ${await labels(otherPage)}`)
   await otherPage.getByRole('button', { name: 'Count stock' }).waitFor()
   await otherContext.close()
 
   // At least one stays: the last one can't be unticked. And back to the usual ones.
   await panel.getByRole('button', { name: 'Use the usual buttons' }).click()
   await cookPage.getByText('Quick mode has the usual buttons again').first().waitFor()
-  for (const name of ['Stock out', 'Move']) await panel.getByLabel(new RegExp(`^${name}`)).uncheck()
+  for (const name of ['Stock out', 'Ask']) await panel.getByLabel(new RegExp(`^${name}`)).uncheck()
   assert(await panel.getByLabel(/^Count/).isDisabled(), 'the last button can be unticked')
   await cookContext.close()
 })

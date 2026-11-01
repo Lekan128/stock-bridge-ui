@@ -28,6 +28,7 @@ import { useProduct } from '@/features/products/hooks/useProduct'
 import { useProductIncoming } from '@/features/products/hooks/useProductIncoming'
 import { useStockActions } from '@/features/products/hooks/useStockActions'
 import { useMoveSheet } from '@/features/moves/useMoveSheet'
+import { useMoveIntent } from '@/features/moves/moveIntent'
 import { useStockHistory } from '@/features/products/hooks/useStockHistory'
 import {
   UNIT_COPY,
@@ -88,6 +89,8 @@ export function ProductDetailPage() {
   )
   // Stock in / out / count, and the toast with Undo after — shared with the Inventory list (C1).
   const moveSheet = useMoveSheet()
+  // A cook asks for more; everyone else moves it (Part 5).
+  const moveIntent = useMoveIntent()
   const stockActions = useStockActions({
     current: product,
     onChanged: (changed) => {
@@ -354,7 +357,7 @@ export function ProductDetailPage() {
               className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-neutral-300 bg-white px-3 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
             >
               <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
-              Move
+              {moveIntent.intent === 'ask' ? 'Ask for more' : 'Move'}
             </button>
           )}
         </div>

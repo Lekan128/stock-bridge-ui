@@ -53,13 +53,25 @@ import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
 
 
-/** Where sales are recorded, Stock out is for everything else - and says so (§6.3). */
-const OUT_MEANING_WHEN_SELLING = 'Goods going out without a sale: used, spoilt or sent away. For a customer, use Sell.'
-/** At a branch with areas, giving to the kitchen or bar is a move, not stock leaving (STOCK_AREAS_PART_3.md). */
-const OUT_MEANING_WITH_AREAS = 'Used, sold or thrown away. To another area, use Move.'
-const OUT_MEANING_WITH_AREAS_SELLING = 'Used or thrown away, not sold. To another area, use Move.'
+/**
+ * Stock out's line, built for what this person has (§6.3, STOCK_AREAS_PART_3.md, owner 2026-11-01): where sales
+ * are recorded it's for everything but a sale; at a branch with areas, giving to the kitchen is a move. It points
+ * at Move or Sell only when that is one of their buttons - never at one they don't have.
+ */
+function outMeaning({ sells, areas, moveButton, sellButton }: { sells: boolean; areas: boolean; moveButton: boolean; sellButton: boolean }): string {
+  const what = sells
+    ? areas
+      ? 'Used or thrown away, not sold.'
+      : 'Goods going out without a sale: used, spoilt or sent away.'
+    : areas
+      ? 'Used, sold or thrown away.'
+      : 'Goods going out: sold, used or sent away. Takes them off your stock.'
+  if (areas && moveButton) return `${what} To another area, use Move.`
+  if (sells && sellButton) return `${what} For a customer, use Sell.`
+  return areas && !sells ? `${what} Takes them off your stock.` : what
+}
 /** The Record button says what it will do: "Stock in 2 bags (100 kg)". */
-const ACTION: Record<Exclude<Mode, 'sell' | 'move'>, string> = { in: 'Stock in', out: 'Stock out', count: 'Record count:' }
+const ACTION: Record<Exclude<Mode, 'sell' | 'move' | 'ask'>, string> = { in: 'Stock in', out: 'Stock out', count: 'Record count:' }
 const GRID_COLS = ['', 'grid-cols-1', 'grid-cols-2', 'grid-cols-3', 'grid-cols-4']
 
 /** One write made in this session, and where it stands. */
@@ -183,7 +195,7 @@ export function QuickModePage() {
               opId: moved.status === 'queued' ? moved.opId : undefined,
             }
     recorded(
-      { mode: 'move', productId: '', summary: moved.items, ...said },
+      { mode: moved.status === 'asked' ? 'ask' : 'move', productId: '', summary: moved.items, ...said },
       moved.status === 'queued' || (moved.status === 'asked' && moved.opId) ? 'recorded' : 'synced',
     )
   }
@@ -191,7 +203,10 @@ export function QuickModePage() {
   function recorded(recordedEntry: SessionEntry, kind: StampKind) {
     area.remember()
     // A move says its own route; everything else lands in the area in the title.
-    const entry = recordedEntry.mode === 'move' || !area.areaName ? recordedEntry : { ...recordedEntry, areaName: area.areaName }
+    const entry =
+      recordedEntry.mode === 'move' || recordedEntry.mode === 'ask' || !area.areaName
+        ? recordedEntry
+        : { ...recordedEntry, areaName: area.areaName }
     const where = entry.areaName ? ` · ${entry.areaName}` : ''
     setSession((current) => [entry, ...current])
     setProduct(null)
@@ -225,7 +240,7 @@ export function QuickModePage() {
           {/* Where every scan here lands (UX §5.2): "Quick mode · Oshodi". */}
           Quick mode{branchHere ? ` · ${branchHere}` : ''}
           {/* Where every scan lands, changed right here (Move has its own From and To). */}
-          {mode !== 'move' && (
+          {mode !== 'move' && mode !== 'ask' && (
             <QuickAreaTitle areaId={area.areaId} areaName={area.areaName} choices={area.choices} onChoose={area.choose} />
           )}
         </h1>
@@ -262,13 +277,12 @@ export function QuickModePage() {
           <div className="flex items-start justify-between gap-3">
             <p id="quick-mode-meaning" className="text-sm text-neutral-600">
               {mode === 'out'
-                ? movesHere
-                  ? sells
-                    ? OUT_MEANING_WITH_AREAS_SELLING
-                    : OUT_MEANING_WITH_AREAS
-                  : sells
-                    ? OUT_MEANING_WHEN_SELLING
-                    : MODES.find((m) => m.value === 'out')?.meaning
+                ? outMeaning({
+                    sells,
+                    areas: movesHere,
+                    moveButton: quickTabs.tabs.includes('move'),
+                    sellButton: quickTabs.tabs.includes('sell'),
+                  })
                 : MODES.find((m) => m.value === mode)?.meaning}
             </p>
             {countLink && (
@@ -292,9 +306,9 @@ export function QuickModePage() {
           <div className="flex flex-col gap-4">
             <SaleBasketEditor basket={basket} onRecorded={saleRecorded} areaId={area.areaId ?? null} />
           </div>
-        ) : mode === 'move' ? (
-          // A fresh editor after each move: the stamp, then the next one.
-          <MoveEditor key={movesRecorded} onMoved={moveRecorded}>
+        ) : mode === 'move' || mode === 'ask' ? (
+          // A fresh editor after each move or ask: the stamp, then the next one.
+          <MoveEditor key={`${mode}-${movesRecorded}`} intent={mode} onMoved={moveRecorded}>
             {({ body, action }) => (
               <div className="flex flex-col gap-3">
                 {body}
@@ -402,7 +416,7 @@ function AmountStep({
   onBack,
   onRecorded,
 }: {
-  mode: Exclude<Mode, 'sell' | 'move'>
+  mode: Exclude<Mode, 'sell' | 'move' | 'ask'>
   product: Product
   /** The session's stock-out reason, or null for none given. */
   reason: OutReason | null

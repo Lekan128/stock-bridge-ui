@@ -5,6 +5,7 @@ import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { hasAreas } from '@/features/branches/areas'
 import { useWorkArea } from '@/features/branches/workArea'
 import { useMoveSheet } from '@/features/moves/useMoveSheet'
+import { useMoveIntent } from '@/features/moves/moveIntent'
 import { BranchLevelDialog } from '@/features/branches/BranchLevelDialog'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
@@ -152,6 +153,8 @@ export function ProductListPage() {
     branch.recordable.some((entry) => entry.id === branch.working?.id)
   const canSelect = canImport || canSendSelected || canMove || levelBranch != null
   const moveSheet = useMoveSheet()
+  // One button, worded for who's holding the phone (Part 5): Ask for stock for a cook, Move stock otherwise.
+  const moveIntent = useMoveIntent()
   const [searchParams, setSearchParams] = useSearchParams()
   const { search: committedSearch, statusFilter, categoryFilter, stockLevelFilter, priceFilter: requestedPriceFilter, sort, page } =
     readListState(searchParams)
@@ -495,6 +498,7 @@ export function ProductListPage() {
     onBulkUpload: () => navigate('/app/products/import'),
     onRecordDelivery: () => navigate('/app/products/receive'),
     onMoveStock: canMove ? () => moveSheet.open() : undefined,
+    moveLabel: moveIntent,
     onRecordSale: recordsSales && canStockOut ? () => navigate('/app/sell') : undefined,
     onExpectedDeliveries: () => navigate('/app/products/expected'),
     onExport: () => void handleExport(),
@@ -585,6 +589,7 @@ export function ProductListPage() {
                 onStockIn={canStockInSheet ? handleStockInSelected : undefined}
                 onSend={canSendSelected ? handleSendSelected : undefined}
                 onMove={canMove ? handleMoveSelected : undefined}
+                moveLabel={moveIntent}
                 onSetLevel={levelBranch ? () => setSettingLevel(true) : undefined}
                 onClear={() => setSelectedIds([])}
               />
@@ -657,6 +662,7 @@ export function ProductListPage() {
                 onStockIn={canStockInSheet ? handleStockInSelected : undefined}
                 onSend={canSendSelected ? handleSendSelected : undefined}
                 onMove={canMove ? handleMoveSelected : undefined}
+                moveLabel={moveIntent}
                 onSetLevel={levelBranch ? () => setSettingLevel(true) : undefined}
                 onClear={() => setSelectedIds([])}
               />
@@ -752,6 +758,7 @@ function SelectionBar({
   onStockIn,
   onSend,
   onMove,
+  moveLabel,
   onSetLevel,
   onClear,
 }: {
@@ -761,6 +768,8 @@ function SelectionBar({
   onSend?: () => void
   /** Move them between this branch's areas (STOCK_AREAS_PART_2.md). */
   onMove?: () => void
+  /** Ask or Move, as the one button reads for this person (Part 5). */
+  moveLabel?: { intent: 'move' | 'ask' }
   /** One low-stock level for them at this branch (Phase 4). */
   onSetLevel?: () => void
   onClear: () => void
@@ -786,7 +795,7 @@ function SelectionBar({
         {onMove && (
           <Button variant="secondary" onClick={onMove}>
             <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
-            Move to an area
+            {moveLabel?.intent === 'ask' ? 'Ask for these' : 'Move to an area'}
           </Button>
         )}
         {onSetLevel && (

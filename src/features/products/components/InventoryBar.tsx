@@ -40,6 +40,8 @@ export interface InventoryBarProps {
   onRecordDelivery: () => void
   /** Move stock between the branch's areas - present at a branch with areas, for whoever may stock out. */
   onMoveStock?: () => void
+  /** How the Move button reads for this person (Part 5): "Ask for stock" for a cook, "Move stock" otherwise. */
+  moveLabel?: { label: string; short: string }
   /**
    * Record a sale (§6.1) - present when the company records sales and this person may. It is then
    * the screen's action, the thing done all day; Record a delivery steps back to secondary.
@@ -166,6 +168,7 @@ export const InventoryBar = forwardRef<HTMLInputElement, InventoryBarProps>(func
  */
 export function InventoryActions(props: InventoryBarProps & { compact?: boolean }) {
   const { canRecordDelivery, canManageProducts, onRecordDelivery, onRecordSale, onMoveStock, onAddProduct, compact = false } = props
+  const moveWords = props.moveLabel ?? { label: 'Move stock', short: 'Move' }
   const selling = onRecordSale != null
   // One action-coloured button: Record a sale, else Record a delivery, else Add product.
   const productIsAction = !selling && !canRecordDelivery
@@ -202,12 +205,12 @@ export function InventoryActions(props: InventoryBarProps & { compact?: boolean 
         <Button
           variant={!selling && !canRecordDelivery && !canManageProducts ? 'action' : 'secondary'}
           onClick={onMoveStock}
-          title="Move stock"
-          aria-label={iconOnly(selling) ? 'Move stock' : undefined}
+          title={moveWords.label}
+          aria-label={iconOnly(selling) ? moveWords.label : undefined}
           className={compact ? '' : 'whitespace-nowrap'}
         >
           <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
-          {iconOnly(selling) ? null : compact ? 'Move' : 'Move stock'}
+          {iconOnly(selling) ? null : compact ? moveWords.short : moveWords.label}
         </Button>
       )}
       {canManageProducts && (

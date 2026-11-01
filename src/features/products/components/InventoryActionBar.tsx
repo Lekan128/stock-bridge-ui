@@ -35,6 +35,7 @@ export function InventoryActionBar(props: InventoryActionBarProps) {
     canSendSelected,
     onSendSelected,
     onMoveSelected,
+    moveLabel,
     onSetLevelSelected,
     onDoneSelecting,
   } = props
@@ -73,7 +74,8 @@ export function InventoryActionBar(props: InventoryActionBarProps) {
           {onMoveSelected && (
             <Button variant="secondary" onClick={onMoveSelected} disabled={selectedCount === 0}>
               <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
-              Move
+              {/* "Ask" for someone who mostly asks (Part 5). */}
+              {moveLabel?.short ?? 'Move'}
             </Button>
           )}
           {onSetLevelSelected && (

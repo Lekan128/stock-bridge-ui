@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
 import { useApiQuery } from '@/data/useApiQuery'
-import { hasAreas } from '@/features/branches/areas'
+import { hasAreas, stockAreas } from '@/features/branches/areas'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { useWorkArea } from '@/features/branches/workArea'
 import { profileApi } from '@/features/profile/api/profileApi'
@@ -10,7 +10,7 @@ import type { Profile } from '@/features/profile/types'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 
 /** What quick mode can be doing: its buttons along the top. */
-export type Mode = 'sell' | 'in' | 'out' | 'move' | 'count'
+export type Mode = 'sell' | 'in' | 'out' | 'move' | 'ask' | 'count'
 
 // The same names as everywhere else in the app (it said Receive and Issue, warehouse words a
 // shopkeeper had to guess at), each with one line saying what it does — Count most of all.
@@ -21,6 +21,8 @@ export const MODES: { value: Mode; label: string; verb: string; meaning: string 
   { value: 'out', label: 'Stock out', verb: 'Stock out', meaning: 'Goods going out: sold, used or sent away. Takes them off your stock.' },
   // At a branch with areas (STOCK_AREAS_PART_3.md): from one area to another, several items at once.
   { value: 'move', label: 'Move', verb: 'Moved', meaning: 'From one area to another, a few items at a time.' },
+  // Part 5: the other side of a move - another area's people bring it.
+  { value: 'ask', label: 'Ask', verb: 'Asked', meaning: 'Ask another area for stock. Its people move it to you.' },
   {
     value: 'count',
     label: 'Count',
@@ -38,15 +40,15 @@ export const MAX_QUICK_TABS = 4
  * - **No areas** (one shop): the till and the stock in front of them - Sell, Stock in, Stock out, Count.
  * - **Every area** (owners, managers): Sell, Stock in, Stock out, Move; Count stays a small link.
  * - **Where deliveries arrive** (a storekeeper): Stock in, Move, Count.
- * - **Another area** (a cook, a barman): Sell where the company sells, Stock out, Move (which asks the Store when
- *   they don't work in it), Count (the closing count).
- * Anything else they may do is theirs to add, on their profile.
+ * - **Another area** (a cook, a barman): Sell where the company sells, Stock out, Ask (the Store, for what they
+ *   need), Count (the closing count).
+ * Anything else they may do - Move for a cook, Ask for a manager - is theirs to add, on their profile.
  */
 const USUAL: Record<'noAreas' | 'everywhere' | 'store' | 'area', Mode[]> = {
   noAreas: ['sell', 'in', 'out', 'count'],
   everywhere: ['sell', 'in', 'out', 'move'],
   store: ['in', 'move', 'count'],
-  area: ['sell', 'out', 'move', 'count'],
+  area: ['sell', 'out', 'ask', 'count'],
 }
 
 export interface QuickModeTabs {
@@ -87,6 +89,12 @@ export function useQuickModeTabs(): QuickModeTabs {
     in: permissions.includes(PERMISSIONS.STOCK_IN),
     out: permissions.includes(PERMISSIONS.STOCK_OUT),
     move: movesHere,
+    // Asking (Part 5): another area that keeps stock, for one they work in - anyone at a branch with areas.
+    ask:
+      (permissions.includes(PERMISSIONS.STOCK_IN) || permissions.includes(PERMISSIONS.STOCK_OUT)) &&
+      hasAreas(working) &&
+      work.areas.length > 0 &&
+      stockAreas(working).length > 1,
     count: permissions.includes(PERMISSIONS.MANAGE_INVENTORY),
   }
   const available = MODES.map((mode) => mode.value).filter((mode) => allowed[mode])

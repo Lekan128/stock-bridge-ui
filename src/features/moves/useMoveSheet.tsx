@@ -3,6 +3,7 @@ import { Sheet } from '@/components/Sheet'
 import { useToast } from '@/components/useToast'
 import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { MoveEditor, type Moved } from '@/features/moves/MoveEditor'
+import { useMoveIntent } from '@/features/moves/moveIntent'
 import { movesApi } from '@/features/moves/movesApi'
 import { applyMoveResult, discardOp, getOutboxState, isInFlight } from '@/features/outbox/outboxStore'
 import { requestsApi } from '@/features/requests/requestsApi'
@@ -15,12 +16,19 @@ import { isAppError } from '@/types/api'
  * not a screen of its own.
  */
 export function useMoveSheet(): {
-  open: (productIds?: string[]) => void
+  /** Opens Move - or, for someone who mostly asks, Ask (Part 5); `intent` chooses. */
+  open: (productIds?: string[], intent?: 'move' | 'ask') => void
   /** Move what a request asked for (Part 5): the route and its lines filled in. */
   openRequest: (request: StockRequest) => void
   sheet: ReactNode
 } {
-  const [opened, setOpened] = useState<{ productIds: string[]; key: number; request?: StockRequest } | null>(null)
+  const [opened, setOpened] = useState<{
+    productIds: string[]
+    key: number
+    request?: StockRequest
+    intent: 'move' | 'ask'
+  } | null>(null)
+  const main = useMoveIntent().intent
   const { showToast } = useToast()
   const { isMultiBranch, working } = useWorkingBranch()
 
@@ -81,12 +89,19 @@ export function useMoveSheet(): {
   }
 
   const sheet = opened && (
-    <MoveEditor key={opened.key} productIds={opened.productIds} request={opened.request} focusSearch onMoved={moved}>
-      {({ body, action }) => (
+    <MoveEditor
+      key={opened.key}
+      productIds={opened.productIds}
+      request={opened.request}
+      intent={opened.intent}
+      focusSearch
+      onMoved={moved}
+    >
+      {({ body, action, asking }) => (
         <Sheet
           open
           onClose={() => setOpened(null)}
-          title={`Move stock${isMultiBranch && working ? ` · ${working.name}` : ''}`}
+          title={`${asking ? 'Ask for stock' : 'Move stock'}${isMultiBranch && working ? ` · ${working.name}` : ''}`}
           size="lg"
           footer={action}
         >
@@ -96,8 +111,8 @@ export function useMoveSheet(): {
     </MoveEditor>
   )
   return {
-    open: (productIds = []) => setOpened({ productIds, key: Date.now() }),
-    openRequest: (request) => setOpened({ productIds: [], key: Date.now(), request }),
+    open: (productIds = [], intent = main) => setOpened({ productIds, key: Date.now(), intent }),
+    openRequest: (request) => setOpened({ productIds: [], key: Date.now(), request, intent: 'move' }),
     sheet,
   }
 }

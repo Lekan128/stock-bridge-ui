@@ -69,10 +69,15 @@ export interface MoveEditorProps {
   /** Focus the search when it opens (a laptop, where a scanner types too); never on a phone. */
   focusSearch?: boolean
   onMoved: (moved: Moved) => void
-  /** Where the editor goes: its body, and the Move button for a footer. */
-  children: (parts: { body: ReactNode; action: ReactNode }) => ReactNode
+  /** Where the editor goes: its body, the button for a footer, and whether it's asking now (the title says so). */
+  children: (parts: { body: ReactNode; action: ReactNode; asking: boolean }) => ReactNode
   /** A request to fill (Part 5): the route and its lines filled in, with "None in the store" for each. */
   request?: StockRequest
+  /**
+   * Move (I carry it, from an area I work in) or Ask (Part 5: another area's people carry it, from any area that
+   * keeps stock to one I work in). A quiet link in the route switches between them.
+   */
+  intent?: 'move' | 'ask'
 }
 
 /** A new line opens in the product's pack (crates, bags) when it has one, as Send stock does. */
@@ -95,34 +100,39 @@ function figureIn(product: Product, areaId: string): number | undefined {
  * the toast) with Undo. It goes through the outbox, so it works offline. To an area that uses what it's
  * given (Housekeeping) it is a give, recorded as Used there.
  */
-export function MoveEditor({ productIds = [], focusSearch = false, onMoved, children, request }: MoveEditorProps) {
+export function MoveEditor({ productIds = [], focusSearch = false, onMoved, children, request, intent = 'move' }: MoveEditorProps) {
   const { working, recordable } = useWorkingBranch()
   const { options: catalogue } = useUnitOfMeasureOptions()
   const online = useOnlineStatus()
   const branch = working && recordable.some((entry) => entry.id === working.id) ? working : null
 
-  // From: the areas this person works in (Part 3) - they're taking stock out of it - starting where this
+  // Moving: from the areas this person works in (Part 3) - they're taking stock out of it - starting where this
   // phone is for them; for people in every area, where deliveries arrive. To: any open area.
-  // Someone placed in particular areas can also choose an area they don't work in: that asks it (Part 5).
+  // Asking (Part 5): from any area that keeps stock - where deliveries arrive, to start with - for an area they
+  // work in, the one they're in to start with (owner, 2026-11-01: "ask from anywhere to where you have access").
   const work = useWorkArea(branch)
   const allOpen = (branch?.areas ?? []).filter((area) => area.active)
-  const askable = work.limited ? stockAreas(branch).filter((area) => !work.areas.some((own) => own.id === area.id)) : []
+  const [asking, setAsking] = useState(intent === 'ask' && !request)
   // Filling a request (Part 5): its route, as asked.
   const requestFrom = request ? allOpen.find((area) => area.id === request.fromAreaId) : undefined
   const requestTo = request ? allOpen.find((area) => area.id === request.toAreaId) : undefined
-  const fromChoices = request ? (requestFrom ? [requestFrom] : []) : work.areas
+  const askTo = work.area ?? work.areas.find((area) => !area.delivery) ?? work.areas[0]
+  const fromChoices = request
+    ? requestFrom
+      ? [requestFrom]
+      : []
+    : asking
+      ? stockAreas(branch)
+      : work.areas
   const [fromChoice, setFromChoice] = useState<string | null>(null)
-  // Someone who doesn't work where deliveries arrive mostly gets stock from there: Move opens asking it (owner,
-  // 2026-11-01) until a route of their own is used.
-  const askStore = askable.find((area) => area.delivery)
   const fromAreaId = request
     ? request.fromAreaId
-    : [...fromChoices, ...askable].some((area) => area.id === fromChoice)
+    : fromChoices.some((area) => area.id === fromChoice)
       ? (fromChoice as string)
-      : (askStore?.id ?? work.area?.id ?? fromChoices.find((area) => area.delivery)?.id ?? fromChoices[0]?.id ?? '')
-  const asking = askable.some((area) => area.id === fromAreaId)
+      : asking
+        ? (fromChoices.find((area) => area.delivery && area.id !== askTo?.id) ?? fromChoices.find((area) => area.id !== askTo?.id))?.id ?? ''
+        : (work.area?.id ?? fromChoices.find((area) => area.delivery)?.id ?? fromChoices[0]?.id ?? '')
   const [toAreaChoice, setToAreaId] = useState<string>('')
-  // Asking: for an area this person works in - the one they're in, to start with.
   const toChoices = request
     ? requestTo
       ? [requestTo]
@@ -130,7 +140,11 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
     : (asking ? work.areas : allOpen).filter((area) => area.id !== fromAreaId)
   const toAreaId = request
     ? request.toAreaId
-    : toAreaChoice || (asking ? (toChoices.find((area) => area.id === work.area?.id) ?? toChoices[0])?.id ?? '' : '')
+    : toChoices.some((area) => area.id === toAreaChoice)
+      ? toAreaChoice
+      : asking
+        ? ((toChoices.find((area) => area.id === askTo?.id) ?? toChoices[0])?.id ?? '')
+        : ''
   const from = allOpen.find((area) => area.id === fromAreaId)
   const to = toChoices.find((area) => area.id === toAreaId)
   // Lines the area asked has none of (filling a request): off the move, said on the request.
@@ -141,6 +155,11 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
   const [term, setTerm] = useState('')
   const [moving, setMoving] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
+
+  /** Where a route from `fromId` may go: for asking, an area this person works in; for moving, any open area. */
+  function toChoicesFor(fromId: string) {
+    return (asking ? work.areas : allOpen).filter((area) => area.id !== fromId)
+  }
 
   // ------------------------------------------------------------------- usual routes, and the last one
   const recent = useApiQuery({
@@ -157,9 +176,7 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
       if (!seen.has(key)) seen.set(key, move)
     }
     return [...seen.values()].filter(
-      (move) =>
-        [...fromChoices, ...askable].some((area) => area.id === move.fromAreaId) &&
-        allOpen.some((area) => area.id === move.toAreaId),
+      (move) => fromChoices.some((area) => area.id === move.fromAreaId) && toChoicesFor(move.fromAreaId).some((area) => area.id === move.toAreaId),
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recent.data, fromChoices, allOpen])
@@ -208,8 +225,8 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
   }, [recent.data])
 
   // ------------------------------------------------------------------------------ the draft (A5)
-  // Filling a request keeps no draft: the request itself is what's left to do.
-  const draft = useDraft<MoveDraft>(`move:${branch?.id ?? 'none'}`, branch != null && !request)
+  // Filling a request keeps no draft: the request itself is what's left to do. Asking keeps its own.
+  const draft = useDraft<MoveDraft>(`${intent}:${branch?.id ?? 'none'}`, branch != null && !request)
   // Once moved, nothing more is saved as a draft: the place clears or closes the editor.
   const finished = useRef(false)
   const [restored, setRestored] = useState(false)
@@ -464,6 +481,7 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
 
   if (!branch || !hasAreas(branch) || fromChoices.length === 0) {
     return children({
+      asking,
       action: null,
       body: (
         <p className="text-sm text-neutral-700">
@@ -507,7 +525,6 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
             <RouteEnd
               label="From"
               areas={fromChoices}
-              askable={request ? [] : askable}
               chosen={fromAreaId}
               onChoose={(id) => {
                 setFromChoice(id)
@@ -530,15 +547,31 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
             <RouteEnd label="To" areas={toChoices} chosen={toAreaId} onChoose={setToAreaId} />
           </div>
           {asking && from ? (
-            // Part 5: nobody takes from an area they don't work in - they ask it.
+            // Part 5: the people of the area asked move it.
             <p className="px-1 pt-1.5 text-xs text-neutral-600" data-asking>
-              You don't work in the {from.name}, so this asks the people there to move it.
+              The {from.name}'s people move it to you.
             </p>
           ) : (
             to &&
             !to.keepsStock && (
               <p className="px-1 pt-1.5 text-xs text-neutral-600">{to.name} uses what it's given: it's recorded as used there.</p>
             )
+          )}
+          {/* The other way to get it there, quietly: carry it yourself, or have them bring it. */}
+          {!request && (asking ? work.areas.some((area) => area.id === fromAreaId) : stockAreas(branch).length > 1) && (
+            <button
+              type="button"
+              disabled={moving}
+              onClick={() => {
+                setAsking((was) => !was)
+                setFromChoice(null)
+                setToAreaId('')
+              }}
+              className="-mb-1 inline-flex min-h-11 items-center px-1 text-sm font-medium text-primary-700 hover:underline"
+              data-switch-intent
+            >
+              {asking ? 'Move it yourself instead' : 'Ask for it instead'}
+            </button>
           )}
         </section>
 
@@ -851,7 +884,7 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
       )}
     </div>
   )
-  return children({ body, action })
+  return children({ body, action, asking })
 }
 
 /** How a move's line was typed: "2 bags", or the stock-unit figure. */
@@ -904,14 +937,11 @@ function BeforeAfter({ before, after, option, unit }: { before: number; after: n
 function RouteEnd({
   label,
   areas,
-  askable = [],
   chosen,
   onChoose,
 }: {
   label: string
   areas: Area[]
-  /** Areas this person doesn't work in, which they can ask (Part 5): grouped after their own. */
-  askable?: Area[]
   chosen: string
   onChoose: (id: string) => void
 }) {
@@ -922,29 +952,7 @@ function RouteEnd({
       <label htmlFor={id} className="block px-1 text-xs text-neutral-600">
         {label}
       </label>
-      {askable.length > 0 ? (
-        <select
-          id={id}
-          value={chosen}
-          onChange={(event) => onChoose(event.target.value)}
-          className="h-11 w-full min-w-0 rounded-md border border-neutral-300 bg-white px-2 text-base font-medium text-neutral-900"
-        >
-          <optgroup label="Your areas">
-            {areas.map((area) => (
-              <option key={area.id} value={area.id}>
-                {name(area)}
-              </option>
-            ))}
-          </optgroup>
-          <optgroup label="Ask another area">
-            {askable.map((area) => (
-              <option key={area.id} value={area.id}>
-                {area.name}
-              </option>
-            ))}
-          </optgroup>
-        </select>
-      ) : areas.length === 1 && chosen === areas[0].id ? (
+      {areas.length === 1 && chosen === areas[0].id ? (
         <output id={id} className="flex h-11 items-center truncate px-1 text-base font-medium text-neutral-900">
           {name(areas[0])}
         </output>
