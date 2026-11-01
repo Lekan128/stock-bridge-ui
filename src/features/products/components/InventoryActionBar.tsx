@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { ArrowLeftRight, PackagePlus, Truck } from 'lucide-react'
+import { ArrowLeftRight, ClipboardList, PackagePlus, Truck } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { InventoryActions, type InventoryBarProps } from '@/features/products/components/InventoryBar'
 
@@ -73,7 +73,11 @@ export function InventoryActionBar(props: InventoryActionBarProps) {
           )}
           {onMoveSelected && (
             <Button variant="secondary" onClick={onMoveSelected} disabled={selectedCount === 0}>
-              <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
+              {moveLabel?.label.startsWith('Ask') ? (
+                <ClipboardList className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
+              )}
               {/* "Ask" for someone who mostly asks (Part 5). */}
               {moveLabel?.short ?? 'Move'}
             </Button>

@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useId, useRef, useState } from 'react'
-import { ArrowLeftRight, CalendarClock, Download, Plus, Search, Settings, ShoppingBag, SlidersHorizontal, Tags, Truck, Upload, Zap } from 'lucide-react'
+import { ArrowLeftRight, CalendarClock, ClipboardList, Download, Plus, Search, Settings, ShoppingBag, SlidersHorizontal, Tags, Truck, Upload, Zap } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { OverflowMenu, type OverflowMenuItem } from '@/components/OverflowMenu'
@@ -79,15 +79,29 @@ const STATUS_OPTIONS: { value: ProductStatusFilter; label: string }[] = [
   { value: 'all', label: 'All' },
 ]
 
-/** The Inventory page's "⋯": everything done a handful of times a year (C1). */
-function inventoryMenuItems(props: InventoryBarProps): OverflowMenuItem[] {
+/**
+ * The Inventory page's "⋯": everything done a handful of times a year (C1) - and, on a phone, whichever of Move and
+ * Ask the bar at the bottom has no room for (on a laptop both are buttons).
+ */
+function inventoryMenuItems(props: InventoryBarProps, compact: boolean): OverflowMenuItem[] {
   const icon = 'h-4 w-4 text-neutral-500'
   return [
     ...(props.onQuickMode
       ? [{ label: 'Quick mode', icon: <Zap className={icon} aria-hidden="true" />, onSelect: props.onQuickMode }]
       : []),
-    ...(props.onOtherMove
-      ? [{ label: props.onOtherMove.label, icon: <ArrowLeftRight className={icon} aria-hidden="true" />, onSelect: props.onOtherMove.onSelect }]
+    ...(props.onOtherMove && compact
+      ? [
+          {
+            label: props.onOtherMove.label,
+            // Ask has its own sign (owner, 2026-11-01): the clipboard of a request, not Move's arrows.
+            icon: props.onOtherMove.label.startsWith('Ask') ? (
+              <ClipboardList className={icon} aria-hidden="true" />
+            ) : (
+              <ArrowLeftRight className={icon} aria-hidden="true" />
+            ),
+            onSelect: props.onOtherMove.onSelect,
+          },
+        ]
       : []),
     { label: 'Expected deliveries', icon: <CalendarClock className={icon} aria-hidden="true" />, onSelect: props.onExpectedDeliveries },
     ...(props.canManageProducts
@@ -121,7 +135,8 @@ export const InventoryBar = forwardRef<HTMLInputElement, InventoryBarProps>(func
     // search keeps its room at any width.
     <div className="flex flex-col gap-2 md:flex-row md:items-center">
       {/* Relative: on a phone the Filters panel spans this row, under it. */}
-      <div className="relative flex min-w-0 items-center gap-2 md:min-w-[16rem] md:max-w-sm md:flex-1">
+      {/* The search takes the room that's left, so this row ends where the title row does (owner, 2026-11-01). */}
+      <div className="relative flex min-w-0 items-center gap-2 md:min-w-[16rem] md:flex-1">
         <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-neutral-500" aria-hidden="true" />
           <label htmlFor="product-search" className="sr-only">
@@ -232,8 +247,23 @@ export function InventoryActions(props: InventoryBarProps & { compact?: boolean 
           aria-label={iconOnly(selling) ? moveWords.label : undefined}
           className={compact ? '' : 'whitespace-nowrap'}
         >
-          <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
-          {iconOnly(selling) ? null : compact ? moveWords.short : moveWords.label}
+          {moveWords.label.startsWith('Ask') ? (
+            <ClipboardList className="h-4 w-4" aria-hidden="true" />
+          ) : (
+            <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
+          )}
+          {iconOnly(selling) ? null : compact ? moveWords.short : <MoveWords words={moveWords} />}
+        </Button>
+      )}
+      {/* On a laptop the other one is a button too (owner, 2026-11-01: room enough, so not hidden in "⋯"). */}
+      {!compact && props.onOtherMove && (
+        <Button variant="secondary" onClick={props.onOtherMove.onSelect} title={props.onOtherMove.label} className="whitespace-nowrap">
+          {props.onOtherMove.label.startsWith('Ask') ? (
+            <ClipboardList className="h-4 w-4" aria-hidden="true" />
+          ) : (
+            <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
+          )}
+          <MoveWords words={{ label: props.onOtherMove.label, short: props.onOtherMove.label.startsWith('Ask') ? 'Ask' : 'Move' }} />
         </Button>
       )}
       {canManageProducts && (
@@ -249,7 +279,7 @@ export function InventoryActions(props: InventoryBarProps & { compact?: boolean 
         </Button>
       )}
       {/* On a phone these sit in the bar along the bottom, so the menu opens upwards to stay on screen. */}
-      <OverflowMenu label="More inventory actions" items={inventoryMenuItems(props)} side={compact ? 'above' : 'below'} />
+      <OverflowMenu label="More inventory actions" items={inventoryMenuItems(props, compact)} side={compact ? 'above' : 'below'} />
     </>
   )
 }
@@ -387,5 +417,15 @@ function FiltersPopover({
         </div>
       )}
     </div>
+  )
+}
+
+/** "Move stock" / "Ask for stock" where there's room, "Move" / "Ask" on a narrower laptop, so the title row fits. */
+function MoveWords({ words }: { words: { label: string; short: string } }) {
+  return (
+    <>
+      <span className="xl:hidden">{words.short}</span>
+      <span className="hidden xl:inline">{words.label}</span>
+    </>
   )
 }

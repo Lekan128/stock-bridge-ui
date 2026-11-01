@@ -1069,9 +1069,12 @@ await check('Inventory: the owner finds Ask in "⋯"; the search keeps its width
   const box = await search.boundingBox()
   assert(box.width >= 200, `the search is ${box.width}px wide`)
   await page.screenshot({ path: SHOTS + '42-inventory-1024.png' })
-  // Move stock is the button; Ask for stock is in "⋯".
+  // Both Move and Ask are buttons on a laptop (owner, 2026-11-01), short words on a narrower one; not in "⋯".
   await page.getByRole('button', { name: 'More inventory actions' }).click()
-  await page.getByRole('menuitem', { name: 'Ask for stock' }).click()
+  assert((await page.getByRole('menuitem', { name: 'Ask for stock' }).count()) === 0, 'Ask is still in "⋯"')
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: 'Move', exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Ask', exact: true }).click()
   const askSheet = page.getByRole('dialog', { name: /Ask for stock/ })
   await askSheet.locator('[data-asking]').waitFor()
   await page.keyboard.press('Escape')
