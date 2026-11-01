@@ -9,7 +9,7 @@ import { stockApi, type StockInRequestPayload } from '@/features/products/api/st
 import type { StockMutationResponse, StockOutPayload } from '@/features/products/types'
 import { transfersApi } from '@/features/transfers/transfersApi'
 import { movesApi } from '@/features/moves/movesApi'
-import type { AreaMove, AreaMoveConfirmPayload, AreaMovePayload } from '@/features/moves/types'
+import type { AreaMove, AreaMoveConfirmPayload, AreaMovePayload, AreaReturnPayload } from '@/features/moves/types'
 import { requestsApi } from '@/features/requests/requestsApi'
 import type { StockRequest, StockRequestPayload } from '@/features/requests/types'
 import type { ReceiptPayload, SendPayload, Transfer } from '@/features/transfers/types'
@@ -192,6 +192,13 @@ function send(op: OutboxOp, { late }: { late: boolean }): Promise<Answer> {
     // A confirmation sent late keeps when it was made, so a count taken since isn't doubled (Part 4).
     case 'AREA_MOVE_CONFIRM':
       return movesApi.confirm(op.moveId, { ...op.payload, ...timing })
+    // A give back keeps when it was done; sent late it says so, so a later count isn't doubled (Part 6).
+    case 'AREA_RETURN':
+      return movesApi.giveBackOrReport(op.moveId, {
+        ...op.payload,
+        occurredAt: new Date(op.createdAt).toISOString(),
+        ...(late ? { recordedOffline: true } : {}),
+      })
     // A request keeps the moment it was asked (Part 5).
     case 'STOCK_REQUEST':
       return requestsApi.ask({ ...op.payload, occurredAt: new Date(op.createdAt).toISOString() })
@@ -270,7 +277,7 @@ export function applyMoveResult(move: AreaMove): void {
 }
 
 function applyResult(op: OutboxOp, response: Answer): void {
-  if (op.kind === 'AREA_MOVE' || op.kind === 'AREA_MOVE_CONFIRM') applyMoveResult(response as AreaMove)
+  if (op.kind === 'AREA_MOVE' || op.kind === 'AREA_MOVE_CONFIRM' || op.kind === 'AREA_RETURN') applyMoveResult(response as AreaMove)
   else if (op.kind === 'STOCK_REQUEST') void queryClient.invalidateQueries({ queryKey: ['stock-requests'] })
   else if (op.kind === 'TRANSFER_SEND' || op.kind === 'TRANSFER_RECEIVE') applyTransferResult(response as Transfer)
   else applyStockResult(op.productId, response as StockMutationResponse)
@@ -486,6 +493,40 @@ export async function submitMoveConfirm(
     attempts: 0,
     nextAttemptAt: 0,
     kind: 'AREA_MOVE_CONFIRM',
+    moveId,
+    payload,
+    baseDelta: null,
+  }
+  if (!isBehind(op)) {
+    try {
+      const response = (await send(op, { late: false })) as AreaMove
+      applyMoveResult(response)
+      return { status: 'sent', response }
+    } catch (error) {
+      if (!isTransient(error)) throw error
+    }
+  }
+  await save({ ...op, attempts: 1, nextAttemptAt: Date.now() + backoff(1) })
+  void processOutbox()
+  return { status: 'queued', op }
+}
+
+/**
+ * A give back or a report (STOCK_AREAS_PART_6.md), the way `submitMoveConfirm` sends a confirmation: now if the
+ * server can be reached, otherwise kept on this phone and sent when it can - behind the move and its product.
+ */
+export async function submitReturn(moveId: string, payload: AreaReturnPayload, summary: string): Promise<SubmitOutcome<AreaMove>> {
+  const op: OutboxOp = {
+    id: crypto.randomUUID(),
+    productId: `move:${moveId}`,
+    keys: [`move:${moveId}`, payload.productId],
+    productName: summary,
+    summary,
+    createdAt: Date.now(),
+    status: 'pending',
+    attempts: 0,
+    nextAttemptAt: 0,
+    kind: 'AREA_RETURN',
     moveId,
     payload,
     baseDelta: null,

@@ -15,6 +15,7 @@ export function AreaMenu({
   className,
   caption = 'Record in',
   all,
+  onGiveBack,
 }: {
   areas: Area[]
   currentId: string | undefined
@@ -27,6 +28,8 @@ export function AreaMenu({
   onPick: (area: Area) => void
   /** Where the dropdown sits, under whatever opened it. */
   className: string
+  /** "Give back or report" under the areas that use stock up (Part 6): what there is to do for them. */
+  onGiveBack?: () => void
 }) {
   return (
     <div
@@ -47,6 +50,19 @@ export function AreaMenu({
         <p role="none" className="mx-3 mt-1 border-t border-neutral-100 pt-2 pb-1 text-xs text-neutral-600">
           {usesOnly.map((area) => area.name).join(' and ')}{' '}
           {usesOnly.length === 1 ? 'uses' : 'use'} stock up as soon as it arrives, so there's nothing to record there.
+          {onGiveBack && (
+            <>
+              {' '}
+              <button
+                type="button"
+                role="menuitem"
+                onClick={onGiveBack}
+                className="inline-flex min-h-11 items-center font-medium text-primary-700 hover:underline"
+              >
+                Give back or report
+              </button>
+            </>
+          )}
         </p>
       )}
     </div>

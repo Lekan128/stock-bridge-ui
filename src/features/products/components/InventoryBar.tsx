@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useId, useRef, useState } from 'react'
-import { ArrowLeftRight, CalendarClock, Download, MessageSquarePlus, Plus, Search, Settings, ShoppingBag, SlidersHorizontal, Tags, Truck, Upload, Zap } from 'lucide-react'
+import { ArrowLeftRight, CalendarClock, Download, MessageSquarePlus, Plus, Search, Settings, ShoppingBag, SlidersHorizontal, Tags, Truck, Undo2, Upload, Zap } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { OverflowMenu, type OverflowMenuItem } from '@/components/OverflowMenu'
@@ -46,6 +46,8 @@ export interface InventoryBarProps {
    * someone whose button is Ask - in "⋯", so the bar keeps one button for it.
    */
   onOtherMove?: { label: string; onSelect: () => void }
+  /** "Give back or report" (Part 6): for someone who works in an area that uses stock up. */
+  onGiveBack?: () => void
   /** How the Move button reads for this person (Part 5): "Ask for stock" for a cook, "Move stock" otherwise. */
   moveLabel?: { label: string; short: string }
   /**
@@ -102,6 +104,9 @@ function inventoryMenuItems(props: InventoryBarProps, compact: boolean): Overflo
             onSelect: props.onOtherMove.onSelect,
           },
         ]
+      : []),
+    ...(props.onGiveBack
+      ? [{ label: 'Give back or report', icon: <Undo2 className={icon} aria-hidden="true" />, onSelect: props.onGiveBack }]
       : []),
     { label: 'Expected deliveries', icon: <CalendarClock className={icon} aria-hidden="true" />, onSelect: props.onExpectedDeliveries },
     ...(props.canManageProducts

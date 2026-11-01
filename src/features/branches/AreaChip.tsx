@@ -4,6 +4,7 @@ import { useClickOutside } from '@/hooks/useClickOutside'
 import { useToast } from '@/components/useToast'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { AreaMenu } from '@/features/branches/AreaMenu'
+import { GivenSheet } from '@/features/moves/GivenSheet'
 import { hasAreas } from '@/features/branches/areas'
 import { ALL_AREAS, myAreas, useWorkArea } from '@/features/branches/workArea'
 
@@ -18,6 +19,7 @@ export function AreaChip() {
   const work = useWorkArea(working)
   const { showToast } = useToast()
   const [open, setOpen] = useState(false)
+  const [givenOpen, setGivenOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useClickOutside(ref, () => setOpen(false))
 
@@ -72,6 +74,10 @@ export function AreaChip() {
             },
           }}
           className="fixed inset-x-4 top-[4.5rem] sm:absolute sm:inset-x-auto sm:top-full sm:right-0 sm:mt-2 sm:w-64"
+          onGiveBack={() => {
+            setOpen(false)
+            setGivenOpen(true)
+          }}
           onPick={(area) => {
             setOpen(false)
             if (area.id === work.area?.id) return
@@ -80,6 +86,7 @@ export function AreaChip() {
           }}
         />
       )}
+      {givenOpen && <GivenSheet onClose={() => setGivenOpen(false)} />}
     </div>
   )
 }

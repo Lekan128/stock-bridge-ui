@@ -3,7 +3,8 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowLeftRight, MessageSquarePlus, PackagePlus, Truck, X } from 'lucide-react'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { hasAreas } from '@/features/branches/areas'
-import { useWorkArea } from '@/features/branches/workArea'
+import { myAreas, useWorkArea } from '@/features/branches/workArea'
+import { GivenSheet } from '@/features/moves/GivenSheet'
 import { useMoveSheet } from '@/features/moves/useMoveSheet'
 import { useMoveIntent } from '@/features/moves/moveIntent'
 import { BranchLevelDialog } from '@/features/branches/BranchLevelDialog'
@@ -153,6 +154,10 @@ export function ProductListPage() {
     branch.recordable.some((entry) => entry.id === branch.working?.id)
   const canSelect = canImport || canSendSelected || canMove || levelBranch != null
   const moveSheet = useMoveSheet()
+  // Give back or report (Part 6): for someone who works in an area that uses stock up, at this branch.
+  const givesHere =
+    (canStockIn || canStockOut) && branch?.working != null && !branch.isAll && myAreas(branch.working).some((area) => !area.keepsStock)
+  const [givenOpen, setGivenOpen] = useState(false)
   // One button, worded for who's holding the phone (Part 5): Ask for stock for a cook, Move stock otherwise.
   const moveIntent = useMoveIntent()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -505,6 +510,7 @@ export function ProductListPage() {
         ? { label: 'Ask for stock', onSelect: () => moveSheet.open([], 'ask') }
         : { label: 'Move stock', onSelect: () => moveSheet.open([], 'move') }
       : undefined,
+    onGiveBack: givesHere ? () => setGivenOpen(true) : undefined,
     onRecordSale: recordsSales && canStockOut ? () => navigate('/app/sell') : undefined,
     onExpectedDeliveries: () => navigate('/app/products/expected'),
     onExport: () => void handleExport(),
@@ -722,6 +728,7 @@ export function ProductListPage() {
 
       {stockActions.sheet}
       {moveSheet.sheet}
+      {givenOpen && <GivenSheet onClose={() => setGivenOpen(false)} />}
 
       {settingLevel && levelBranch && (
         <BranchLevelDialog

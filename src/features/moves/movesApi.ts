@@ -1,5 +1,5 @@
 import { api } from '@/api/client'
-import type { AreaMove, AreaMoveConfirmPayload, AreaMovePayload } from '@/features/moves/types'
+import type { AreaMove, AreaMoveConfirmPayload, AreaMovePayload, AreaReturnPayload } from '@/features/moves/types'
 import type { PageResponse } from '@/features/products/types'
 
 /** Moves between the areas of a branch (STOCK_AREAS_PART_2.md). Writes go through the outbox. */
@@ -11,6 +11,12 @@ export const movesApi = {
     api.post<AreaMove>(`/api/area-moves/${id}/confirm`, payload).then((r) => r.data),
   /** Takes back a move still waiting (Part 4). Online only. */
   cancel: (id: string) => api.post<AreaMove>(`/api/area-moves/${id}/cancel`).then((r) => r.data),
+  /** Gives back, or reports, part of a give to an area that uses stock up (Part 6). Through the outbox. */
+  giveBackOrReport: (id: string, payload: AreaReturnPayload) =>
+    api.post<AreaMove>(`/api/area-moves/${id}/returns`, payload).then((r) => r.data),
+  /** What was given lately to the areas that use stock up where this person works (Part 6). */
+  given: (branchId?: string) =>
+    api.get<AreaMove[]>('/api/area-moves/given', { params: branchId ? { branchId } : {} }).then((r) => r.data),
   /** The moves waiting for this person to confirm, at one branch or every one they see. */
   waiting: (branchId?: string) =>
     api.get<AreaMove[]>('/api/area-moves/waiting', { params: branchId ? { branchId } : {} }).then((r) => r.data),

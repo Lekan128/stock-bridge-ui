@@ -859,7 +859,9 @@ await check('the Kitchen confirms what arrives: a move waits, the cook confirms 
   const confirmSheet = cookPage.getByRole('dialog', { name: '1 item from the Store' })
   await confirmSheet.getByRole('button', { name: 'Got everything' }).waitFor()
   await confirmSheet.getByRole('button', { name: 'Decrease got of rice' }).click()
-  await confirmSheet.getByText("It's still in the Store").waitFor()
+  // That line asks what happened to the rest, one tap each (Part 6); still in the Store to start with.
+  await confirmSheet.locator('[data-rest-question]').getByText(/What happened to the other 1/).waitFor()
+  assert(await confirmSheet.getByRole('radio', { name: 'Still in the Store' }).isChecked(), 'the rest does not start as still in the Store')
   await cookPage.waitForTimeout(300)
   await cookPage.screenshot({ path: SHOTS + '31-confirm-short.png' })
   await confirmSheet.getByRole('button', { name: /^Confirm · 1 .*short$/ }).click()
@@ -926,6 +928,124 @@ await check('the Kitchen confirms what arrives: a move waits, the cook confirms 
   await sheet.getByLabel('It arrives straight away').check()
   await sheet.getByRole('button', { name: 'Save' }).click()
   await sheet.waitFor({ state: 'hidden' })
+})
+
+// ------------------------------------------------------------------------------------- Part 6
+
+await check('confirming short, each line says what happened and the cook adds a note; the move says it', async () => {
+  const beans = await createProduct(ownerToken, owner.unique, 'Beans')
+  await api(`/api/products/${beans.id}/stock/stock-in`, { token: ownerToken, method: 'POST', body: { quantity: 10, unitPrice: '100' } })
+  const areaIds = Object.fromEntries((await api('/api/branches', { token: ownerToken })).json.branches[0].areas.map((a) => [a.name, a.id]))
+  await api(`/api/areas/${areaIds.Kitchen}`, { token: ownerToken, method: 'PATCH', body: { confirms: true } })
+  const before = await areaFigures(ownerToken, rice.id)
+  const moveId = randomUUID()
+  await api('/api/area-moves', {
+    token: ownerToken,
+    method: 'POST',
+    body: {
+      id: moveId,
+      fromAreaId: areaIds.Store,
+      toAreaId: areaIds.Kitchen,
+      lines: [
+        { productId: rice.id, quantity: 3 },
+        { productId: beans.id, quantity: 2 },
+      ],
+    },
+  })
+
+  // The cook, on a phone: one short of each - the rice still in the Store, the beans expired - and a note.
+  const cookContext = await contextFor(await login(owner.user.clientIdentifier, `cook-${owner.unique}`), { width: 390, height: 844 })
+  const cookPage = await cookContext.newPage()
+  await cookPage.goto(`${UI}/app/quick?mode=out`)
+  await cookPage.locator('[data-waiting-line]').getByText('2 items from the Store to confirm').click()
+  const sheet = cookPage.getByRole('dialog', { name: '2 items from the Store' })
+  await sheet.getByRole('button', { name: 'Decrease got of rice' }).click()
+  await sheet.getByRole('button', { name: 'Decrease got of beans' }).click()
+  const beansLine = sheet.locator(`[data-confirm-line="${beans.id}"]`)
+  await beansLine.getByText('What happened to the other 1 piece?').waitFor()
+  await beansLine.getByText('Expired', { exact: true }).click()
+  assert(await beansLine.getByRole('radio', { name: 'Expired' }).isChecked(), 'Expired is not chosen')
+  await sheet.getByLabel('Note (optional)').fill('One tin was swollen')
+  await cookPage.waitForTimeout(300)
+  await cookPage.screenshot({ path: SHOTS + '48-confirm-short-reasons.png' })
+  await sheet.getByRole('button', { name: /^Confirm · 2 items short$/ }).click()
+  await sheet.waitFor({ state: 'hidden' })
+  await cookContext.close()
+
+  const move = (await api(`/api/area-moves/${moveId}`, { token: ownerToken })).json
+  const reasons = Object.fromEntries(move.lines.map((line) => [line.productName, line.restReason]))
+  assert(reasons.Rice === 'BACK' && reasons.Beans === 'EXPIRED', `reasons ${JSON.stringify(reasons)}`)
+  assert(move.confirmNote === 'One tin was swollen', `note ${move.confirmNote}`)
+  assert((await areaFigures(ownerToken, rice.id)).Store === before.Store - 2, 'the rice still in the Store is not back there')
+
+  // The owner opens it from its link: each line says what happened, and the note.
+  await page.goto(`${UI}/app?move=${moveId}`)
+  const opened = page.getByRole('dialog', { name: '2 items from the Store' })
+  await opened.locator(`[data-confirm-line="${beans.id}"]`).getByText('1 piece expired').waitFor()
+  await opened.locator(`[data-confirm-line="${rice.id}"]`).getByText('1 piece still in the Store').waitFor()
+  await opened.locator('[data-move-state]').getByText('The Kitchen got less of each item').waitFor()
+  await opened.locator('[data-confirm-note]').getByText('Note: One tin was swollen').waitFor()
+  await page.screenshot({ path: SHOTS + '49-move-says-what-happened.png' })
+  await page.keyboard.press('Escape')
+  await api(`/api/areas/${areaIds.Kitchen}`, { token: ownerToken, method: 'PATCH', body: { confirms: false } })
+})
+
+await check('Housekeeping gives back what it did not use and reports what spoilt, from what it was given; offline too', async () => {
+  const areaIds = Object.fromEntries((await api('/api/branches', { token: ownerToken })).json.branches[0].areas.map((a) => [a.name, a.id]))
+  const role = (await api('/api/roles', { token: ownerToken })).json.find((r) => r.name === 'STOREKEEPER')
+  const name = `maid-${owner.unique}`
+  await api('/api/users', { token: ownerToken, method: 'POST', body: { username: name, password: PASSWORD, roleId: role.id, areaIds: [areaIds.Housekeeping] } })
+  await api('/api/area-moves', {
+    token: ownerToken,
+    method: 'POST',
+    body: { id: randomUUID(), fromAreaId: areaIds.Store, toAreaId: areaIds.Housekeeping, lines: [{ productId: rice.id, quantity: 3 }] },
+  })
+  const before = await areaFigures(ownerToken, rice.id)
+  const ownerHeard = () =>
+    execSync(psqlCommand, {
+      input: `SELECT COUNT(*) FROM notifications n JOIN users u ON u.id = n.user_id WHERE u.email = '${owner.email}' AND n.type = 'AREA_RETURN';`,
+    })
+      .toString()
+      .trim()
+
+  // On a phone: Inventory's "⋯" → Give back or report → what Housekeeping was given lately.
+  const maidContext = await contextFor(await login(owner.user.clientIdentifier, name), { width: 390, height: 844 })
+  const maidPage = await maidContext.newPage()
+  await maidPage.goto(`${UI}/app/products`)
+  await maidPage.getByRole('button', { name: 'More inventory actions' }).click()
+  await maidPage.getByRole('menuitem', { name: 'Give back or report' }).click()
+  const sheet = maidPage.getByRole('dialog', { name: 'Given to Housekeeping' })
+  const line = sheet.locator('[data-given-line="Rice"]').first()
+  await line.getByText('3 pieces given').waitFor()
+
+  // Give back 1: it opens in place; the Store has it again.
+  await line.getByRole('button', { name: 'Give back Rice' }).click()
+  await line.getByRole('button', { name: 'Give back 1 piece to the Store' }).click()
+  await maidPage.getByText('Given back · 1 piece of Rice · in the Store').first().waitFor()
+  await waitFor(async () => (await areaFigures(ownerToken, rice.id)).Store === before.Store + 1, 'the Store to have it again')
+  await line.getByText('1 piece given back').waitFor()
+
+  // Report 1 spoilt, with a note: no figure changes.
+  await line.getByRole('button', { name: 'Report Rice' }).click()
+  await line.getByText('Spoilt', { exact: true }).click()
+  await line.getByLabel('Note (optional)').fill('Mice got into the bag')
+  await maidPage.waitForTimeout(300)
+  await maidPage.screenshot({ path: SHOTS + '50-report-spoilt.png' })
+  await line.getByRole('button', { name: 'Report 1 piece spoilt' }).click()
+  await line.getByText('1 piece reported spoilt').waitFor()
+  assert((await areaFigures(ownerToken, rice.id)).Store === before.Store + 1, 'a report changed the Store')
+  await maidPage.screenshot({ path: SHOTS + '51-given-to-housekeeping.png' })
+
+  // The last one, given back offline: kept on the phone, and it lands once back online.
+  await maidContext.setOffline(true)
+  await line.getByRole('button', { name: 'Give back Rice' }).click()
+  await line.getByRole('button', { name: 'Give back 1 piece to the Store' }).click()
+  await maidPage.getByText(/Saved on this phone/).first().waitFor()
+  await maidContext.setOffline(false)
+  await maidPage.evaluate(() => window.dispatchEvent(new Event('online')))
+  await waitFor(async () => (await areaFigures(ownerToken, rice.id)).Store === before.Store + 2, 'the offline give back to land')
+  await maidContext.close()
+  await waitFor(async () => ownerHeard() === '3', `the owner to hear 3 times (heard ${ownerHeard()})`)
 })
 
 // ------------------------------------------------------------------------------------- Part 5

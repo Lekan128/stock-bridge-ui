@@ -2,11 +2,13 @@ import { useState } from 'react'
 import { Button } from '@/components/Button'
 import { QuantityStepper } from '@/components/QuantityStepper'
 import { Sheet } from '@/components/Sheet'
+import { TextField } from '@/components/TextField'
 import { useToast } from '@/components/useToast'
 import { formatDateTime } from '@/features/marketplace/formatters'
 import { movesApi } from '@/features/moves/movesApi'
-import { itemsWord, lineUnit, moveState, type MoveLine } from '@/features/moves/moveWords'
-import type { AreaMove } from '@/features/moves/types'
+import { ChoiceChips } from '@/features/moves/ChoiceChips'
+import { itemsWord, lineUnit, moveState, restChoices, restWords, returnsSaid, type MoveLine } from '@/features/moves/moveWords'
+import type { AreaMove, MoveRest } from '@/features/moves/types'
 import { applyMoveResult, submitMoveConfirm } from '@/features/outbox/outboxStore'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import { resolveUnitSymbol } from '@/features/products/unitSet'
@@ -15,7 +17,8 @@ import { isAppError } from '@/types/api'
 /**
  * One move, opened from Needs you today, quick mode's line, the bell or the Moves list (STOCK_AREAS_PART_4.md,
  * STOCK_AREAS_PLAN.md §5.3). Waiting for an area this person works in: what was moved, each with "got", and
- * **Got everything** in one tap - change a number and it asks the one question, what happened to the rest.
+ * **Got everything** in one tap - change a number and that line asks what happened to the rest, one tap each, with
+ * a note for the move (Part 6; owner, 2026-11-01).
  * Otherwise it says where the move stands, with **Take it back** for its mover while it waits. A side panel on a
  * laptop, a bottom sheet on a phone, like every stock write; the confirmation goes through the outbox.
  */
@@ -26,7 +29,9 @@ export function MoveSheet({ move, onClose }: { move: AreaMove; onClose: () => vo
   const units = move.lines.map((line) => lineUnit(line, resolveUnitSymbol(line.unitOfMeasure, options)))
   // What arrived of each line, in the unit it's spoken in; everything, to start with.
   const [got, setGot] = useState<number[]>(() => move.lines.map((line, i) => line.quantity / units[i].per))
-  const [rest, setRest] = useState<'BACK' | 'DAMAGED'>('BACK')
+  // What happened to each line's shortfall (Part 6): still where it came from, to start with.
+  const [rests, setRests] = useState<MoveRest[]>(() => move.lines.map(() => 'BACK'))
+  const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
 
@@ -45,8 +50,11 @@ export function MoveSheet({ move, onClose }: { move: AreaMove; onClose: () => vo
       const outcome = await submitMoveConfirm(
         move.id,
         {
-          lines: move.lines.map((line, i) => ({ productId: line.productId, got: Math.min(line.quantity, got[i] * units[i].per) })),
-          ...(short ? { rest } : {}),
+          lines: move.lines.map((line, i) => {
+            const arrived = Math.min(line.quantity, got[i] * units[i].per)
+            return { productId: line.productId, got: arrived, ...(arrived < line.quantity ? { rest: rests[i] } : {}) }
+          }),
+          ...(short && note.trim() ? { note: note.trim() } : {}),
         },
         move.lines.map((line) => line.productId),
         `${itemsWord(move.lines.length)} · ${move.fromAreaName} → ${move.toAreaName}`,
@@ -110,45 +118,61 @@ export function MoveSheet({ move, onClose }: { move: AreaMove; onClose: () => vo
               </span>
             </>
           ) : null}
+          {!confirming && move.confirmNote ? (
+            <>
+              <br />
+              <span className="text-neutral-800" data-confirm-note>
+                Note: {move.confirmNote}
+              </span>
+            </>
+          ) : null}
         </p>
         <ul className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200">
-          {move.lines.map((line, i) => (
-            <li key={line.productId} className="flex items-center justify-between gap-3 px-3 py-2.5" data-confirm-line={line.productId}>
-              <div className="min-w-0">
-                <p className="truncate text-base font-medium text-neutral-900">{line.productName}</p>
-                <p className="text-sm text-neutral-600">
-                  moved {units[i].say(line.quantity / units[i].per)}
-                  {!confirming && line.got != null && line.got !== line.quantity ? ` · got ${units[i].say(line.got / units[i].per)}` : ''}
-                  {line.damaged ? ` · ${units[i].say(line.damaged / units[i].per)} damaged` : ''}
-                </p>
-              </div>
-              {confirming && <GotStepper line={line} value={got[i]} max={line.quantity / units[i].per} onChange={(n) => setGot((all) => all.map((v, j) => (j === i ? n : v)))} />}
-            </li>
-          ))}
+          {move.lines.map((line, i) => {
+            const missing = line.quantity / units[i].per - got[i]
+            // What happened to what didn't arrive, once it's confirmed: "1 bag damaged or spoilt", "1 still in the Store".
+            const shortBy = line.got != null ? (line.quantity - line.got) / units[i].per : 0
+            const why = line.restReason ?? (line.damaged ? 'DAMAGED' : 'BACK')
+            const returned = returnsSaid(line.returns, units[i].say, units[i].per)
+            return (
+              <li key={line.productId} className="flex flex-col gap-2 px-3 py-2.5" data-confirm-line={line.productId}>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-base font-medium text-neutral-900">{line.productName}</p>
+                    <p className="text-sm text-neutral-600">
+                      moved {units[i].say(line.quantity / units[i].per)}
+                      {!confirming && line.got != null && line.got !== line.quantity ? ` · got ${units[i].say(line.got / units[i].per)}` : ''}
+                      {!confirming && shortBy > 0 ? ` · ${units[i].say(shortBy)} ${restWords(why, move.fromAreaName)}` : ''}
+                      {returned ? ` · ${returned}` : ''}
+                    </p>
+                  </div>
+                  {confirming && <GotStepper line={line} value={got[i]} max={line.quantity / units[i].per} onChange={(n) => setGot((all) => all.map((v, j) => (j === i ? n : v)))} />}
+                </div>
+                {confirming && missing > 0 && (
+                  <div className="flex flex-col gap-1.5" data-rest-question>
+                    <p className="text-sm font-medium text-neutral-800">What happened to the other {units[i].say(missing)}?</p>
+                    <ChoiceChips
+                      name={`rest-${move.id}-${line.productId}`}
+                      label={`What happened to the other ${units[i].say(missing)} of ${line.productName}`}
+                      value={rests[i]}
+                      options={restChoices(move.fromAreaName)}
+                      onChange={(value) => setRests((all) => all.map((v, j) => (j === i ? value : v)))}
+                    />
+                  </div>
+                )}
+              </li>
+            )
+          })}
         </ul>
 
         {confirming && short && (
-          <fieldset className="flex flex-col gap-2">
-            <legend className="mb-1 text-sm font-medium text-neutral-800">
-              What happened to {shortLines.length === 1 ? `the other ${shortSaid}` : 'the rest'}?
-            </legend>
-            {(
-              [
-                ['BACK', `It's still in the ${move.fromAreaName}`],
-                ['DAMAGED', 'It was damaged'],
-              ] as const
-            ).map(([value, label]) => (
-              <label
-                key={value}
-                className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border px-3 ${
-                  rest === value ? 'border-primary-500 bg-primary-50' : 'border-neutral-200 bg-white'
-                }`}
-              >
-                <input type="radio" name={`rest-${move.id}`} checked={rest === value} onChange={() => setRest(value)} className="h-4 w-4" />
-                <span className="text-base text-neutral-900">{label}</span>
-              </label>
-            ))}
-          </fieldset>
+          <TextField
+            id={`confirm-note-${move.id}`}
+            label="Note (optional)"
+            value={note}
+            maxLength={500}
+            onChange={(event) => setNote(event.target.value)}
+          />
         )}
 
         {problem && (
