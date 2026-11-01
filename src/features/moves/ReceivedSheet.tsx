@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Button } from '@/components/Button'
+import { ErrorState } from '@/components/ErrorState'
 import { QuantityStepper } from '@/components/QuantityStepper'
 import { Sheet } from '@/components/Sheet'
 import { Skeleton } from '@/components/Skeleton'
@@ -29,7 +30,7 @@ type Open = { key: string; kind: 'GIVE_BACK' | 'REPORT' }
 export function ReceivedSheet({ onClose }: { onClose: () => void }) {
   const branch = useOptionalWorkingBranch()
   const here = branch && !branch.isAll ? branch.working : null
-  const { data, loading } = useApiQuery({
+  const { data, loading, error, refetch } = useApiQuery({
     queryKey: ['area-moves', 'received', here?.id ?? 'all'],
     queryFn: () => movesApi.received(here?.id),
     fallbackError: "Couldn't load what arrived.",
@@ -45,7 +46,10 @@ export function ReceivedSheet({ onClose }: { onClose: () => void }) {
         <p className="text-sm text-neutral-600">
           The last 7 days. Give back what you don't need or can't use, or report what spoilt.
         </p>
-        {loading && moves.length === 0 ? (
+        {error && moves.length === 0 ? (
+          // Not "nothing arrived": that would be wrong, and it may well have.
+          <ErrorState title="We could not load what arrived" message={error} onRetry={refetch} />
+        ) : loading && moves.length === 0 ? (
           <div className="flex flex-col gap-2">
             {Array.from({ length: 3 }).map((_, index) => (
               <Skeleton key={index} className="h-16 w-full rounded-md" />
