@@ -25,6 +25,8 @@ export interface NewArea {
   name: string
   keepsStock: boolean
   shortIsUsed?: boolean
+  /** Moves to it wait until someone there confirms them (Part 4). */
+  confirms?: boolean
 }
 
 /** A branch's areas (STOCK_AREAS_PART_1.md). Shared records, so online only, like branches. */

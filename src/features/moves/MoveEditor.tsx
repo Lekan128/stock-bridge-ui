@@ -564,7 +564,7 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
           ) : (
             to &&
             !to.keepsStock && (
-              <p className="px-1 pt-1.5 text-xs text-neutral-600">{to.name} uses what it's given: it's recorded as used there.</p>
+              <p className="px-1 pt-1.5 text-xs text-neutral-600">{to.name} uses stock up as soon as it arrives: it's recorded as used there.</p>
             )
           )}
           {/* The other way to get it there, quietly: carry it yourself, or have them bring it. */}

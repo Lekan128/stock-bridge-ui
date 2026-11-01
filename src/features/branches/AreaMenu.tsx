@@ -46,7 +46,7 @@ export function AreaMenu({
       {usesOnly.length > 0 && (
         <p role="none" className="mx-3 mt-1 border-t border-neutral-100 pt-2 pb-1 text-xs text-neutral-600">
           {usesOnly.map((area) => area.name).join(' and ')}{' '}
-          {usesOnly.length === 1 ? "uses what it's given" : "use what they're given"}, so there's nothing to record there.
+          {usesOnly.length === 1 ? 'uses' : 'use'} stock up as soon as it arrives, so there's nothing to record there.
         </p>
       )}
     </div>

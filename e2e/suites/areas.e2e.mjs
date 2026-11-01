@@ -151,22 +151,33 @@ await check('the owner adds Kitchen, Bar and Housekeeping in one sheet; everythi
   await dialog.getByRole('heading', { name: `Add areas to ${branchName}` }).waitFor()
   await dialog.getByText(/Your stock is in the Store\./).waitFor()
   for (const name of ['Kitchen', 'Bar', 'Housekeeping']) await dialog.getByRole('button', { name, exact: true }).click()
-  // What happens there (D-A12): the quick picks start sensibly - the Kitchen and Bar work with stock,
-  // Housekeeping uses it up - and each is one tap to change.
-  const kindOf = (name) => dialog.getByLabel(`What happens at ${name}`)
-  assert((await kindOf('Kitchen').inputValue()) === 'WORKED', 'the Kitchen does not start as "stock is used here"')
-  assert((await kindOf('Housekeeping').inputValue()) === 'USED_UP', "Housekeeping does not start as \"uses what it's given\"")
-  // What the chosen answer does, right under it, in words (owner, 2026-10-31).
-  await dialog.locator('li', { hasText: 'Housekeeping' }).getByText('Not counted. Whatever is sent here is recorded as used').waitFor()
+  // Each new area gets the two questions its Edit asks (owner, 2026-11-01), answers that say it alone. The quick
+  // picks start sensibly - the Kitchen and Bar keep stock and use it, Housekeeping uses it up - one tap to change.
+  const row = (name) => dialog.locator('li', { hasText: name })
+  const kindOf = (name) => row(name).getByLabel('What happens here?')
+  assert((await kindOf('Kitchen').inputValue()) === 'WORKED', 'the Kitchen does not start as "used here, bit by bit"')
+  assert((await kindOf('Housekeeping').inputValue()) === 'USED_UP', 'Housekeeping does not start as "used up as soon as it arrives"')
+  assert(
+    (await kindOf('Kitchen').locator('option:checked').innerText()) === 'Stock is used here, bit by bit',
+    `the Kitchen's answer reads "${await kindOf('Kitchen').locator('option:checked').innerText()}"`,
+  )
+  const arriving = row('Kitchen').getByLabel('When stock is moved here')
+  assert((await arriving.locator('option:checked').innerText()) === 'It arrives straight away', 'moves to the Kitchen do not arrive straight away')
+  // The Bar's people will confirm what reaches them, said as it's added.
+  await row('Bar').getByLabel('When stock is moved here').selectOption({ label: 'Someone here confirms it' })
   await dialog.screenshot({ path: SHOTS + '2-add-areas-sheet.png' })
   await dialog.getByRole('button', { name: 'Add 3 areas' }).click()
   await page.getByRole('status').filter({ hasText: `${branchName} now has 4 areas. Everything you have is in the Store.` }).waitFor()
 
   const areas = page.getByRole('region', { name: `Areas at ${branchName}` })
   // Each row says the area in words: what happens there (owner, 2026-10-31).
-  await areas.locator('[data-area="Housekeeping"]').getByText("uses what it's given").waitFor()
-  await areas.locator('[data-area="Kitchen"]').getByText('stock is used here').waitFor()
-  await areas.locator('[data-area="Store"]').getByText('stock is kept here').waitFor()
+  await areas.locator('[data-area="Housekeeping"]').getByText('used up as soon as it arrives').waitFor()
+  await areas.locator('[data-area="Kitchen"]').getByText('stock is used here bit by bit').waitFor()
+  await areas.locator('[data-area="Store"]').getByText('stock is stored here').waitFor()
+  const bar = (await api('/api/branches', { token: ownerToken })).json.branches[0].areas.find((area) => area.name === 'Bar')
+  assert(bar.confirms === true, 'the Bar was added without confirming what reaches it')
+  // Back as it was for the checks that follow: moves to the Bar arrive straight away.
+  await api(`/api/areas/${bar.id}`, { token: ownerToken, method: 'PATCH', body: { confirms: false } })
   // Where deliveries arrive is the branch's default, set by the areas on this page.
   assert((await areas.getByLabel('Deliveries arrive in').locator('option:checked').innerText()) === 'Store', 'deliveries do not arrive in the Store')
   await page.screenshot({ path: SHOTS + '3-branches-with-areas.png' })
@@ -305,7 +316,7 @@ await check('Move stock opens in a panel like the other actions: before → afte
 
 await check("a give to Housekeeping is recorded as used there, and the toast's Undo puts it back", async () => {
   await page.locator('#move-to').selectOption({ label: 'Housekeeping (uses it)' })
-  await page.getByText("Housekeeping uses what it's given").waitFor()
+  await page.getByText('Housekeeping uses stock up as soon as it arrives').waitFor()
   await page.getByLabel('How many Rice').fill('1')
   await moveSheet.getByRole('button', { name: 'Give 1 item to Housekeeping' }).click()
   await page.getByText('Given · 1 item · Store → Housekeeping').waitFor()
@@ -771,13 +782,13 @@ await check('an area\'s Edit asks what happens there in words, and the row says 
   const areas = page.getByRole('region', { name: `Areas at ${branchName}` })
   await areas.getByRole('button', { name: 'Edit Bar' }).click()
   const sheet = page.getByRole('dialog', { name: 'Edit Bar' })
-  await sheet.getByText('If a count finds less, it\'s recorded as used').waitFor()
+  await sheet.getByText('If a count finds less, the rest is recorded as used').waitFor()
   await page.waitForTimeout(400)
   await page.screenshot({ path: SHOTS + '20-what-happens-here.png' })
-  await sheet.getByLabel(/Stock is kept here/).check()
+  await sheet.getByLabel(/^Stock is stored here/).check()
   await sheet.getByRole('button', { name: 'Save' }).click()
   await sheet.waitFor({ state: 'hidden' })
-  await areas.locator('[data-area="Bar"]').getByText('stock is kept here').waitFor()
+  await areas.locator('[data-area="Bar"]').getByText('stock is stored here').waitFor()
   await page.screenshot({ path: SHOTS + '21-branches-rows.png' })
 
   // The same on a phone: the rows, then the panel from the bottom.
@@ -1286,7 +1297,7 @@ await check('axe: Branches with areas and the add-areas steps have no WCAG 2.2 A
   const sheet = phonePage.getByRole('dialog')
   await sheet.getByRole('heading', { name: `Add areas to ${branchName}` }).waitFor()
   await sheet.getByRole('button', { name: 'Front desk', exact: true }).click()
-  await sheet.getByLabel('What happens at Front desk').waitFor()
+  await sheet.locator('li', { hasText: 'Front desk' }).getByLabel('When stock is moved here').waitFor()
   await phonePage.waitForTimeout(300)
   await phonePage.screenshot({ path: SHOTS + '6-phone-add-sheet.png' })
   found.push(...(await axe(phonePage)).map((v) => `Add sheet: ${v}`))

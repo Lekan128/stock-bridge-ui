@@ -17,14 +17,24 @@ const SUGGESTIONS = ['Kitchen', 'Bar', 'Front desk', 'Shop floor', 'Housekeeping
 interface Wanted {
   name: string
   kind: AreaKind
+  /** Moves to it wait until someone there confirms them (Part 4). */
+  confirms: boolean
 }
+
+/** "When stock is moved here", as Edit asks it. */
+const ARRIVING = [
+  { value: 'NOW', title: 'It arrives straight away' },
+  { value: 'CONFIRM', title: 'Someone here confirms it' },
+] as const
 
 /**
  * Adding areas to a branch (STOCK_AREAS_PLAN.md §4.1, STOCK_AREAS_PART_1.md): a task flow, so a `Sheet`
  * (DESIGN.md) - a side panel on a laptop with the branch still in view, a bottom sheet on a phone. One
- * screen: the Store as it is (with "Rename it"), quick picks or a typed name, and each new area with a
- * "What happens there?" choice in plain words (D-A12), with what the chosen answer does right under it. Where deliveries arrive is not asked: it stays the Store, and moves from an area's "⋯" (owner's
- * comments, 2026-10-30). Online only, like every branch change.
+ * screen: the Store as it is (with "Rename it"), quick picks or a typed name, and each new area with the two
+ * questions its Edit asks - what happens there (D-A12) and when stock is moved there (Part 4; owner, 2026-11-01:
+ * "the two options should show") - each answer worded to be understood without more. Several at once. Where
+ * deliveries arrive is not asked: it stays the Store, and moves from an area's "⋯" (owner's comments,
+ * 2026-10-30). Online only, like every branch change.
  */
 export function AddAreasSheet({ branch, onClose }: { branch: Branch; onClose: () => void }) {
   const queryClient = useQueryClient()
@@ -49,8 +59,12 @@ export function AddAreasSheet({ branch, onClose }: { branch: Branch; onClose: ()
   function addWanted(name: string) {
     const clean = name.trim().replace(/\s+/g, ' ')
     if (!clean || taken(clean)) return
-    setWanted((all) => [...all, { name: clean, kind: suggestedKind(clean) }])
+    setWanted((all) => [...all, { name: clean, kind: suggestedKind(clean), confirms: false }])
     setTyped('')
+  }
+
+  function change(index: number, patch: Partial<Wanted>) {
+    setWanted((all) => all.map((other, at) => (at === index ? { ...other, ...patch } : other)))
   }
 
   async function save() {
@@ -60,7 +74,7 @@ export function AddAreasSheet({ branch, onClose }: { branch: Branch; onClose: ()
       if (first && store && currentName !== store.name) {
         await areasApi.update(store.id, { name: currentName })
       }
-      await areasApi.add(branch.id, wanted.map((area) => ({ name: area.name, ...kindFlags(area.kind) })))
+      await areasApi.add(branch.id, wanted.map((area) => ({ name: area.name, ...kindFlags(area.kind), confirms: area.confirms })))
       await queryClient.invalidateQueries({ queryKey: BRANCHES_KEY })
       const total = (branch.areas?.length ?? 1) + wanted.length
       showToast(
@@ -162,12 +176,12 @@ export function AddAreasSheet({ branch, onClose }: { branch: Branch; onClose: ()
 
         {wanted.length > 0 && (
           <div className="flex flex-col gap-2">
-            <p className="text-sm text-neutral-600">For each, say what happens there. You can change it later.</p>
+            <p className="text-sm text-neutral-600">For each, answer two questions. You can change them later.</p>
             <ul aria-label="Areas to add" className="divide-y divide-neutral-100 border-y border-neutral-100">
               {wanted.map((area, index) => (
-                <li key={area.name} className="flex flex-col gap-1.5 py-3">
+                <li key={area.name} className="flex flex-col gap-3 py-3">
                   <div className="flex items-center gap-2">
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-neutral-900">{area.name}</span>
+                    <span className="min-w-0 flex-1 truncate text-base font-semibold text-neutral-900">{area.name}</span>
                     <button
                       type="button"
                       onClick={() => setWanted((all) => all.filter((other) => other.name !== area.name))}
@@ -177,22 +191,21 @@ export function AddAreasSheet({ branch, onClose }: { branch: Branch; onClose: ()
                       <X className="h-4 w-4" aria-hidden="true" />
                     </button>
                   </div>
-                  {/* The question in words (D-A12), and what the answer chosen will do, right under it. */}
-                  <select
-                    aria-label={`What happens at ${area.name}`}
+                  {/* The two questions Edit asks, each labelled, so it's plain there are two. */}
+                  <AreaQuestion
+                    id={`area-kind-${index}`}
+                    label="What happens here?"
                     value={area.kind}
-                    onChange={(event) =>
-                      setWanted((all) => all.map((other, at) => (at === index ? { ...other, kind: event.target.value as AreaKind } : other)))
-                    }
-                    className="min-h-11 w-full rounded-md border border-neutral-300 bg-white px-3 text-base text-neutral-900 sm:text-sm"
-                  >
-                    {AREA_KIND_ORDER.map((kind) => (
-                      <option key={kind} value={kind}>
-                        {AREA_KINDS[kind].title}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-neutral-600">{AREA_KINDS[area.kind].means}</p>
+                    options={AREA_KIND_ORDER.map((kind) => ({ value: kind, title: AREA_KINDS[kind].title }))}
+                    onChange={(kind) => change(index, { kind })}
+                  />
+                  <AreaQuestion
+                    id={`area-confirms-${index}`}
+                    label="When stock is moved here"
+                    value={area.confirms ? 'CONFIRM' : 'NOW'}
+                    options={ARRIVING}
+                    onChange={(value) => change(index, { confirms: value === 'CONFIRM' })}
+                  />
                 </li>
               ))}
             </ul>
@@ -206,5 +219,40 @@ export function AddAreasSheet({ branch, onClose }: { branch: Branch; onClose: ()
         )}
       </div>
     </Sheet>
+  )
+}
+
+/** One question for one new area: its label above, the answer chosen in a dropdown. */
+function AreaQuestion<T extends string>({
+  id,
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  id: string
+  label: string
+  value: T
+  options: readonly { value: T; title: string }[]
+  onChange: (value: T) => void
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label htmlFor={id} className="text-xs font-medium text-neutral-700">
+        {label}
+      </label>
+      <select
+        id={id}
+        value={value}
+        onChange={(event) => onChange(event.target.value as T)}
+        className="min-h-11 w-full rounded-md border border-neutral-300 bg-white px-3 text-base text-neutral-900 sm:text-sm"
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.title}
+          </option>
+        ))}
+      </select>
+    </div>
   )
 }

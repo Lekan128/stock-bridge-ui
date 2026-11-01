@@ -69,20 +69,21 @@ export type AreaKind = 'STORED' | 'WORKED' | 'USED_UP'
  * no examples beside them): `title` where it's chosen, `means` what it does, and `short` on the area's row.
  */
 export const AREA_KINDS: Record<AreaKind, { title: string; short: string; means: string }> = {
+  // Each title says it alone (owner, 2026-11-01: "the user does not have to read the description").
   STORED: {
-    title: 'Stock is kept here',
-    short: 'stock is kept here',
-    means: "Counted. If a count finds less, it's recorded as missing.",
+    title: 'Stock is stored here',
+    short: 'stock is stored here',
+    means: 'If a count finds less, the rest is recorded as missing.',
   },
   WORKED: {
-    title: 'Stock is used here',
-    short: 'stock is used here',
-    means: "Counted. If a count finds less, it's recorded as used, so nobody records every use.",
+    title: 'Stock is used here, bit by bit',
+    short: 'stock is used here bit by bit',
+    means: 'If a count finds less, the rest is recorded as used, so nobody has to record each use.',
   },
   USED_UP: {
-    title: "It uses what it's given",
-    short: "uses what it's given",
-    means: 'Not counted. Whatever is sent here is recorded as used the moment it arrives.',
+    title: 'Stock is used up as soon as it arrives',
+    short: 'used up as soon as it arrives',
+    means: "Nothing is counted here: what's moved here is recorded as used when it arrives.",
   },
 }
 
