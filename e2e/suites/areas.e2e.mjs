@@ -151,20 +151,27 @@ await check('the owner adds Kitchen, Bar and Housekeeping in one sheet; everythi
   await dialog.getByRole('heading', { name: `Add areas to ${branchName}` }).waitFor()
   await dialog.getByText(/Your stock is in the Store\./).waitFor()
   for (const name of ['Kitchen', 'Bar', 'Housekeeping']) await dialog.getByRole('button', { name, exact: true }).click()
-  // Each new area gets the two questions its Edit asks (owner, 2026-11-01), answers that say it alone. The quick
-  // picks start sensibly - the Kitchen and Bar keep stock and use it, Housekeeping uses it up - one tap to change.
-  const row = (name) => dialog.locator('li', { hasText: name })
-  const kindOf = (name) => row(name).getByLabel('What happens here?')
-  assert((await kindOf('Kitchen').inputValue()) === 'WORKED', 'the Kitchen does not start as "used here, bit by bit"')
-  assert((await kindOf('Housekeeping').inputValue()) === 'USED_UP', 'Housekeeping does not start as "used up as soon as it arrives"')
-  assert(
-    (await kindOf('Kitchen').locator('option:checked').innerText()) === 'Stock is used here, bit by bit',
-    `the Kitchen's answer reads "${await kindOf('Kitchen').locator('option:checked').innerText()}"`,
-  )
-  const arriving = row('Kitchen').getByLabel('When stock is moved here')
-  assert((await arriving.locator('option:checked').innerText()) === 'It arrives straight away', 'moves to the Kitchen do not arrive straight away')
-  // The Bar's people will confirm what reaches them, said as it's added.
-  await row('Bar').getByLabel('When stock is moved here').selectOption({ label: 'Someone here confirms it' })
+  // Each area is a card, and the cards are what gets added (owner, 2026-11-01): the first pick fills the empty card.
+  const card = (name) => dialog.locator(`[data-area-card="${name}"]`)
+  const answers = (name) => card(name).locator('[data-area-answers]')
+  assert((await dialog.locator('[data-area-card]').count()) === 3, `${await dialog.locator('[data-area-card]').count()} cards for 3 picks`)
+  // Its two answers in a line each, words that say it alone; the picks start sensibly.
+  await answers('Kitchen').getByText('Stock is used here, bit by bit').waitFor()
+  await answers('Kitchen').getByText('It arrives straight away').waitFor()
+  await answers('Housekeeping').getByText('Stock is used up as soon as it arrives').waitFor()
+  // A typed one, on a card of its own.
+  await dialog.getByRole('button', { name: 'Another area' }).click()
+  await dialog.locator('[data-area-card=""]').getByLabel('Area name').fill('Pantry')
+  await answers('Pantry').getByText('Stock is stored here').waitFor()
+  // The Bar's people confirm what reaches them: Change opens the Bar's card in place - the questions Edit asks.
+  await card('Bar').getByRole('button', { name: 'Change what happens at Bar' }).click()
+  await card('Bar').getByRole('group', { name: 'When stock is moved here' }).getByLabel(/^Someone here confirms it/).check()
+  await card('Bar').getByText('It waits until someone in the Bar says they got it.').waitFor()
+  await dialog.screenshot({ path: SHOTS + '2a-add-areas-change.png' })
+  await card('Bar').getByRole('button', { name: 'Done' }).click()
+  await answers('Bar').getByText('Someone here confirms it').waitFor()
+  // Not wanted after all.
+  await card('Pantry').getByRole('button', { name: 'Remove Pantry' }).click()
   await dialog.screenshot({ path: SHOTS + '2-add-areas-sheet.png' })
   await dialog.getByRole('button', { name: 'Add 3 areas' }).click()
   await page.getByRole('status').filter({ hasText: `${branchName} now has 4 areas. Everything you have is in the Store.` }).waitFor()
@@ -1297,7 +1304,9 @@ await check('axe: Branches with areas and the add-areas steps have no WCAG 2.2 A
   const sheet = phonePage.getByRole('dialog')
   await sheet.getByRole('heading', { name: `Add areas to ${branchName}` }).waitFor()
   await sheet.getByRole('button', { name: 'Front desk', exact: true }).click()
-  await sheet.locator('li', { hasText: 'Front desk' }).getByLabel('When stock is moved here').waitFor()
+  // Its card opened, so the questions are checked too.
+  await sheet.locator('[data-area-card="Front desk"]').getByRole('button', { name: 'Change what happens at Front desk' }).click()
+  await sheet.locator('[data-area-card="Front desk"]').getByRole('group', { name: 'When stock is moved here' }).waitFor()
   await phonePage.waitForTimeout(300)
   await phonePage.screenshot({ path: SHOTS + '6-phone-add-sheet.png' })
   found.push(...(await axe(phonePage)).map((v) => `Add sheet: ${v}`))

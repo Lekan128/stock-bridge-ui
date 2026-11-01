@@ -87,6 +87,9 @@ export const AREA_KINDS: Record<AreaKind, { title: string; short: string; means:
   },
 }
 
+/** The answers to "When stock is moved here" (Part 4), as Edit asks it and as a card says it. */
+export const ARRIVING = { NOW: 'It arrives straight away', CONFIRM: 'Someone here confirms it' } as const
+
 /** The three answers, in the order they're offered. */
 export const AREA_KIND_ORDER: AreaKind[] = ['STORED', 'WORKED', 'USED_UP']
 
