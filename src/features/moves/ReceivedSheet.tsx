@@ -10,7 +10,7 @@ import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { formatDateTime } from '@/features/marketplace/formatters'
 import { ChoiceChips } from '@/features/moves/ChoiceChips'
 import { movesApi } from '@/features/moves/movesApi'
-import { RETURN_REASONS, lineUnit, returnsSaid, type MoveLine } from '@/features/moves/moveWords'
+import { GIVE_BACK_REASONS, RETURN_REASONS, lineUnit, returnsSaid, type MoveLine } from '@/features/moves/moveWords'
 import type { AreaMove, ReturnReason } from '@/features/moves/types'
 import { submitReturn } from '@/features/outbox/outboxStore'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
@@ -20,29 +20,30 @@ import { isAppError } from '@/types/api'
 type Open = { key: string; kind: 'GIVE_BACK' | 'REPORT' }
 
 /**
- * "Given to Housekeeping" (STOCK_AREAS_PART_6.md, STOCK_AREAS_PLAN.md §5.6): what was given in the last 7 days to the
- * areas that use stock up where this person works, newest first - each line with **Give back** and **Report**, so
- * nobody searches the catalogue. Either opens that line in place (owner: no popups), one at a time: how many, and
- * for a report why and a note. Through the outbox, so it works offline like the move it came from.
+ * "Received by Kitchen" (STOCK_AREAS_PART_6.md, STOCK_AREAS_PLAN.md §5.6; owner, 2026-11-01: any area that received
+ * stock): what arrived in the last 7 days in the areas this person works in, newest first - each line with **Give
+ * back** and **Report**, so nobody searches the catalogue. Either opens that line in place (owner: no popups), one at
+ * a time: how many, why, a note. Give back goes to where it came from; Report writes it off where it is. Through the
+ * outbox, so it works offline like the move it came from.
  */
-export function GivenSheet({ onClose }: { onClose: () => void }) {
+export function ReceivedSheet({ onClose }: { onClose: () => void }) {
   const branch = useOptionalWorkingBranch()
   const here = branch && !branch.isAll ? branch.working : null
   const { data, loading } = useApiQuery({
-    queryKey: ['area-moves', 'given', here?.id ?? 'all'],
-    queryFn: () => movesApi.given(here?.id),
-    fallbackError: "Couldn't load what was given.",
+    queryKey: ['area-moves', 'received', here?.id ?? 'all'],
+    queryFn: () => movesApi.received(here?.id),
+    fallbackError: "Couldn't load what arrived.",
   })
   const [open, setOpen] = useState<Open | null>(null)
   const moves = data ?? []
   const areaNames = [...new Set(moves.map((move) => move.toAreaName))]
-  const title = areaNames.length === 1 ? `Given to ${areaNames[0]}` : 'Given to your areas'
+  const title = areaNames.length === 1 ? `Received by ${areaNames[0]}` : 'Received lately'
 
   return (
     <Sheet open onClose={onClose} title={title} size="md">
       <div className="flex flex-col gap-4" data-given-sheet>
         <p className="text-sm text-neutral-600">
-          The last 7 days. Give back what wasn't used, or report what spoilt.
+          The last 7 days. Give back what you don't need or can't use, or report what spoilt.
         </p>
         {loading && moves.length === 0 ? (
           <div className="flex flex-col gap-2">
@@ -52,13 +53,13 @@ export function GivenSheet({ onClose }: { onClose: () => void }) {
           </div>
         ) : moves.length === 0 ? (
           <p className="rounded-lg border border-neutral-200 bg-white px-4 py-6 text-center text-sm text-neutral-600">
-            Nothing was given here in the last 7 days.
+            Nothing arrived here in the last 7 days.
           </p>
         ) : (
-          <ul aria-label="Given lately" className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
+          <ul aria-label="Received lately" className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
             {moves.flatMap((move) =>
               move.lines.map((line) => (
-                <GivenLine
+                <ReceivedLine
                   key={`${move.id}:${line.productId}`}
                   move={move}
                   line={line}
@@ -75,7 +76,7 @@ export function GivenSheet({ onClose }: { onClose: () => void }) {
   )
 }
 
-function GivenLine({
+function ReceivedLine({
   move,
   line,
   areaShown,
@@ -95,6 +96,7 @@ function GivenLine({
   const left = Math.floor((line.returnable ?? 0) / unit.per)
   const [howMany, setHowMany] = useState(1)
   const [reason, setReason] = useState<ReturnReason>('SPOILT')
+  const [why, setWhy] = useState<ReturnReason | 'NOT_NEEDED'>('NOT_NEEDED')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
@@ -104,6 +106,7 @@ function GivenLine({
 
   function start(kind: 'GIVE_BACK' | 'REPORT') {
     setHowMany(1)
+    setWhy('NOT_NEEDED')
     setNote('')
     setProblem(null)
     onOpen(kind)
@@ -122,7 +125,7 @@ function GivenLine({
           productId: line.productId,
           kind: open,
           quantity,
-          ...(open === 'REPORT' ? { reason } : {}),
+          ...(open === 'REPORT' ? { reason } : why !== 'NOT_NEEDED' ? { reason: why } : {}),
           ...(note.trim() ? { note: note.trim() } : {}),
         },
         open === 'GIVE_BACK' ? `Give back ${amount} of ${line.productName}` : `Report ${amount} of ${line.productName} ${reasonWord}`,
@@ -132,7 +135,7 @@ function GivenLine({
         outcome.status === 'queued'
           ? "Saved on this phone. It goes when you're connected."
           : open === 'GIVE_BACK'
-            ? `Given back · ${amount} of ${line.productName} · in the ${move.fromAreaName}`
+            ? `Given back · ${amount} of ${line.productName} · to the ${move.fromAreaName}`
             : `Reported · ${amount} of ${line.productName} ${reasonWord}`,
         outcome.status === 'queued' ? 'info' : 'success',
       )
@@ -155,7 +158,7 @@ function GivenLine({
       </div>
       <div className="-mt-2 flex items-end justify-between gap-3">
         <p className="text-sm text-neutral-600">
-          {unit.say(used / unit.per)} given{returned ? ` · ${returned}` : ''}
+          {unit.say(used / unit.per)} received{returned ? ` · ${returned}` : ''}
         </p>
         {open == null && left > 0 && (
           <div className="-my-2 flex shrink-0 gap-1">
@@ -189,7 +192,7 @@ function GivenLine({
             <span className="text-sm text-neutral-800">{open === 'GIVE_BACK' ? 'How many to give back?' : 'How many?'}</span>
             <QuantityStepper value={Math.min(howMany, left)} onChange={setHowMany} min={1} max={left} label={`How many ${line.productName}`} size="md" />
           </div>
-          {open === 'REPORT' && (
+          {open === 'REPORT' ? (
             <div className="flex flex-col gap-1.5">
               <p className="text-sm text-neutral-800">What happened to it?</p>
               <ChoiceChips
@@ -198,6 +201,18 @@ function GivenLine({
                 value={reason}
                 options={RETURN_REASONS.map(({ value, label }) => ({ value, label }))}
                 onChange={setReason}
+              />
+            </div>
+          ) : (
+            // Why it goes back, so the area it came from knows what to do with it (an expired tin to the supplier).
+            <div className="flex flex-col gap-1.5">
+              <p className="text-sm text-neutral-800">Why?</p>
+              <ChoiceChips
+                name={`why-${move.id}-${line.productId}`}
+                label={`Why the ${line.productName} goes back`}
+                value={why}
+                options={GIVE_BACK_REASONS}
+                onChange={setWhy}
               />
             </div>
           )}

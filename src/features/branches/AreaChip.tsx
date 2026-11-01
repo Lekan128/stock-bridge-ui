@@ -4,7 +4,7 @@ import { useClickOutside } from '@/hooks/useClickOutside'
 import { useToast } from '@/components/useToast'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { AreaMenu } from '@/features/branches/AreaMenu'
-import { GivenSheet } from '@/features/moves/GivenSheet'
+import { ReceivedSheet } from '@/features/moves/ReceivedSheet'
 import { hasAreas } from '@/features/branches/areas'
 import { ALL_AREAS, myAreas, useWorkArea } from '@/features/branches/workArea'
 
@@ -86,7 +86,7 @@ export function AreaChip() {
           }}
         />
       )}
-      {givenOpen && <GivenSheet onClose={() => setGivenOpen(false)} />}
+      {givenOpen && <ReceivedSheet onClose={() => setGivenOpen(false)} />}
     </div>
   )
 }

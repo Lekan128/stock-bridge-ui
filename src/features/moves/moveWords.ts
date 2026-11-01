@@ -84,13 +84,21 @@ export const RETURN_REASONS: { value: ReturnReason; label: string; word: string 
   { value: 'OTHER', label: 'Other', word: 'not used' },
 ]
 
-/** "1 bag given back · 2 bags reported spoilt" - what an area that uses stock up did with a line. */
+/** Why something is given back (Part 6): not needed to start with, or what was wrong with it. */
+export const GIVE_BACK_REASONS: { value: ReturnReason | 'NOT_NEEDED'; label: string }[] = [
+  { value: 'NOT_NEEDED', label: 'Not needed' },
+  { value: 'EXPIRED', label: 'Expired' },
+  { value: 'DAMAGED', label: 'Damaged' },
+  { value: 'OTHER', label: 'Other' },
+]
+
+/** "1 bag given back (expired) · 2 bags reported spoilt" - what the area it arrived in did with a line. */
 export function returnsSaid(returns: AreaReturn[] | undefined, say: (n: number) => string, per: number): string | null {
   if (!returns || returns.length === 0) return null
   return returns
     .map((r) =>
       r.kind === 'GIVE_BACK'
-        ? `${say(r.quantity / per)} given back`
+        ? `${say(r.quantity / per)} given back${r.reason ? ` (${RETURN_REASONS.find((reason) => reason.value === r.reason)?.word ?? ''})` : ''}`
         : `${say(r.quantity / per)} reported ${RETURN_REASONS.find((reason) => reason.value === r.reason)?.word ?? ''}`.trim(),
     )
     .join(' · ')

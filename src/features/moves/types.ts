@@ -80,13 +80,16 @@ export interface AreaMove {
   canCancel?: boolean
   /** The confirmer's words about what didn't arrive (Part 6). */
   confirmNote?: string
-  /** This person may give back or report part of it: a give to an area they work in that uses stock up, lately. */
+  /** This person may give back or report part of it: it arrived lately in an area they work in. */
   canReturn?: boolean
 }
 
 export type ReturnReason = 'SPOILT' | 'EXPIRED' | 'DAMAGED' | 'OTHER'
 
-/** Given back, or reported, by an area that uses stock up (STOCK_AREAS_PART_6.md). `quantity` in the stock unit. */
+/**
+ * Given back, or reported, by the area it arrived in (STOCK_AREAS_PART_6.md). `quantity` in the stock unit. A give
+ * back's `reason` is why (absent: not needed); a report's what happened.
+ */
 export interface AreaReturn {
   kind: 'GIVE_BACK' | 'REPORT'
   quantity: number
@@ -104,6 +107,7 @@ export interface AreaReturnPayload {
   /** Whole numbers in `unit`, or the stock unit when it's absent. */
   quantity: number
   unit?: string
+  /** A report's what happened; a give back's why, absent when it just wasn't needed. */
   reason?: ReturnReason
   note?: string
   occurredAt?: string

@@ -46,7 +46,7 @@ export interface InventoryBarProps {
    * someone whose button is Ask - in "⋯", so the bar keeps one button for it.
    */
   onOtherMove?: { label: string; onSelect: () => void }
-  /** "Give back or report" (Part 6): for someone who works in an area that uses stock up. */
+  /** "Give back or report" what arrived (Part 6): for someone who works in an area of this branch. */
   onGiveBack?: () => void
   /** How the Move button reads for this person (Part 5): "Ask for stock" for a cook, "Move stock" otherwise. */
   moveLabel?: { label: string; short: string }
