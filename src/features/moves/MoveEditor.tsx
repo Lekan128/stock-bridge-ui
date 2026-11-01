@@ -3,7 +3,7 @@ import { ArrowLeftRight, ChevronDown, Plus, Search, X } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { TextField } from '@/components/TextField'
 import { useApiQuery } from '@/data/useApiQuery'
-import { hasAreas } from '@/features/branches/areas'
+import { hasAreas, stockAreas } from '@/features/branches/areas'
 import { useWorkArea } from '@/features/branches/workArea'
 import type { Area } from '@/features/branches/types'
 import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
@@ -12,7 +12,9 @@ import { DraftNote } from '@/features/drafts/DraftNote'
 import { useDraft } from '@/features/drafts/useDraft'
 import { movesApi } from '@/features/moves/movesApi'
 import type { AreaMove } from '@/features/moves/types'
-import { submitMove } from '@/features/outbox/outboxStore'
+import { submitMove, submitRequest } from '@/features/outbox/outboxStore'
+import { requestsApi } from '@/features/requests/requestsApi'
+import type { StockRequest } from '@/features/requests/types'
 import { productsApi } from '@/features/products/api/productsApi'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import type { Product, UnitOption } from '@/features/products/types'
@@ -41,8 +43,16 @@ interface MoveDraft {
   note: string
 }
 
-/** What happened once Move was pressed: sent (Undo through the move), or saved on this phone (Undo drops it). */
-export type Moved = ({ status: 'sent'; move: AreaMove } | { status: 'queued'; opId: string }) & {
+/**
+ * What happened once Move was pressed: sent (Undo through the move), or saved on this phone (Undo drops it); or,
+ * asking (Part 5), the request sent or saved; or, filling one, only "none in the store" said.
+ */
+export type Moved = (
+  | { status: 'sent'; move: AreaMove }
+  | { status: 'queued'; opId: string }
+  | { status: 'asked'; requestId: string; opId?: string }
+  | { status: 'answered' }
+) & {
   /** "Moved" or "Given" (to an area that uses what it's given). */
   verb: string
   /** "2 items". */
@@ -61,6 +71,8 @@ export interface MoveEditorProps {
   onMoved: (moved: Moved) => void
   /** Where the editor goes: its body, and the Move button for a footer. */
   children: (parts: { body: ReactNode; action: ReactNode }) => ReactNode
+  /** A request to fill (Part 5): the route and its lines filled in, with "None in the store" for each. */
+  request?: StockRequest
 }
 
 /** A new line opens in the product's pack (crates, bags) when it has one, as Send stock does. */
@@ -83,7 +95,7 @@ function figureIn(product: Product, areaId: string): number | undefined {
  * the toast) with Undo. It goes through the outbox, so it works offline. To an area that uses what it's
  * given (Housekeeping) it is a give, recorded as Used there.
  */
-export function MoveEditor({ productIds = [], focusSearch = false, onMoved, children }: MoveEditorProps) {
+export function MoveEditor({ productIds = [], focusSearch = false, onMoved, children, request }: MoveEditorProps) {
   const { working, recordable } = useWorkingBranch()
   const { options: catalogue } = useUnitOfMeasureOptions()
   const online = useOnlineStatus()
@@ -91,17 +103,35 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
 
   // From: the areas this person works in (Part 3) - they're taking stock out of it - starting where this
   // phone is for them; for people in every area, where deliveries arrive. To: any open area.
+  // Someone placed in particular areas can also choose an area they don't work in: that asks it (Part 5).
   const work = useWorkArea(branch)
-  const fromChoices = work.areas
   const allOpen = (branch?.areas ?? []).filter((area) => area.active)
+  const askable = work.limited ? stockAreas(branch).filter((area) => !work.areas.some((own) => own.id === area.id)) : []
+  // Filling a request (Part 5): its route, as asked.
+  const requestFrom = request ? allOpen.find((area) => area.id === request.fromAreaId) : undefined
+  const requestTo = request ? allOpen.find((area) => area.id === request.toAreaId) : undefined
+  const fromChoices = request ? (requestFrom ? [requestFrom] : []) : work.areas
   const [fromChoice, setFromChoice] = useState<string | null>(null)
-  const fromAreaId = fromChoices.some((area) => area.id === fromChoice)
-    ? (fromChoice as string)
-    : (work.area?.id ?? fromChoices.find((area) => area.delivery)?.id ?? fromChoices[0]?.id ?? '')
-  const [toAreaId, setToAreaId] = useState<string>('')
-  const toChoices = allOpen.filter((area) => area.id !== fromAreaId)
+  const fromAreaId = request
+    ? request.fromAreaId
+    : [...fromChoices, ...askable].some((area) => area.id === fromChoice)
+      ? (fromChoice as string)
+      : (work.area?.id ?? fromChoices.find((area) => area.delivery)?.id ?? fromChoices[0]?.id ?? '')
+  const asking = askable.some((area) => area.id === fromAreaId)
+  const [toAreaChoice, setToAreaId] = useState<string>('')
+  // Asking: for an area this person works in - the one they're in, to start with.
+  const toChoices = request
+    ? requestTo
+      ? [requestTo]
+      : []
+    : (asking ? work.areas : allOpen).filter((area) => area.id !== fromAreaId)
+  const toAreaId = request
+    ? request.toAreaId
+    : toAreaChoice || (asking ? (toChoices.find((area) => area.id === work.area?.id) ?? toChoices[0])?.id ?? '' : '')
   const from = allOpen.find((area) => area.id === fromAreaId)
   const to = toChoices.find((area) => area.id === toAreaId)
+  // Lines the area asked has none of (filling a request): off the move, said on the request.
+  const [noneHere, setNoneHere] = useState<string[]>([])
   const [lines, setLines] = useState<MoveLine[]>([])
   const [note, setNote] = useState('')
   const [noteOpen, setNoteOpen] = useState(false)
@@ -124,8 +154,11 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
       if (!seen.has(key)) seen.set(key, move)
     }
     return [...seen.values()].filter(
-      (move) => fromChoices.some((area) => area.id === move.fromAreaId) && allOpen.some((area) => area.id === move.toAreaId),
+      (move) =>
+        [...fromChoices, ...askable].some((area) => area.id === move.fromAreaId) &&
+        allOpen.some((area) => area.id === move.toAreaId),
     )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recent.data, fromChoices, allOpen])
 
   /**
@@ -163,7 +196,7 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
   useEffect(() => {
     if (routed.current || recent.data == null) return
     routed.current = true
-    if (toAreaId) return
+    if (toAreaId || request) return
     const last = routes[0]
     if (!last) return
     setFromChoice(last.fromAreaId)
@@ -172,7 +205,8 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
   }, [recent.data])
 
   // ------------------------------------------------------------------------------ the draft (A5)
-  const draft = useDraft<MoveDraft>(`move:${branch?.id ?? 'none'}`, branch != null)
+  // Filling a request keeps no draft: the request itself is what's left to do.
+  const draft = useDraft<MoveDraft>(`move:${branch?.id ?? 'none'}`, branch != null && !request)
   // Once moved, nothing more is saved as a draft: the place clears or closes the editor.
   const finished = useRef(false)
   const [restored, setRestored] = useState(false)
@@ -204,6 +238,34 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fromAreaId, toAreaId, lines, note, initial, save])
 
+  // ------------------------------------------------------------------ pre-filled from a request (Part 5)
+  // What's still asked of each line, in the pack it was asked in when that's whole.
+  const requestFilled = useRef(false)
+  useEffect(() => {
+    if (requestFilled.current || !request || catalogue.length === 0) return
+    requestFilled.current = true
+    for (const line of request.lines) {
+      const left = line.quantity - line.moved
+      if (left <= 0 || line.noneInStore) continue
+      void productsApi
+        .get(line.productId)
+        .then((product) => {
+          const options = unitsFor(product, catalogue)
+          const typed = options.find((o) => o.code === line.enteredUnit && !o.isStockUnit)
+          const per = typed ? toBaseQuantity(1, typed) : 1
+          const inPacks = typed != null && per > 0 && left % per === 0
+          addProduct(
+            product,
+            String(inPacks ? left / per : left),
+            inPacks ? typed.label : stockUnitOption(options).label,
+            false,
+          )
+        })
+        .catch(() => undefined)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catalogue])
+
   // ---------------------------------------------------------------------- pre-filled from a link
   // The product page's product, or the products selected on Inventory.
   const prefilled = useRef(false)
@@ -227,7 +289,7 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
   useEffect(() => {
     if (searchReadied.current || !searchRef.current) return
     searchReadied.current = true
-    if (!focusSearch || productIds.length > 0 || !window.matchMedia?.('(pointer: fine)').matches) return
+    if (!focusSearch || productIds.length > 0 || request || !window.matchMedia?.('(pointer: fine)').matches) return
     searchRef.current.focus()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branch?.id])
@@ -285,15 +347,85 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
   const ready = checked.filter((entry) => entry.valid)
   const anyShort = checked.some((entry) => entry.short)
   const anyInvalid = checked.some((entry) => entry.line.quantity.trim() !== '' && !entry.valid)
-  const canMove = !moving && from != null && to != null && ready.length > 0 && !anyShort && !anyInvalid
+  // Asking for more than the Store has is fine: the Store answers (Part 5).
+  const canMove = !moving && from != null && to != null && ready.length > 0 && (asking || !anyShort) && !anyInvalid
   const items = `${ready.length} ${ready.length === 1 ? 'item' : 'items'}`
   const verb = to && !to.keepsStock ? 'Give' : 'Move'
+  // Filling a request with nothing left to move: the button only says there's none.
+  const onlyNone = request != null && ready.length === 0 && noneHere.length > 0
+
+  /** Asking another area (Part 5): a request, through the outbox like a move. */
+  async function ask() {
+    if (!branch || !to || !from || ready.length === 0) return
+    setMoving(true)
+    setProblem(null)
+    const requestId = crypto.randomUUID()
+    try {
+      const outcome = await submitRequest(
+        {
+          id: requestId,
+          branchId: branch.id,
+          fromAreaId: from.id,
+          toAreaId: to.id,
+          note: note.trim() || undefined,
+          lines: ready.map((entry) => ({
+            productId: entry.line.product.id,
+            quantity: entry.quantity,
+            unit: entry.option.isStockUnit ? undefined : entry.option.code || undefined,
+          })),
+        },
+        `${items} · asked of the ${from.name}`,
+      )
+      finished.current = true
+      await draft.finish()
+      onMoved({
+        status: 'asked',
+        requestId,
+        ...(outcome.status === 'queued' ? { opId: outcome.op.id } : {}),
+        verb: 'Asked',
+        items,
+        route: `${from.name} → ${to.name}`,
+      })
+    } catch (error) {
+      setProblem(isAppError(error) ? error.message : "Couldn't ask for this. Try again.")
+    } finally {
+      setMoving(false)
+    }
+  }
+
+  /** "None in the store" for the lines taken off (Part 5). Online only: it's an answer the Kitchen waits on. */
+  async function sayNone(): Promise<boolean> {
+    if (!request || noneHere.length === 0) return true
+    try {
+      await requestsApi.noneInStore(request.id, noneHere)
+      return true
+    } catch (error) {
+      setProblem(
+        isAppError(error) && error.status !== 0
+          ? error.message
+          : "You're offline. Saying there's none in the store needs a connection - try again when you're back.",
+      )
+      return false
+    }
+  }
+
+  async function answerNone() {
+    setMoving(true)
+    setProblem(null)
+    const said = await sayNone()
+    setMoving(false)
+    if (said && to && from) onMoved({ status: 'answered', verb: 'Told', items: `the ${to.name}`, route: `${from.name} → ${to.name}` })
+  }
 
   async function move() {
     if (!canMove || !branch || !to || !from) return
     setMoving(true)
     setProblem(null)
     const summary = `${items} · ${from.name} → ${to.name}`
+    if (!(await sayNone())) {
+      setMoving(false)
+      return
+    }
     try {
       const outcome = await submitMove(
         {
@@ -307,6 +439,7 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
             quantity: entry.quantity,
             unit: entry.option.isStockUnit ? undefined : entry.option.code || undefined,
           })),
+          ...(request ? { requestId: request.id } : {}),
         },
         summary,
       )
@@ -346,6 +479,13 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
   const usualShown = allUsualShown ? usualLeft : usualLeft.slice(0, USUAL_AT_FIRST)
   const body = (
       <div className="flex flex-col gap-3">
+        {/* Filling a request (Part 5): whose it is, above what they asked for. */}
+        {request && (
+          <p className="text-sm text-neutral-700" data-request-header>
+            The {request.toAreaName} asked for these
+            {request.askedByName ? ` · ${request.askedByName}` : ''}, {formatAskedAt(request.askedAt)}
+          </p>
+        )}
         <DraftNote
           savedAt={draft.savedAt}
           restored={restored}
@@ -364,16 +504,17 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
             <RouteEnd
               label="From"
               areas={fromChoices}
+              askable={request ? [] : askable}
               chosen={fromAreaId}
               onChoose={(id) => {
                 setFromChoice(id)
-                if (id === toAreaId) setToAreaId('')
+                setToAreaId('')
               }}
             />
             <button
               type="button"
               aria-label="Swap from and to"
-              disabled={!to || !to.keepsStock || !fromChoices.some((area) => area.id === to.id)}
+              disabled={asking || request != null || !to || !to.keepsStock || !fromChoices.some((area) => area.id === to.id)}
               onClick={() => {
                 const was = fromAreaId
                 setFromChoice(toAreaId)
@@ -385,8 +526,16 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
             </button>
             <RouteEnd label="To" areas={toChoices} chosen={toAreaId} onChoose={setToAreaId} />
           </div>
-          {to && !to.keepsStock && (
-            <p className="px-1 pt-1.5 text-xs text-neutral-600">{to.name} uses what it's given: it's recorded as used there.</p>
+          {asking && from ? (
+            // Part 5: nobody takes from an area they don't work in - they ask it.
+            <p className="px-1 pt-1.5 text-xs text-neutral-600" data-asking>
+              You don't work in the {from.name}, so this asks the people there to move it.
+            </p>
+          ) : (
+            to &&
+            !to.keepsStock && (
+              <p className="px-1 pt-1.5 text-xs text-neutral-600">{to.name} uses what it's given: it's recorded as used there.</p>
+            )
           )}
         </section>
 
@@ -435,7 +584,7 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
 
         {/* What usually goes this way: tap one to add it, or Add all. Typing a search folds it into its one-line
             header (animated, so it's clear where it went); the header opens it again. Gone once all is on. */}
-        {usualLeft.length > 0 && usual && (
+        {!request && usualLeft.length > 0 && usual && (
           <section aria-label={usual.label} className="rounded-lg border border-dashed border-neutral-300 px-3" data-usual>
             <div className="flex items-center gap-1">
               <button
@@ -518,10 +667,12 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
                       inputMode="numeric"
                       value={line.quantity}
                       disabled={moving}
-                      aria-invalid={short || undefined}
+                      aria-invalid={(short && !asking) || undefined}
                       onChange={(event) => update(line.key, { quantity: event.target.value.replace(/[^0-9]/g, '') })}
                       className={`h-11 w-16 shrink-0 rounded-md border bg-white px-2 text-center text-base tabular-nums focus:ring-2 focus:outline-none ${
-                        short ? 'border-danger-500 focus:ring-danger-100' : 'border-neutral-300 focus:border-primary-500 focus:ring-primary-100'
+                        short && !asking
+                          ? 'border-danger-500 focus:ring-danger-100'
+                          : 'border-neutral-300 focus:border-primary-500 focus:ring-primary-100'
                       }`}
                     />
                     {options.length > 1 ? (
@@ -550,7 +701,14 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
                       <X className="h-4 w-4" />
                     </button>
                   </div>
-                  {/* Both areas, before → after (§5.1), in the unit being moved and in the stock unit. */}
+                  {/* Asking (Part 5): what each has now - nothing moves until the Store moves it. */}
+                  {asking ? (
+                    <p className="text-xs tabular-nums text-neutral-700" data-asking-figures>
+                      {to && toHas != null && `${to.name} has ${inUnit(toHas, option, unit)} · `}
+                      {from && has != null && (has <= 0 ? `The ${from.name} has none` : `${from.name} has ${inUnit(has, option, unit)}`)}
+                    </p>
+                  ) : (
+                  /* Both areas, before → after (§5.1), in the unit being moved and in the stock unit. */
                   <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 text-xs tabular-nums" data-before-after>
                     {from && has != null && (
                       <>
@@ -579,15 +737,62 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
                       </>
                     )}
                   </dl>
-                  {short && has != null && from && (
+                  )}
+                  {short && has != null && from && !asking && (
                     <p className="text-sm text-danger-700">
-                      The {from.name} has {inUnit(has, option, unit)}.
+                      {has <= 0 ? `The ${from.name} has none.` : `The ${from.name} has ${inUnit(has, option, unit)}.`}
                     </p>
+                  )}
+                  {/* Filling a request: a line the Store can't give comes off the move, and the Kitchen is told. */}
+                  {short && request?.lines.some((asked) => asked.productId === line.product.id) && (
+                    <button
+                      type="button"
+                      disabled={moving}
+                      onClick={() => {
+                        setNoneHere((current) => [...current, line.product.id])
+                        setLines((current) => current.filter((l) => l.key !== line.key))
+                      }}
+                      className="-my-2 inline-flex min-h-11 items-center self-start text-sm font-medium text-primary-700 hover:underline"
+                    >
+                      None in the {from?.name ?? 'store'}
+                    </button>
                   )}
                 </li>
               )
             })}
           </ul>
+        )}
+
+        {/* What the Store said it has none of (Part 5), each one tap from going back on. */}
+        {request && noneHere.length > 0 && (
+          <p className="text-sm text-neutral-700" data-none-here>
+            None in the {from?.name}:{' '}
+            {noneHere.map((productId, index) => {
+              const asked = request.lines.find((l) => l.productId === productId)
+              return (
+                <span key={productId}>
+                  {index > 0 && ', '}
+                  {asked?.productName}{' '}
+                  <button
+                    type="button"
+                    disabled={moving}
+                    onClick={() => {
+                      setNoneHere((current) => current.filter((id) => id !== productId))
+                      if (asked) {
+                        void productsApi
+                          .get(productId)
+                          .then((product) => addProduct(product, String(asked.quantity - asked.moved), undefined, false))
+                          .catch(() => undefined)
+                      }
+                    }}
+                    className="font-medium text-primary-700 hover:underline"
+                  >
+                    (put back)
+                  </button>
+                </span>
+              )
+            })}
+          </p>
         )}
 
         {/* A note is rare: a link until it's wanted. */}
@@ -617,16 +822,27 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
   )
   const action = (
     <div className="flex w-full flex-col gap-2">
-      <Button variant="action" className="w-full" disabled={!canMove} loading={moving} onClick={() => void move()}>
-        {!to
-          ? 'Choose where it goes'
-          : ready.length === 0
-            ? `${verb} to ${to.name}`
-            : to.confirms
-              ? // Names what happens next (Part 4), short enough for a phone's button.
-                `${verb} ${items} · ${to.name} will confirm`
-              : `${verb} ${items} to ${to.name}`}
-      </Button>
+      {onlyNone && to ? (
+        <Button variant="action" className="w-full" loading={moving} onClick={() => void answerNone()}>
+          Tell the {to.name}: none in the {from?.name}
+        </Button>
+      ) : asking && from ? (
+        // Part 5: the button names the outcome - nothing moves until the Store moves it.
+        <Button variant="action" className="w-full" disabled={!canMove} loading={moving} onClick={() => void ask()}>
+          {ready.length === 0 ? `Ask the ${from.name}` : `Ask the ${from.name} for ${items}`}
+        </Button>
+      ) : (
+        <Button variant="action" className="w-full" disabled={!canMove} loading={moving} onClick={() => void move()}>
+          {!to
+            ? 'Choose where it goes'
+            : ready.length === 0
+              ? `${verb} to ${to.name}`
+              : to.confirms
+                ? // Names what happens next (Part 4), short enough for a phone's button.
+                  `${verb} ${items} · ${to.name} will confirm`
+                : `${verb} ${items} to ${to.name}`}
+        </Button>
+      )}
       {!online && ready.length > 0 && (
         <p className="text-center text-xs text-neutral-600">You're offline. It's kept on this phone and goes when you're connected.</p>
       )}
@@ -685,11 +901,14 @@ function BeforeAfter({ before, after, option, unit }: { before: number; after: n
 function RouteEnd({
   label,
   areas,
+  askable = [],
   chosen,
   onChoose,
 }: {
   label: string
   areas: Area[]
+  /** Areas this person doesn't work in, which they can ask (Part 5): grouped after their own. */
+  askable?: Area[]
   chosen: string
   onChoose: (id: string) => void
 }) {
@@ -700,7 +919,29 @@ function RouteEnd({
       <label htmlFor={id} className="block px-1 text-xs text-neutral-600">
         {label}
       </label>
-      {areas.length === 1 && chosen === areas[0].id ? (
+      {askable.length > 0 ? (
+        <select
+          id={id}
+          value={chosen}
+          onChange={(event) => onChoose(event.target.value)}
+          className="h-11 w-full min-w-0 rounded-md border border-neutral-300 bg-white px-2 text-base font-medium text-neutral-900"
+        >
+          <optgroup label="Your areas">
+            {areas.map((area) => (
+              <option key={area.id} value={area.id}>
+                {name(area)}
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="Ask another area">
+            {askable.map((area) => (
+              <option key={area.id} value={area.id}>
+                {area.name}
+              </option>
+            ))}
+          </optgroup>
+        </select>
+      ) : areas.length === 1 && chosen === areas[0].id ? (
         <output id={id} className="flex h-11 items-center truncate px-1 text-base font-medium text-neutral-900">
           {name(areas[0])}
         </output>
@@ -721,4 +962,13 @@ function RouteEnd({
       )}
     </div>
   )
+}
+
+/** "today 7:10 AM", or "Mon 7:10 AM" for an earlier day: when a request was asked. */
+function formatAskedAt(iso: string): string {
+  const when = new Date(iso)
+  const time = when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  return when.toDateString() === new Date().toDateString()
+    ? `today ${time}`
+    : `${when.toLocaleDateString(undefined, { weekday: 'short' })} ${time}`
 }

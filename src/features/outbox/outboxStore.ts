@@ -10,6 +10,8 @@ import type { StockMutationResponse, StockOutPayload } from '@/features/products
 import { transfersApi } from '@/features/transfers/transfersApi'
 import { movesApi } from '@/features/moves/movesApi'
 import type { AreaMove, AreaMoveConfirmPayload, AreaMovePayload } from '@/features/moves/types'
+import { requestsApi } from '@/features/requests/requestsApi'
+import type { StockRequest, StockRequestPayload } from '@/features/requests/types'
 import type { ReceiptPayload, SendPayload, Transfer } from '@/features/transfers/types'
 import { isAppError } from '@/types/api'
 
@@ -172,7 +174,7 @@ function isTransient(error: unknown): boolean {
   return isAppError(error) && (error.status === 0 || error.status >= 500)
 }
 
-type Answer = StockMutationResponse | Transfer | AreaMove
+type Answer = StockMutationResponse | Transfer | AreaMove | StockRequest
 
 function send(op: OutboxOp, { late }: { late: boolean }): Promise<Answer> {
   // A write sent the moment it is entered is dated by the server, as always. One sent later
@@ -190,6 +192,9 @@ function send(op: OutboxOp, { late }: { late: boolean }): Promise<Answer> {
     // A confirmation sent late keeps when it was made, so a count taken since isn't doubled (Part 4).
     case 'AREA_MOVE_CONFIRM':
       return movesApi.confirm(op.moveId, { ...op.payload, ...timing })
+    // A request keeps the moment it was asked (Part 5).
+    case 'STOCK_REQUEST':
+      return requestsApi.ask({ ...op.payload, occurredAt: new Date(op.createdAt).toISOString() })
     case 'STOCK_IN':
       return stockApi.stockIn(op.productId, { ...op.payload, ...timing } as StockInRequestPayload, op.id)
     case 'STOCK_OUT':
@@ -253,6 +258,8 @@ function applyTransferResult(transfer: Transfer): void {
  */
 export function applyMoveResult(move: AreaMove): void {
   void queryClient.invalidateQueries({ queryKey: ['area-moves'] })
+  // A move may have filled a request (Part 5).
+  void queryClient.invalidateQueries({ queryKey: ['stock-requests'] })
   void queryClient.invalidateQueries({ queryKey: queryKeys.products.lowStock })
   for (const line of move.lines) {
     void queryClient.invalidateQueries({ queryKey: queryKeys.products.detail(line.productId) })
@@ -264,6 +271,7 @@ export function applyMoveResult(move: AreaMove): void {
 
 function applyResult(op: OutboxOp, response: Answer): void {
   if (op.kind === 'AREA_MOVE' || op.kind === 'AREA_MOVE_CONFIRM') applyMoveResult(response as AreaMove)
+  else if (op.kind === 'STOCK_REQUEST') void queryClient.invalidateQueries({ queryKey: ['stock-requests'] })
   else if (op.kind === 'TRANSFER_SEND' || op.kind === 'TRANSFER_RECEIVE') applyTransferResult(response as Transfer)
   else applyStockResult(op.productId, response as StockMutationResponse)
 }
@@ -486,6 +494,39 @@ export async function submitMoveConfirm(
     try {
       const response = (await send(op, { late: false })) as AreaMove
       applyMoveResult(response)
+      return { status: 'sent', response }
+    } catch (error) {
+      if (!isTransient(error)) throw error
+    }
+  }
+  await save({ ...op, attempts: 1, nextAttemptAt: Date.now() + backoff(1) })
+  void processOutbox()
+  return { status: 'queued', op }
+}
+
+/**
+ * Sends a request for stock (STOCK_AREAS_PART_5.md) the way `submitMove` sends a move: now if the server can be
+ * reached, otherwise kept on this phone and sent when it can. It changes no figure, so it waits behind nothing.
+ */
+export async function submitRequest(payload: StockRequestPayload, summary: string): Promise<SubmitOutcome<StockRequest>> {
+  const op: OutboxOp = {
+    id: crypto.randomUUID(),
+    productId: `request:${payload.id}`,
+    keys: [`request:${payload.id}`],
+    productName: summary,
+    summary,
+    createdAt: Date.now(),
+    status: 'pending',
+    attempts: 0,
+    nextAttemptAt: 0,
+    kind: 'STOCK_REQUEST',
+    payload,
+    baseDelta: null,
+  }
+  if (!isBehind(op)) {
+    try {
+      const response = (await send(op, { late: false })) as StockRequest
+      void queryClient.invalidateQueries({ queryKey: ['stock-requests'] })
       return { status: 'sent', response }
     } catch (error) {
       if (!isTransient(error)) throw error

@@ -6,6 +6,7 @@ import { Button } from '@/components/Button'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { hasAreas } from '@/features/branches/areas'
 import { MovesList } from '@/features/moves/MovesList'
+import { RequestsList } from '@/features/requests/RequestsList'
 import { useToast } from '@/components/useToast'
 import { stockMovementsApi } from '@/features/stock/api/stockMovementsApi'
 import { downloadBlob } from '@/utils/downloadBlob'
@@ -28,8 +29,11 @@ import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 
 const PAGE_SIZE = 25
 
-/** 'MOVES': moves between the branch's areas (V63), its own list - a move is not a ledger row. */
-type DirectionFilter = 'all' | MovementType | 'MOVES'
+/**
+ * 'MOVES': moves between the branch's areas (V63), its own list - a move is not a ledger row. 'REQUESTS': what one
+ * area asked another for (Part 5), its own list too.
+ */
+type DirectionFilter = 'all' | MovementType | 'MOVES' | 'REQUESTS'
 
 const DIRECTIONS: { value: DirectionFilter; label: string }[] = [
   { value: 'all', label: 'Everything' },
@@ -99,6 +103,7 @@ export function StockMovementsPage() {
   })
   const [direction, setDirection] = useState<DirectionFilter>(() => {
     if (searchParams.get('moves') === '1') return 'MOVES'
+    if (searchParams.get('requests') === '1') return 'REQUESTS'
     const requested = searchParams.get('movementType')
     return requested === 'IN' || requested === 'OUT' || requested === 'ADJUSTMENT' ? requested : 'all'
   })
@@ -121,15 +126,18 @@ export function StockMovementsPage() {
   // Areas (V60): at a branch with areas, each row says which, and the moves between them are a choice.
   const areaBranch = branch?.working && hasAreas(branch.working) ? branch.working : null
   const areaName = (id: string | undefined) => areaBranch?.areas?.find((area) => area.id === id)?.name
-  const directions = areaBranch ? [...DIRECTIONS, { value: 'MOVES' as const, label: 'Moves between areas' }] : DIRECTIONS
-  const showingMoves = direction === 'MOVES' && areaBranch != null
+  const directions = areaBranch
+    ? [...DIRECTIONS, { value: 'MOVES' as const, label: 'Moves between areas' }, { value: 'REQUESTS' as const, label: 'Requests' }]
+    : DIRECTIONS
+  // A list of its own (moves, or requests) instead of the ledger's rows.
+  const showingMoves = (direction === 'MOVES' || direction === 'REQUESTS') && areaBranch != null
 
   const { vendors } = useVendorOptions(canViewVendors)
 
   const filters = {
     from: toApiDateTime(range.from),
     to: toApiDateTime(range.to),
-    movementType: direction === 'all' || direction === 'MOVES' || showingAdjustments ? undefined : direction,
+    movementType: direction === 'all' || direction === 'MOVES' || direction === 'REQUESTS' || showingAdjustments ? undefined : direction,
     adjustments: showingAdjustments ? true : undefined,
     companyVendorId: companyVendorId || undefined,
     outReason: reasonApplies && reasonFilter && reasonFilter !== 'NONE' ? reasonFilter : undefined,
@@ -401,7 +409,7 @@ export function StockMovementsPage() {
         )}
       </div>
 
-      {showingMoves && areaBranch && <MovesList branchId={areaBranch.id} />}
+      {showingMoves && areaBranch && (direction === 'REQUESTS' ? <RequestsList branchId={areaBranch.id} /> : <MovesList branchId={areaBranch.id} />)}
 
       {!showingMoves && error && (
         <ErrorState

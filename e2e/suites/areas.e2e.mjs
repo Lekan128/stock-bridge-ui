@@ -556,12 +556,12 @@ await check('the owner places a cook in the Kitchen; the cook records there with
   await waitFor(async () => (await areaFigures(ownerToken, rice.id)).Kitchen === before - 1, 'the Kitchen to hold one fewer')
   await cookPage.screenshot({ path: SHOTS + '11-cook-product.png' })
 
-  // Move stock: from the Kitchen, the only area they take from.
+  // Move stock: from the Kitchen, the only area they take from; the others are there to ask (Part 5).
   await cookPage.goto(`${UI}/app/move`)
-  // One place to take from, so no picker: just the name.
-  const from = cookPage.locator('output#move-from')
-  await from.waitFor()
-  assert((await from.innerText()) === 'Kitchen', `Move starts from ${await from.innerText()}`)
+  await cookPage.locator('select#move-from').waitFor()
+  assert((await chosenIn(cookPage, 'select#move-from')) === 'Kitchen', `Move starts from ${await chosenIn(cookPage, 'select#move-from')}`)
+  const askGroup = await cookPage.locator('select#move-from optgroup[label="Ask another area"] option').allInnerTexts()
+  assert(askGroup.includes('Store') && askGroup.includes('Bar'), `to ask: ${askGroup.join(', ')}`)
   await cookContext.close()
 })
 
@@ -906,6 +906,101 @@ await check('the Kitchen confirms what arrives: a move waits, the cook confirms 
   await sheet.getByLabel('It arrives straight away').check()
   await sheet.getByRole('button', { name: 'Save' }).click()
   await sheet.waitFor({ state: 'hidden' })
+})
+
+// ------------------------------------------------------------------------------------- Part 5
+await check('the cook asks the Store from Move; the storekeeper moves part, says none of the rest; the buyer sees it', async () => {
+  const paste = await createProduct(ownerToken, owner.unique, 'Tomato paste')
+  const areaIds = Object.fromEntries((await api('/api/branches', { token: ownerToken })).json.branches[0].areas.map((a) => [a.name, a.id]))
+  const role = (await api('/api/roles', { token: ownerToken })).json.find((r) => r.name === 'STOREKEEPER')
+  const keeperName = `keeper-${owner.unique}`
+  await api('/api/users', { token: ownerToken, method: 'POST', body: { username: keeperName, password: PASSWORD, roleId: role.id, areaIds: [areaIds.Store] } })
+  const before = await areaFigures(ownerToken, rice.id)
+
+  // The cook, on a phone: quick mode's Move, From the Store - it asks.
+  const cookContext = await contextFor(await login(owner.user.clientIdentifier, `cook-${owner.unique}`), { width: 390, height: 844 })
+  const cookPage = await cookContext.newPage()
+  await cookPage.goto(`${UI}/app/quick`)
+  await cookPage.getByRole('group', { name: 'What are you doing?' }).getByRole('button', { name: 'Move' }).click()
+  await cookPage.locator('#move-from').selectOption({ label: 'Store' })
+  await cookPage.locator('[data-asking]').getByText("You don't work in the Store, so this asks the people there to move it.").waitFor()
+  for (const [name, quantity] of [['Rice', '2'], ['Tomato paste', '3']]) {
+    await cookPage.locator('#move-search').fill(name)
+    await cookPage.getByRole('button', { name: new RegExp(`^${name}`) }).first().click()
+    await cookPage.getByLabel(`How many ${name}`).fill(quantity)
+  }
+  await cookPage.locator(`[data-move-line="${paste.id}"]`).getByText('The Store has none').waitFor()
+  await cookPage.waitForTimeout(300)
+  await cookPage.screenshot({ path: SHOTS + '35-cook-asks.png' })
+  await cookPage.getByRole('button', { name: 'Ask the Store for 2 items' }).click()
+  await cookPage.getByText(/2 items · Store → Kitchen · asked/).first().waitFor()
+  assert((await areaFigures(ownerToken, rice.id)).Store === before.Store, 'asking moved stock')
+
+  // The storekeeper, on a laptop: the line at the top of Inventory opens Move, filled.
+  const keeperContext = await contextFor(await login(owner.user.clientIdentifier, keeperName))
+  const keeperPage = await keeperContext.newPage()
+  await keeperPage.goto(`${UI}/app/products`)
+  const askedLine = keeperPage.locator('[data-request-line]')
+  await askedLine.getByText('The Kitchen asked for 2 items').waitFor()
+  await keeperPage.screenshot({ path: SHOTS + '36-store-asked-line.png' })
+  await askedLine.click()
+  const fillSheet = keeperPage.getByRole('dialog', { name: /Move stock/ })
+  await fillSheet.locator('[data-request-header]').getByText(/The Kitchen asked for these/).waitFor()
+  await waitFor(async () => (await keeperPage.getByLabel('How many Rice').inputValue()) === '2', 'rice to be filled in at 2')
+  await keeperPage.getByLabel('How many Tomato paste').waitFor()
+  await keeperPage.waitForTimeout(300)
+  await keeperPage.screenshot({ path: SHOTS + '37-move-filled-from-request.png' })
+  await fillSheet.locator(`[data-move-line="${paste.id}"]`).getByRole('button', { name: 'None in the Store' }).click()
+  await fillSheet.locator('[data-none-here]').getByText(/Tomato paste/).waitFor()
+  await keeperPage.getByLabel('How many Rice').fill('1')
+  await fillSheet.getByRole('button', { name: 'Move 1 item to Kitchen' }).click()
+  await fillSheet.waitFor({ state: 'hidden' })
+  await waitFor(async () => (await areaFigures(ownerToken, rice.id)).Kitchen === before.Kitchen + 1, 'the Kitchen to get 1')
+  // One rice still asked: the line stays, and opens with just that.
+  await keeperPage.reload()
+  await askedLine.click()
+  await waitFor(async () => (await keeperPage.getByLabel('How many Rice').inputValue()) === '1', 'the last rice to be filled in')
+  assert((await keeperPage.getByLabel('How many Tomato paste').count()) === 0, 'tomato paste is asked again')
+  await fillSheet.getByRole('button', { name: 'Move 1 item to Kitchen' }).click()
+  await fillSheet.waitFor({ state: 'hidden' })
+  await askedLine.waitFor({ state: 'detached' })
+  await keeperContext.close()
+
+  // The cook's Requests: how it went.
+  await cookPage.goto(`${UI}/app/stock-movements?requests=1`)
+  const requests = cookPage.getByRole('list', { name: 'Requests' })
+  await requests.locator('[data-request-state]').getByText('Moved, some none in the Store').waitFor()
+  await cookPage.screenshot({ path: SHOTS + '38-cook-requests.png' })
+  await cookContext.close()
+
+  // The buyer: Low stock opens with what the Store has none of.
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.goto(`${UI}/app/products/low-stock`)
+  await page.getByRole('region', { name: 'Asked for, none in the store' })
+    .getByText(/The Kitchen needs 3 .* of Tomato paste\. The Store has none\./).waitFor()
+  await page.screenshot({ path: SHOTS + '39-low-stock-none-in-store.png' })
+  const end = await areaFigures(ownerToken, rice.id)
+  assert(end.Store === before.Store - 2 && end.Kitchen === before.Kitchen + 2, `ended ${JSON.stringify(end)}, began ${JSON.stringify(before)}`)
+})
+
+await check('a request nobody has moved can be cancelled by the cook', async () => {
+  const areaIds = Object.fromEntries((await api('/api/branches', { token: ownerToken })).json.branches[0].areas.map((a) => [a.name, a.id]))
+  const cook = await login(owner.user.clientIdentifier, `cook-${owner.unique}`)
+  await api('/api/stock-requests', {
+    token: cook.tokens.accessToken,
+    method: 'POST',
+    body: { id: randomUUID(), fromAreaId: areaIds.Store, toAreaId: areaIds.Kitchen, lines: [{ productId: rice.id, quantity: 1 }] },
+  })
+  const cookContext = await contextFor(cook)
+  const cookPage = await cookContext.newPage()
+  await cookPage.goto(`${UI}/app/stock-movements?requests=1`)
+  const requests = cookPage.getByRole('list', { name: 'Requests' })
+  await requests.locator('[data-request-row="OPEN"]').first().click()
+  const sheet = cookPage.getByRole('dialog', { name: 'The Kitchen asked for 1 item' })
+  await sheet.getByRole('button', { name: 'Cancel this request' }).click()
+  await sheet.waitFor({ state: 'hidden' })
+  await requests.locator('[data-request-state]').getByText('Cancelled').waitFor()
+  await cookContext.close()
 })
 
 await check('a company without areas sees no area word on its sheets or product page, and renames its Store', async () => {

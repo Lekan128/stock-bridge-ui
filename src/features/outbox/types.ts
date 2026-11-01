@@ -2,6 +2,7 @@ import type { StockInRequestPayload } from '@/features/products/api/stockApi'
 import type { StockOutPayload } from '@/features/products/types'
 import type { ReceiptPayload, SendPayload } from '@/features/transfers/types'
 import type { AreaMoveConfirmPayload, AreaMovePayload } from '@/features/moves/types'
+import type { StockRequestPayload } from '@/features/requests/types'
 
 /** A stock count as the API takes it (A4): what was on the shelf, in stock units. */
 export interface StockCountPayload {
@@ -63,6 +64,8 @@ export type OutboxOp = {
   | { kind: 'AREA_MOVE'; payload: AreaMovePayload; baseDelta: null }
   /** What an area that confirms got of a move (STOCK_AREAS_PART_4.md). `moveId` is the move's id. */
   | { kind: 'AREA_MOVE_CONFIRM'; moveId: string; payload: AreaMoveConfirmPayload; baseDelta: null }
+  /** One area asking another for stock (STOCK_AREAS_PART_5.md). `payload.id` is the request's own id. */
+  | { kind: 'STOCK_REQUEST'; payload: StockRequestPayload; baseDelta: null }
 )
 
 export type OutboxProblem =

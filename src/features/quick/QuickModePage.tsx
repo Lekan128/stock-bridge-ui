@@ -199,17 +199,21 @@ export function QuickModePage() {
 
   function moveRecorded(moved: Moved) {
     setMovesRecorded((n) => n + 1)
+    // Asked (Part 5): "2 items · asked of the Store"; a request answered with none: "Told the Kitchen · none".
+    const said =
+      moved.status === 'asked'
+        ? { key: moved.requestId, productName: `${moved.route} · asked`, opId: moved.opId }
+        : moved.status === 'answered'
+          ? { key: `answered-${Date.now()}`, productName: `${moved.route} · none in the store` }
+          : {
+              key: moved.status === 'sent' ? moved.move.id : moved.opId,
+              productName: moved.waitingFor ? `${moved.route} · waiting for the ${moved.waitingFor}` : moved.route,
+              moveId: moved.status === 'sent' ? moved.move.id : undefined,
+              opId: moved.status === 'queued' ? moved.opId : undefined,
+            }
     recorded(
-      {
-        key: moved.status === 'sent' ? moved.move.id : moved.opId,
-        mode: 'move',
-        productId: '',
-        productName: moved.waitingFor ? `${moved.route} · waiting for the ${moved.waitingFor}` : moved.route,
-        summary: moved.items,
-        moveId: moved.status === 'sent' ? moved.move.id : undefined,
-        opId: moved.status === 'queued' ? moved.opId : undefined,
-      },
-      moved.status === 'sent' ? 'synced' : 'recorded',
+      { mode: 'move', productId: '', summary: moved.items, ...said },
+      moved.status === 'queued' || (moved.status === 'asked' && moved.opId) ? 'recorded' : 'synced',
     )
   }
 

@@ -8,6 +8,8 @@ export interface AreaMovePayload {
   note?: string
   /** Whole numbers in `unit`, or the stock unit when `unit` is absent, as on every sheet. */
   lines: { productId: string; quantity: number; unit?: string }[]
+  /** The request it fills (Part 5): the area asked moving to the area that asked. */
+  requestId?: string
   /** Set by the outbox when the move goes late: when it happened on the phone, and that it was offline. */
   occurredAt?: string
   recordedOffline?: boolean

@@ -26,6 +26,9 @@ import { MoveSheet } from '@/features/moves/MoveSheet'
 import { itemsWord } from '@/features/moves/moveWords'
 import type { AreaMove } from '@/features/moves/types'
 import { useWaitingMoves } from '@/features/moves/useWaitingMoves'
+import { useMoveSheet } from '@/features/moves/useMoveSheet'
+import { askedFor } from '@/features/requests/requestWords'
+import { useWaitingRequests } from '@/features/requests/useWaitingRequests'
 
 const SHOWN_PER_KIND = 4
 
@@ -101,6 +104,9 @@ export function NeedsYouToday({ canStockIn, canReceive }: NeedsYouTodayProps) {
   // Areas that confirm (STOCK_AREAS_PART_4.md): moves waiting for an area this person works in.
   const waitingMoves = useWaitingMoves().moves
   const [openMove, setOpenMove] = useState<AreaMove | null>(null)
+  // Asked for (Part 5): requests to move, for the people of the area asked. Move opens filled.
+  const waitingRequests = useWaitingRequests().requests
+  const moveSheet = useMoveSheet()
 
   const rows: ReactNode[] = []
   if (refused > 0) {
@@ -114,6 +120,25 @@ export function NeedsYouToday({ canStockIn, canReceive }: NeedsYouTodayProps) {
         action={
           <button type="button" onClick={() => setSyncOpen(true)} className={buttonClassName('secondary', 'whitespace-nowrap')}>
             Review
+          </button>
+        }
+      />,
+    )
+  }
+  for (const request of waitingRequests.slice(0, SHOWN_PER_KIND)) {
+    rows.push(
+      <NeedRow
+        key={`request-${request.id}`}
+        icon={<ClipboardList className="h-5 w-5 text-neutral-500" aria-hidden="true" />}
+        title={askedFor(request)}
+        detail={`Of the ${request.fromAreaName}${request.askedByName ? ` · ${request.askedByName}` : ''}`}
+        action={
+          <button
+            type="button"
+            onClick={() => moveSheet.openRequest(request)}
+            className={buttonClassName('secondary', 'whitespace-nowrap')}
+          >
+            Move them
           </button>
         }
       />,
@@ -274,6 +299,7 @@ export function NeedsYouToday({ canStockIn, canReceive }: NeedsYouTodayProps) {
       )}
       {stockActions.sheet}
       {openMove && <MoveSheet key={openMove.id} move={openMove} onClose={() => setOpenMove(null)} />}
+      {moveSheet.sheet}
       <SyncCentre open={syncOpen} onClose={() => setSyncOpen(false)} />
     </section>
   )

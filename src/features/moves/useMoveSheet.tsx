@@ -5,6 +5,8 @@ import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { MoveEditor, type Moved } from '@/features/moves/MoveEditor'
 import { movesApi } from '@/features/moves/movesApi'
 import { applyMoveResult, discardOp, getOutboxState, isInFlight } from '@/features/outbox/outboxStore'
+import { requestsApi } from '@/features/requests/requestsApi'
+import type { StockRequest } from '@/features/requests/types'
 import { isAppError } from '@/types/api'
 
 /**
@@ -12,13 +14,33 @@ import { isAppError } from '@/types/api'
  * out - a side panel on a laptop, a bottom sheet on a phone - and, once moved, the same toast with Undo,
  * not a screen of its own.
  */
-export function useMoveSheet(): { open: (productIds?: string[]) => void; sheet: ReactNode } {
-  const [opened, setOpened] = useState<{ productIds: string[]; key: number } | null>(null)
+export function useMoveSheet(): {
+  open: (productIds?: string[]) => void
+  /** Move what a request asked for (Part 5): the route and its lines filled in. */
+  openRequest: (request: StockRequest) => void
+  sheet: ReactNode
+} {
+  const [opened, setOpened] = useState<{ productIds: string[]; key: number; request?: StockRequest } | null>(null)
   const { showToast } = useToast()
   const { isMultiBranch, working } = useWorkingBranch()
 
   function moved(result: Moved) {
     setOpened(null)
+    // Asked (Part 5): sent, Undo takes the request back; kept on this phone, Undo drops it.
+    if (result.status === 'asked') {
+      const requestId = result.requestId
+      const opId = result.opId
+      showToast(
+        opId ? "Saved on this phone. It's asked when you're connected." : `Asked · ${result.items} · ${result.route}`,
+        opId ? 'info' : 'success',
+        { action: { label: 'Undo', onAction: () => (opId ? undoQueued(opId) : void takeBack(requestId)) } },
+      )
+      return
+    }
+    if (result.status === 'answered') {
+      showToast(`Told ${result.items}: none in the store`, 'success')
+      return
+    }
     if (result.status === 'sent') {
       const move = result.move
       showToast(`${result.verb} · ${result.items} · ${result.route}${result.waitingFor ? ` · waiting for the ${result.waitingFor}` : ''}`, 'success', {
@@ -40,6 +62,15 @@ export function useMoveSheet(): { open: (productIds?: string[]) => void; sheet: 
     }
   }
 
+  async function takeBack(requestId: string) {
+    try {
+      await requestsApi.cancel(requestId)
+      showToast('Undone · nothing was asked', 'info')
+    } catch (error) {
+      showToast(isAppError(error) ? error.message : "Couldn't take that back.", 'error')
+    }
+  }
+
   function undoQueued(opId: string) {
     if (isInFlight(opId) || !getOutboxState().ops.some((op) => op.id === opId)) {
       showToast("It has already gone, so it can't be taken back here. Move it back instead.", 'info')
@@ -50,7 +81,7 @@ export function useMoveSheet(): { open: (productIds?: string[]) => void; sheet: 
   }
 
   const sheet = opened && (
-    <MoveEditor key={opened.key} productIds={opened.productIds} focusSearch onMoved={moved}>
+    <MoveEditor key={opened.key} productIds={opened.productIds} request={opened.request} focusSearch onMoved={moved}>
       {({ body, action }) => (
         <Sheet
           open
@@ -64,5 +95,9 @@ export function useMoveSheet(): { open: (productIds?: string[]) => void; sheet: 
       )}
     </MoveEditor>
   )
-  return { open: (productIds = []) => setOpened({ productIds, key: Date.now() }), sheet }
+  return {
+    open: (productIds = []) => setOpened({ productIds, key: Date.now() }),
+    openRequest: (request) => setOpened({ productIds: [], key: Date.now(), request }),
+    sheet,
+  }
 }

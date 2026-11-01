@@ -9,6 +9,7 @@ import { useProductIncoming } from '@/features/products/hooks/useProductIncoming
 import type { Product } from '@/features/products/types'
 import { scopeProduct } from '@/features/branches/scopeProduct'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
+import { NoneInStorePanel } from '@/features/requests/NoneInStorePanel'
 
 function sortProducts(products: Product[], sort: ProductSort): Product[] {
   const direction = sort.direction === 'asc' ? 1 : -1
@@ -74,6 +75,9 @@ export function LowStockProductsPage() {
           <p className="text-sm text-neutral-500">Products at or below their low-stock threshold.</p>
         </div>
       </div>
+
+      {/* What an area asked for that its store has none of (Part 5): a buyer's to-do, whatever the levels say. */}
+      <NoneInStorePanel />
 
       {loading && !hasLoadedOnce && <ProductListSkeleton />}
 

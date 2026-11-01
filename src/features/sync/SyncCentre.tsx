@@ -23,6 +23,7 @@ const KIND_LABEL: Record<OutboxOp['kind'], string> = {
   TRANSFER_RECEIVE: 'Receive stock',
   AREA_MOVE: 'Move stock',
   AREA_MOVE_CONFIRM: 'Confirm a move',
+  STOCK_REQUEST: 'Ask for stock',
 }
 
 /** "10:42" today, "3 Oct, 10:42" otherwise. */
