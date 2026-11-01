@@ -1093,6 +1093,25 @@ await check('Inventory: the owner finds Ask in "⋯"; the search keeps its width
   await page.setViewportSize({ width: 1280, height: 900 })
 })
 
+await check('a shared number signs nobody in, and Add user says so as it is typed', async () => {
+  await page.setViewportSize({ width: 1280, height: 900 })
+  const cook = (await api('/api/users?size=100', { token: ownerToken })).json.content.find((u) => u.username === `cook-${owner.unique}`)
+  await api(`/api/users/${cook.id}`, { token: ownerToken, method: 'PUT', body: { phone: '0806 000 0009' } })
+  await page.goto(`${UI}/app/users`)
+  await page.getByRole('button', { name: 'Add user' }).first().click()
+  const sheet = page.getByRole('dialog')
+  await sheet.getByLabel('Username').fill(`chef-${owner.unique}`)
+  // The same number, written another way.
+  await sheet.getByLabel('Phone').fill('+234 806 000 0009')
+  await sheet.locator('[data-shared-sign-in]').getByText(/has this number too, so nobody can sign in with it/).waitFor()
+  await sheet.locator('[data-shared-sign-in]').scrollIntoViewIfNeeded()
+  await page.waitForTimeout(300)
+  await page.screenshot({ path: SHOTS + '44-shared-number.png' })
+  await sheet.getByLabel('Phone').fill('0806 000 0010')
+  await sheet.locator('[data-shared-sign-in]').waitFor({ state: 'detached' })
+  await page.keyboard.press('Escape')
+})
+
 await check('a company without areas sees no area word on its sheets or product page, and renames its Store', async () => {
   const shop = await signup('noareas')
   const beans = await createProduct(shop.tokens.accessToken, shop.unique, 'Beans')

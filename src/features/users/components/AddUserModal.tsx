@@ -13,6 +13,9 @@ import { RoleSelectField } from '@/features/users/components/RoleSelectField'
 import { createUserFormDefaults, createUserSchema, type CreateUserFormValues } from '@/features/users/schemas'
 import type { TenantUserSummary } from '@/features/users/types'
 import { isAppError } from '@/types/api'
+import { useUsers } from '@/features/users/hooks/useUsers'
+import { formatDisplayName } from '@/features/users/formatters'
+import { sharedSignInNote } from '@/features/users/sharedSignIn'
 
 export interface AddUserModalProps {
   onClose: () => void
@@ -44,6 +47,18 @@ export function AddUserModal({ onClose, onSuccess }: AddUserModalProps) {
     defaultValues: createUserFormDefaults(),
   })
   const roleId = useWatch({ control, name: 'roleId' })
+  // Everyone here, to say when an email or number typed is someone else's too (owner, 2026-11-01).
+  const everyone = useUsers({ page: 0, size: 200 }).data?.content ?? []
+  const [typedEmail, typedPhone, typedFirst, typedLast, typedUsername] = useWatch({
+    control,
+    name: ['email', 'phone', 'firstName', 'lastName', 'username'],
+  })
+  const thisPerson = {
+    name:
+      formatDisplayName({ username: typedUsername || '', firstName: typedFirst, lastName: typedLast }) || 'This person',
+  }
+  const sharedEmail = sharedSignInNote('email', typedEmail, thisPerson, everyone)
+  const sharedPhone = sharedSignInNote('number', typedPhone, thisPerson, everyone)
 
   async function onSubmit(values: CreateUserFormValues) {
     setFormError(null)
@@ -123,7 +138,9 @@ export function AddUserModal({ onClose, onSuccess }: AddUserModalProps) {
               <TextField label="Last name" autoComplete="off" error={errors.lastName?.message} {...register('lastName')} />
             </div>
             <TextField label="Email" type="email" autoComplete="off" error={errors.email?.message} {...register('email')} />
+            <SharedNote text={sharedEmail} />
             <TextField label="Phone" autoComplete="off" type="tel" error={errors.phone?.message} {...register('phone')} />
+            <SharedNote text={sharedPhone} />
             <TextField label="Job title" autoComplete="off" error={errors.jobTitle?.message} {...register('jobTitle')} />
           </div>
         </div>
@@ -131,5 +148,15 @@ export function AddUserModal({ onClose, onSuccess }: AddUserModalProps) {
         <FormError message={formError} />
       </form>
     </Sheet>
+  )
+}
+
+/** Under Email or Phone: someone else here has it too, so it won't sign anyone in (owner, 2026-11-01). */
+function SharedNote({ text }: { text: string | null }) {
+  if (!text) return null
+  return (
+    <p className="-mt-2 text-sm text-warning-800" data-shared-sign-in>
+      {text}
+    </p>
   )
 }

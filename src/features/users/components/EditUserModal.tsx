@@ -15,6 +15,8 @@ import { formatDisplayName } from '@/features/users/formatters'
 import { editUserSchema, type EditUserFormValues } from '@/features/users/schemas'
 import type { TenantUserSummary, UpdateUserPayload } from '@/features/users/types'
 import { isAppError } from '@/types/api'
+import { useUsers } from '@/features/users/hooks/useUsers'
+import { sharedSignInNote } from '@/features/users/sharedSignIn'
 
 export interface EditUserModalProps {
   user: TenantUserSummary
@@ -57,6 +59,19 @@ export function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) 
     },
   })
   const roleId = useWatch({ control, name: 'roleId' })
+  // Everyone here, to say when an email or number typed is someone else's too (owner, 2026-11-01).
+  const everyone = useUsers({ page: 0, size: 200 }).data?.content ?? []
+  const [typedEmail, typedPhone, typedFirst, typedLast] = useWatch({
+    control,
+    name: ['email', 'phone', 'firstName', 'lastName'],
+  })
+  const thisPerson = {
+    id: user.id,
+    root: user.root,
+    name: formatDisplayName({ username: user.username, firstName: typedFirst, lastName: typedLast }),
+  }
+  const sharedEmail = sharedSignInNote('email', typedEmail, thisPerson, everyone)
+  const sharedPhone = sharedSignInNote('number', typedPhone, thisPerson, everyone)
 
   // PUT /api/users/{id} patches: an omitted key is left alone, and a blank string clears the
   // stored value. So only touched fields are sent — nothing the admin didn't edit can be lost,
@@ -187,7 +202,9 @@ export function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) 
               <TextField label="Last name" autoComplete="off" error={errors.lastName?.message} {...register('lastName')} />
             </div>
             <TextField label="Email" type="email" autoComplete="off" error={errors.email?.message} {...register('email')} />
+            <SharedNote text={sharedEmail} />
             <TextField label="Phone" autoComplete="off" type="tel" error={errors.phone?.message} {...register('phone')} />
+            <SharedNote text={sharedPhone} />
             <TextField label="Job title" autoComplete="off" error={errors.jobTitle?.message} {...register('jobTitle')} />
           </div>
         </div>
@@ -195,5 +212,15 @@ export function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) 
         <FormError message={formError} />
       </form>
     </Sheet>
+  )
+}
+
+/** Under Email or Phone: someone else here has it too, so it won't sign anyone in (owner, 2026-11-01). */
+function SharedNote({ text }: { text: string | null }) {
+  if (!text) return null
+  return (
+    <p className="-mt-2 text-sm text-warning-800" data-shared-sign-in>
+      {text}
+    </p>
   )
 }
