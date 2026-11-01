@@ -5,6 +5,7 @@ import { areaShortAs, type ShortAs } from '@/features/branches/areas'
 import { QuickAreaTitle } from '@/features/quick/QuickAreaTitle'
 import { MoveEditor, type Moved } from '@/features/moves/MoveEditor'
 import { movesApi } from '@/features/moves/movesApi'
+import { requestsApi } from '@/features/requests/requestsApi'
 import { WaitingMovesLine } from '@/features/moves/WaitingMovesLine'
 import { usePendingStock } from '@/features/outbox/useOutbox'
 import { useEffect, useRef, useState, type RefObject } from 'react'
@@ -48,6 +49,8 @@ import { MySalesToday } from '@/features/selling/sale/MySalesToday'
 import { SaleBasketEditor } from '@/features/selling/sale/SaleBasketEditor'
 import { undoSale, useSaleBasket, type RecordedSale } from '@/features/selling/sale/useSaleBasket'
 import { MODES, useQuickModeTabs, type Mode } from '@/features/quick/quickTabs'
+import { WhatsAppTell } from '@/features/requests/WhatsAppTell'
+import type { AskShare } from '@/features/requests/whatsAppShare'
 import { SyncPill } from '@/features/sync/SyncPill'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
@@ -90,6 +93,8 @@ interface SessionEntry {
   moveId?: string
   /** Where it was recorded, as the title said at the time (owner, 2026-10-31): "Stock in · 1 set · Store". */
   areaName?: string
+  /** An ask (Part 5): what to tell the Store's people on WhatsApp. */
+  share?: AskShare
   undone?: boolean
 }
 
@@ -185,7 +190,7 @@ export function QuickModePage() {
     // Asked (Part 5): "2 items · asked of the Store"; a request answered with none: "Told the Kitchen · none".
     const said =
       moved.status === 'asked'
-        ? { key: moved.requestId, productName: `${moved.route} · asked`, opId: moved.opId }
+        ? { key: moved.requestId, productName: `${moved.route} · asked`, opId: moved.opId, share: moved.share }
         : moved.status === 'answered'
           ? { key: `answered-${Date.now()}`, productName: `${moved.route} · none in the store` }
           : {
@@ -753,6 +758,8 @@ function SessionList({ entries, onUndone }: { entries: SessionEntry[]; onUndone:
       return stamps.includes('check') ? 'check' : stamps.includes('recorded') ? 'recorded' : 'synced'
     }
     if (entry.movementId || entry.moveId) return 'synced'
+    // An ask (or an answer) that reached the server has no op to watch: it's synced, as its stamp said.
+    if ((entry.mode === 'ask' || entry.mode === 'move') && !entry.opId) return 'synced'
     const waiting = ops.find((op) => op.id === entry.opId)
     if (waiting) return waiting.status === 'needs_attention' ? 'check' : 'recorded'
     return recentlySent.some((op) => op.id === entry.opId) ? 'synced' : 'recorded'
@@ -764,6 +771,13 @@ function SessionList({ entries, onUndone }: { entries: SessionEntry[]; onUndone:
       if (entry.sale) {
         const problems = await undoSale(entry.sale)
         if (problems.length > 0) throw new Error(`Some of it couldn't be undone. ${problems.join(' ')}`)
+      } else if (entry.mode === 'ask') {
+        // An ask (Part 5): still on this phone, dropped; sent, taken back - the Store isn't asked any more.
+        if (entry.opId && !isInFlight(entry.opId) && getOutboxState().ops.some((op) => op.id === entry.opId)) {
+          await discardOp(entry.opId)
+        } else {
+          await requestsApi.cancel(entry.key)
+        }
       } else if (entry.moveId) {
         applyMoveResult(await movesApi.undo(entry.moveId))
       } else if (entry.movementId) {
@@ -800,6 +814,8 @@ function SessionList({ entries, onUndone }: { entries: SessionEntry[]; onUndone:
                 {MODES.find((m) => m.value === entry.mode)?.verb} · {entry.summary}
                 {entry.areaName ? ` · ${entry.areaName}` : ''}
               </span>
+              {/* An ask: tell the Store's people on WhatsApp, right here (its stamp only shows for a moment). */}
+              {entry.share && !entry.undone && <WhatsAppTell share={entry.share} />}
             </span>
             {entry.undone ? (
               <span className="text-sm text-neutral-500">Undone</span>

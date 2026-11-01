@@ -33,6 +33,8 @@ export interface StockRequest {
   canFill: boolean
   /** This person may take it back: they asked, or work in the asking area, and nothing has moved. */
   canCancel: boolean
+  /** Who can move it, with a WhatsApp number - only to the person who asked, while it's open. */
+  movers?: { id: string; name: string; whatsapp: string }[]
 }
 
 export interface StockRequestLine {

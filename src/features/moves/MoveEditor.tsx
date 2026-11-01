@@ -15,10 +15,11 @@ import type { AreaMove } from '@/features/moves/types'
 import { submitMove, submitRequest } from '@/features/outbox/outboxStore'
 import { requestsApi } from '@/features/requests/requestsApi'
 import type { StockRequest } from '@/features/requests/types'
+import type { AskShare } from '@/features/requests/whatsAppShare'
 import { productsApi } from '@/features/products/api/productsApi'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import type { Product, UnitOption } from '@/features/products/types'
-import { formatNumber, packRemainderPhrase, pluraliseUnitNoun, stockUnitWord, unitNoun } from '@/features/products/unitCopy'
+import { formatNumber, formatQuantityInUnit, packRemainderPhrase, pluraliseUnitNoun, stockUnitWord, unitNoun } from '@/features/products/unitCopy'
 import { packRemainder, resolveUnitSymbol, stockUnitOption, toBaseQuantity } from '@/features/products/unitSet'
 import { unitsFor } from '@/features/selling/sale/saleLine'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
@@ -50,7 +51,7 @@ interface MoveDraft {
 export type Moved = (
   | { status: 'sent'; move: AreaMove }
   | { status: 'queued'; opId: string }
-  | { status: 'asked'; requestId: string; opId?: string }
+  | { status: 'asked'; requestId: string; opId?: string; share: AskShare }
   | { status: 'answered' }
 ) & {
   /** "Moved" or "Given" (to an area that uses what it's given). */
@@ -398,9 +399,18 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
       )
       finished.current = true
       await draft.finish()
+      // The WhatsApp message (owner, 2026-11-01), written here so it's there offline too.
+      const asked = ready.map((entry) => `${entry.line.product.name} ${formatQuantityInUnit(entry.quantity, entry.option)}`)
+      const share: AskShare = {
+        text: `The ${to.name} asked for ${asked.join(', ')}. Open Procure Paddy to move ${
+          asked.length === 1 ? 'it' : 'them'
+        }: ${window.location.origin}/app?request=${requestId}`,
+        movers: outcome.status === 'sent' ? (outcome.response.movers ?? []) : [],
+      }
       onMoved({
         status: 'asked',
         requestId,
+        share,
         ...(outcome.status === 'queued' ? { opId: outcome.op.id } : {}),
         verb: 'Asked',
         items,

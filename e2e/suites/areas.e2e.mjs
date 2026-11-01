@@ -914,7 +914,7 @@ await check('the cook asks the Store from Move; the storekeeper moves part, says
   const areaIds = Object.fromEntries((await api('/api/branches', { token: ownerToken })).json.branches[0].areas.map((a) => [a.name, a.id]))
   const role = (await api('/api/roles', { token: ownerToken })).json.find((r) => r.name === 'STOREKEEPER')
   const keeperName = `keeper-${owner.unique}`
-  await api('/api/users', { token: ownerToken, method: 'POST', body: { username: keeperName, password: PASSWORD, roleId: role.id, areaIds: [areaIds.Store] } })
+  await api('/api/users', { token: ownerToken, method: 'POST', body: { username: keeperName, password: PASSWORD, roleId: role.id, areaIds: [areaIds.Store], firstName: 'Amaka', phone: '0803 123 4567' } })
   const before = await areaFigures(ownerToken, rice.id)
 
   // The cook, on a phone: quick mode's Move, From the Store - it asks.
@@ -941,6 +941,20 @@ await check('the cook asks the Store from Move; the storekeeper moves part, says
   await cookPage.screenshot({ path: SHOTS + '35-cook-asks.png' })
   await cookPage.getByRole('button', { name: 'Ask the Store for 2 items' }).click()
   await cookPage.getByText(/2 items · Store → Kitchen · asked/).first().waitFor()
+  // Tell the one person who can move it, on WhatsApp, the message already typed (owner, 2026-11-01).
+  await cookContext.route('https://wa.me/**', (route) => route.fulfill({ body: 'whatsapp' }))
+  const tell = cookPage.locator('[data-whatsapp-tell]').getByRole('button', { name: 'Tell Amaka on WhatsApp' })
+  await tell.waitFor()
+  // Sent: the session line says so too, as the big stamp did.
+  await cookPage.locator('section[aria-labelledby="quick-session-heading"] [data-stamp="synced"]').waitFor()
+  await cookPage.screenshot({ path: SHOTS + '45-tell-on-whatsapp.png' })
+  const [chat] = await Promise.all([cookContext.waitForEvent('page'), tell.click()])
+  await chat.waitForURL(/wa\.me/)
+  const link = decodeURIComponent(chat.url())
+  assert(link.startsWith('https://wa.me/2348031234567?text=The Kitchen asked for '), `whatsapp link: ${link}`)
+  assert(link.includes('Rice 2 pieces') && link.includes('Tomato paste 3 pieces'), `whatsapp message: ${link}`)
+  assert(link.includes('/app?request='), `no link back to the request: ${link}`)
+  await chat.close()
   assert((await areaFigures(ownerToken, rice.id)).Store === before.Store, 'asking moved stock')
 
   // The storekeeper, on a laptop: the line at the top of Inventory opens Move, filled.

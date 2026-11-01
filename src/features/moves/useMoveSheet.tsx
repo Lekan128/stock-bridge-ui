@@ -7,6 +7,7 @@ import { useMoveIntent } from '@/features/moves/moveIntent'
 import { movesApi } from '@/features/moves/movesApi'
 import { applyMoveResult, discardOp, getOutboxState, isInFlight } from '@/features/outbox/outboxStore'
 import { requestsApi } from '@/features/requests/requestsApi'
+import { whatsAppAction } from '@/features/requests/whatsAppShare'
 import type { StockRequest } from '@/features/requests/types'
 import { isAppError } from '@/types/api'
 
@@ -38,10 +39,14 @@ export function useMoveSheet(): {
     if (result.status === 'asked') {
       const requestId = result.requestId
       const opId = result.opId
+      // Tell the Store's people on WhatsApp (owner, 2026-11-01), then Undo.
       showToast(
         opId ? "Saved on this phone. It's asked when you're connected." : `Asked · ${result.items} · ${result.route}`,
         opId ? 'info' : 'success',
-        { action: { label: 'Undo', onAction: () => (opId ? undoQueued(opId) : void takeBack(requestId)) } },
+        {
+          action: whatsAppAction(result.share),
+          secondaryAction: { label: 'Undo', onAction: () => (opId ? undoQueued(opId) : void takeBack(requestId)) },
+        },
       )
       return
     }
