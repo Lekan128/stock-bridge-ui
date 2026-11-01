@@ -112,11 +112,14 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
   const requestTo = request ? allOpen.find((area) => area.id === request.toAreaId) : undefined
   const fromChoices = request ? (requestFrom ? [requestFrom] : []) : work.areas
   const [fromChoice, setFromChoice] = useState<string | null>(null)
+  // Someone who doesn't work where deliveries arrive mostly gets stock from there: Move opens asking it (owner,
+  // 2026-11-01) until a route of their own is used.
+  const askStore = askable.find((area) => area.delivery)
   const fromAreaId = request
     ? request.fromAreaId
     : [...fromChoices, ...askable].some((area) => area.id === fromChoice)
       ? (fromChoice as string)
-      : (work.area?.id ?? fromChoices.find((area) => area.delivery)?.id ?? fromChoices[0]?.id ?? '')
+      : (askStore?.id ?? work.area?.id ?? fromChoices.find((area) => area.delivery)?.id ?? fromChoices[0]?.id ?? '')
   const asking = askable.some((area) => area.id === fromAreaId)
   const [toAreaChoice, setToAreaId] = useState<string>('')
   // Asking: for an area this person works in - the one they're in, to start with.

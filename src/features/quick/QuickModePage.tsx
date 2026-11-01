@@ -1,9 +1,7 @@
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { useSheetArea } from '@/features/branches/useSheetBranch'
-import { hasAreas } from '@/features/branches/areas'
 import { CountShortfall } from '@/features/branches/CountShortfall'
 import { areaShortAs, type ShortAs } from '@/features/branches/areas'
-import { useWorkArea } from '@/features/branches/workArea'
 import { QuickAreaTitle } from '@/features/quick/QuickAreaTitle'
 import { MoveEditor, type Moved } from '@/features/moves/MoveEditor'
 import { movesApi } from '@/features/moves/movesApi'
@@ -13,8 +11,6 @@ import { useEffect, useRef, useState, type RefObject } from 'react'
 import { Delete, Search, X } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useAuth } from '@/auth/useAuth'
-import { PERMISSIONS } from '@/auth/permissions'
 import { Stamp, type StampKind } from '@/components/Stamp'
 import { useDialogBehaviour } from '@/components/useDialogBehaviour'
 import { applyMoveResult, discardOp, getOutboxState, isInFlight, submitStockWrite } from '@/features/outbox/outboxStore'
@@ -51,29 +47,12 @@ import { formatMoney } from '@/features/selling/money'
 import { MySalesToday } from '@/features/selling/sale/MySalesToday'
 import { SaleBasketEditor } from '@/features/selling/sale/SaleBasketEditor'
 import { undoSale, useSaleBasket, type RecordedSale } from '@/features/selling/sale/useSaleBasket'
-import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
+import { MODES, useQuickModeTabs, type Mode } from '@/features/quick/quickTabs'
 import { SyncPill } from '@/features/sync/SyncPill'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
 
-type Mode = 'sell' | 'in' | 'out' | 'move' | 'count'
 
-// The same names as everywhere else in the app (it said Receive and Issue, warehouse words a
-// shopkeeper had to guess at), each with one line saying what it does — Count most of all.
-const MODES: { value: Mode; label: string; verb: string; meaning: string }[] = [
-  // Only where the company records sales (useSellingPolicy) - and first there: it is the till.
-  { value: 'sell', label: 'Sell', verb: 'Sold', meaning: 'Scan what the customer is buying, then record the sale in one go.' },
-  { value: 'in', label: 'Stock in', verb: 'Stock in', meaning: 'Goods coming in, like a delivery or a return. Adds them to your stock.' },
-  { value: 'out', label: 'Stock out', verb: 'Stock out', meaning: 'Goods going out: sold, used or sent away. Takes them off your stock.' },
-  // At a branch with areas (STOCK_AREAS_PART_3.md): from one area to another, several items at once.
-  { value: 'move', label: 'Move', verb: 'Moved', meaning: 'From one area to another, a few items at a time.' },
-  {
-    value: 'count',
-    label: 'Count',
-    verb: 'Counted',
-    meaning: "Count what's on the shelf. The app's figure is corrected to match, and the difference goes into the history.",
-  },
-]
 /** Where sales are recorded, Stock out is for everything else - and says so (§6.3). */
 const OUT_MEANING_WHEN_SELLING = 'Goods going out without a sale: used, spoilt or sent away. For a customer, use Sell.'
 /** At a branch with areas, giving to the kitchen or bar is a move, not stock leaving (STOCK_AREAS_PART_3.md). */
@@ -123,25 +102,17 @@ export function QuickModePage() {
   // session, like the reason; a sale chooses its own on the basket.
   const area = useSheetArea(branch && !branch.isAll ? branch.working : null)
   const [params, setParams] = useSearchParams()
-  const { user } = useAuth()
-  const permissions = user?.type === 'tenant' ? user.permissions : []
-  const { recordsSales } = useSellingPolicy()
-  const allowed: Record<Mode, boolean> = {
-    sell: recordsSales && permissions.includes(PERMISSIONS.STOCK_OUT),
-    in: permissions.includes(PERMISSIONS.STOCK_IN),
-    out: permissions.includes(PERMISSIONS.STOCK_OUT),
-    count: permissions.includes(PERMISSIONS.MANAGE_INVENTORY),
-    move: false,
-  }
-  // At a branch with areas a move is done every day and a count once in a while: Move takes Count's place
-  // in the row (it opens the Move stock screen), and Count becomes a small link beside the line below.
-  const working = branch && !branch.isAll ? branch.working : null
-  const work = useWorkArea(working)
-  const movesHere = allowed.out && hasAreas(working) && work.areas.length > 0
-  allowed.move = movesHere
-  const tabs = MODES.filter((m) => allowed[m.value] && !(movesHere && m.value === 'count'))
+  // The buttons along the top (owner, 2026-11-01): the person's own choice of up to four, kept on their account,
+  // else the app's for where they work - never one their role doesn't give them. Count they may do but didn't
+  // keep a button for stays one small link beside the line below.
+  const quickTabs = useQuickModeTabs()
+  const tabs = MODES.filter((m) => quickTabs.tabs.includes(m.value))
+  const movesHere = quickTabs.movesHere
+  const sells = quickTabs.available.includes('sell')
+  const countLink = quickTabs.available.includes('count') && !quickTabs.tabs.includes('count')
   const requested = params.get('mode') as Mode | null
-  const mode: Mode = requested && allowed[requested] ? requested : (MODES.find((m) => allowed[m.value])?.value ?? 'in')
+  // A link may open another button they may use (the product page's Count); otherwise the first of theirs.
+  const mode: Mode = requested && quickTabs.available.includes(requested) ? requested : (tabs[0]?.value ?? 'in')
 
   const [product, setProduct] = useState<Product | null>(null)
   const [flash, setFlash] = useState<{ kind: StampKind; text: string } | null>(null)
@@ -269,9 +240,11 @@ export function QuickModePage() {
             role="group"
             aria-label="What are you doing?"
             aria-describedby="quick-mode-meaning"
-            className={`grid ${GRID_COLS[tabs.length]} gap-1 rounded-lg bg-neutral-100 p-1`}
+            aria-busy={!quickTabs.ready || undefined}
+            className={`grid ${GRID_COLS[tabs.length]} min-h-14 gap-1 rounded-lg bg-neutral-100 p-1`}
           >
-            {tabs.map((m) => (
+            {/* Until their own buttons are known, the row keeps its place, empty - no flash of the wrong ones. */}
+            {quickTabs.ready && tabs.map((m) => (
               <button
                 key={m.value}
                 type="button"
@@ -290,15 +263,15 @@ export function QuickModePage() {
             <p id="quick-mode-meaning" className="text-sm text-neutral-600">
               {mode === 'out'
                 ? movesHere
-                  ? allowed.sell
+                  ? sells
                     ? OUT_MEANING_WITH_AREAS_SELLING
                     : OUT_MEANING_WITH_AREAS
-                  : allowed.sell
+                  : sells
                     ? OUT_MEANING_WHEN_SELLING
                     : MODES.find((m) => m.value === 'out')?.meaning
                 : MODES.find((m) => m.value === mode)?.meaning}
             </p>
-            {movesHere && allowed.count && (
+            {countLink && (
               <button
                 type="button"
                 aria-pressed={mode === 'count'}

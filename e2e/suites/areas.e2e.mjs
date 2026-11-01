@@ -556,12 +556,15 @@ await check('the owner places a cook in the Kitchen; the cook records there with
   await waitFor(async () => (await areaFigures(ownerToken, rice.id)).Kitchen === before - 1, 'the Kitchen to hold one fewer')
   await cookPage.screenshot({ path: SHOTS + '11-cook-product.png' })
 
-  // Move stock: from the Kitchen, the only area they take from; the others are there to ask (Part 5).
+  // Move stock: the Store, asked (Part 5) - where a cook's stock comes from; the Kitchen to take from, the
+  // Bar to ask too.
   await cookPage.goto(`${UI}/app/move`)
   await cookPage.locator('select#move-from').waitFor()
-  assert((await chosenIn(cookPage, 'select#move-from')) === 'Kitchen', `Move starts from ${await chosenIn(cookPage, 'select#move-from')}`)
+  assert((await chosenIn(cookPage, 'select#move-from')) === 'Store', `Move starts from ${await chosenIn(cookPage, 'select#move-from')}`)
+  await cookPage.locator('[data-asking]').waitFor()
+  const own = await cookPage.locator('select#move-from optgroup[label="Your areas"] option').allInnerTexts()
   const askGroup = await cookPage.locator('select#move-from optgroup[label="Ask another area"] option').allInnerTexts()
-  assert(askGroup.includes('Store') && askGroup.includes('Bar'), `to ask: ${askGroup.join(', ')}`)
+  assert(own.join() === 'Kitchen' && askGroup.includes('Store') && askGroup.includes('Bar'), `own: ${own}, to ask: ${askGroup}`)
   await cookContext.close()
 })
 
@@ -925,8 +928,14 @@ await check('the cook asks the Store from Move; the storekeeper moves part, says
   await cookPage.locator('#move-from').selectOption({ label: 'Store' })
   await cookPage.locator('[data-asking]').getByText("You don't work in the Store, so this asks the people there to move it.").waitFor()
   for (const [name, quantity] of [['Rice', '2'], ['Tomato paste', '3']]) {
+    // A product made moments ago may still be reaching the phone's copy of the catalogue: type again once.
+    const result = cookPage.getByRole('button', { name: new RegExp(`^${name}`) }).first()
     await cookPage.locator('#move-search').fill(name)
-    await cookPage.getByRole('button', { name: new RegExp(`^${name}`) }).first().click()
+    if (!(await result.waitFor({ timeout: 10_000 }).then(() => true).catch(() => false))) {
+      await cookPage.locator('#move-search').fill('')
+      await cookPage.locator('#move-search').fill(name)
+    }
+    await result.click()
     await cookPage.getByLabel(`How many ${name}`).fill(quantity)
   }
   await cookPage.locator(`[data-move-line="${paste.id}"]`).getByText('The Store has none').waitFor()
@@ -1000,6 +1009,56 @@ await check('a request nobody has moved can be cancelled by the cook', async () 
   await sheet.getByRole('button', { name: 'Cancel this request' }).click()
   await sheet.waitFor({ state: 'hidden' })
   await requests.locator('[data-request-state]').getByText('Cancelled').waitFor()
+  await cookContext.close()
+})
+
+// ---------------------------------------------------------------------------------- quick mode buttons
+await check("quick mode's buttons: the usual ones for where each works, a person's own choice kept on their account", async () => {
+  const row = (p) => p.getByRole('group', { name: 'What are you doing?' })
+  const labels = async (p) => (await row(p).getByRole('button').allInnerTexts()).map((t) => t.trim())
+
+  // The storekeeper: deliveries arrive in the Store.
+  const keeperContext = await contextFor(await login(owner.user.clientIdentifier, `keeper-${owner.unique}`), { width: 390, height: 844 })
+  const keeperPage = await keeperContext.newPage()
+  await keeperPage.goto(`${UI}/app/quick`)
+  await row(keeperPage).getByRole('button', { name: 'Move' }).waitFor()
+  assert(JSON.stringify(await labels(keeperPage)) === JSON.stringify(['Stock in', 'Move', 'Count']), `keeper: ${await labels(keeperPage)}`)
+  await keeperContext.close()
+
+  // The cook: Stock out, Move, Count - Count a button, so no link.
+  const cookContext = await contextFor(await login(owner.user.clientIdentifier, `cook-${owner.unique}`), { width: 390, height: 844 })
+  const cookPage = await cookContext.newPage()
+  await cookPage.goto(`${UI}/app/quick`)
+  await row(cookPage).getByRole('button', { name: 'Move' }).waitFor()
+  assert(JSON.stringify(await labels(cookPage)) === JSON.stringify(['Stock out', 'Move', 'Count']), `cook: ${await labels(cookPage)}`)
+  assert((await cookPage.getByRole('button', { name: 'Count stock' }).count()) === 0, 'a Count link beside a Count button')
+  await cookPage.screenshot({ path: SHOTS + '40-cook-quick-buttons.png' })
+
+  // On their profile: add Stock in, drop Count. The row above the choices shows it as quick mode will.
+  await cookPage.goto(`${UI}/app/profile`)
+  const panel = cookPage.getByRole('region', { name: 'Quick mode buttons' })
+  await panel.getByLabel(/^Stock in/).check()
+  await panel.getByLabel(/^Count/).uncheck()
+  assert(JSON.stringify(await panel.locator('[data-quick-preview] span').allInnerTexts()) === JSON.stringify(['Stock in', 'Stock out', 'Move']), 'preview')
+  await cookPage.waitForTimeout(300)
+  await cookPage.screenshot({ path: SHOTS + '41-profile-quick-buttons.png', fullPage: true })
+  await panel.getByRole('button', { name: 'Save' }).click()
+  await cookPage.getByText('Quick mode buttons saved').first().waitFor()
+
+  // Kept on the account: a fresh sign-in, on another "phone", has them; Count is the small link again.
+  const otherContext = await contextFor(await login(owner.user.clientIdentifier, `cook-${owner.unique}`), { width: 390, height: 844 })
+  const otherPage = await otherContext.newPage()
+  await otherPage.goto(`${UI}/app/quick`)
+  await row(otherPage).getByRole('button', { name: 'Stock in' }).waitFor()
+  assert(JSON.stringify(await labels(otherPage)) === JSON.stringify(['Stock in', 'Stock out', 'Move']), `chosen: ${await labels(otherPage)}`)
+  await otherPage.getByRole('button', { name: 'Count stock' }).waitFor()
+  await otherContext.close()
+
+  // At least one stays: the last one can't be unticked. And back to the usual ones.
+  await panel.getByRole('button', { name: 'Use the usual buttons' }).click()
+  await cookPage.getByText('Quick mode has the usual buttons again').first().waitFor()
+  for (const name of ['Stock out', 'Move']) await panel.getByLabel(new RegExp(`^${name}`)).uncheck()
+  assert(await panel.getByLabel(/^Count/).isDisabled(), 'the last button can be unticked')
   await cookContext.close()
 })
 
