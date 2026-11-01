@@ -26,7 +26,7 @@ const SELF_HINT = "You can't change your own role or status"
 const ROOT_HINT = "The account owner's role and status can't be changed"
 
 export function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) {
-  const { user: currentUser } = useAuth()
+  const { user: currentUser, client } = useAuth()
   const isSelf = currentUser?.type === 'tenant' && currentUser.id === user.id
   const isRoot = user.root
   const lockAccess = isSelf || isRoot
@@ -106,6 +106,18 @@ export function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) 
       }
     >
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
+        {/* What they type to sign in (owner, 2026-11-01: "the username is not even showing"): the username, or the
+            email or phone below, with the Company ID. */}
+        <p className="rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-neutral-700" data-signs-in>
+          Signs in as <span className="font-semibold text-neutral-900">{user.username}</span>
+          {client?.identifier && (
+            <>
+              {' '}
+              at <span className="font-semibold text-neutral-900">{client.identifier}</span>
+            </>
+          )}
+          , or with the email or phone below.
+        </p>
         {isRoot && (
           <p className="flex items-start gap-2 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-neutral-600">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-neutral-500" />
