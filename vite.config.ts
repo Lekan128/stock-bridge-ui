@@ -161,6 +161,8 @@ export default defineConfig(({ isSsrBuild }) => ({
         // Never swap a new version in under someone mid-entry: a waiting worker activates only
         // when the user taps "Reload" on the update prompt (`messageSkipWaiting`).
         skipWaiting: false,
+        // Notifications (public/push-sw.js): shown and opened by the worker, so they arrive with the app closed.
+        importScripts: ['push-sw.js'],
       },
     }),
   ],

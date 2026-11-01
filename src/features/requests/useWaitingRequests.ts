@@ -1,6 +1,8 @@
+import { useEffect } from 'react'
 import { useApiQuery } from '@/data/useApiQuery'
 import { hasAreas } from '@/features/branches/areas'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
+import { shownRequestNotifications } from '@/features/push/pushDevice'
 import { requestsApi } from '@/features/requests/requestsApi'
 import type { StockRequest } from '@/features/requests/types'
 
@@ -23,5 +25,23 @@ export function useWaitingRequests(): { requests: StockRequest[] } {
     refetchInterval: EVERY_MINUTE,
     refetchOnWindowFocus: true,
   })
+  // A notification still showing for a request that's no longer waiting (moved while this phone was off, or the
+  // quiet "Moved ✓" never came): it goes once the app knows - each one checked, as it may be another branch's.
+  useEffect(() => {
+    if (!data) return
+    const waiting = new Set(data.map((request) => request.id))
+    void shownRequestNotifications().then((shown) => {
+      for (const [id, notification] of shown) {
+        if (waiting.has(id)) continue
+        void requestsApi
+          .get(id)
+          .then((request) => {
+            if (request.status !== 'OPEN' || !request.canFill) notification.close()
+          })
+          .catch(() => undefined)
+      }
+    })
+  }, [data])
+
   return { requests: withAreas ? (data ?? []) : [] }
 }

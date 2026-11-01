@@ -14,8 +14,10 @@
 //   7. axe on Branches with areas, and on the Add areas sheet (phone).
 import { chromium } from 'playwright'
 import { createRequire } from 'node:module'
-import { API, UI, launchOptions, shotsPrefix } from '../config.mjs'
-import { randomUUID } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { execSync } from 'node:child_process'
+import { API, UI, launchOptions, psqlCommand, shotsPrefix } from '../config.mjs'
+import { createECDH, randomBytes, randomUUID } from 'node:crypto'
 
 const SHOTS = shotsPrefix('areas')
 const PASSWORD = 'correct-horse-battery-staple'
@@ -1004,6 +1006,123 @@ await check('the cook asks the Store from Move; the storekeeper moves part, says
   assert(end.Store === before.Store - 2 && end.Kitchen === before.Kitchen + 2, `ended ${JSON.stringify(end)}, began ${JSON.stringify(before)}`)
 })
 
+await check('the Store is offered notifications under what was asked, turns them on, and can turn them off on Profile', async () => {
+  const areaIds = Object.fromEntries((await api('/api/branches', { token: ownerToken })).json.branches[0].areas.map((a) => [a.name, a.id]))
+  const role = (await api('/api/roles', { token: ownerToken })).json.find((r) => r.name === 'STOREKEEPER')
+  const name = `notify-${owner.unique}`
+  await api('/api/users', { token: ownerToken, method: 'POST', body: { username: name, password: PASSWORD, roleId: role.id, areaIds: [areaIds.Store] } })
+  const cook = await login(owner.user.clientIdentifier, `cook-${owner.unique}`)
+  const requestId = randomUUID()
+  await api('/api/stock-requests', {
+    token: cook.tokens.accessToken,
+    method: 'POST',
+    body: { id: requestId, fromAreaId: areaIds.Store, toAreaId: areaIds.Kitchen, lines: [{ productId: rice.id, quantity: 1 }] },
+  })
+
+  const keeperContext = await contextFor(await login(owner.user.clientIdentifier, name))
+  await keeperContext.grantPermissions(['notifications'], { origin: UI })
+  // Headless Chromium has no push service to subscribe with: the browser's subscription stands in, with real keys.
+  const device = createECDH('prime256v1')
+  device.generateKeys()
+  const keys = { p256dh: device.getPublicKey().toString('base64url'), auth: randomBytes(16).toString('base64url') }
+  await keeperContext.addInitScript(([keys]) => {
+    // Headless Chromium answers "denied" whatever it's granted: the browser's "Allow" stands in too.
+    let permission = localStorage.getItem('__permission') ?? 'default'
+    Object.defineProperty(Notification, 'permission', { get: () => permission })
+    Notification.requestPermission = async () => {
+      permission = 'granted'
+      localStorage.setItem('__permission', permission)
+      return permission
+    }
+    let current = null
+    const fake = (endpoint) => ({ endpoint, toJSON: () => ({ endpoint, keys }), unsubscribe: async () => ((current = null), true) })
+    PushManager.prototype.subscribe = async function () {
+      current = fake('https://push.example.test/e2e/' + Math.random().toString(36).slice(2))
+      localStorage.setItem('__push', current.endpoint)
+      return current
+    }
+    PushManager.prototype.getSubscription = async function () {
+      const kept = localStorage.getItem('__push')
+      return current ?? (kept ? (current = fake(kept)) : null)
+    }
+  }, [keys])
+  const keeperPage = await keeperContext.newPage()
+  await keeperPage.goto(`${UI}/app/products`)
+  await keeperPage.evaluate(() => navigator.serviceWorker.ready)
+  await keeperPage.locator('[data-request-line]').getByText('The Kitchen asked for 1 item').waitFor()
+  const offer = keeperPage.locator('[data-push-offer]')
+  await offer.getByText('Get a notification on this computer when someone asks').waitFor()
+  await keeperPage.screenshot({ path: SHOTS + '46-push-offer.png' })
+  await offer.getByRole('button', { name: 'Turn on' }).click()
+  await keeperPage.getByText('Notifications on. This computer will tell you when someone asks.').waitFor()
+  await offer.waitFor({ state: 'detached' })
+  const devices = () =>
+    execSync(psqlCommand, { input: `SELECT COUNT(*) FROM push_subscriptions s JOIN users u ON u.id = s.user_id WHERE u.username = '${name}' AND s.p256dh = '${keys.p256dh}';` })
+      .toString()
+      .trim()
+  await waitFor(async () => devices() === '1', 'the server to keep this computer')
+
+  // Profile: the switch for this computer, on; off again, and the server forgets it.
+  await keeperPage.goto(`${UI}/app/profile`)
+  const panel = keeperPage.locator('[data-notifications-panel]')
+  await panel.getByText(/^On for this computer\./).waitFor()
+  await keeperPage.screenshot({ path: SHOTS + '47-profile-notifications.png' })
+  await panel.getByRole('button', { name: 'Turn off' }).click()
+  await panel.getByText(/^Get a notification on this computer/).waitFor()
+  await waitFor(async () => devices() === '0', 'the server to forget this computer')
+  await keeperContext.close()
+  await api(`/api/stock-requests/${requestId}/cancel`, { token: cook.tokens.accessToken, method: 'POST' })
+})
+
+await check("the app's worker shows what's asked, puts the quiet answer in its place and closes it, and opens it over the page", async () => {
+  // Headless Chromium shows no notifications, so the worker script runs here against a stand-in browser.
+  const shown = []
+  const listeners = {}
+  const posted = []
+  const opened = []
+  const windows = []
+  const self = {
+    addEventListener: (type, listener) => (listeners[type] = listener),
+    location: { origin: UI },
+    registration: {
+      showNotification: async (title, options) => {
+        for (const old of shown.filter((n) => n.tag && n.tag === options.tag)) old.close()
+        const notification = { title, ...options, close: () => shown.splice(shown.indexOf(notification), 1) }
+        shown.push(notification)
+      },
+      getNotifications: async ({ tag } = {}) => shown.filter((n) => !tag || n.tag === tag),
+    },
+    clients: { matchAll: async () => windows, openWindow: async (url) => opened.push(url) },
+  }
+  new Function('self', readFileSync(new URL('../../public/push-sw.js', import.meta.url), 'utf8'))(self)
+  const deliver = async (type, event) => {
+    let work
+    listeners[type]({ ...event, waitUntil: (promise) => (work = promise) })
+    return work
+  }
+  const push = (message) => deliver('push', { data: { json: () => message } })
+  const tag = 'request-1'
+
+  await push({ title: 'The Kitchen asked for 1 item', body: 'Rice · cook at 9:00 AM', tag, url: '/app?request=1', quiet: false })
+  assert(shown.length === 1 && shown[0].title === 'The Kitchen asked for 1 item' && !shown[0].silent, `shown: ${JSON.stringify(shown)}`)
+  const answered = push({ title: "The Kitchen's request · Moved ✓", body: 'Moved by Amaka', tag, url: '/app?request=1', quiet: true })
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  assert(shown.length === 1 && shown[0].title.endsWith('Moved ✓') && shown[0].silent, `in its place: ${JSON.stringify(shown)}`)
+  await answered
+  assert(shown.length === 0, 'the quiet one stayed')
+
+  // Tapped with the app open: it's asked to open the request over its page; with none open, a window opens.
+  await push({ title: 'The Kitchen asked for 2 items', body: '', tag: 'request-2', url: '/app?request=2', quiet: false })
+  windows.push({ url: `${UI}/app/products`, focus: async () => undefined, postMessage: (message) => posted.push(message) })
+  await deliver('notificationclick', { notification: shown[0] })
+  assert(shown.length === 0, 'tapping it left it showing')
+  assert(posted[0]?.type === 'pp.push.open' && posted[0].url === '/app?request=2', `posted ${JSON.stringify(posted)}`)
+  windows.length = 0
+  await push({ title: 'The Kitchen asked for 3 items', body: '', tag: 'request-3', url: '/app?request=3', quiet: false })
+  await deliver('notificationclick', { notification: shown[0] })
+  assert(opened[0] === `${UI}/app?request=3`, `opened ${JSON.stringify(opened)}`)
+})
+
 await check('a request nobody has moved can be cancelled by the cook', async () => {
   const areaIds = Object.fromEntries((await api('/api/branches', { token: ownerToken })).json.branches[0].areas.map((a) => [a.name, a.id]))
   const cook = await login(owner.user.clientIdentifier, `cook-${owner.unique}`)
@@ -1020,7 +1139,7 @@ await check('a request nobody has moved can be cancelled by the cook', async () 
   const sheet = cookPage.getByRole('dialog', { name: 'The Kitchen asked for 1 item' })
   await sheet.getByRole('button', { name: 'Cancel this request' }).click()
   await sheet.waitFor({ state: 'hidden' })
-  await requests.locator('[data-request-state]').getByText('Cancelled').waitFor()
+  await requests.locator('[data-request-state]').getByText('Cancelled').first().waitFor()
   await cookContext.close()
 })
 

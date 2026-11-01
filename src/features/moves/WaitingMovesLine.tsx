@@ -4,6 +4,7 @@ import { itemsWord } from '@/features/moves/moveWords'
 import type { AreaMove } from '@/features/moves/types'
 import { useWaitingMoves } from '@/features/moves/useWaitingMoves'
 import { useMoveSheet } from '@/features/moves/useMoveSheet'
+import { PushOffer } from '@/features/push/PushOffer'
 import { askedFor } from '@/features/requests/requestWords'
 import { useWaitingRequests } from '@/features/requests/useWaitingRequests'
 
@@ -31,6 +32,8 @@ export function WaitingMovesLine({ bar = false }: { bar?: boolean }) {
           <span className="shrink-0 font-semibold text-primary-700">Move them</span>
         </button>
       )}
+      {/* The moment a notification makes sense: something was just asked of them. */}
+      {requests.length > 0 && <PushOffer bar={bar} />}
       {moves.length > 0 && (
         <button type="button" onClick={() => setOpen(moves[0])} data-waiting-line className={lineClass}>
           <span className="truncate">

@@ -5,6 +5,7 @@ import { ProfileIdentityHeader } from '@/features/profile/components/ProfileIden
 import { ProfileSkeleton } from '@/features/profile/components/ProfileSkeleton'
 import { ProfileDetailsForm } from '@/features/profile/components/ProfileDetailsForm'
 import { QuickModeButtonsPanel } from '@/features/profile/components/QuickModeButtonsPanel'
+import { NotificationsPanel } from '@/features/push/NotificationsPanel'
 import { useProfile } from '@/features/profile/hooks/useProfile'
 
 /** Open to every authenticated tenant user — root and sub-users alike. */
@@ -40,6 +41,8 @@ export function ProfilePage() {
               <EmailSettingsPanel profile={profile} onUpdated={setProfile} />
               {/* Quick mode's buttons (owner, 2026-11-01): chosen here, so quick mode stays simple. */}
               <QuickModeButtonsPanel onUpdated={setProfile} />
+              {/* Per device: "someone asked you for stock", with the app closed (Part 5). */}
+              <NotificationsPanel />
               <ChangePasswordForm />
             </div>
             <ProfileAccountFacts profile={profile} />

@@ -32,6 +32,27 @@ export function MoveFromLink() {
     persist: false,
   })
 
+  // A notification tapped while the app is open (public/push-sw.js): opened here, over this page, not by reloading it.
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
+    const opened = (event: MessageEvent) => {
+      const data = event.data as { type?: string; url?: string } | null
+      if (data?.type !== 'pp.push.open' || !data.url) return
+      const id = new URL(data.url, window.location.origin).searchParams.get('request')
+      if (!id) return
+      setParams(
+        (current) => {
+          const next = new URLSearchParams(current)
+          next.set('request', id)
+          return next
+        },
+        { replace: true },
+      )
+    }
+    navigator.serviceWorker.addEventListener('message', opened)
+    return () => navigator.serviceWorker.removeEventListener('message', opened)
+  }, [setParams])
+
   function close(name: 'move' | 'request') {
     setParams(
       (current) => {
