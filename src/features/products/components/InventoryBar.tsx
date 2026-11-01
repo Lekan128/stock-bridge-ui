@@ -40,6 +40,11 @@ export interface InventoryBarProps {
   onRecordDelivery: () => void
   /** Move stock between the branch's areas - present at a branch with areas, for whoever may stock out. */
   onMoveStock?: () => void
+  /**
+   * The other way to get stock from one area to another (Part 5): Ask for someone whose button is Move, Move for
+   * someone whose button is Ask - in "⋯", so the bar keeps one button for it.
+   */
+  onOtherMove?: { label: string; onSelect: () => void }
   /** How the Move button reads for this person (Part 5): "Ask for stock" for a cook, "Move stock" otherwise. */
   moveLabel?: { label: string; short: string }
   /**
@@ -80,6 +85,9 @@ function inventoryMenuItems(props: InventoryBarProps): OverflowMenuItem[] {
     ...(props.onQuickMode
       ? [{ label: 'Quick mode', icon: <Zap className={icon} aria-hidden="true" />, onSelect: props.onQuickMode }]
       : []),
+    ...(props.onOtherMove
+      ? [{ label: props.onOtherMove.label, icon: <ArrowLeftRight className={icon} aria-hidden="true" />, onSelect: props.onOtherMove.onSelect }]
+      : []),
     { label: 'Expected deliveries', icon: <CalendarClock className={icon} aria-hidden="true" />, onSelect: props.onExpectedDeliveries },
     ...(props.canManageProducts
       ? [
@@ -106,8 +114,9 @@ export const InventoryBar = forwardRef<HTMLInputElement, InventoryBarProps>(func
   return (
     // One row on a laptop — search, Filters, the chips, then the actions pushed right; on a phone,
     // search and Filters, with the chips on their own scrolling line beneath.
-    <div className="flex flex-col gap-2 md:flex-row md:items-center">
-      <div className="flex min-w-0 items-center gap-2 md:flex-1 md:max-w-sm">
+    // A laptop too narrow for all of it puts the actions on a second line rather than squeezing the search.
+    <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
+      <div className="flex min-w-0 items-center gap-2 md:min-w-[16rem] md:max-w-sm md:flex-1">
         <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-neutral-500" aria-hidden="true" />
           <label htmlFor="product-search" className="sr-only">
@@ -131,6 +140,18 @@ export const InventoryBar = forwardRef<HTMLInputElement, InventoryBarProps>(func
           </kbd>
         </div>
         <FiltersPopover {...props} />
+        {/* On a phone, quick mode is one tap from the list (C4), here rather than on a row of its own. */}
+        {props.onQuickMode && (
+          <button
+            type="button"
+            onClick={props.onQuickMode}
+            aria-label="Quick mode"
+            title="Quick mode"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-neutral-200 bg-white text-neutral-700 md:hidden"
+          >
+            <Zap className="h-4 w-4" aria-hidden="true" />
+          </button>
+        )}
       </div>
 
       {/* One line on a phone, scrolling sideways rather than wrapping. */}
@@ -284,7 +305,8 @@ function FiltersPopover({
           id={panelId}
           role="dialog"
           aria-label="Filters"
-          className="absolute top-full left-0 z-30 mt-2 flex w-72 flex-col gap-4 rounded-md border border-neutral-200 bg-white p-4 shadow-paper"
+          // Under the button, kept on screen: on a phone the button is at the right edge, so it opens leftwards.
+          className="absolute top-full right-0 z-30 mt-2 flex w-72 max-w-[calc(100vw-2rem)] flex-col gap-4 rounded-md border border-neutral-200 bg-white p-4 shadow-paper md:right-auto md:left-0"
         >
           <fieldset className="flex flex-col gap-2">
             <legend className="mb-1 text-xs font-semibold tracking-wider text-neutral-500 uppercase">Show</legend>

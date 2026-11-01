@@ -1060,6 +1060,39 @@ await check("quick mode's buttons: the usual ones for where each works, a person
   await cookContext.close()
 })
 
+await check('Inventory: the owner finds Ask in "⋯"; the search keeps its width; Filters stays on a phone; one heading', async () => {
+  // A narrower laptop: the search keeps room to type; the actions go to a second line instead.
+  await page.setViewportSize({ width: 1024, height: 800 })
+  await page.goto(`${UI}/app/products`)
+  const search = page.getByLabel('Search products')
+  await search.waitFor()
+  const box = await search.boundingBox()
+  assert(box.width >= 200, `the search is ${box.width}px wide`)
+  await page.screenshot({ path: SHOTS + '42-inventory-1024.png' })
+  // Move stock is the button; Ask for stock is in "⋯".
+  await page.getByRole('button', { name: 'More inventory actions' }).click()
+  await page.getByRole('menuitem', { name: 'Ask for stock' }).click()
+  const askSheet = page.getByRole('dialog', { name: /Ask for stock/ })
+  await askSheet.locator('[data-asking]').waitFor()
+  await page.keyboard.press('Escape')
+  await askSheet.waitFor({ state: 'hidden' })
+
+  // A phone: no second "Inventory" under the top bar's; Filters opens on screen; Quick mode beside it.
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto(`${UI}/app/products`)
+  await search.waitFor()
+  // Still there for screen readers - 1px, not a second title on screen.
+  const heading = await page.getByRole('heading', { name: 'Inventory', level: 1 }).boundingBox()
+  assert(heading.width <= 1 && heading.height <= 1, `the heading shows twice on a phone: ${JSON.stringify(heading)}`)
+  await page.getByRole('button', { name: 'Quick mode' }).waitFor()
+  await page.getByRole('button', { name: 'Filters' }).click()
+  const filters = await page.getByRole('dialog', { name: 'Filters' }).boundingBox()
+  assert(filters.x >= 0 && filters.x + filters.width <= 390, `Filters runs off the screen: ${JSON.stringify(filters)}`)
+  await page.screenshot({ path: SHOTS + '43-inventory-phone-filters.png' })
+  await page.keyboard.press('Escape')
+  await page.setViewportSize({ width: 1280, height: 900 })
+})
+
 await check('a company without areas sees no area word on its sheets or product page, and renames its Store', async () => {
   const shop = await signup('noareas')
   const beans = await createProduct(shop.tokens.accessToken, shop.unique, 'Beans')

@@ -33,9 +33,10 @@ export function Topbar({ onOpenMobileSidebar }: TopbarProps) {
             first 100px. On a phone it stays as the section name beside the menu button, because
             the page's own heading scrolls away and the sidebar that would say where you are is
             hidden. */}
-        <p className="truncate text-base font-semibold text-neutral-900 md:hidden">{pageTitle}</p>
+        <p className="min-w-0 truncate text-base font-semibold text-neutral-900 md:hidden">{pageTitle}</p>
       </div>
-      <div className="flex items-center gap-2">
+      {/* Tighter on a phone, so the page's name beside the menu button reads whole ("Inventory", not "Inve…"). */}
+      <div className="flex shrink-0 items-center gap-1 sm:gap-2">
         {/* Where this phone is (MULTI_BRANCH_UX_PLAN.md §4.1). Nothing at a one-branch company. */}
         <BranchChip />
         {/* …and where in it, for someone placed in particular areas (STOCK_AREAS_PART_3.md). */}

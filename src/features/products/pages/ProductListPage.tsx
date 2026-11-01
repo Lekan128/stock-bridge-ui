@@ -1,6 +1,6 @@
 import { useRecordsHere } from '@/features/branches/useRecordsHere'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ArrowLeftRight, PackagePlus, Truck, X, Zap } from 'lucide-react'
+import { ArrowLeftRight, PackagePlus, Truck, X } from 'lucide-react'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { hasAreas } from '@/features/branches/areas'
 import { useWorkArea } from '@/features/branches/workArea'
@@ -499,6 +499,12 @@ export function ProductListPage() {
     onRecordDelivery: () => navigate('/app/products/receive'),
     onMoveStock: canMove ? () => moveSheet.open() : undefined,
     moveLabel: moveIntent,
+    // The other way, in "⋯" (owner, 2026-11-01: "I can't find Ask"): Ask for stock beside Move stock, and back.
+    onOtherMove: canMove
+      ? moveIntent.intent === 'move'
+        ? { label: 'Ask for stock', onSelect: () => moveSheet.open([], 'ask') }
+        : { label: 'Move stock', onSelect: () => moveSheet.open([], 'move') }
+      : undefined,
     onRecordSale: recordsSales && canStockOut ? () => navigate('/app/sell') : undefined,
     onExpectedDeliveries: () => navigate('/app/products/expected'),
     onExport: () => void handleExport(),
@@ -509,20 +515,9 @@ export function ProductListPage() {
   return (
     // Room at the bottom on a phone for the action bar pinned there.
     <div className="flex flex-col gap-4 pb-20 md:pb-0">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold text-neutral-900">Inventory</h1>
-        {/* On a phone, quick mode is one tap from the list (C4); on a laptop it is in "⋯". */}
-        {barProps.onQuickMode && (
-          <button
-            type="button"
-            onClick={barProps.onQuickMode}
-            className="inline-flex h-10 items-center gap-1.5 rounded-md border border-neutral-200 bg-white px-3 text-sm font-medium text-neutral-700 md:hidden"
-          >
-            <Zap className="h-4 w-4" aria-hidden="true" />
-            Quick mode
-          </button>
-        )}
-      </div>
+      {/* On a phone the top bar already says "Inventory": the heading is for screen readers there, and the row it
+          took is the list's (owner, 2026-11-01). Quick mode sits beside Filters on a phone; in "⋯" on a laptop. */}
+      <h1 className="sr-only text-2xl font-semibold text-neutral-900 md:not-sr-only">Inventory</h1>
 
       <SavedDataNote showing={showingSaved} updatedAt={updatedAt} subject="stock levels" onRetry={retryRefresh} />
 

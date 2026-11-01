@@ -32,7 +32,7 @@ export function AreaChip() {
   if (work.fixed) {
     return (
       <span className="flex max-w-[10rem] items-center gap-1.5 truncate rounded-md px-2 py-1 text-sm text-neutral-700" title={label} data-area-chip>
-        <LayoutGrid className="h-4 w-4 shrink-0 text-neutral-500" aria-hidden />
+        <LayoutGrid className="hidden h-4 w-4 shrink-0 text-neutral-500 sm:block" aria-hidden />
         <span className="truncate">{label}</span>
       </span>
     )
@@ -51,7 +51,7 @@ export function AreaChip() {
         aria-label={`Area: ${label}. Change area`}
         data-area-chip
       >
-        <LayoutGrid className="h-4 w-4 shrink-0 text-neutral-500" aria-hidden />
+        <LayoutGrid className="hidden h-4 w-4 shrink-0 text-neutral-500 sm:block" aria-hidden />
         <span className="truncate">{label}</span>
         <ChevronDown className="h-4 w-4 shrink-0 text-neutral-500" aria-hidden />
       </button>
