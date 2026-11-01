@@ -32,7 +32,7 @@ import {
 } from '@/features/products/components/ProductTable'
 import { AttentionLine, type AttentionItem } from '@/features/products/components/AttentionLine'
 import { InventoryActionBar } from '@/features/products/components/InventoryActionBar'
-import { InventoryBar, type InventoryBarProps, type StockLevelFilter } from '@/features/products/components/InventoryBar'
+import { InventoryActions, InventoryBar, type InventoryBarProps, type StockLevelFilter } from '@/features/products/components/InventoryBar'
 import { useStockActions } from '@/features/products/hooks/useStockActions'
 import type { CardSelection } from '@/features/catalog/CatalogProductList'
 import { useDataIssuesNotice } from '@/features/products/quality/useDataIssuesNotice'
@@ -515,9 +515,14 @@ export function ProductListPage() {
   return (
     // Room at the bottom on a phone for the action bar pinned there.
     <div className="flex flex-col gap-4 pb-20 md:pb-0">
-      {/* On a phone the top bar already says "Inventory": the heading is for screen readers there, and the row it
-          took is the list's (owner, 2026-11-01). Quick mode sits beside Filters on a phone; in "⋯" on a laptop. */}
-      <h1 className="sr-only text-2xl font-semibold text-neutral-900 md:not-sr-only">Inventory</h1>
+      {/* On a laptop the title and the screen's actions share a row (owner, 2026-11-01). On a phone the top bar
+          already says "Inventory", so the heading is for screen readers and the actions are in the bar at the bottom. */}
+      <div className="md:flex md:items-center md:justify-between md:gap-3">
+        <h1 className="sr-only text-2xl font-semibold text-neutral-900 md:not-sr-only">Inventory</h1>
+        <div className="hidden shrink-0 items-center gap-2 md:flex">
+          <InventoryActions {...barProps} />
+        </div>
+      </div>
 
       <SavedDataNote showing={showingSaved} updatedAt={updatedAt} subject="stock levels" onRetry={retryRefresh} />
 

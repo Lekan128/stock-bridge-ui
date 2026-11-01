@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useId, useRef, useState } from 'react'
 import { ArrowLeftRight, CalendarClock, Download, Plus, Search, Settings, ShoppingBag, SlidersHorizontal, Tags, Truck, Upload, Zap } from 'lucide-react'
 import { Button } from '@/components/Button'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { OverflowMenu, type OverflowMenuItem } from '@/components/OverflowMenu'
 import type { CompanyCategory } from '@/features/products/categories/types'
 import type { ProductStatusFilter, StockStatusFilter } from '@/features/products/types'
@@ -111,12 +112,16 @@ function inventoryMenuItems(props: InventoryBarProps): OverflowMenuItem[] {
  */
 export const InventoryBar = forwardRef<HTMLInputElement, InventoryBarProps>(function InventoryBar(props, searchRef) {
   const { search, onSearchChange, stockLevelFilter, onStockLevelFilterChange, stockLevelCounts } = props
+  // A phone's row also holds Filters and Quick mode: the short word, whole, rather than "Search nam…".
+  const wide = useMediaQuery('(min-width: 768px)')
   return (
     // One row on a laptop — search, Filters, the chips, then the actions pushed right; on a phone,
     // search and Filters, with the chips on their own scrolling line beneath.
-    // A laptop too narrow for all of it puts the actions on a second line rather than squeezing the search.
-    <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
-      <div className="flex min-w-0 items-center gap-2 md:min-w-[16rem] md:max-w-sm md:flex-1">
+    // The actions sit in the page's title row on a laptop (owner, 2026-11-01), so this row is all finding: the
+    // search keeps its room at any width.
+    <div className="flex flex-col gap-2 md:flex-row md:items-center">
+      {/* Relative: on a phone the Filters panel spans this row, under it. */}
+      <div className="relative flex min-w-0 items-center gap-2 md:min-w-[16rem] md:max-w-sm md:flex-1">
         <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-neutral-500" aria-hidden="true" />
           <label htmlFor="product-search" className="sr-only">
@@ -128,7 +133,7 @@ export const InventoryBar = forwardRef<HTMLInputElement, InventoryBarProps>(func
             type="search"
             value={search}
             onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Search name or SKU"
+            placeholder={wide ? 'Search name or SKU' : 'Search'}
             aria-keyshortcuts="/"
             className="w-full rounded-md border border-neutral-200 bg-white py-2 pr-9 pl-9 text-sm text-neutral-900 placeholder:text-neutral-500 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
           />
@@ -140,16 +145,16 @@ export const InventoryBar = forwardRef<HTMLInputElement, InventoryBarProps>(func
           </kbd>
         </div>
         <FiltersPopover {...props} />
-        {/* On a phone, quick mode is one tap from the list (C4), here rather than on a row of its own. */}
+        {/* On a phone, quick mode is one tap from the list (C4), and says so in words - it's how people learn
+            there's a quick way (owner, 2026-11-01). On a laptop it's in "⋯". */}
         {props.onQuickMode && (
           <button
             type="button"
             onClick={props.onQuickMode}
-            aria-label="Quick mode"
-            title="Quick mode"
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-neutral-200 bg-white text-neutral-700 md:hidden"
+            className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-md border border-neutral-200 bg-white px-3 text-sm font-medium whitespace-nowrap text-neutral-700 md:hidden"
           >
             <Zap className="h-4 w-4" aria-hidden="true" />
+            Quick mode
           </button>
         )}
       </div>
@@ -176,9 +181,6 @@ export const InventoryBar = forwardRef<HTMLInputElement, InventoryBarProps>(func
         </div>
       </div>
 
-      <div className="hidden shrink-0 items-center gap-2 md:ml-auto md:flex">
-        <InventoryActions {...props} />
-      </div>
     </div>
   )
 })
@@ -285,7 +287,7 @@ function FiltersPopover({
   const categoryName = categories.find((category) => category.id === categoryFilter)?.name
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="md:relative" ref={ref}>
       <button
         ref={buttonRef}
         type="button"
@@ -297,7 +299,8 @@ function FiltersPopover({
         }`}
       >
         <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
-        Filters
+        {/* The word on a laptop; on a phone the icon, so Quick mode beside it keeps its words. */}
+        <span className="sr-only md:not-sr-only">Filters</span>
         {applied > 0 && <span className="tabular-nums">· {applied}</span>}
       </button>
       {open && (
@@ -305,8 +308,8 @@ function FiltersPopover({
           id={panelId}
           role="dialog"
           aria-label="Filters"
-          // Under the button, kept on screen: on a phone the button is at the right edge, so it opens leftwards.
-          className="absolute top-full right-0 z-30 mt-2 flex w-72 max-w-[calc(100vw-2rem)] flex-col gap-4 rounded-md border border-neutral-200 bg-white p-4 shadow-paper md:right-auto md:left-0"
+          // On a phone, the width of the search row under it - always on screen; on a laptop, under the button.
+          className="absolute inset-x-0 top-full z-30 mt-2 flex flex-col gap-4 rounded-md border border-neutral-200 bg-white p-4 shadow-paper md:inset-x-auto md:left-0 md:w-72"
         >
           <fieldset className="flex flex-col gap-2">
             <legend className="mb-1 text-xs font-semibold tracking-wider text-neutral-500 uppercase">Show</legend>
