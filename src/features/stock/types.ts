@@ -22,6 +22,10 @@ export interface StockMovementReportParams {
   outReason?: OutReason
   /** Only stock-outs with no reason given. */
   noReason?: boolean
+  /** Only stock adjustments: counts that changed the figure, and damaged, expired or lost stock-outs. */
+  adjustments?: boolean
+  /** One branch, chosen in "All branches"; otherwise the branch being viewed (`viewingBranchId`). */
+  branchId?: string
   page?: number
   size?: number
   /** Spring Data sort, e.g. `occurredAt,desc`. Defaults server-side to newest-occurring first. */
@@ -65,4 +69,20 @@ export interface StockMovementSummary {
   /** Every other stock-out - used, spoilt, sent away - at what the stock cost. */
   otherOutCost: number
   otherOutCount: number
+  /**
+   * Stock moved here from another branch, and from here to another (V53): never part of units in or
+   * out. Across every branch the two are equal once all of it has arrived. Absent from an older API.
+   */
+  movedInQuantity?: number
+  movedOutQuantity?: number
+  movedInCount?: number
+  movedOutCount?: number
+  /**
+   * Stock adjustments in range, net, at cost: damaged, expired and lost stock-outs, and counts at the
+   * product's cost (short adds, over takes off). Entries with no cost are left out and counted in
+   * `writtenOffUnpricedCount`. Absent from an older API.
+   */
+  writtenOffCost?: number
+  writtenOffQuantity?: number
+  writtenOffUnpricedCount?: number
 }

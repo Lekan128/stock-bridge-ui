@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
+import { useWorkArea } from '@/features/branches/workArea'
 import { getCatalogState, queryCatalog, subscribeCatalog, toProduct, type CatalogState } from '@/features/catalog/catalogStore'
 import type { CatalogQuery, CatalogQueryResult } from '@/features/catalog/types'
 import type { Product } from '@/features/products/types'
@@ -20,6 +22,8 @@ export interface CatalogList {
   incoming: CatalogQueryResult['incoming']
   catalogSize: number
   activeCount: number
+  /** In an area view: products the chosen areas have never had, left out of the list (Part 3.6). */
+  elsewhere: number
   /** The first answer for these filters has arrived. */
   ready: boolean
   /** The row at a position in the filtered, sorted list, or undefined until it is loaded. */
@@ -37,7 +41,16 @@ const NO_INCOMING = { units: 0, productCount: 0 }
  * the filters change or the copy itself changes (a sync, or a write from this phone), keeping
  * whichever windows the user has scrolled through.
  */
-export function useCatalogList(filters: CatalogFilters, enabled: boolean): CatalogList {
+export function useCatalogList(asked: CatalogFilters, enabled: boolean): CatalogList {
+  // Rows read as the phone's branch holds them, or as "All branches" (MULTI_BRANCH_UX_PLAN.md §4.3).
+  const branch = useOptionalWorkingBranch()
+  // …and as the areas chosen in the top bar hold them (Part 3.6).
+  const work = useWorkArea(branch && !branch.isAll ? branch.working : null)
+  const atBranch: CatalogFilters =
+    branch?.isMultiBranch && (branch.working || branch.isAll)
+      ? { ...asked, branchId: branch.isAll ? undefined : branch.working?.id, allBranches: branch.isAll }
+      : asked
+  const filters: CatalogFilters = work.viewAreaIds ? { ...atBranch, areaIds: work.viewAreaIds } : atBranch
   const { version } = useCatalogState()
   const key = JSON.stringify(filters)
   const [summary, setSummary] = useState<Omit<CatalogQueryResult, 'rows'> | null>(null)
@@ -101,6 +114,7 @@ export function useCatalogList(filters: CatalogFilters, enabled: boolean): Catal
     incoming: summary?.incoming ?? NO_INCOMING,
     catalogSize: summary?.catalogSize ?? 0,
     activeCount: summary?.activeCount ?? 0,
+    elsewhere: summary?.elsewhere ?? 0,
     ready: summary != null,
     rowAt,
     loadRange,

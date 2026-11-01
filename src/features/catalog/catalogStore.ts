@@ -1,6 +1,6 @@
 import Dexie from 'dexie'
 import { catalogApi } from '@/features/catalog/catalogApi'
-import type { CatalogMeta, CatalogQuery, CatalogQueryResult, CatalogRow } from '@/features/catalog/types'
+import { CATALOG_ROW_FORMAT, type CatalogMeta, type CatalogQuery, type CatalogQueryResult, type CatalogRow } from '@/features/catalog/types'
 import type { Product } from '@/features/products/types'
 import { isAppError } from '@/types/api'
 
@@ -208,10 +208,29 @@ export async function syncCatalog(): Promise<void> {
   }
 }
 
+/**
+ * Starts the copy over (MULTI_BRANCH_BUILD_PLAN.md §6.1): every row carries a figure per branch the
+ * person sees, so when that set of branches changes - a branch added, somebody given another - rows
+ * already on the phone lack the new one, and no product changed to send it. Online only: offline the
+ * old copy is still the best there is, and the provider asks again when the branches next load.
+ */
+export async function resyncCatalog(): Promise<boolean> {
+  if (!databaseName || !worker || !navigator.onLine) return false
+  await call({ type: 'reset' })
+  setState({ phase: 'loading', loaded: 0, total: null, version: state.version + 1 })
+  void syncCatalog()
+  return true
+}
+
 /** The first full copy, resuming from where an interrupted one stopped. */
 async function loadSnapshotIfNeeded(name: string): Promise<CatalogMeta | null> {
   let meta = await currentMeta()
-  if (meta.phase === 'ready') return meta
+  // A copy in an older row shape is taken again - online only: offline it's still the best there is.
+  if (meta.phase === 'ready' && (meta.rowFormat === CATALOG_ROW_FORMAT || !navigator.onLine)) return meta
+  if (meta.phase === 'ready') {
+    meta = await call<CatalogMeta>({ type: 'reset' })
+    setState({ phase: 'loading', loaded: 0, total: null, version: state.version + 1 })
+  }
 
   let afterId = meta.phase === 'snapshot' ? meta.afterId : null
   if (afterId == null && meta.phase !== 'empty') {
@@ -346,5 +365,8 @@ export function toProduct(row: CatalogRow): Product {
     updatedAt: '',
     hasMultiplePacks: row.hasMultiplePacks,
     expectedQuantity: row.expectedQuantity ?? undefined,
+    // Every branch's figure the person sees: Send stock shows both ends' (MULTI_BRANCH_UX_PLAN.md §5.4).
+    branchStock: row.branchStock,
+    areaStock: row.areaStock,
   }
 }

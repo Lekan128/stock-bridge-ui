@@ -94,7 +94,7 @@ await page.waitForFunction(() => navigator.serviceWorker.controller?.state === '
 const toast = (text) => page.getByRole('status').filter({ hasText: text })
 const row = (name) => page.locator('tr[data-product-row]').filter({ hasText: name })
 
-await check('one compact bar: search, Filters, chips with counts, the daily action, Add product, ⋯ — on one row', async () => {
+await check('the title shares its row with the actions; search, Filters and chips with counts on the row below', async () => {
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.reload()
   await row('Rice (c1)').waitFor()
@@ -104,8 +104,18 @@ await check('one compact bar: search, Filters, chips with counts, the daily acti
   const record = page.getByRole('button', { name: 'Record a delivery' }).first()
   const add = page.getByRole('button', { name: 'Add product' }).first()
   const more = page.getByRole('button', { name: 'More inventory actions' }).first()
-  const tops = await Promise.all([search, filters, chips, record, add, more].map(async (l) => (await l.boundingBox()).y))
-  assert(Math.max(...tops) - Math.min(...tops) < 12, `not one row: ${tops}`)
+  // Owner, 2026-11-01: the actions in the title's row (it was empty), the finding on its own row - so the search
+  // keeps its room at any width.
+  const middle = async (l) => {
+    const box = await l.boundingBox()
+    return box.y + box.height / 2
+  }
+  const title = page.getByRole('heading', { name: 'Inventory', level: 1 })
+  const titleRow = await Promise.all([title, record, add, more].map(middle))
+  const findRow = await Promise.all([search, filters, chips].map(middle))
+  assert(Math.max(...titleRow) - Math.min(...titleRow) < 12, `actions not beside the title: ${titleRow}`)
+  assert(Math.max(...findRow) - Math.min(...findRow) < 12, `search, Filters and chips not on one row: ${findRow}`)
+  assert(Math.min(...findRow) > Math.max(...titleRow), 'the finding row is not under the title row')
   await chips.getByRole('button', { name: /^All\s*4$/ }).waitFor()
   await chips.getByRole('button', { name: /^Low\s*1$/ }).waitFor()
   assert((await record.getAttribute('class')).includes('bg-action'), 'Record a delivery is not the action')

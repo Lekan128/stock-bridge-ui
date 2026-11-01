@@ -132,7 +132,9 @@ function normalizeResponseBody(status: number, responseData: unknown): AppError 
     // (which has neither field) is completely unaffected.
     const availableQuantity = typeof data.availableQuantity === 'number' ? data.availableQuantity : undefined
     const requestedQuantity = typeof data.requestedQuantity === 'number' ? data.requestedQuantity : undefined
-    return { status, message: data.message, availableQuantity, requestedQuantity }
+    // A waybill's 409 also names the product it was short of (multiple branches).
+    const productId = typeof data.productId === 'string' ? data.productId : undefined
+    return { status, message: data.message, availableQuantity, requestedQuantity, ...(productId ? { productId } : {}) }
   }
 
   if (data && (typeof data.title === 'string' || typeof data.detail === 'string' || Array.isArray(data.errors))) {

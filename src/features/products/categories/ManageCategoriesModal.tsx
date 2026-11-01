@@ -3,7 +3,7 @@ import { Pencil, Tags, Trash2 } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmptyState } from '@/components/EmptyState'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { Spinner } from '@/components/Spinner'
 import { TextField } from '@/components/TextField'
 import { useToast } from '@/components/useToast'
@@ -150,7 +150,7 @@ export function ManageCategoriesModal({
 
   return (
     <>
-      <Modal
+      <Sheet
         open={open}
         // While the confirmation is up, Escape belongs to it alone — both dialogs listen on the
         // document, and one keypress should not close the confirmation and this behind it.
@@ -274,7 +274,7 @@ export function ManageCategoriesModal({
             </ul>
           )}
         </div>
-      </Modal>
+      </Sheet>
 
       {/* A sibling rendered after the dialog, so it stacks above it. */}
       <ConfirmDialog

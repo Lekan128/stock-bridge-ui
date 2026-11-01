@@ -1,4 +1,6 @@
 import { Suspense, lazy } from 'react'
+import { BranchesPage } from '@/features/branches/BranchesPage'
+import { RecordingBranchGate } from '@/features/branches/RecordingBranchGate'
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
 import { RedirectIfAuthenticated } from '@/auth/RedirectIfAuthenticated'
@@ -145,6 +147,11 @@ const SalesPage = lazy(() =>
     default: m.SalesPage,
   })),
 )
+// Transfers between branches (MULTI_BRANCH_UX_PLAN.md §5.4-5.7): one chunk for the three screens,
+// which only a company with two branches ever opens - one, so Send can move to the waybill offline.
+const TransfersPage = lazy(() => import('@/features/transfers/screens').then((m) => ({ default: m.TransfersPage })))
+const SendStockPage = lazy(() => import('@/features/transfers/screens').then((m) => ({ default: m.SendStockPage })))
+const TransferDetailPage = lazy(() => import('@/features/transfers/screens').then((m) => ({ default: m.TransferDetailPage })))
 // What has been ordered from a supplier off the platform and not received yet (task 3.1). Two
 // chunks, like the import screens: the list is read by anyone who can see products, while the
 // screen that writes one down is reached far less often and by fewer people.
@@ -652,7 +659,9 @@ export function AppRoutes() {
             path="quick"
             element={
               <RequirePermission anyOf={[PERMISSIONS.STOCK_IN, PERMISSIONS.STOCK_OUT, PERMISSIONS.MANAGE_INVENTORY]}>
-                <QuickModePage />
+                <RecordingBranchGate doing="recording">
+                  <QuickModePage />
+                </RecordingBranchGate>
               </RequirePermission>
             }
           />
@@ -660,7 +669,9 @@ export function AppRoutes() {
             path="sell"
             element={
               <RequirePermission permission={PERMISSIONS.STOCK_OUT}>
-                <RecordSalePage />
+                <RecordingBranchGate doing="selling">
+                  <RecordSalePage />
+                </RecordingBranchGate>
               </RequirePermission>
             }
           />
@@ -672,11 +683,42 @@ export function AppRoutes() {
               </RequirePermission>
             }
           />
+          {/* Transfers: reading is any of the stock authorities, as the API's list is; sending is
+            SEND_STOCK. "send" is static, so it is declared before ":id". */}
+          <Route
+            path="transfers"
+            element={
+              <RequirePermission anyOf={[PERMISSIONS.STOCK_IN, PERMISSIONS.STOCK_OUT, PERMISSIONS.SEND_STOCK, PERMISSIONS.MANAGE_INVENTORY]}>
+                <TransfersPage />
+              </RequirePermission>
+            }
+          />
+          {/* Move stock lives in quick mode and in a Sheet now, not on a screen of its own; an old link lands on
+              quick mode's Move. */}
+          <Route path="move" element={<Navigate to="/app/quick?mode=move" replace />} />
+          <Route
+            path="transfers/send"
+            element={
+              <RequirePermission permission={PERMISSIONS.SEND_STOCK}>
+                <SendStockPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="transfers/:id"
+            element={
+              <RequirePermission anyOf={[PERMISSIONS.STOCK_IN, PERMISSIONS.STOCK_OUT, PERMISSIONS.SEND_STOCK, PERMISSIONS.MANAGE_INVENTORY]}>
+                <TransferDetailPage />
+              </RequirePermission>
+            }
+          />
           <Route
             path="products/receive"
             element={
               <RequirePermission permission={PERMISSIONS.MANAGE_INVENTORY}>
-                <RecordDeliveryPage />
+                <RecordingBranchGate question="Which branch is this delivery for?">
+                  <RecordDeliveryPage />
+                </RecordingBranchGate>
               </RequirePermission>
             }
           />
@@ -958,6 +1000,14 @@ export function AppRoutes() {
             Company ID they need to onboard a colleague) even though only an OWNER can change
             them. The page gates the edit form on MANAGE_COMPANY_PROFILE instead. */}
           <Route path="company" element={<CompanySettingsPage />} />
+          <Route
+            path="company/branches"
+            element={
+              <RequirePermission permission={PERMISSIONS.MANAGE_BRANCHES}>
+                <BranchesPage />
+              </RequirePermission>
+            }
+          />
           <Route
             path="users"
             element={

@@ -23,6 +23,8 @@ export interface Profile {
   emailVerified: boolean
   /** Read-only here; written through PUT /api/me/email-preferences, never PUT /api/me. */
   receivePromotionalEmail: boolean
+  /** Quick mode's buttons as this person chose them (owner, 2026-11-01); absent: the app's own choice. */
+  quickModeTabs?: string[] | null
   phone?: string | null
   jobTitle?: string | null
   role: string

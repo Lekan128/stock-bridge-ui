@@ -65,6 +65,8 @@ export interface ExpectedDelivery {
   /** OPEN and still owed something, so "Receive this" is worth offering. */
   receivable: boolean
   createdAt: string
+  /** Multiple branches (V52): the branch it is going to. */
+  branchId?: string
 }
 
 export interface ExpectedDeliveryLineInput {
@@ -84,6 +86,8 @@ export interface ExpectedDeliveryInput {
   reference?: string
   note?: string
   lines: ExpectedDeliveryLineInput[]
+  /** The branch it is going to ("Going to"); left out, the phone's branch. */
+  branchId?: string
 }
 
 export interface ExpectedDeliveryListParams {

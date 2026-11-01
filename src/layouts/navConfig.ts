@@ -52,6 +52,10 @@ export interface NavItem {
    * own flag; the permission still applies on top.
    */
   recordsSalesOnly?: boolean
+  /** Only once the company has two branches (MULTI_BRANCH_UX_PLAN.md rule 1): Transfers. */
+  multiBranchOnly?: boolean
+  /** Any one of these, where a screen serves several jobs (Transfers: receiving and sending). */
+  anyOfPermissions?: Permission[]
 }
 
 export interface NavGroup {
@@ -115,6 +119,13 @@ export const NAV_GROUPS: NavGroup[] = [
         label: 'Stock Movements',
         icon: ArrowLeftRight,
         requiredPermission: PERMISSIONS.MANAGE_INVENTORY,
+      },
+      {
+        path: '/app/transfers',
+        label: 'Transfers',
+        icon: Truck,
+        multiBranchOnly: true,
+        anyOfPermissions: [PERMISSIONS.STOCK_IN, PERMISSIONS.STOCK_OUT, PERMISSIONS.SEND_STOCK, PERMISSIONS.MANAGE_INVENTORY],
       },
       { path: '/app/users', label: 'Users', icon: Users, requiredPermission: PERMISSIONS.MANAGE_USERS },
       {

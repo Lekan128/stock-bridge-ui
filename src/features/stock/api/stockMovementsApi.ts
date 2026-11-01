@@ -1,4 +1,5 @@
 import { api } from '@/api/client'
+import { viewingAreaParams, viewingBranchId } from '@/features/branches/viewingBranch'
 import type { PageResponse, StockMovement } from '@/features/products/types'
 import type { StockMovementReportParams, StockMovementSummary } from '@/features/stock/types'
 
@@ -11,8 +12,18 @@ import type { StockMovementReportParams, StockMovementSummary } from '@/features
  */
 export const stockMovementsApi = {
   list: (params: StockMovementReportParams) =>
-    api.get<PageResponse<StockMovement>>('/api/stock/movements', { params }).then((r) => r.data),
+    api
+      .get<PageResponse<StockMovement>>('/api/stock/movements', { params: { branchId: viewingBranchId(), ...viewingAreaParams(), ...params } })
+      .then((r) => r.data),
+
+  /** The same rows as a spreadsheet, with a Branch column at a multi-branch company (Phase 3). */
+  export: (params: Omit<StockMovementReportParams, 'page' | 'size' | 'sort'>) =>
+    api
+      .get('/api/stock/movements/export', { params: { branchId: viewingBranchId(), ...params }, responseType: 'blob' })
+      .then((r) => r.data as Blob),
 
   summary: (params: Omit<StockMovementReportParams, 'page' | 'size' | 'sort'>) =>
-    api.get<StockMovementSummary>('/api/stock/movements/summary', { params }).then((r) => r.data),
+    api
+      .get<StockMovementSummary>('/api/stock/movements/summary', { params: { branchId: viewingBranchId(), ...viewingAreaParams(), ...params } })
+      .then((r) => r.data),
 }

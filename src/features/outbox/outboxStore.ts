@@ -2,9 +2,17 @@ import Dexie, { type Table } from 'dexie'
 import { invalidateInventory, syncProductIntoCache } from '@/data/inventoryCache'
 import { queryClient } from '@/data/queryClient'
 import { queryKeys } from '@/data/queryKeys'
+import { reportPhoneStatusWith } from '@/features/catalog/catalogApi'
+import { syncCatalog } from '@/features/catalog/catalogStore'
 import type { OutboxOp, OutboxProblem, StockCountPayload, SubmitOutcome } from '@/features/outbox/types'
 import { stockApi, type StockInRequestPayload } from '@/features/products/api/stockApi'
 import type { StockMutationResponse, StockOutPayload } from '@/features/products/types'
+import { transfersApi } from '@/features/transfers/transfersApi'
+import { movesApi } from '@/features/moves/movesApi'
+import type { AreaMove, AreaMoveConfirmPayload, AreaMovePayload, AreaReturnPayload } from '@/features/moves/types'
+import { requestsApi } from '@/features/requests/requestsApi'
+import type { StockRequest, StockRequestPayload } from '@/features/requests/types'
+import type { ReceiptPayload, SendPayload, Transfer } from '@/features/transfers/types'
 import { isAppError } from '@/types/api'
 
 /**
@@ -47,6 +55,8 @@ export interface OutboxState {
 }
 
 const RETRY_INTERVAL_MS = 20_000
+/** After a send that got no answer (offline): eligible again at the next tick. */
+const NO_CONNECTION_RETRY_MS = 5_000
 /** Back-off after a failed attempt: 5 s, 10 s, 20 s … capped at 5 minutes. */
 const backoff = (attempts: number) => Math.min(5_000 * 2 ** Math.max(0, attempts - 1), 300_000)
 
@@ -129,16 +139,19 @@ export async function stopOutbox({ deleteData }: { deleteData: boolean }): Promi
 
 function attachTriggers(): () => void {
   const kick = () => void processOutbox()
+  // Back online: whatever waited only for a connection goes now, not after its back-off (a waybill
+  // sent from a dead zone should get its number as the phone walks back into signal).
+  const reconnected = () => void processOutbox({ force: true })
   const onVisible = () => {
     if (document.visibilityState === 'visible') kick()
   }
-  window.addEventListener('online', kick)
+  window.addEventListener('online', reconnected)
   document.addEventListener('visibilitychange', onVisible)
   const timer = window.setInterval(() => {
     if (state.ops.some((op) => op.status === 'pending')) kick()
   }, RETRY_INTERVAL_MS)
   return () => {
-    window.removeEventListener('online', kick)
+    window.removeEventListener('online', reconnected)
     document.removeEventListener('visibilitychange', onVisible)
     window.clearInterval(timer)
   }
@@ -161,11 +174,34 @@ function isTransient(error: unknown): boolean {
   return isAppError(error) && (error.status === 0 || error.status >= 500)
 }
 
-function send(op: OutboxOp, { late }: { late: boolean }): Promise<StockMutationResponse> {
+type Answer = StockMutationResponse | Transfer | AreaMove | StockRequest
+
+function send(op: OutboxOp, { late }: { late: boolean }): Promise<Answer> {
   // A write sent the moment it is entered is dated by the server, as always. One sent later
   // carries the moment it was entered, and says it is late.
   const timing = late ? { occurredAt: new Date(op.createdAt).toISOString(), recordedOffline: true } : {}
   switch (op.kind) {
+    // A waybill keeps the moment it was made, sent now or later: the receiver sees when it left.
+    case 'TRANSFER_SEND':
+      return transfersApi.send({ ...op.payload, occurredAt: new Date(op.createdAt).toISOString() })
+    case 'TRANSFER_RECEIVE':
+      return transfersApi.receive(op.transferId, { ...op.payload, occurredAt: new Date(op.createdAt).toISOString() })
+    // A move keeps the moment it was made too; one sent late says so, so a later count isn't doubled.
+    case 'AREA_MOVE':
+      return movesApi.move({ ...op.payload, occurredAt: new Date(op.createdAt).toISOString(), ...(late ? { recordedOffline: true } : {}) })
+    // A confirmation sent late keeps when it was made, so a count taken since isn't doubled (Part 4).
+    case 'AREA_MOVE_CONFIRM':
+      return movesApi.confirm(op.moveId, { ...op.payload, ...timing })
+    // A give back keeps when it was done; sent late it says so, so a later count isn't doubled (Part 6).
+    case 'AREA_RETURN':
+      return movesApi.giveBackOrReport(op.moveId, {
+        ...op.payload,
+        occurredAt: new Date(op.createdAt).toISOString(),
+        ...(late ? { recordedOffline: true } : {}),
+      })
+    // A request keeps the moment it was asked (Part 5).
+    case 'STOCK_REQUEST':
+      return requestsApi.ask({ ...op.payload, occurredAt: new Date(op.createdAt).toISOString() })
     case 'STOCK_IN':
       return stockApi.stockIn(op.productId, { ...op.payload, ...timing } as StockInRequestPayload, op.id)
     case 'STOCK_OUT':
@@ -182,15 +218,69 @@ function send(op: OutboxOp, { late }: { late: boolean }): Promise<StockMutationR
 /** What the server answered, made into something the person can act on. */
 function problemFrom(error: unknown): OutboxProblem {
   if (isAppError(error) && error.status === 409 && error.availableQuantity != null && error.requestedQuantity != null) {
-    return { kind: 'oversell', message: error.message, available: error.availableQuantity, requested: error.requestedQuantity }
+    return {
+      kind: 'oversell',
+      message: error.message,
+      available: error.availableQuantity,
+      requested: error.requestedQuantity,
+      ...(error.productId ? { productId: error.productId } : {}),
+    }
   }
   if (isAppError(error) && error.status === 404) {
     return { kind: 'refused', message: 'This product no longer exists.' }
   }
   if (isAppError(error) && error.status === 403) {
+    // The branch was taken away since this was saved (UX §5.10): say which, not just "not allowed".
+    const lost = /You don't work at (.+?), so/.exec(error.message ?? '')
+    if (lost) return { kind: 'refused', message: `You no longer work at ${lost[1]}. This change wasn't sent.` }
     return { kind: 'refused', message: 'Your account is no longer allowed to record this.' }
   }
   return { kind: 'refused', message: isAppError(error) ? error.message : 'The server could not record this.' }
+}
+
+function keysOf(op: Pick<OutboxOp, 'productId' | 'keys'>): string[] {
+  return op.keys ?? [op.productId]
+}
+
+/**
+ * A transfer has landed: both branches' figures moved, which the catalogue learns from its next delta
+ * (the server logs every product on the waybill), and the transfer lists and pages are out of date.
+ */
+function applyTransferResult(transfer: Transfer): void {
+  queryClient.setQueryData(['transfers', 'detail', transfer.id], transfer)
+  void queryClient.invalidateQueries({ queryKey: ['transfers'] })
+  void queryClient.invalidateQueries({ queryKey: queryKeys.products.lowStock })
+  for (const line of transfer.lines) {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.products.detail(line.productId) })
+    void queryClient.invalidateQueries({ queryKey: ['products', 'history', line.productId] })
+  }
+  void invalidateInventory(queryClient)
+  void syncCatalog()
+}
+
+/**
+ * A move has landed: two areas' figures changed (a give also the branch's). The catalogue hears from its
+ * next delta (the server logs every product on it); the products' pages, histories and the moves list
+ * are out of date.
+ */
+export function applyMoveResult(move: AreaMove): void {
+  void queryClient.invalidateQueries({ queryKey: ['area-moves'] })
+  // A move may have filled a request (Part 5).
+  void queryClient.invalidateQueries({ queryKey: ['stock-requests'] })
+  void queryClient.invalidateQueries({ queryKey: queryKeys.products.lowStock })
+  for (const line of move.lines) {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.products.detail(line.productId) })
+    void queryClient.invalidateQueries({ queryKey: ['products', 'history', line.productId] })
+  }
+  void invalidateInventory(queryClient)
+  void syncCatalog()
+}
+
+function applyResult(op: OutboxOp, response: Answer): void {
+  if (op.kind === 'AREA_MOVE' || op.kind === 'AREA_MOVE_CONFIRM' || op.kind === 'AREA_RETURN') applyMoveResult(response as AreaMove)
+  else if (op.kind === 'STOCK_REQUEST') void queryClient.invalidateQueries({ queryKey: ['stock-requests'] })
+  else if (op.kind === 'TRANSFER_SEND' || op.kind === 'TRANSFER_RECEIVE') applyTransferResult(response as Transfer)
+  else applyStockResult(op.productId, response as StockMutationResponse)
 }
 
 /** The product's figures everywhere — detail, list, device catalogue — after a write lands (or is undone). */
@@ -214,7 +304,59 @@ type NewOp =
  * A write behind another for the same product that is still waiting is queued straight away, so
  * the product's writes always arrive in the order they were made.
  */
+/**
+ * Where this phone records now (MULTI_BRANCH_UX_PLAN.md rule 3), kept in step by `BranchProvider`. Null
+ * at a one-branch company, and in "All branches", where the sheet names the branch itself.
+ */
+let recordingBranch: string | null = null
+
+export function setRecordingBranch(branchId: string | null) {
+  recordingBranch = branchId
+}
+
+/**
+ * The same branch, for the stock writes that go straight to the server rather than through the outbox:
+ * sheet imports, Record a delivery, expected deliveries, a new product's opening stock. Undefined at a
+ * one-branch company and in "All branches" - the server then uses the person's one branch, or asks.
+ */
+export function recordingBranchId(): string | undefined {
+  return recordingBranch ?? undefined
+}
+
+/** This phone, as the server knows it: made once, kept in storage. Not a hardware identifier. */
+function deviceId(): string | null {
+  try {
+    const existing = window.localStorage.getItem('pp.device-id')
+    if (existing) return existing
+    const id = crypto.randomUUID()
+    window.localStorage.setItem('pp.device-id', id)
+    return id
+  } catch {
+    return null
+  }
+}
+
+// The owner's branch table reads these (V55): how much is waiting here, and at which branch.
+reportPhoneStatusWith(() => {
+  const device = deviceId()
+  if (!device || !state.ready) return {}
+  const waiting = state.ops.filter((op) => op.status === 'pending')
+  const needsYou = state.ops.filter((op) => op.status === 'needs_attention')
+  const oldest = state.ops.reduce<number | null>((min, op) => (min == null || op.createdAt < min ? op.createdAt : min), null)
+  return {
+    device,
+    waiting: waiting.length,
+    needsYou: needsYou.length,
+    ...(oldest != null ? { oldestWaiting: oldest } : {}),
+    // The branch goes with every change-feed request already (the one being viewed).
+  }
+})
+
 export async function submitStockWrite(input: NewOp): Promise<SubmitOutcome<StockMutationResponse>> {
+  // The branch is fixed when the write is MADE: a queued write sent after the phone switched branch
+  // still lands where it was typed. A sheet that chose a branch itself (All branches) keeps its choice.
+  const branchId = input.payload.branchId ?? recordingBranch ?? undefined
+  if (branchId) input = { ...input, payload: { ...input.payload, branchId } } as NewOp
   const op = {
     ...input,
     id: crypto.randomUUID(),
@@ -225,13 +367,13 @@ export async function submitStockWrite(input: NewOp): Promise<SubmitOutcome<Stoc
     ...(input.kind === 'COUNT' ? { baseDelta: null } : {}),
   } as OutboxOp
 
-  const waitingBehind = state.ops.some((existing) => existing.productId === op.productId)
+  const waitingBehind = isBehind(op)
   // Choosing which deliveries a sale comes from needs the server's current lots: never queued.
   const mustBeOnline = op.kind === 'STOCK_OUT' && (op.payload.allocations?.length ?? 0) > 0
 
   if (!waitingBehind) {
     try {
-      const response = await send(op, { late: false })
+      const response = (await send(op, { late: false })) as StockMutationResponse
       applyStockResult(op.productId, response)
       return { status: 'sent', response }
     } catch (error) {
@@ -244,6 +386,204 @@ export async function submitStockWrite(input: NewOp): Promise<SubmitOutcome<Stoc
   await save({ ...op, attempts: 1, nextAttemptAt: Date.now() + backoff(1) })
   void processOutbox()
   return { status: 'queued', op }
+}
+
+/** Something already waiting shares a product (or the waybill) with this write: it goes after. */
+function isBehind(op: Pick<OutboxOp, 'productId' | 'keys'>): boolean {
+  const mine = new Set(keysOf(op))
+  return state.ops.some((existing) => keysOf(existing).some((key) => mine.has(key)))
+}
+
+type NewTransferOp =
+  | { kind: 'TRANSFER_SEND'; payload: SendPayload; summary: string }
+  | { kind: 'TRANSFER_RECEIVE'; transferId: string; payload: ReceiptPayload; summary: string; productIds: string[] }
+
+/**
+ * Sends a waybill or a receipt the way `submitStockWrite` sends a stock write: now if the server can
+ * be reached, otherwise kept on this phone and sent in order (MULTI_BRANCH_UX_PLAN.md rule 9). It
+ * waits behind any earlier write for one of its products, so "received 10 bags, sent 4 to Oshodi"
+ * typed offline arrives in that order. A refusal that comes back now is thrown for the screen to show.
+ */
+export async function submitTransfer(input: NewTransferOp): Promise<SubmitOutcome<Transfer>> {
+  const transferId = input.kind === 'TRANSFER_SEND' ? input.payload.id : input.transferId
+  const productIds = input.kind === 'TRANSFER_SEND' ? input.payload.lines.map((line) => line.productId) : input.productIds
+  const base = {
+    id: crypto.randomUUID(),
+    productId: `transfer:${transferId}`,
+    keys: [`transfer:${transferId}`, ...productIds],
+    productName: input.summary,
+    summary: input.summary,
+    createdAt: Date.now(),
+    status: 'pending' as const,
+    attempts: 0,
+    nextAttemptAt: 0,
+    baseDelta: null,
+  }
+  const op: OutboxOp =
+    input.kind === 'TRANSFER_SEND'
+      ? { ...base, kind: 'TRANSFER_SEND', payload: input.payload }
+      : { ...base, kind: 'TRANSFER_RECEIVE', transferId: input.transferId, payload: input.payload }
+
+  if (!isBehind(op)) {
+    try {
+      const response = (await send(op, { late: false })) as Transfer
+      applyTransferResult(response)
+      return { status: 'sent', response }
+    } catch (error) {
+      if (!isTransient(error)) throw error
+    }
+  }
+  await save({ ...op, attempts: 1, nextAttemptAt: Date.now() + backoff(1) })
+  void processOutbox()
+  return { status: 'queued', op }
+}
+
+/**
+ * Sends a move between areas the way `submitTransfer` sends a waybill: now if the server can be reached,
+ * otherwise kept on this phone and sent in order behind any earlier write for one of its products.
+ */
+export async function submitMove(payload: AreaMovePayload, summary: string): Promise<SubmitOutcome<AreaMove>> {
+  const op: OutboxOp = {
+    id: crypto.randomUUID(),
+    productId: `move:${payload.id}`,
+    keys: [`move:${payload.id}`, ...payload.lines.map((line) => line.productId)],
+    productName: summary,
+    summary,
+    createdAt: Date.now(),
+    status: 'pending',
+    attempts: 0,
+    nextAttemptAt: 0,
+    kind: 'AREA_MOVE',
+    payload,
+    baseDelta: null,
+  }
+  if (!isBehind(op)) {
+    try {
+      const response = (await send(op, { late: false })) as AreaMove
+      applyMoveResult(response)
+      return { status: 'sent', response }
+    } catch (error) {
+      if (!isTransient(error)) throw error
+    }
+  }
+  await save({ ...op, attempts: 1, nextAttemptAt: Date.now() + backoff(1) })
+  void processOutbox()
+  return { status: 'queued', op }
+}
+
+/**
+ * Sends what an area got of a move (STOCK_AREAS_PART_4.md) the way `submitMove` sends the move: now if the
+ * server can be reached, otherwise kept on this phone and sent in order behind any earlier write for one of
+ * its products - and behind the move itself, if that is still on this phone too.
+ */
+export async function submitMoveConfirm(
+  moveId: string,
+  payload: AreaMoveConfirmPayload,
+  productIds: string[],
+  summary: string,
+): Promise<SubmitOutcome<AreaMove>> {
+  const op: OutboxOp = {
+    id: crypto.randomUUID(),
+    productId: `move:${moveId}`,
+    keys: [`move:${moveId}`, ...productIds],
+    productName: summary,
+    summary,
+    createdAt: Date.now(),
+    status: 'pending',
+    attempts: 0,
+    nextAttemptAt: 0,
+    kind: 'AREA_MOVE_CONFIRM',
+    moveId,
+    payload,
+    baseDelta: null,
+  }
+  if (!isBehind(op)) {
+    try {
+      const response = (await send(op, { late: false })) as AreaMove
+      applyMoveResult(response)
+      return { status: 'sent', response }
+    } catch (error) {
+      if (!isTransient(error)) throw error
+    }
+  }
+  await save({ ...op, attempts: 1, nextAttemptAt: Date.now() + backoff(1) })
+  void processOutbox()
+  return { status: 'queued', op }
+}
+
+/**
+ * A give back or a report (STOCK_AREAS_PART_6.md), the way `submitMoveConfirm` sends a confirmation: now if the
+ * server can be reached, otherwise kept on this phone and sent when it can - behind the move and its product.
+ */
+export async function submitReturn(moveId: string, payload: AreaReturnPayload, summary: string): Promise<SubmitOutcome<AreaMove>> {
+  const op: OutboxOp = {
+    id: crypto.randomUUID(),
+    productId: `move:${moveId}`,
+    keys: [`move:${moveId}`, payload.productId],
+    productName: summary,
+    summary,
+    createdAt: Date.now(),
+    status: 'pending',
+    attempts: 0,
+    nextAttemptAt: 0,
+    kind: 'AREA_RETURN',
+    moveId,
+    payload,
+    baseDelta: null,
+  }
+  if (!isBehind(op)) {
+    try {
+      const response = (await send(op, { late: false })) as AreaMove
+      applyMoveResult(response)
+      return { status: 'sent', response }
+    } catch (error) {
+      if (!isTransient(error)) throw error
+    }
+  }
+  await save({ ...op, attempts: 1, nextAttemptAt: Date.now() + backoff(1) })
+  void processOutbox()
+  return { status: 'queued', op }
+}
+
+/**
+ * Sends a request for stock (STOCK_AREAS_PART_5.md) the way `submitMove` sends a move: now if the server can be
+ * reached, otherwise kept on this phone and sent when it can. It changes no figure, so it waits behind nothing.
+ */
+export async function submitRequest(payload: StockRequestPayload, summary: string): Promise<SubmitOutcome<StockRequest>> {
+  const op: OutboxOp = {
+    id: crypto.randomUUID(),
+    productId: `request:${payload.id}`,
+    keys: [`request:${payload.id}`],
+    productName: summary,
+    summary,
+    createdAt: Date.now(),
+    status: 'pending',
+    attempts: 0,
+    nextAttemptAt: 0,
+    kind: 'STOCK_REQUEST',
+    payload,
+    baseDelta: null,
+  }
+  if (!isBehind(op)) {
+    try {
+      const response = (await send(op, { late: false })) as StockRequest
+      void queryClient.invalidateQueries({ queryKey: ['stock-requests'] })
+      return { status: 'sent', response }
+    } catch (error) {
+      if (!isTransient(error)) throw error
+    }
+  }
+  await save({ ...op, attempts: 1, nextAttemptAt: Date.now() + backoff(1) })
+  void processOutbox()
+  return { status: 'queued', op }
+}
+
+/** The waybills and receipts waiting on this phone, for the transfers screens. */
+export function pendingTransferOps(): Extract<OutboxOp, { kind: 'TRANSFER_SEND' | 'TRANSFER_RECEIVE' }>[] {
+  return state.ops.filter(
+    (op): op is Extract<OutboxOp, { kind: 'TRANSFER_SEND' | 'TRANSFER_RECEIVE' }> =>
+      op.kind === 'TRANSFER_SEND' || op.kind === 'TRANSFER_RECEIVE',
+  )
 }
 
 let processing = false
@@ -275,10 +615,16 @@ export async function processOutbox({ force = false }: { force?: boolean } = {})
   }
   processing = true
   try {
-    // The first waiting write per product; anything behind it waits its turn.
-    const heads = new Map<string, OutboxOp>()
-    for (const op of state.ops) if (!heads.has(op.productId)) heads.set(op.productId, op)
-    for (const op of heads.values()) {
+    // The first waiting write per product; anything behind it waits its turn. A transfer is a head
+    // only when nothing earlier shares one of its products, and holds back what comes after it.
+    const heads: OutboxOp[] = []
+    const taken = new Set<string>()
+    for (const op of state.ops) {
+      const keys = keysOf(op)
+      if (!keys.some((key) => taken.has(key))) heads.push(op)
+      for (const key of keys) taken.add(key)
+    }
+    for (const op of heads) {
       if (op.status !== 'pending') continue
       if (!forceRound && op.nextAttemptAt > Date.now()) continue
       setState({ sending: true })
@@ -290,12 +636,15 @@ export async function processOutbox({ force = false }: { force?: boolean } = {})
           sentThisRound: state.sentThisRound + 1,
           recentlySent: [{ ...op, sentAt: Date.now() }, ...state.recentlySent].slice(0, RECENT_LIMIT),
         })
-        applyStockResult(op.productId, response)
+        applyResult(op, response)
         processAgain = true // the product's next write, if any, can go now
       } catch (error) {
         if (isTransient(error)) {
           const attempts = op.attempts + 1
-          await save({ ...op, attempts, nextAttemptAt: Date.now() + backoff(attempts) })
+          // No answer at all is the phone being offline, not the server struggling: try again at the
+          // next tick rather than backing off for minutes. Only a server error earns the back-off.
+          const wait = isAppError(error) && error.status === 0 ? NO_CONNECTION_RETRY_MS : backoff(attempts)
+          await save({ ...op, attempts, nextAttemptAt: Date.now() + wait })
         } else {
           await save({ ...op, status: 'needs_attention', problem: problemFrom(error) })
         }
@@ -347,7 +696,9 @@ export async function discardOp(id: string): Promise<void> {
  * to replay it for a different one.
  */
 export async function sendAvailableInstead(id: string): Promise<void> {
-  const op = state.ops.find((entry) => entry.id === id)
+  const found = state.ops.find((entry) => entry.id === id)
+  if (found?.kind === 'TRANSFER_SEND') return sendWaybillLineInstead(found)
+  const op = found
   if (!op || op.kind !== 'STOCK_OUT' || op.problem?.kind !== 'oversell') return
   const available = op.problem.available
   if (available <= 0) {
@@ -376,6 +727,44 @@ export async function sendAvailableInstead(id: string): Promise<void> {
     },
     baseDelta: -available,
     summary: `${available} (what was left)`,
+    status: 'pending',
+    problem: undefined,
+    attempts: 0,
+    nextAttemptAt: 0,
+  }
+  setState({ ops: state.ops.map((entry) => (entry.id === op.id ? replacement : entry)) })
+  await db?.transaction('rw', db.ops, async () => {
+    await db!.ops.delete(op.id)
+    await db!.ops.put(replacement)
+  }).catch(() => undefined)
+  await processOutbox({ force: true })
+}
+
+/**
+ * A waybill refused because one product was short at the sending branch (UX §6, Send: *Send 8 instead*):
+ * that line becomes what the branch had, in stock units, or leaves the waybill at none. The waybill keeps
+ * its id - the server made nothing of the refused one - so its page on this phone stays the same.
+ */
+async function sendWaybillLineInstead(op: Extract<OutboxOp, { kind: 'TRANSFER_SEND' }>): Promise<void> {
+  if (op.problem?.kind !== 'oversell' || !op.problem.productId) return
+  const { productId: shortId, available } = op.problem
+  const lines = op.payload.lines.flatMap((line) =>
+    line.productId !== shortId ? [line] : available > 0 ? [{ productId: line.productId, quantity: available }] : [],
+  )
+  if (lines.length === 0) {
+    await remove(op.id)
+    return
+  }
+  // "2 items to Oshodi" says how many lines: one dropped, the count drops. The keys name the products
+  // still on it, so a product taken off no longer waits behind this waybill.
+  const summary = op.summary.replace(/^\d+ items? /, `${lines.length} ${lines.length === 1 ? 'item' : 'items'} `)
+  const replacement: OutboxOp = {
+    ...op,
+    id: crypto.randomUUID(),
+    payload: { ...op.payload, lines },
+    summary,
+    productName: summary,
+    keys: [`transfer:${op.payload.id}`, ...lines.map((line) => line.productId)],
     status: 'pending',
     problem: undefined,
     attempts: 0,

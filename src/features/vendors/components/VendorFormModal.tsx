@@ -102,7 +102,7 @@ export function VendorFormModal({ vendor, onClose, onSaved }: VendorFormModalPro
           <Button variant="secondary" onClick={onClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button type="submit" form="vendor-form" loading={isSubmitting}>
+          <Button type="submit" form="vendor-form" variant="action" loading={isSubmitting}>
             {isEdit ? 'Save changes' : 'Add supplier'}
           </Button>
         </>

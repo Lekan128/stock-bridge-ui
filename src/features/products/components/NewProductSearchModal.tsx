@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { PackagePlus, Search } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/Button'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { ProductImage } from '@/features/products/components/ProductImage'
 import { productsApi } from '@/features/products/api/productsApi'
 import type { Product } from '@/features/products/types'
@@ -89,7 +89,7 @@ export function NewProductSearchModal({ open, onClose }: NewProductSearchModalPr
   const trimmedQuery = query.trim()
 
   return (
-    <Modal open={open} onClose={onClose} title="Add a product" size="md">
+    <Sheet open={open} onClose={onClose} title="Add a product" size="md">
       <div className="flex flex-col gap-4">
         <div>
           <label htmlFor="new-product-search" className="mb-1.5 block text-sm font-medium text-neutral-700">
@@ -178,6 +178,6 @@ export function NewProductSearchModal({ open, onClose }: NewProductSearchModalPr
           {trimmedQuery.length > 0 ? `Create "${trimmedQuery}" as a new product` : 'Create new product'}
         </Button>
       </div>
-    </Modal>
+    </Sheet>
   )
 }

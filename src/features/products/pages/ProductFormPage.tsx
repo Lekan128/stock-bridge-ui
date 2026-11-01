@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, ArrowLeft, Banknote, Clock, Lock, Ruler, Tag, Truck, Zap } from 'lucide-react'
 import { useForm } from 'react-hook-form'
@@ -23,6 +24,8 @@ import { useProduct } from '@/features/products/hooks/useProduct'
 import { useProductSkuSettings } from '@/features/products/hooks/useProductSkuSettings'
 import { useStockHistory } from '@/features/products/hooks/useStockHistory'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
+import { BranchLevels } from '@/features/branches/BranchLevels'
+import { listPriceText } from '@/features/selling/priceText'
 import {
   makeProductFormSchema,
   productFormDefaults,
@@ -227,6 +230,16 @@ export function ProductFormPage() {
   const location = useLocation() as { state?: { name?: string } }
   const { showToast } = useToast()
   const { user, isVendor } = useAuth()
+  // One product, one price, every branch (MULTI_BRANCH_UX_PLAN.md §5.14): the form says where a change
+  // lands, and the price is read-only for someone who can't change selling prices.
+  // Every open branch in the company, not only those this person sees: a price applies at all of them.
+  const { isMultiBranch, openBranches: branchCount } = useWorkingBranch()
+  const canChangePrices = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.CHANGE_SELLING_PRICES)
+  const priceHint = !canChangePrices
+    ? 'Prices are set by people who can change selling prices.'
+    : isMultiBranch
+      ? `Same price at all ${branchCount} branches.`
+      : undefined
   const { showsSellingPrice, requiresSellingPrice } = useSellingPolicy()
   /** The pack a company's selling price is typed per ("CARTON"), or null for the stock unit (V47). */
   const [priceUnitCode, setPriceUnitCode] = useState<string | null>(null)
@@ -859,6 +872,10 @@ export function ProductFormPage() {
         showToast('Saved. This listing is back with us for review and will return to the storefront once approved.', 'success')
       } else if (isVendor && !isEdit) {
         showToast('Product created. It goes for a quick review before buyers can see it.', 'success')
+      } else if (isMultiBranch && isEdit && priceChanged(product, saved)) {
+        // One price for the company (MULTI_BRANCH_UX_PLAN.md §5.6): the toast says where it now applies.
+        const price = listPriceText(saved, unitOfMeasureOptions)
+        showToast(price ? `Saved. ${price.replace(' / ', ' a ')} at all ${branchCount} branches.` : 'Product updated.', 'success')
       } else {
         showToast(isEdit ? 'Product updated.' : 'Product created.', 'success')
       }
@@ -1409,6 +1426,8 @@ export function ProductFormPage() {
                   <TextField
                     label={priceUnitWord ? `Selling price (₦ per ${priceUnitWord}, optional)` : 'Selling price (₦, optional)'}
                     inputMode="decimal"
+                    hint={priceHint}
+                    readOnly={!canChangePrices}
                     error={errors.unitPrice?.message}
                     {...register('unitPrice')}
                   />
@@ -1472,6 +1491,7 @@ export function ProductFormPage() {
                 formatPackCostEcho(Number(watchedUnitPrice), quantityOption) ??
                 (stockUnitLabel ? `What a buyer pays for one ${stockUnitLabel}.` : undefined)
               }
+              readOnly={!canChangePrices}
               error={errors.unitPrice?.message}
               {...register('unitPrice')}
             />
@@ -1606,10 +1626,16 @@ export function ProductFormPage() {
             error={errors.lowStockThreshold?.message}
             {...register('lowStockThreshold')}
           />
+          {isMultiBranch && isEdit && product?.branchStock != null && (
+            <BranchLevels key={product.id} product={product} unit={stockUnitLabel ?? undefined} />
+          )}
         </div>
 
         <FormError message={formError} />
 
+        {isMultiBranch && isEdit && (
+          <p className="text-right text-sm text-neutral-600">Changes to this product apply at all {branchCount} branches.</p>
+        )}
         <div className="flex justify-end gap-2">
           <Button
             variant="secondary"
@@ -1657,5 +1683,15 @@ export function ProductFormPage() {
         />
       )}
     </div>
+  )
+}
+
+/** The selling price, as typed, is not what it was before this save. */
+function priceChanged(before: Product | null | undefined, after: Product): boolean {
+  return (
+    after.unitPrice != null &&
+    (before?.unitPrice !== after.unitPrice ||
+      before?.unitPriceEntered !== after.unitPriceEntered ||
+      before?.unitPriceEnteredUnit !== after.unitPriceEnteredUnit)
   )
 }

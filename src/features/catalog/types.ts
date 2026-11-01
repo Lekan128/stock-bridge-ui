@@ -1,3 +1,4 @@
+import type { AreaFigure, BranchFigure } from '@/features/branches/types'
 import type { StockStatusFilter } from '@/features/products/types'
 
 /**
@@ -31,6 +32,13 @@ export interface CatalogRow {
   active: boolean
   isLowStock: boolean
   stockStatus: StockStatusFilter
+  /**
+   * Multiple branches (V52): this product at each branch the person sees, so the list can show any of
+   * them offline. The fields above stay the company's. Absent at a one-branch company (`== null`).
+   */
+  branchStock?: BranchFigure[]
+  /** Areas inside a branch (V60): this product in each area of those branches that have areas. */
+  areaStock?: AreaFigure[]
 }
 
 export interface SnapshotPage {
@@ -66,9 +74,27 @@ export interface CatalogQuery {
   sort: { field: CatalogSortField; direction: 'asc' | 'desc' }
   offset: number
   limit: number
+  /**
+   * Multiple branches (MULTI_BRANCH_UX_PLAN.md §4.3): read every row as this branch holds it. With
+   * `allBranches`, the company figure, and a product low at any branch counts as low.
+   */
+  branchId?: string
+  allBranches?: boolean
+  /**
+   * Areas (STOCK_AREAS_PART_3_6.md): read every row as these areas of the branch hold it - their figures
+   * summed; out when they hold none, never "low" (an area has no level of its own until Part 8).
+   */
+  areaIds?: string[]
+  /** In an area view, list the products those areas have never had as well ("Show them"). */
+  showOthers?: boolean
 }
 
 export interface CatalogQueryResult {
+  /**
+   * In an area view (Part 3.6): how many products matching the other filters the chosen areas have never had -
+   * left out of the list and the chips unless searched for or shown ("14 other products aren't in the Kitchen").
+   */
+  elsewhere?: number
   rows: CatalogRow[]
   /** How many rows match every filter. */
   total: number
@@ -93,4 +119,13 @@ export interface CatalogMeta {
   total: number | null
   syncedAt: number | null
   count: number
+  /** The row shape the copy was taken in; absent for copies older than formats. */
+  rowFormat?: number
 }
+
+/**
+ * The row shape this app reads. Raise it when rows gain a field the app relies on, so a phone's copy taken
+ * before is downloaded afresh: the change feed only sends products that changed, so old rows never gain it.
+ * 2: area figures say whether the area has had the product (`carried`, Part 3.6).
+ */
+export const CATALOG_ROW_FORMAT = 2

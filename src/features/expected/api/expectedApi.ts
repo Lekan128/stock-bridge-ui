@@ -1,4 +1,6 @@
 import { api } from '@/api/client'
+import { viewingBranchId } from '@/features/branches/viewingBranch'
+import { recordingBranchId } from '@/features/outbox/outboxStore'
 import type {
   ExpectedDelivery,
   ExpectedDeliveryInput,
@@ -25,7 +27,8 @@ export const expectedApi = {
   list(params: ExpectedDeliveryListParams): Promise<PageResponse<ExpectedDelivery>> {
     return api
       .get<PageResponse<ExpectedDelivery>>(BASE, {
-        params: { status: params.status, page: params.page, size: params.size },
+        // At a branch, the ones going there; in "All branches", every one (each with its branch).
+        params: { status: params.status, page: params.page, size: params.size, branchId: viewingBranchId() },
       })
       .then((response) => response.data)
   },
@@ -37,7 +40,8 @@ export const expectedApi = {
 
   /** POST /api/expected-deliveries — 201 with the record it created. */
   create(body: ExpectedDeliveryInput): Promise<ExpectedDelivery> {
-    return api.post<ExpectedDelivery>(BASE, body).then((response) => response.data)
+    // Going to the phone's branch (V52); the server uses the person's one branch otherwise.
+    return api.post<ExpectedDelivery>(BASE, { branchId: recordingBranchId(), ...body }).then((response) => response.data)
   },
 
   /**

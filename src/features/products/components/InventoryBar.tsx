@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useId, useRef, useState } from 'react'
-import { CalendarClock, Download, Plus, Search, Settings, ShoppingBag, SlidersHorizontal, Tags, Truck, Upload, Zap } from 'lucide-react'
+import { ArrowLeftRight, CalendarClock, Download, MessageSquarePlus, Plus, Search, Settings, ShoppingBag, SlidersHorizontal, Tags, Truck, Undo2, Upload, Zap } from 'lucide-react'
 import { Button } from '@/components/Button'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { OverflowMenu, type OverflowMenuItem } from '@/components/OverflowMenu'
 import type { CompanyCategory } from '@/features/products/categories/types'
 import type { ProductStatusFilter, StockStatusFilter } from '@/features/products/types'
@@ -38,6 +39,17 @@ export interface InventoryBarProps {
   onAddProduct: () => void
   onBulkUpload: () => void
   onRecordDelivery: () => void
+  /** Move stock between the branch's areas - present at a branch with areas, for whoever may stock out. */
+  onMoveStock?: () => void
+  /**
+   * The other way to get stock from one area to another (Part 5): Ask for someone whose button is Move, Move for
+   * someone whose button is Ask - in "⋯", so the bar keeps one button for it.
+   */
+  onOtherMove?: { label: string; onSelect: () => void }
+  /** "Give back or report" what arrived (Part 6): for someone who works in an area of this branch. */
+  onGiveBack?: () => void
+  /** How the Move button reads for this person (Part 5): "Ask for stock" for a cook, "Move stock" otherwise. */
+  moveLabel?: { label: string; short: string }
   /**
    * Record a sale (§6.1) - present when the company records sales and this person may. It is then
    * the screen's action, the thing done all day; Record a delivery steps back to secondary.
@@ -69,12 +81,32 @@ const STATUS_OPTIONS: { value: ProductStatusFilter; label: string }[] = [
   { value: 'all', label: 'All' },
 ]
 
-/** The Inventory page's "⋯": everything done a handful of times a year (C1). */
-function inventoryMenuItems(props: InventoryBarProps): OverflowMenuItem[] {
+/**
+ * The Inventory page's "⋯": everything done a handful of times a year (C1) - and, on a phone, whichever of Move and
+ * Ask the bar at the bottom has no room for (on a laptop both are buttons).
+ */
+function inventoryMenuItems(props: InventoryBarProps, compact: boolean): OverflowMenuItem[] {
   const icon = 'h-4 w-4 text-neutral-500'
   return [
     ...(props.onQuickMode
       ? [{ label: 'Quick mode', icon: <Zap className={icon} aria-hidden="true" />, onSelect: props.onQuickMode }]
+      : []),
+    ...(props.onOtherMove && compact
+      ? [
+          {
+            label: props.onOtherMove.label,
+            // Ask has its own sign (owner, 2026-11-01): a speech bubble with a + (telling the Store you need more), not Move's arrows.
+            icon: props.onOtherMove.label.startsWith('Ask') ? (
+              <MessageSquarePlus className={icon} aria-hidden="true" />
+            ) : (
+              <ArrowLeftRight className={icon} aria-hidden="true" />
+            ),
+            onSelect: props.onOtherMove.onSelect,
+          },
+        ]
+      : []),
+    ...(props.onGiveBack
+      ? [{ label: 'Give back or report', icon: <Undo2 className={icon} aria-hidden="true" />, onSelect: props.onGiveBack }]
       : []),
     { label: 'Expected deliveries', icon: <CalendarClock className={icon} aria-hidden="true" />, onSelect: props.onExpectedDeliveries },
     ...(props.canManageProducts
@@ -99,11 +131,17 @@ function inventoryMenuItems(props: InventoryBarProps): OverflowMenuItem[] {
  */
 export const InventoryBar = forwardRef<HTMLInputElement, InventoryBarProps>(function InventoryBar(props, searchRef) {
   const { search, onSearchChange, stockLevelFilter, onStockLevelFilterChange, stockLevelCounts } = props
+  // A phone's row also holds Filters and Quick mode: the short word, whole, rather than "Search nam…".
+  const wide = useMediaQuery('(min-width: 768px)')
   return (
     // One row on a laptop — search, Filters, the chips, then the actions pushed right; on a phone,
     // search and Filters, with the chips on their own scrolling line beneath.
+    // The actions sit in the page's title row on a laptop (owner, 2026-11-01), so this row is all finding: the
+    // search keeps its room at any width.
     <div className="flex flex-col gap-2 md:flex-row md:items-center">
-      <div className="flex min-w-0 items-center gap-2 md:flex-1 md:max-w-sm">
+      {/* Relative: on a phone the Filters panel spans this row, under it. */}
+      {/* The search takes the room that's left, so this row ends where the title row does (owner, 2026-11-01). */}
+      <div className="relative flex min-w-0 items-center gap-2 md:min-w-[16rem] md:flex-1">
         <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-neutral-500" aria-hidden="true" />
           <label htmlFor="product-search" className="sr-only">
@@ -115,7 +153,7 @@ export const InventoryBar = forwardRef<HTMLInputElement, InventoryBarProps>(func
             type="search"
             value={search}
             onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Search name or SKU"
+            placeholder={wide ? 'Search name or SKU' : 'Search'}
             aria-keyshortcuts="/"
             className="w-full rounded-md border border-neutral-200 bg-white py-2 pr-9 pl-9 text-sm text-neutral-900 placeholder:text-neutral-500 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
           />
@@ -127,6 +165,18 @@ export const InventoryBar = forwardRef<HTMLInputElement, InventoryBarProps>(func
           </kbd>
         </div>
         <FiltersPopover {...props} />
+        {/* On a phone, quick mode is one tap from the list (C4), and says so in words - it's how people learn
+            there's a quick way (owner, 2026-11-01). On a laptop it's in "⋯". */}
+        {props.onQuickMode && (
+          <button
+            type="button"
+            onClick={props.onQuickMode}
+            className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-md border border-neutral-200 bg-white px-3 text-sm font-medium whitespace-nowrap text-neutral-700 md:hidden"
+          >
+            <Zap className="h-4 w-4" aria-hidden="true" />
+            Quick mode
+          </button>
+        )}
       </div>
 
       {/* One line on a phone, scrolling sideways rather than wrapping. */}
@@ -151,9 +201,6 @@ export const InventoryBar = forwardRef<HTMLInputElement, InventoryBarProps>(func
         </div>
       </div>
 
-      <div className="hidden shrink-0 items-center gap-2 md:ml-auto md:flex">
-        <InventoryActions {...props} />
-      </div>
     </div>
   )
 })
@@ -163,7 +210,8 @@ export const InventoryBar = forwardRef<HTMLInputElement, InventoryBarProps>(func
  * secondary. For someone who manages products but doesn't receive stock, Add product is the action.
  */
 export function InventoryActions(props: InventoryBarProps & { compact?: boolean }) {
-  const { canRecordDelivery, canManageProducts, onRecordDelivery, onRecordSale, onAddProduct, compact = false } = props
+  const { canRecordDelivery, canManageProducts, onRecordDelivery, onRecordSale, onMoveStock, onAddProduct, compact = false } = props
+  const moveWords = props.moveLabel ?? { label: 'Move stock', short: 'Move' }
   const selling = onRecordSale != null
   // One action-coloured button: Record a sale, else Record a delivery, else Add product.
   const productIsAction = !selling && !canRecordDelivery
@@ -181,11 +229,46 @@ export function InventoryActions(props: InventoryBarProps & { compact?: boolean 
           variant={selling ? 'secondary' : 'action'}
           onClick={onRecordDelivery}
           title="Record a delivery"
-          aria-label={iconOnly(selling) ? 'Record a delivery' : undefined}
-          className={compact ? (selling ? '' : 'flex-1') : 'whitespace-nowrap'}
+          aria-label={iconOnly(selling) || (compact && onMoveStock) ? 'Record a delivery' : undefined}
+          className={compact ? (selling ? '' : 'flex-1 whitespace-nowrap') : 'whitespace-nowrap'}
         >
           <Truck className="h-4 w-4" aria-hidden="true" />
-          {iconOnly(selling) ? null : selling && !compact ? <span className="hidden xl:inline">Record a delivery</span> : 'Record a delivery'}
+          {/* On a phone beside Move, the short word keeps the bar on one line. */}
+          {iconOnly(selling) ? null : selling && !compact ? (
+            <span className="hidden xl:inline">Record a delivery</span>
+          ) : compact && onMoveStock ? (
+            'Delivery'
+          ) : (
+            'Record a delivery'
+          )}
+        </Button>
+      )}
+      {/* Move stock, beside Record a delivery: at a branch with areas it is done every day. */}
+      {onMoveStock && (
+        <Button
+          variant={!selling && !canRecordDelivery && !canManageProducts ? 'action' : 'secondary'}
+          onClick={onMoveStock}
+          title={moveWords.label}
+          aria-label={iconOnly(selling) ? moveWords.label : undefined}
+          className={compact ? '' : 'whitespace-nowrap'}
+        >
+          {moveWords.label.startsWith('Ask') ? (
+            <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
+          ) : (
+            <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
+          )}
+          {iconOnly(selling) ? null : compact ? moveWords.short : <MoveWords words={moveWords} />}
+        </Button>
+      )}
+      {/* On a laptop the other one is a button too (owner, 2026-11-01: room enough, so not hidden in "⋯"). */}
+      {!compact && props.onOtherMove && (
+        <Button variant="secondary" onClick={props.onOtherMove.onSelect} title={props.onOtherMove.label} className="whitespace-nowrap">
+          {props.onOtherMove.label.startsWith('Ask') ? (
+            <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
+          ) : (
+            <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
+          )}
+          <MoveWords words={{ label: props.onOtherMove.label, short: props.onOtherMove.label.startsWith('Ask') ? 'Ask' : 'Move' }} />
         </Button>
       )}
       {canManageProducts && (
@@ -200,7 +283,8 @@ export function InventoryActions(props: InventoryBarProps & { compact?: boolean 
           {iconOnly(!productIsAction) ? null : compact ? 'Add product' : <span className="hidden 2xl:inline">Add product</span>}
         </Button>
       )}
-      <OverflowMenu label="More inventory actions" items={inventoryMenuItems(props)} />
+      {/* On a phone these sit in the bar along the bottom, so the menu opens upwards to stay on screen. */}
+      <OverflowMenu label="More inventory actions" items={inventoryMenuItems(props, compact)} side={compact ? 'above' : 'below'} />
     </>
   )
 }
@@ -238,7 +322,7 @@ function FiltersPopover({
   const categoryName = categories.find((category) => category.id === categoryFilter)?.name
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="md:relative" ref={ref}>
       <button
         ref={buttonRef}
         type="button"
@@ -250,7 +334,8 @@ function FiltersPopover({
         }`}
       >
         <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
-        Filters
+        {/* The word on a laptop; on a phone the icon, so Quick mode beside it keeps its words. */}
+        <span className="sr-only md:not-sr-only">Filters</span>
         {applied > 0 && <span className="tabular-nums">· {applied}</span>}
       </button>
       {open && (
@@ -258,7 +343,8 @@ function FiltersPopover({
           id={panelId}
           role="dialog"
           aria-label="Filters"
-          className="absolute top-full left-0 z-30 mt-2 flex w-72 flex-col gap-4 rounded-md border border-neutral-200 bg-white p-4 shadow-paper"
+          // On a phone, the width of the search row under it - always on screen; on a laptop, under the button.
+          className="absolute inset-x-0 top-full z-30 mt-2 flex flex-col gap-4 rounded-md border border-neutral-200 bg-white p-4 shadow-paper md:inset-x-auto md:left-0 md:w-72"
         >
           <fieldset className="flex flex-col gap-2">
             <legend className="mb-1 text-xs font-semibold tracking-wider text-neutral-500 uppercase">Show</legend>
@@ -336,5 +422,15 @@ function FiltersPopover({
         </div>
       )}
     </div>
+  )
+}
+
+/** "Move stock" / "Ask for stock" where there's room, "Move" / "Ask" on a narrower laptop, so the title row fits. */
+function MoveWords({ words }: { words: { label: string; short: string } }) {
+  return (
+    <>
+      <span className="xl:hidden">{words.short}</span>
+      <span className="hidden xl:inline">{words.label}</span>
+    </>
   )
 }

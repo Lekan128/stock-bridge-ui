@@ -4,7 +4,7 @@ import { TriangleAlert } from 'lucide-react'
 import { Controller, useForm } from 'react-hook-form'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import { superAdminApiClient } from '@/features/admin/api/superAdminApi'
 import { PAYMENT_TERMS_OPTIONS } from '@/features/admin/formatters'
@@ -80,18 +80,18 @@ export function EditClientModal({ client, onClose, onSuccess }: EditClientModalP
   }
 
   return (
-    <Modal
+    <Sheet
       open
       onClose={onClose}
       title={`Edit ${client.name}`}
-      size="lg"
+      size="md"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
           <Button
-            variant={renameSlug ? 'danger' : 'primary'}
+            variant={renameSlug ? 'danger' : 'action'}
             onClick={handleSubmit(onSubmit)}
             loading={isSubmitting}
           >
@@ -213,6 +213,6 @@ export function EditClientModal({ client, onClose, onSuccess }: EditClientModalP
 
         <FormError message={formError} />
       </form>
-    </Modal>
+    </Sheet>
   )
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/Button'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { Skeleton } from '@/components/Skeleton'
 import { TextField } from '@/components/TextField'
 import { superAdminApiClient } from '@/features/admin/api/superAdminApi'
@@ -104,7 +104,7 @@ export function EditVendorModal({ vendorId, submitting, onCancel, onConfirm }: E
     !!vendor && name.trim().length > 0 && contactPhone.trim().length > 0 && commissionValid && !submitting
 
   return (
-    <Modal
+    <Sheet
       open={!!vendorId}
       onClose={onCancel}
       size="lg"
@@ -115,7 +115,7 @@ export function EditVendorModal({ vendorId, submitting, onCancel, onConfirm }: E
             Cancel
           </Button>
           <Button
-            variant="primary"
+            variant="action"
             disabled={!canSubmit}
             loading={submitting}
             onClick={() =>
@@ -278,6 +278,6 @@ export function EditVendorModal({ vendorId, submitting, onCancel, onConfirm }: E
           </div>
         </div>
       )}
-    </Modal>
+    </Sheet>
   )
 }

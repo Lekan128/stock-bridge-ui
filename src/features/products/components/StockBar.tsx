@@ -9,6 +9,11 @@ export interface StockBarProps {
   unit: string
   /** `row` under a list figure; `hero` under the product's headline figure, with its scale spelled out. */
   size?: 'row' | 'hero'
+  /**
+   * In an area view, a product the chosen areas have never had (Part 3.6): with none on hand it says "Not
+   * here", not "Out" - it isn't out there, it just isn't theirs.
+   */
+  notHere?: boolean
 }
 
 /**
@@ -20,8 +25,24 @@ export interface StockBarProps {
  * grey — most rows carry no colour at all; amber and red are earned. Low and Out also say so in a
  * word, so the state never rests on colour alone.
  */
-export function StockBar({ quantity, threshold, low, unit, size = 'row' }: StockBarProps) {
-  if (threshold == null || threshold <= 0) return null
+export function StockBar({ quantity, threshold, low, unit, size = 'row', notHere = false }: StockBarProps) {
+  if (notHere && quantity <= 0) {
+    return (
+      <span className="text-xs text-neutral-600" data-stock-bar="not-here">
+        Not here
+      </span>
+    )
+  }
+  // With no level there's no bar - but none on hand is still said, so a row never disagrees with the Out chip
+  // that counts it (owner, 2026-10-31).
+  if (threshold == null || threshold <= 0) {
+    if (quantity > 0) return null
+    return (
+      <span className="text-xs font-semibold text-danger-700" data-stock-bar="out">
+        Out
+      </span>
+    )
+  }
   const out = quantity <= 0
   const share = Math.max(0, Math.min(1, quantity / (threshold * 2)))
   const state = out ? 'out' : low ? 'low' : 'ok'

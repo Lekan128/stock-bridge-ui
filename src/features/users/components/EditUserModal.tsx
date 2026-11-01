@@ -1,11 +1,13 @@
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useWatch } from 'react-hook-form'
+import { WorksAtField } from '@/features/branches/WorksAtField'
 import { useState } from 'react'
 import { ShieldCheck } from 'lucide-react'
 import { Controller, useForm } from 'react-hook-form'
 import { useAuth } from '@/auth/useAuth'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import { usersApi } from '@/features/users/api/usersApi'
 import { RoleSelectField } from '@/features/users/components/RoleSelectField'
@@ -13,6 +15,8 @@ import { formatDisplayName } from '@/features/users/formatters'
 import { editUserSchema, type EditUserFormValues } from '@/features/users/schemas'
 import type { TenantUserSummary, UpdateUserPayload } from '@/features/users/types'
 import { isAppError } from '@/types/api'
+import { useUsers } from '@/features/users/hooks/useUsers'
+import { sharedSignInNote } from '@/features/users/sharedSignIn'
 
 export interface EditUserModalProps {
   user: TenantUserSummary
@@ -24,12 +28,18 @@ const SELF_HINT = "You can't change your own role or status"
 const ROOT_HINT = "The account owner's role and status can't be changed"
 
 export function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) {
-  const { user: currentUser } = useAuth()
+  const { user: currentUser, client } = useAuth()
   const isSelf = currentUser?.type === 'tenant' && currentUser.id === user.id
   const isRoot = user.root
   const lockAccess = isSelf || isRoot
   const lockHint = isRoot ? ROOT_HINT : SELF_HINT
   const [formError, setFormError] = useState<string | null>(null)
+  // Where they work (MULTI_BRANCH_UX_PLAN.md §5.10). Sent only when changed.
+  const [branchIds, setBranchIds] = useState<string[]>(user.branchIds ?? [])
+  const branchesChanged = [...branchIds].sort().join() !== [...(user.branchIds ?? [])].sort().join()
+  // …and in which areas (STOCK_AREAS_PART_3.md). Sent only when changed; empty = every area.
+  const [areaIds, setAreaIds] = useState<string[]>(user.areaIds ?? [])
+  const areasChanged = [...areaIds].sort().join() !== [...(user.areaIds ?? [])].sort().join()
 
   const {
     register,
@@ -48,6 +58,20 @@ export function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) 
       jobTitle: user.jobTitle ?? '',
     },
   })
+  const roleId = useWatch({ control, name: 'roleId' })
+  // Everyone here, to say when an email or number typed is someone else's too (owner, 2026-11-01).
+  const everyone = useUsers({ page: 0, size: 200 }).data?.content ?? []
+  const [typedEmail, typedPhone, typedFirst, typedLast] = useWatch({
+    control,
+    name: ['email', 'phone', 'firstName', 'lastName'],
+  })
+  const thisPerson = {
+    id: user.id,
+    root: user.root,
+    name: formatDisplayName({ username: user.username, firstName: typedFirst, lastName: typedLast }),
+  }
+  const sharedEmail = sharedSignInNote('email', typedEmail, thisPerson, everyone)
+  const sharedPhone = sharedSignInNote('number', typedPhone, thisPerson, everyone)
 
   // PUT /api/users/{id} patches: an omitted key is left alone, and a blank string clears the
   // stored value. So only touched fields are sent — nothing the admin didn't edit can be lost,
@@ -63,6 +87,8 @@ export function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) 
     if (dirtyFields.email) payload.email = values.email.trim()
     if (dirtyFields.phone) payload.phone = values.phone.trim()
     if (dirtyFields.jobTitle) payload.jobTitle = values.jobTitle.trim()
+    if (branchesChanged) payload.branchIds = branchIds
+    if (areasChanged) payload.areaIds = areaIds
 
     if (Object.keys(payload).length === 0) {
       onClose()
@@ -78,23 +104,35 @@ export function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) 
   }
 
   return (
-    <Modal
+    <Sheet
       open
       onClose={onClose}
       title={`Edit ${formatDisplayName(user)}`}
-      size="lg"
+      size="md"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
+          <Button variant="action" onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
             Save changes
           </Button>
         </>
       }
     >
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
+        {/* What they type to sign in (owner, 2026-11-01: "the username is not even showing"): the username, or the
+            email or phone below, with the Company ID. */}
+        <p className="rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-neutral-700" data-signs-in>
+          Signs in as <span className="font-semibold text-neutral-900">{user.username}</span>
+          {client?.identifier && (
+            <>
+              {' '}
+              at <span className="font-semibold text-neutral-900">{client.identifier}</span>
+            </>
+          )}
+          , or with the email or phone below.
+        </p>
         {isRoot && (
           <p className="flex items-start gap-2 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-neutral-600">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-neutral-500" />
@@ -123,6 +161,9 @@ export function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) 
             />
           )}
         />
+        {!isRoot && (
+          <WorksAtField roleId={roleId} value={branchIds} onChange={setBranchIds} areaIds={areaIds} onAreasChange={setAreaIds} />
+        )}
         <Controller
           control={control}
           name="active"
@@ -157,17 +198,29 @@ export function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) 
           <p className="mt-0.5 text-xs text-neutral-500">Leave a field empty to clear it.</p>
           <div className="mt-3 flex flex-col gap-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <TextField label="First name" error={errors.firstName?.message} {...register('firstName')} />
-              <TextField label="Last name" error={errors.lastName?.message} {...register('lastName')} />
+              <TextField label="First name" autoComplete="off" error={errors.firstName?.message} {...register('firstName')} />
+              <TextField label="Last name" autoComplete="off" error={errors.lastName?.message} {...register('lastName')} />
             </div>
-            <TextField label="Email" type="email" error={errors.email?.message} {...register('email')} />
-            <TextField label="Phone" type="tel" error={errors.phone?.message} {...register('phone')} />
-            <TextField label="Job title" error={errors.jobTitle?.message} {...register('jobTitle')} />
+            <TextField label="Email" type="email" autoComplete="off" error={errors.email?.message} {...register('email')} />
+            <SharedNote text={sharedEmail} />
+            <TextField label="Phone" autoComplete="off" type="tel" error={errors.phone?.message} {...register('phone')} />
+            <SharedNote text={sharedPhone} />
+            <TextField label="Job title" autoComplete="off" error={errors.jobTitle?.message} {...register('jobTitle')} />
           </div>
         </div>
 
         <FormError message={formError} />
       </form>
-    </Modal>
+    </Sheet>
+  )
+}
+
+/** Under Email or Phone: someone else here has it too, so it won't sign anyone in (owner, 2026-11-01). */
+function SharedNote({ text }: { text: string | null }) {
+  if (!text) return null
+  return (
+    <p className="-mt-2 text-sm text-warning-800" data-shared-sign-in>
+      {text}
+    </p>
   )
 }

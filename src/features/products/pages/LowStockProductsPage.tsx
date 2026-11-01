@@ -7,6 +7,9 @@ import { ProductTable, type ProductSort, type ProductSortField } from '@/feature
 import { useLowStockAlerts } from '@/features/products/hooks/useLowStockAlerts'
 import { useProductIncoming } from '@/features/products/hooks/useProductIncoming'
 import type { Product } from '@/features/products/types'
+import { scopeProduct } from '@/features/branches/scopeProduct'
+import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
+import { NoneInStorePanel } from '@/features/requests/NoneInStorePanel'
 
 function sortProducts(products: Product[], sort: ProductSort): Product[] {
   const direction = sort.direction === 'asc' ? 1 : -1
@@ -40,6 +43,22 @@ export function LowStockProductsPage() {
 
   const sorted = useMemo(() => sortProducts(alerts, sort), [alerts, sort])
 
+  // "All branches" (MULTI_BRANCH_UX_PLAN.md §5.1): low anywhere, grouped by the branch it is low at, each
+  // with that branch's figure. A product low at two branches is under both.
+  const branch = useOptionalWorkingBranch()
+  const groups = useMemo(() => {
+    if (!branch?.isMultiBranch || !branch.isAll) return null
+    return branch.branches
+      .filter((at) => at.active)
+      .map((at) => ({
+        branch: at,
+        products: sorted
+          .filter((product) => product.branchStock?.some((entry) => entry.branchId === at.id && entry.isLowStock))
+          .map((product) => scopeProduct(product, at)),
+      }))
+      .filter((group) => group.products.length > 0)
+  }, [branch, sorted])
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-3">
@@ -56,6 +75,9 @@ export function LowStockProductsPage() {
           <p className="text-sm text-neutral-500">Products at or below their low-stock threshold.</p>
         </div>
       </div>
+
+      {/* What an area asked for that its store has none of (Part 5): a buyer's to-do, whatever the levels say. */}
+      <NoneInStorePanel />
 
       {loading && !hasLoadedOnce && <ProductListSkeleton />}
 
@@ -90,16 +112,45 @@ export function LowStockProductsPage() {
               </p>
             </div>
           )}
-          <div className="flex flex-col gap-2 md:hidden">
-            {sorted.map((product) => (
-              <ProductCard key={product.id} product={product} incoming={incomingFor(product).quantity} />
-            ))}
-          </div>
-          <div className="hidden overflow-hidden rounded-lg border border-neutral-200 bg-white md:block">
-            <ProductTable products={sorted} sort={sort} onSortChange={handleSortChange} incomingFor={incomingFor} />
-          </div>
+          {groups == null ? (
+            <LowList products={sorted} sort={sort} onSortChange={handleSortChange} incomingFor={incomingFor} />
+          ) : (
+            groups.map((group) => (
+              <section key={group.branch.id} aria-labelledby={`low-at-${group.branch.id}`} className="flex flex-col gap-2" data-low-group>
+                <h2 id={`low-at-${group.branch.id}`} className="text-sm font-semibold text-neutral-900">
+                  {group.branch.name} <span className="font-normal text-neutral-500">· {group.products.length} low</span>
+                </h2>
+                <LowList products={group.products} sort={sort} onSortChange={handleSortChange} incomingFor={incomingFor} />
+              </section>
+            ))
+          )}
         </>
       )}
     </div>
+  )
+}
+
+function LowList({
+  products,
+  sort,
+  onSortChange,
+  incomingFor,
+}: {
+  products: Product[]
+  sort: ProductSort
+  onSortChange: (field: ProductSortField) => void
+  incomingFor: (product: Product) => { quantity: number }
+}) {
+  return (
+    <>
+      <div className="flex flex-col gap-2 md:hidden">
+        {products.map((product) => (
+          <ProductCard key={product.id} product={product} incoming={incomingFor(product).quantity} />
+        ))}
+      </div>
+      <div className="hidden overflow-hidden rounded-lg border border-neutral-200 bg-white md:block">
+        <ProductTable products={products} sort={sort} onSortChange={onSortChange} incomingFor={incomingFor} />
+      </div>
+    </>
   )
 }

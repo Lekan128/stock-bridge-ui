@@ -211,6 +211,8 @@ export function pluraliseUnitNoun(noun: string, quantity: number): string {
   if (quantity === 1) return noun
   if (!/^[A-Za-z]{3,}$/.test(noun)) return noun
   if (noun.endsWith('s')) return noun
+  // "box" → "boxes", "pouch" → "pouches", "dish" → "dishes" (owner's test: "2 boxs").
+  if (/(x|z|ch|sh)$/i.test(noun)) return `${noun}es`
   return `${noun}s`
 }
 

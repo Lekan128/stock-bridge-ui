@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { Truck } from 'lucide-react'
 import { Badge } from '@/components/Badge'
 import { buttonClassName } from '@/components/Button'
+import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { expectedCopy } from '@/features/expected/copy'
 import { isOverdue } from '@/features/expected/expected'
 import type { ExpectedDelivery } from '@/features/expected/types'
@@ -28,6 +29,9 @@ export interface ExpectedDeliveryCardProps {
 export function ExpectedDeliveryCard({ expected, onCancel }: ExpectedDeliveryCardProps) {
   const overdue = isOverdue(expected)
   const open = expected.status === 'OPEN'
+  // In "All branches", where it is going (MULTI_BRANCH_UX_PLAN.md §5.1); at a branch, all of them go there.
+  const branch = useOptionalWorkingBranch()
+  const goingTo = branch?.isMultiBranch && branch.isAll && expected.branchId ? branch.nameOf(expected.branchId) : undefined
 
   return (
     <li
@@ -47,6 +51,7 @@ export function ExpectedDeliveryCard({ expected, onCancel }: ExpectedDeliveryCar
               : expectedCopy.list.nothingOutstanding}
             {expected.total != null && ` · ${expectedCopy.list.totalLabel(formatPrice(expected.total))}`}
           </p>
+          {goingTo && <p className="mt-0.5 text-xs text-neutral-600" data-going-to>Going to {goingTo}</p>}
           {expected.reference != null && (
             <p className="mt-0.5 truncate text-xs text-neutral-500">
               {expectedCopy.list.reference(expected.reference)}

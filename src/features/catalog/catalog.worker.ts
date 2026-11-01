@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import Dexie, { type Table } from 'dexie'
-import type { CatalogMeta, CatalogQuery, CatalogQueryResult, CatalogRow, CatalogSortField } from '@/features/catalog/types'
+import { CATALOG_ROW_FORMAT, type CatalogMeta, type CatalogQuery, type CatalogQueryResult, type CatalogRow, type CatalogSortField } from '@/features/catalog/types'
 
 /**
  * The on-device catalogue (INVENTORY_OFFLINE_AND_CHARACTER_PLAN.md, A3), off the main thread.
@@ -15,6 +15,8 @@ import type { CatalogMeta, CatalogQuery, CatalogQueryResult, CatalogRow, Catalog
  */
 
 interface StoredRow extends CatalogRow {
+  /** In an area view: the chosen areas have never had it (Part 3.6). */
+  _elsewhere?: boolean
   /** Lower-cased once, for search. */
   _name: string
   _sku: string
@@ -76,18 +78,69 @@ function sortedRows(field: CatalogSortField, direction: 'asc' | 'desc'): StoredR
   return order
 }
 
+/**
+ * A row as the list should read it (MULTI_BRANCH_UX_PLAN.md §4.3). At a branch: that branch's figure,
+ * level and status. In "All branches": the company figure, low when it is low at any branch, out only
+ * when every branch is. A row with no figure for the branch (it arrived before the branch existed) is
+ * read as holding none there - never as the company's figure, which would overstate the shelf.
+ */
+function asSeen(row: StoredRow, q: CatalogQuery): StoredRow {
+  return inAreas(atBranch(row, q), q)
+}
+
+/** The row as the areas chosen in the top bar hold it (Part 3.6); unchanged for the whole branch. */
+function inAreas(row: StoredRow, q: CatalogQuery): StoredRow {
+  if (!q.areaIds || q.areaIds.length === 0 || row.areaStock == null) return row
+  const figures = row.areaStock.filter((figure) => q.areaIds!.includes(figure.areaId))
+  const quantity = figures.reduce((sum, figure) => sum + figure.quantityOnHand, 0)
+  // Out only where it was had and ran out; a product these areas never had isn't theirs (an older API, which
+  // doesn't say, counts as had).
+  const carried = figures.some((figure) => figure.carried !== false || figure.quantityOnHand !== 0)
+  return { ...row, quantityOnHand: quantity, isLowStock: false, stockStatus: quantity > 0 ? 'OK' : 'OUT', _elsewhere: !carried }
+}
+
+function atBranch(row: StoredRow, q: CatalogQuery): StoredRow {
+  if (row.branchStock == null) return row
+  if (q.branchId) {
+    const figure = row.branchStock.find((entry) => entry.branchId === q.branchId)
+    return figure
+      ? { ...row, quantityOnHand: figure.quantityOnHand, lowStockThreshold: figure.lowStockThreshold ?? null,
+          isLowStock: figure.isLowStock === true, stockStatus: figure.stockStatus }
+      : { ...row, quantityOnHand: 0, isLowStock: row.lowStockThreshold != null, stockStatus: 'OUT' }
+  }
+  if (q.allBranches && row.stockStatus !== 'OUT' && row.branchStock.some((entry) => entry.stockStatus !== 'OK')) {
+    return { ...row, isLowStock: true, stockStatus: 'LOW' }
+  }
+  return row
+}
+
 function query(q: CatalogQuery): CatalogQueryResult {
   const term = q.search.trim().toLowerCase()
   const counts = { all: 0, OK: 0, LOW: 0, OUT: 0 }
   const priceCounts = { has: 0, none: 0 }
   const price = q.price ?? 'all'
   const matching: StoredRow[] = []
+  let elsewhere = 0
 
-  for (const row of sortedRows(q.sort.field, q.sort.direction)) {
+  // A branch's own figures sort differently from the company's: sorted here, after the filters.
+  const byBranchQuantity = (q.branchId != null || (q.areaIds?.length ?? 0) > 0) && q.sort.field === 'quantityOnHand'
+  for (const stored of sortedRows(byBranchQuantity ? 'name' : q.sort.field, q.sort.direction)) {
+    const row = asSeen(stored, q)
     if (q.status === 'active' && !row.active) continue
     if (q.status === 'inactive' && row.active) continue
     if (q.categoryId && row.categoryId !== q.categoryId) continue
     if (term && !row._name.includes(term) && !row._sku.includes(term) && !row._barcode.includes(term)) continue
+    // Not the chosen areas' product: counted for "N other products", listed only when searched for or shown,
+    // and never in the stock chips - it isn't out there, it just isn't theirs.
+    if (row._elsewhere) {
+      if (!term && !q.showOthers) {
+        elsewhere += 1
+        continue
+      }
+      if (q.stockStatus !== 'all') continue
+      matching.push(row)
+      continue
+    }
     const priced = row.unitPrice != null
     // Each census is counted under every filter but its own, so a chip says what picking it shows.
     if (q.stockStatus === 'all' || row.stockStatus === q.stockStatus) {
@@ -100,6 +153,10 @@ function query(q: CatalogQuery): CatalogQueryResult {
     counts[row.stockStatus] += 1
     if (q.stockStatus !== 'all' && row.stockStatus !== q.stockStatus) continue
     matching.push(row)
+  }
+  if (byBranchQuantity) {
+    const sign = q.sort.direction === 'asc' ? 1 : -1
+    matching.sort((a, b) => sign * (a.quantityOnHand - b.quantityOnHand) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   }
 
   let incomingUnits = 0
@@ -121,10 +178,11 @@ function query(q: CatalogQuery): CatalogQueryResult {
     incoming: { units: incomingUnits, productCount: incomingProducts },
     catalogSize: rows.size,
     activeCount,
+    elsewhere,
   }
 }
 
-function strip({ _name: _n, _sku: _s, _barcode: _b, ...row }: StoredRow): CatalogRow {
+function strip({ _name: _n, _sku: _s, _barcode: _b, _elsewhere: _e, ...row }: StoredRow): CatalogRow {
   return row
 }
 
@@ -190,7 +248,7 @@ async function handle(request: Request): Promise<unknown> {
       })
     }
     case 'finishSnapshot':
-      return saveMeta({ phase: 'ready', afterId: null, syncedAt: request.syncedAt })
+      return saveMeta({ phase: 'ready', afterId: null, syncedAt: request.syncedAt, rowFormat: CATALOG_ROW_FORMAT })
     case 'applyChanges': {
       await upsert(request.products)
       await remove(request.removedIds)

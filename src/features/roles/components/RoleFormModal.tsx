@@ -3,12 +3,13 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { Skeleton } from '@/components/Skeleton'
 import { TextField } from '@/components/TextField'
 import { rolesManagementApi } from '@/features/roles/api/rolesManagementApi'
 import { usePermissionCatalog } from '@/features/roles/hooks/usePermissionCatalog'
-import { PERMISSION_CATEGORIES } from '@/features/roles/permissionCategories'
+import { BRANCH_CATEGORY_LABEL, PERMISSION_CATEGORIES } from '@/features/roles/permissionCategories'
+import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { roleFormSchema, type RoleFormValues } from '@/features/roles/schemas'
 import { formatPermissionName } from '@/features/users/formatters'
 import type { Role } from '@/features/users/types'
@@ -23,6 +24,7 @@ export interface RoleFormModalProps {
 
 export function RoleFormModal({ role, onClose, onSuccess }: RoleFormModalProps) {
   const isEdit = role !== undefined
+  const isMultiBranch = useOptionalWorkingBranch()?.isMultiBranch ?? false
   const { data: permissions, loading: loadingPermissions, error: permissionsError } = usePermissionCatalog()
   const [selected, setSelected] = useState<Set<string>>(new Set(role?.permissions ?? []))
   const [formError, setFormError] = useState<string | null>(null)
@@ -72,17 +74,17 @@ export function RoleFormModal({ role, onClose, onSuccess }: RoleFormModalProps) 
   const knownCodes = new Set((permissions ?? []).map((p) => p.code))
 
   return (
-    <Modal
+    <Sheet
       open
       onClose={onClose}
       title={isEdit ? `Edit ${role.name}` : 'New role'}
-      size="lg"
+      size="md"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
+          <Button variant="action" onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
             {isEdit ? 'Save changes' : 'Create role'}
           </Button>
         </>
@@ -120,6 +122,7 @@ export function RoleFormModal({ role, onClose, onSuccess }: RoleFormModalProps) 
               {PERMISSION_CATEGORIES.map((category) => {
                 const codesInCatalog = category.codes.filter((code) => knownCodes.has(code))
                 if (codesInCatalog.length === 0) return null
+                if (category.label === BRANCH_CATEGORY_LABEL && !isMultiBranch) return null
                 return (
                   <div key={category.label}>
                     <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-neutral-500">
@@ -150,6 +153,6 @@ export function RoleFormModal({ role, onClose, onSuccess }: RoleFormModalProps) 
 
         <FormError message={formError} />
       </form>
-    </Modal>
+    </Sheet>
   )
 }

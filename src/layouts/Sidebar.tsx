@@ -4,6 +4,7 @@ import { useAuth } from '@/auth/useAuth'
 import { Logo } from '@/components/Logo'
 import { NAV_GROUPS, type NavGroup, type NavItem } from '@/layouts/navConfig'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
+import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 
 export interface SidebarProps {
   collapsed: boolean
@@ -23,6 +24,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onCloseMobile
   const { user, client, isPlatformOwner, isVendor, isSeller } = useAuth()
   const permissions = user?.type === 'tenant' ? user.permissions : []
   const { recordsSales } = useSellingPolicy()
+  const isMultiBranch = useOptionalWorkingBranch()?.isMultiBranch ?? false
 
   // Two independent kinds of filter, and they are not interchangeable.
   //
@@ -42,6 +44,8 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onCloseMobile
       items: group.items
         .filter((item) => !item.hideFromPlatformOwner || !isPlatformOwner)
         .filter((item) => !item.recordsSalesOnly || recordsSales)
+        .filter((item) => !item.multiBranchOnly || isMultiBranch)
+        .filter((item) => !item.anyOfPermissions || item.anyOfPermissions.some((code) => permissions.includes(code)))
         .filter((item) => !item.requiredPermission || permissions.includes(item.requiredPermission)),
     }))
     .filter((group) => group.items.length > 0)

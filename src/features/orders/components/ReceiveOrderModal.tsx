@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { PackageCheck, Pencil } from 'lucide-react'
 import { Button } from '@/components/Button'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { QuantityStepper } from '@/components/QuantityStepper'
 import { ordersApi } from '@/features/orders/api/ordersApi'
 import type { DuplicateResolution } from '@/features/orders/components/DuplicateProductNudge'
@@ -208,7 +208,7 @@ export function ReceiveOrderModal({ order, onClose, onSuccess }: ReceiveOrderMod
   }
 
   return (
-    <Modal
+    <Sheet
       open
       onClose={onClose}
       title="Confirm what you received"
@@ -218,7 +218,7 @@ export function ReceiveOrderModal({ order, onClose, onSuccess }: ReceiveOrderMod
           <Button variant="secondary" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button onClick={() => void handleSubmit()} loading={submitting} disabled={totalSelected === 0}>
+          <Button variant="action" onClick={() => void handleSubmit()} loading={submitting} disabled={totalSelected === 0}>
             <PackageCheck className="h-4 w-4" aria-hidden="true" />
             Add {totalSelected} to my stock
           </Button>
@@ -349,6 +349,6 @@ export function ReceiveOrderModal({ order, onClose, onSuccess }: ReceiveOrderMod
           {error}
         </p>
       )}
-    </Modal>
+    </Sheet>
   )
 }

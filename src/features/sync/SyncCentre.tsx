@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/Button'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { Stamp, type StampKind } from '@/components/Stamp'
 import { syncCatalog } from '@/features/catalog/catalogStore'
 import { useCatalogState } from '@/features/catalog/useCatalog'
@@ -19,6 +19,12 @@ const KIND_LABEL: Record<OutboxOp['kind'], string> = {
   STOCK_IN: 'Stock in',
   STOCK_OUT: 'Stock out',
   COUNT: 'Count',
+  TRANSFER_SEND: 'Send stock',
+  TRANSFER_RECEIVE: 'Receive stock',
+  AREA_MOVE: 'Move stock',
+  AREA_MOVE_CONFIRM: 'Confirm a move',
+  STOCK_REQUEST: 'Ask for stock',
+  AREA_RETURN: 'Give back or report',
 }
 
 /** "10:42" today, "3 Oct, 10:42" otherwise. */
@@ -59,7 +65,7 @@ export function SyncCentre({ open, onClose }: { open: boolean; onClose: () => vo
   const { ops, recentlySent } = useOutboxState()
 
   return (
-    <Modal
+    <Sheet
       open={open}
       onClose={onClose}
       title="On this phone"
@@ -114,7 +120,7 @@ export function SyncCentre({ open, onClose }: { open: boolean; onClose: () => vo
         <DraftsSection open={open} onLeave={onClose} />
         <CatalogSection online={status.online} />
       </div>
-    </Modal>
+    </Sheet>
   )
 }
 
@@ -130,7 +136,7 @@ function ReceiptLine({ op, stamp, sentAt }: { op: OutboxOp; stamp: StampKind; se
           <p className="text-sm text-neutral-900">
             <span className="font-medium">{KIND_LABEL[op.kind]}</span> · {op.summary}
           </p>
-          <p className="truncate text-sm text-neutral-600">{op.productName}</p>
+          {op.productName !== op.summary && <p className="truncate text-sm text-neutral-600">{op.productName}</p>}
           <p className="mt-0.5 text-xs tabular-nums text-neutral-500">
             Recorded {at(op.createdAt)}
             {sentAt != null && ` · sent ${at(sentAt)}`}
@@ -142,10 +148,17 @@ function ReceiptLine({ op, stamp, sentAt }: { op: OutboxOp; stamp: StampKind; se
         <div className="flex flex-col gap-2 rounded-md bg-warning-50 px-3 py-2">
           <p className="text-sm text-warning-900">{op.problem.message}</p>
           <div className="flex flex-wrap gap-2">
-            {op.problem.kind === 'oversell' && op.problem.available > 0 && (
+            {op.kind === 'STOCK_OUT' && op.problem.kind === 'oversell' && op.problem.available > 0 && (
               <Button onClick={() => void sendAvailableInstead(op.id)}>Send {op.problem.available} instead</Button>
             )}
-            {op.problem.kind === 'refused' && (
+            {/* A waybill short of one product: that line goes for what the branch had (UX §6). */}
+            {op.kind === 'TRANSFER_SEND' && op.problem.kind === 'oversell' && op.problem.productId != null && (
+              <Button onClick={() => void sendAvailableInstead(op.id)}>
+                {op.problem.available > 0 ? `Send ${op.problem.available} instead` : 'Send without it'}
+              </Button>
+            )}
+            {/* A waybill refused for want of stock goes as it is once the stock is there. */}
+            {(op.problem.kind === 'refused' || op.kind === 'TRANSFER_SEND') && (
               <Button variant="secondary" onClick={() => void retryOp(op.id)}>
                 Try again
               </Button>
@@ -216,6 +229,7 @@ function CatalogSection({ online }: { online: boolean }) {
   if (catalog.phase === 'off' || catalog.phase === 'starting') return null
 
   const count = catalog.loaded.toLocaleString()
+  const onPhone = `${count} ${catalog.loaded === 1 ? 'product' : 'products'} on this phone`
   let sentence: string
   if (catalog.phase === 'unavailable') {
     sentence = "This phone doesn't have room for a copy of your products, so the list comes from the server and needs a connection."
@@ -225,9 +239,9 @@ function CatalogSection({ online }: { online: boolean }) {
         ? `Downloading your products: ${count} of ${catalog.total.toLocaleString()}. Until it's done, the list comes from the server.`
         : `Downloading your products: ${count} so far.`
   } else if (catalog.behind) {
-    sentence = `${count} products on this phone. The server couldn't be reached to check for changes, so they're as of ${catalog.syncedAt != null ? at(catalog.syncedAt) : 'the last check'}.`
+    sentence = `${onPhone}. The server couldn't be reached to check for changes, so they're as of ${catalog.syncedAt != null ? at(catalog.syncedAt) : 'the last check'}.`
   } else {
-    sentence = `${count} products on this phone, up to date as of ${catalog.syncedAt != null ? at(catalog.syncedAt) : 'now'}.`
+    sentence = `${onPhone}, up to date as of ${catalog.syncedAt != null ? at(catalog.syncedAt) : 'now'}.`
   }
 
   return (

@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Truck } from 'lucide-react'
+import { ArrowLeftRight, MessageSquarePlus, PackagePlus, Truck } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { InventoryActions, type InventoryBarProps } from '@/features/products/components/InventoryBar'
 
@@ -9,6 +9,13 @@ export interface InventoryActionBarProps extends InventoryBarProps {
   selectedCount: number
   canStockInSelected: boolean
   onStockInSelected: () => void
+  /** Multiple branches: "Send" the selection to another branch (MULTI_BRANCH_UX_PLAN.md §5.4). */
+  canSendSelected?: boolean
+  onSendSelected?: () => void
+  /** Areas: move the selection between this branch's areas (STOCK_AREAS_PART_2.md). */
+  onMoveSelected?: () => void
+  /** One low-stock level for the selection at this branch (Phase 4). */
+  onSetLevelSelected?: () => void
   onDoneSelecting: () => void
 }
 
@@ -20,7 +27,18 @@ const BAR_HEIGHT = '4.5rem'
  * Publishes its height so toasts rise above it.
  */
 export function InventoryActionBar(props: InventoryActionBarProps) {
-  const { selecting, selectedCount, canStockInSelected, onStockInSelected, onDoneSelecting } = props
+  const {
+    selecting,
+    selectedCount,
+    canStockInSelected,
+    onStockInSelected,
+    canSendSelected,
+    onSendSelected,
+    onMoveSelected,
+    moveLabel,
+    onSetLevelSelected,
+    onDoneSelecting,
+  } = props
 
   useEffect(() => {
     const root = document.documentElement
@@ -43,8 +61,30 @@ export function InventoryActionBar(props: InventoryActionBarProps) {
           </p>
           {canStockInSelected && (
             <Button variant="action" onClick={onStockInSelected} disabled={selectedCount === 0}>
-              <Truck className="h-4 w-4" aria-hidden="true" />
+              <PackagePlus className="h-4 w-4" aria-hidden="true" />
               Stock in
+            </Button>
+          )}
+          {canSendSelected && onSendSelected && (
+            <Button variant={canStockInSelected ? 'secondary' : 'action'} onClick={onSendSelected} disabled={selectedCount === 0}>
+              <Truck className="h-4 w-4" aria-hidden="true" />
+              Send
+            </Button>
+          )}
+          {onMoveSelected && (
+            <Button variant="secondary" onClick={onMoveSelected} disabled={selectedCount === 0}>
+              {moveLabel?.label.startsWith('Ask') ? (
+                <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
+              )}
+              {/* "Ask" for someone who mostly asks (Part 5). */}
+              {moveLabel?.short ?? 'Move'}
+            </Button>
+          )}
+          {onSetLevelSelected && (
+            <Button variant="secondary" onClick={onSetLevelSelected} disabled={selectedCount === 0}>
+              Level
             </Button>
           )}
           <Button variant="secondary" onClick={onDoneSelecting}>

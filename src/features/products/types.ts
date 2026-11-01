@@ -1,3 +1,4 @@
+import type { AreaFigure, BranchFigure } from '@/features/branches/types'
 export interface Product {
   id: string
   name: string
@@ -115,6 +116,16 @@ export interface Product {
   isLowStock: boolean
   createdAt: string
   updatedAt: string
+  /**
+   * Multiple branches (V52): this product at each branch the person sees - the product page only, at
+   * a company with more than one branch. Absent otherwise (`== null`).
+   */
+  branchStock?: BranchFigure[]
+  /**
+   * Areas inside a branch (V60): this product in each area that keeps stock, at each branch the person
+   * sees that has areas - "Store 30 · Kitchen 6". Absent otherwise (`== null`).
+   */
+  areaStock?: AreaFigure[]
   warnings?: string[] | null
   /**
    * True when `packagingUnit`/`packagingSize` above are the DEFAULT among more than one distinct
@@ -139,6 +150,12 @@ export interface Product {
    * `== null`, never `=== null`.
    */
   expectedQuantity?: number
+  /**
+   * Sent from another branch and not yet received (MULTI_BRANCH_UX_PLAN.md §5.9) - set on the phone by
+   * `scopeProduct` from the branch figures, never sent by the API on the product itself. Beside the
+   * figure, never in it (rule 5).
+   */
+  transferOnTheWay?: number
 }
 
 /** Mirrors Spring Data's Page<T> JSON shape. */
@@ -189,6 +206,8 @@ export interface ProductListParams {
  * fields.
  */
 export interface InitialVendorPayload {
+  /** Where the opening stock is (V52); set by `productsApi.create` from the phone's branch. */
+  branchId?: string
   /** An entry in this company's own vendor directory (`/app/vendors`). */
   companyVendorId: string
   vendorSku?: string
@@ -383,9 +402,30 @@ export interface ProductUpdatePayload extends Partial<ProductFormPayload> {
   // has no use for it and `ProductFormPage` never populates it outside the create form.
 }
 
-export type MovementType = 'IN' | 'OUT' | 'ADJUSTMENT'
+/**
+ * TRANSFER_OUT / TRANSFER_IN: stock sent to, or received from, another branch (V53). MOVE: a line of a
+ * move between two areas of a branch (V63) - in the lists only, never a ledger row; it changes no
+ * branch figure.
+ */
+export type MovementType = 'IN' | 'OUT' | 'ADJUSTMENT' | 'TRANSFER_OUT' | 'TRANSFER_IN' | 'MOVE'
 
 export interface StockMovement {
+  /** Where it happened (V51). Absent from an older API. */
+  branchId?: string
+  /** Areas (V60): the area of that branch it happened in; absent on rows from before areas. */
+  areaId?: string
+  /** A give to an area that uses what it's given (V63): that area - "Used at Housekeeping". */
+  usedAreaId?: string
+  /**
+   * Written by a stock count (Part 3.5): a kitchen's count records what it found short as a Used stock-out,
+   * which reads "Used at Kitchen · count". Absent on everything else.
+   */
+  count?: boolean
+  /** A MOVE row: where it went (`areaId` is where it came from), the move, and both areas by name. */
+  toAreaId?: string
+  moveId?: string
+  areaName?: string
+  toAreaName?: string
   id: string
   productId: string
   /**
@@ -479,6 +519,17 @@ export interface StockMutationResponse {
 }
 
 export interface StockInPayload {
+  /**
+   * The branch this was recorded at (V51). Stamped by `submitStockWrite` when the write is made, from
+   * the phone's working branch, so a later switch never moves a queued write. Absent at a one-branch
+   * company: the server's only branch, and the request exactly what it was before branches.
+   */
+  branchId?: string
+  /**
+   * The area of that branch it happened in (V60): chosen on the sheet at a branch with two or more
+   * areas that keep stock. Absent otherwise - the server's only area, or its delivery area for stock in.
+   */
+  areaId?: string
   quantity: number
   /** Which of the product's configured units the quantity was entered in — omit for base unit. */
   unit?: string
@@ -499,6 +550,17 @@ export interface StockInPayload {
 export type OutReason = 'SALE' | 'USED' | 'DAMAGED' | 'EXPIRED' | 'LOST' | 'RETURNED_TO_SUPPLIER' | 'OTHER'
 
 export interface StockOutPayload {
+  /**
+   * The branch this was recorded at (V51). Stamped by `submitStockWrite` when the write is made, from
+   * the phone's working branch, so a later switch never moves a queued write. Absent at a one-branch
+   * company: the server's only branch, and the request exactly what it was before branches.
+   */
+  branchId?: string
+  /**
+   * The area of that branch it happened in (V60): chosen on the sheet at a branch with two or more
+   * areas that keep stock. Absent otherwise - the server's only area, or its delivery area for stock in.
+   */
+  areaId?: string
   quantity: number
   unit?: string
   /** Omitted (simple path) = server computes FIFO. Present = manual per-lot override. */

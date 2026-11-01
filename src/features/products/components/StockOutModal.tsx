@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useSheetBranch } from '@/features/branches/useSheetBranch'
 import { useEffect, useState } from 'react'
 import { AlertTriangle, ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
@@ -38,6 +39,7 @@ import { formatMoney, parseMoneyInput } from '@/features/selling/money'
 import { usualAmount } from '@/features/selling/sale/saleLine'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { submitStockWrite } from '@/features/outbox/outboxStore'
+import { SendFromOtherBranch } from '@/features/transfers/SendFromOtherBranch'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
 
@@ -161,6 +163,8 @@ function newRowKey(): string {
  * was guessing is a strange thing to hand someone.
  */
 export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOutModalProps) {
+  // Where this goes out from (MULTI_BRANCH_UX_PLAN.md §5.2): in the title, or asked first in "All branches".
+  const sheetBranch = useSheetBranch()
   const { options: unitOfMeasureOptions } = useUnitOfMeasureOptions()
 
   const [choosingLots, setChoosingLots] = useState(false)
@@ -437,9 +441,10 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
         productId: product.id,
         productName: product.name,
         summary: reason ? `${quantityBothWays} · ${outReasonLabel(reason)}` : quantityBothWays,
-        payload,
+        payload: { ...payload, branchId: sheetBranch.branchId, areaId: sheetBranch.areaId },
         baseDelta: -baseQuantity,
       })
+      sheetBranch.remember()
       if (outcome.status === 'sent') setResult(outcome.response as StockOutResponse)
       else {
         setQueued(true)
@@ -478,14 +483,14 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
       open
       onClose={onClose}
       size={choosingLots ? 'xl' : 'md'}
-      title={step === 'form' ? 'Stock out' : queued ? 'Saved on this phone' : result ? 'Stock out recorded' : 'Recording stock out'}
+      title={step === 'form' ? `Stock out${sheetBranch.titleSuffix}` : queued ? 'Saved on this phone' : result ? 'Stock out recorded' : 'Recording stock out'}
       footer={
         step === 'form' ? (
           <>
             <Button variant="secondary" onClick={onClose}>
               Cancel
             </Button>
-            <Button variant="action" onClick={handleSubmit(() => void submit())} loading={submitting} disabled={roundsToZero}>
+            <Button variant="action" onClick={handleSubmit(() => void submit())} loading={submitting} disabled={roundsToZero || sheetBranch.missing}>
               Confirm
             </Button>
           </>
@@ -501,12 +506,16 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
     >
       {step === 'form' && (
         <form onSubmit={handleSubmit(() => void submit())} noValidate className="flex flex-col gap-4">
+          {sheetBranch.field}
           {/* Base units, and said so (plan §3's P2 — this figure used to be rendered bare), with
               the pack equivalent beside it so the balance is legible to someone counting bags on a
               shelf as well as to the ledger. See `onHandInPacks`. */}
           <p className="text-sm text-neutral-500">
-            Current {UNIT_COPY.ON_HAND.toLowerCase()}: {formatQuantity(product.quantityOnHand, stockUnitText)}
-            {onHandInPacks && ` (${onHandInPacks})`}
+            {/* At a branch with areas, the figure of the area chosen above (V60): the Kitchen can only
+                give out what the Kitchen has. */}
+            {sheetBranch.areaName ? `In the ${sheetBranch.areaName}` : `Current ${UNIT_COPY.ON_HAND.toLowerCase()}`}:{' '}
+            {formatQuantity(sheetBranch.onHand(product), stockUnitText)}
+            {!sheetBranch.areaId && onHandInPacks && ` (${onHandInPacks})`}
           </p>
 
           <div>
@@ -773,6 +782,7 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
                   Only {formatQuantity(oversellInfo.available, stockUnitText)} available — you requested{' '}
                   {formatQuantity(oversellInfo.requested, stockUnitText)}.
                 </p>
+                <SendFromOtherBranch product={product} shortAt={sheetBranch.branchId} unit={stockUnitText} />
               </div>
             </div>
           ) : (
@@ -783,6 +793,7 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
 
       {step === 'receipt' && (
         <StockReceipt
+          branchId={sheetBranch.branchId}
           state={result ? 'synced' : queued ? 'recorded' : 'sending'}
           kind="Stock out"
           id={result?.movement?.id ?? queuedOpId}

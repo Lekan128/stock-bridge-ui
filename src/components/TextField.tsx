@@ -4,10 +4,12 @@ export interface TextFieldProps extends InputHTMLAttributes<HTMLInputElement> {
   label: string
   error?: string
   hint?: string
+  /** The label for screen readers only, where the field already says what it is (an area's name on its card). */
+  hideLabel?: boolean
 }
 
 export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function TextField(
-  { label, error, hint, id, name, className = '', ...props },
+  { label, error, hint, hideLabel = false, id, name, className = '', ...props },
   ref,
 ) {
   const inputId = id ?? name
@@ -16,7 +18,7 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function T
 
   return (
     <div>
-      <label htmlFor={inputId} className="mb-1.5 block text-sm font-medium text-neutral-700">
+      <label htmlFor={inputId} className={hideLabel ? 'sr-only' : 'mb-1.5 block text-sm font-medium text-neutral-700'}>
         {label}
       </label>
       <input

@@ -1,4 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useSheetBranch } from '@/features/branches/useSheetBranch'
+import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Button } from '@/components/Button'
@@ -10,13 +12,18 @@ import { StockReceipt } from '@/features/products/components/StockReceipt'
 import { submitStockWrite } from '@/features/outbox/outboxStore'
 import { stockCountSchema, type StockCountFormValues } from '@/features/products/schemas'
 import type { StockMutationResponse } from '@/features/products/types'
+import type { AreaFigure } from '@/features/branches/types'
 import { formatQuantity } from '@/features/products/unitCopy'
+import { CountShortfall } from '@/features/branches/CountShortfall'
+import { areaShortAs, lastCountedPhrase, type ShortAs } from '@/features/branches/areas'
 import { isAppError } from '@/types/api'
 
 export interface StockAdjustmentModalProps {
   productId: string
   productName: string
   currentQuantity: number
+  /** The product in each area (V60), so a count of the Kitchen is judged against the Kitchen's figure. */
+  areaStock?: AreaFigure[]
   /** The stock unit's short form ("kg"), for every figure on screen. */
   stockUnit: string
   onClose: () => void
@@ -36,12 +43,32 @@ export interface StockAdjustmentModalProps {
 export function StockAdjustmentModal({
   productId,
   productName,
-  currentQuantity,
+  currentQuantity: branchQuantity,
+  areaStock,
   stockUnit,
   onClose,
   onSuccess,
   onQueued,
 }: StockAdjustmentModalProps) {
+  // Which branch's shelf is counted (MULTI_BRANCH_UX_PLAN.md §5.2).
+  const sheetBranch = useSheetBranch()
+  const branchContext = useOptionalWorkingBranch()
+  // The area counted, at a branch with a choice of them (V60): its books are the Kitchen's, not the branch's.
+  const areaFigure = sheetBranch.areaId ? areaStock?.find((figure) => figure.areaId === sheetBranch.areaId) : undefined
+  const currentQuantity = sheetBranch.areaId ? (areaFigure?.quantityOnHand ?? 0) : branchQuantity
+  const countedAt = sheetBranch.areaId
+    ? sheetBranch.areaName
+    : branchContext?.isMultiBranch
+      ? branchContext.nameOf(sheetBranch.branchId ?? branchContext.working?.id)
+      : undefined
+  // What a shortfall becomes (Part 3.5): the area's answer - used in a kitchen, missing in a store - unless
+  // changed for this count.
+  const area = sheetBranch.areaId
+    ? branchContext?.branches.flatMap((branch) => branch.areas ?? []).find((candidate) => candidate.id === sheetBranch.areaId)
+    : undefined
+  const [shortChosen, setShortChosen] = useState<ShortAs | null>(null)
+  const shortAs = shortChosen ?? (area ? areaShortAs(area) : 'MISSING')
+  const lastCounted = lastCountedPhrase(areaFigure?.lastCountedAt)
   const [formError, setFormError] = useState<string | null>(null)
   const [queuedSentence, setQueuedSentence] = useState<string | null>(null)
   const [queuedOpId, setQueuedOpId] = useState<string | null>(null)
@@ -69,8 +96,15 @@ export function StockAdjustmentModal({
         productId,
         productName,
         summary: formatQuantity(countedQuantity, stockUnit),
-        payload: { countedQuantity, note: values.note || undefined },
+        payload: {
+          countedQuantity,
+          note: values.note || undefined,
+          branchId: sheetBranch.branchId,
+          areaId: sheetBranch.areaId,
+          shortAs: shortChosen ?? undefined,
+        },
       })
+      sheetBranch.remember()
       if (outcome.status === 'sent') onSuccess(outcome.response)
       else {
         setQueuedSentence(formatQuantity(countedQuantity, stockUnit))
@@ -91,6 +125,7 @@ export function StockAdjustmentModal({
         footer={<Button onClick={() => (queuedOpId && onQueued ? onQueued(queuedOpId) : onClose())}>Done</Button>}
       >
         <StockReceipt
+          branchId={sheetBranch.branchId}
           state="recorded"
           kind="Count"
           id={queuedOpId}
@@ -107,26 +142,35 @@ export function StockAdjustmentModal({
     <Sheet
       open
       onClose={onClose}
-      title="Count stock"
+      title={`Count stock${sheetBranch.titleSuffix}`}
       size="sm"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="action" onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
+          <Button variant="action" onClick={handleSubmit(onSubmit)} loading={isSubmitting} disabled={sheetBranch.missing}>
             Record count
           </Button>
         </>
       }
     >
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
+        {sheetBranch.field}
         <TextField
           label={`How much is on the shelf now? (${stockUnit})`}
           inputMode="numeric"
           autoFocus
           error={errors.countedQuantity?.message}
-          hint={`The app says ${formatQuantity(currentQuantity, stockUnit)}.`}
+          hint={
+            // At a branch the figure is that branch's, so say whose (UX §5.2: "Oshodi's books say 40").
+            // …and when it was last counted there (Part 3.5), so nobody counts what's just been counted.
+            `${
+              countedAt
+                ? `${countedAt}'s books say ${formatQuantity(currentQuantity, stockUnit)}.`
+                : `The app says ${formatQuantity(currentQuantity, stockUnit)}.`
+            }${lastCounted ? ` ${lastCounted}.` : ''}`
+          }
           {...register('countedQuantity')}
         />
         {/* The difference, before anything is recorded (C3, D1): set as a figure, because it is
@@ -142,6 +186,22 @@ export function StockAdjustmentModal({
               </>
             )}
           </div>
+        )}
+        {/* Moved here and not confirmed yet (Part 4): counted now, it would be counted again on confirming. */}
+        {areaFigure?.waiting != null && areaFigure.waiting > 0 && (
+          <p className="text-sm text-primary-800" data-count-waiting>
+            {formatQuantity(areaFigure.waiting, stockUnit)} more {areaFigure.waiting === 1 ? 'is' : 'are'} waiting for you to
+            confirm. Confirm {areaFigure.waiting === 1 ? 'it' : 'them'} first, so {areaFigure.waiting === 1 ? "it isn't" : "they aren't"}{' '}
+            counted twice.
+          </p>
+        )}
+        {area && (
+          <CountShortfall
+            area={area}
+            shortAs={shortAs}
+            short={difference != null && difference < 0 ? formatQuantity(-difference, stockUnit) : null}
+            onChange={setShortChosen}
+          />
         )}
         <div>
           <label htmlFor="count-note" className="mb-1.5 block text-sm font-medium text-neutral-700">

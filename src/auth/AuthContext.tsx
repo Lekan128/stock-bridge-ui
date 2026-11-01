@@ -5,6 +5,7 @@ import { isTransientRefreshFailure } from '@/api/createApiClient'
 import type { ClientSignupRequest, ClientType, TenantLoginRequest, TenantLoginResponse, TenantUser } from '@/types/auth'
 import { decodeJwtPayload, type TenantAccessTokenClaims } from '@/utils/jwt'
 import { authStorage } from '@/utils/storage'
+import { forgetPushOnThisDevice } from '@/features/push/pushDevice'
 
 export interface AuthTenantUser {
   type: 'tenant'
@@ -250,6 +251,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function logout() {
     const refreshToken = authStorage.getRefreshToken()
+    // While still signed in: this device stops getting the notifications of the person signing out.
+    await forgetPushOnThisDevice()
 
     if (refreshToken) {
       try {

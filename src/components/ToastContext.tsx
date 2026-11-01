@@ -4,9 +4,18 @@ import { X } from 'lucide-react'
 
 export type ToastVariant = 'success' | 'error' | 'info'
 
+/** A button on a toast. With `choices`, it opens a short list above it and the one picked runs instead. */
+export interface ToastAction {
+  label: string
+  onAction: () => void
+  choices?: { label: string; onSelect: () => void }[]
+}
+
 export interface ToastOptions {
   /** One button on the toast — "Undo". Running it dismisses the toast. */
-  action?: { label: string; onAction: () => void }
+  action?: ToastAction
+  /** A second, after it ("Tell Amaka on WhatsApp" · "Undo"). */
+  secondaryAction?: ToastAction
   /** How long it stays, unhovered and unfocused. Longer by default when it carries an action. */
   duration?: number
 }
@@ -75,7 +84,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 }
 
 function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }) {
-  const { action } = toast.options
+  const { action, secondaryAction } = toast.options
   const duration = toast.options.duration ?? (action ? ACTION_DISMISS_MS : AUTO_DISMISS_MS)
   const [paused, setPaused] = useState(false)
   const remaining = useRef(duration)
@@ -103,16 +112,8 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
       <p className="min-w-0 flex-1 tabular-nums">{toast.message}</p>
       {action && (
         <>
-          <button
-            type="button"
-            onClick={() => {
-              onDismiss()
-              action.onAction()
-            }}
-            className="shrink-0 rounded-sm px-1.5 py-0.5 font-semibold underline underline-offset-2 hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-          >
-            {action.label}
-          </button>
+          <ToastActionButton action={action} onDismiss={onDismiss} onOpenChange={setPaused} />
+          {secondaryAction && <ToastActionButton action={secondaryAction} onDismiss={onDismiss} onOpenChange={setPaused} />}
           <button
             type="button"
             onClick={onDismiss}
@@ -122,6 +123,69 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </>
+      )}
+    </div>
+  )
+}
+
+/** One action: a button, or - with choices - a button that opens a short list above it (the toast waits meanwhile). */
+function ToastActionButton({
+  action,
+  onDismiss,
+  onOpenChange,
+}: {
+  action: ToastAction
+  onDismiss: () => void
+  onOpenChange: (open: boolean) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const className =
+    'shrink-0 rounded-sm px-1.5 py-0.5 font-semibold underline underline-offset-2 hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500'
+  if (!action.choices || action.choices.length === 0) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          onDismiss()
+          action.onAction()
+        }}
+        className={className}
+      >
+        {action.label}
+      </button>
+    )
+  }
+  return (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => {
+          setOpen((was) => !was)
+          onOpenChange(!open)
+        }}
+        className={className}
+      >
+        {action.label}
+      </button>
+      {open && (
+        <div role="menu" className="absolute right-0 bottom-full mb-2 flex min-w-[12rem] flex-col rounded-md border border-neutral-200 bg-white p-1 text-neutral-800 shadow-lg">
+          {action.choices.map((choice) => (
+            <button
+              key={choice.label}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onDismiss()
+                choice.onSelect()
+              }}
+              className="flex min-h-11 items-center rounded-md px-3 text-left text-sm hover:bg-neutral-50"
+            >
+              {choice.label}
+            </button>
+          ))}
+        </div>
       )}
     </div>
   )
