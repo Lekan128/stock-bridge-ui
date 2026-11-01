@@ -6,7 +6,7 @@ import { useWorkArea } from '@/features/branches/workArea'
 import { OtherBranchesList } from '@/features/branches/OtherBranchesList'
 import { AreaBreakdown } from '@/features/branches/AreaBreakdown'
 import { hasAreas } from '@/features/branches/areas'
-import { ArrowLeft, ArrowLeftRight, ClipboardList, Minus, Pencil, Plus, ShoppingBag, Truck } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight, MessageSquarePlus, Minus, Pencil, Plus, ShoppingBag, Truck } from 'lucide-react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { PERMISSIONS } from '@/auth/permissions'
@@ -357,7 +357,7 @@ export function ProductDetailPage() {
               className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-neutral-300 bg-white px-3 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
             >
               {moveIntent.intent === 'ask' ? (
-                <ClipboardList className="h-4 w-4" aria-hidden="true" />
+                <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
               ) : (
                 <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
               )}

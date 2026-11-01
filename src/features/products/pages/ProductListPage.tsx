@@ -1,6 +1,6 @@
 import { useRecordsHere } from '@/features/branches/useRecordsHere'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ArrowLeftRight, ClipboardList, PackagePlus, Truck, X } from 'lucide-react'
+import { ArrowLeftRight, MessageSquarePlus, PackagePlus, Truck, X } from 'lucide-react'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { hasAreas } from '@/features/branches/areas'
 import { useWorkArea } from '@/features/branches/workArea'
@@ -795,7 +795,7 @@ function SelectionBar({
         {onMove && (
           <Button variant="secondary" onClick={onMove}>
             {moveLabel?.intent === 'ask' ? (
-              <ClipboardList className="h-4 w-4" aria-hidden="true" />
+              <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
             ) : (
               <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
             )}

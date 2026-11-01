@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ClipboardList } from 'lucide-react'
+import { MessageSquarePlus } from 'lucide-react'
 import { EmptyState } from '@/components/EmptyState'
 import { ErrorState } from '@/components/ErrorState'
 import { Pagination } from '@/components/Pagination'
@@ -46,7 +46,7 @@ export function RequestsList({ branchId }: { branchId: string }) {
   if (requests.length === 0) {
     return (
       <EmptyState
-        icon={ClipboardList}
+        icon={MessageSquarePlus}
         title="Nothing asked for yet"
         description="When the Kitchen asks the Store for stock, from Move, it shows here."
       />

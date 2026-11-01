@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useId, useRef, useState } from 'react'
-import { ArrowLeftRight, CalendarClock, ClipboardList, Download, Plus, Search, Settings, ShoppingBag, SlidersHorizontal, Tags, Truck, Upload, Zap } from 'lucide-react'
+import { ArrowLeftRight, CalendarClock, Download, MessageSquarePlus, Plus, Search, Settings, ShoppingBag, SlidersHorizontal, Tags, Truck, Upload, Zap } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { OverflowMenu, type OverflowMenuItem } from '@/components/OverflowMenu'
@@ -93,9 +93,9 @@ function inventoryMenuItems(props: InventoryBarProps, compact: boolean): Overflo
       ? [
           {
             label: props.onOtherMove.label,
-            // Ask has its own sign (owner, 2026-11-01): the clipboard of a request, not Move's arrows.
+            // Ask has its own sign (owner, 2026-11-01): a speech bubble with a + (telling the Store you need more), not Move's arrows.
             icon: props.onOtherMove.label.startsWith('Ask') ? (
-              <ClipboardList className={icon} aria-hidden="true" />
+              <MessageSquarePlus className={icon} aria-hidden="true" />
             ) : (
               <ArrowLeftRight className={icon} aria-hidden="true" />
             ),
@@ -248,7 +248,7 @@ export function InventoryActions(props: InventoryBarProps & { compact?: boolean 
           className={compact ? '' : 'whitespace-nowrap'}
         >
           {moveWords.label.startsWith('Ask') ? (
-            <ClipboardList className="h-4 w-4" aria-hidden="true" />
+            <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
           ) : (
             <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
           )}
@@ -259,7 +259,7 @@ export function InventoryActions(props: InventoryBarProps & { compact?: boolean 
       {!compact && props.onOtherMove && (
         <Button variant="secondary" onClick={props.onOtherMove.onSelect} title={props.onOtherMove.label} className="whitespace-nowrap">
           {props.onOtherMove.label.startsWith('Ask') ? (
-            <ClipboardList className="h-4 w-4" aria-hidden="true" />
+            <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
           ) : (
             <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
           )}

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { CheckCircle2, ClipboardList, PackageX, Plus, TriangleAlert, Truck, Wrench } from 'lucide-react'
+import { CheckCircle2, ClipboardList, MessageSquarePlus, PackageX, Plus, TriangleAlert, Truck, Wrench } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { buttonClassName } from '@/components/Button'
 import { Stamp } from '@/components/Stamp'
@@ -129,7 +129,7 @@ export function NeedsYouToday({ canStockIn, canReceive }: NeedsYouTodayProps) {
     rows.push(
       <NeedRow
         key={`request-${request.id}`}
-        icon={<ClipboardList className="h-5 w-5 text-neutral-500" aria-hidden="true" />}
+        icon={<MessageSquarePlus className="h-5 w-5 text-neutral-500" aria-hidden="true" />}
         title={askedFor(request)}
         detail={`Of the ${request.fromAreaName}${request.askedByName ? ` · ${request.askedByName}` : ''}`}
         action={
