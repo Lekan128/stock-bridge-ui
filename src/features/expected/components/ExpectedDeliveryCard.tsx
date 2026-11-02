@@ -26,6 +26,21 @@ export interface ExpectedDeliveryCardProps {
  * because a colour on its own is not a statement, and this is the single fact on the card that
  * changes what somebody does next.
  */
+/**
+ * "Emailed to tony@…", "WhatsApp opened", "Not sent yet" — what became of sending a purchase order,
+ * in one short line. It says only what we know: the provider took the email, or the buyer opened
+ * WhatsApp / copied the message. Never "delivered" or "read".
+ */
+function sendingLine(expected: ExpectedDelivery): string | null {
+  if (expected.poNumber == null) return null
+  const email = expected.email
+  if (email?.status === 'SENT') return expectedCopy.list.emailedTo(email.toAddress ?? '')
+  if (expected.share?.whatsappOpenedAt) return expectedCopy.list.whatsappOpened
+  if (expected.share?.messageCopiedAt) return expectedCopy.list.messageCopied
+  if (email != null) return expectedCopy.list.emailProblem
+  return expectedCopy.list.notSent
+}
+
 export function ExpectedDeliveryCard({ expected, onCancel }: ExpectedDeliveryCardProps) {
   const overdue = isOverdue(expected)
   const open = expected.status === 'OPEN'
@@ -42,8 +57,14 @@ export function ExpectedDeliveryCard({ expected, onCancel }: ExpectedDeliveryCar
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold text-neutral-900">
-            {expected.title}
-            {overdue && <span className="sr-only"> — {expectedCopy.list.overdueAria}</span>}
+            {/* The order's own page: what was asked for, and how to get it to the supplier. */}
+            <Link
+              to={`/app/products/expected/${expected.id}`}
+              className="rounded-sm hover:underline focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none"
+            >
+              {expected.title}
+              {overdue && <span className="sr-only"> — {expectedCopy.list.overdueAria}</span>}
+            </Link>
           </h3>
           <p className="mt-0.5 text-sm text-neutral-600">
             {expected.outstandingLines > 0
@@ -51,6 +72,11 @@ export function ExpectedDeliveryCard({ expected, onCancel }: ExpectedDeliveryCar
               : expectedCopy.list.nothingOutstanding}
             {expected.total != null && ` · ${expectedCopy.list.totalLabel(formatPrice(expected.total))}`}
           </p>
+          {sendingLine(expected) && (
+            <p className="mt-0.5 text-xs text-neutral-600" data-sending>
+              {sendingLine(expected)}
+            </p>
+          )}
           {goingTo && <p className="mt-0.5 text-xs text-neutral-600" data-going-to>Going to {goingTo}</p>}
           {expected.reference != null && (
             <p className="mt-0.5 truncate text-xs text-neutral-500">

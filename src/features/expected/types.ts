@@ -41,6 +41,39 @@ export interface ExpectedDeliveryLine {
   price?: number | null
 }
 
+/**
+ * What became of the latest attempt to email a purchase order to its supplier. `SENT` is said as
+ * "Emailed" — the email provider took it; we never claim it was delivered or read.
+ */
+export type PurchaseOrderEmailStatus = 'SENT' | 'FAILED' | 'BOUNCED' | 'COMPLAINED'
+
+export interface PurchaseOrderEmail {
+  status: PurchaseOrderEmailStatus
+  /** The address it went to, or was meant for. Absent when the supplier had none. */
+  toAddress?: string | null
+  /** When the attempt was made. */
+  sentAt: string
+  /** A plain sentence for the screen, as it is — absent when nothing went wrong. */
+  problem?: string | null
+}
+
+/**
+ * What the buyer needs to send a purchase order themselves. Only on a single order, never in the
+ * list, and only on a purchase order.
+ */
+export interface PurchaseOrderShare {
+  token: string
+  /** The page the supplier opens, when the server knows the app's address. */
+  url?: string | null
+  /** The message to send or paste, in the buyer's voice, link included. Absent in the list. */
+  message?: string | null
+  /** Opens WhatsApp to the supplier with `message` typed. Absent when there is no usable number. */
+  whatsappUrl?: string | null
+  /** When the buyer last opened WhatsApp for it. All we can know — never "delivered" or "read". */
+  whatsappOpenedAt?: string | null
+  messageCopiedAt?: string | null
+}
+
 export interface ExpectedDelivery {
   id: string
   status: ExpectedDeliveryStatus
@@ -67,6 +100,11 @@ export interface ExpectedDelivery {
   createdAt: string
   /** Multiple branches (V52): the branch it is going to. */
   branchId?: string
+  /** "PO-0007" on a purchase order. Absent on one that was only written down — that is how to tell. */
+  poNumber?: string | null
+  revision?: number
+  email?: PurchaseOrderEmail | null
+  share?: PurchaseOrderShare | null
 }
 
 export interface ExpectedDeliveryLineInput {
@@ -88,6 +126,10 @@ export interface ExpectedDeliveryInput {
   lines: ExpectedDeliveryLineInput[]
   /** The branch it is going to ("Going to"); left out, the phone's branch. */
   branchId?: string
+  /** Make it a purchase order: a number, a PDF, and something to send the supplier. */
+  purchaseOrder?: boolean
+  /** On a purchase order: also email it to the supplier now (the switch on the form). */
+  emailRequested?: boolean
 }
 
 export interface ExpectedDeliveryListParams {

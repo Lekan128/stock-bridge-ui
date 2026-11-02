@@ -111,7 +111,7 @@ export function OrderDetailPage() {
   if (error || !order) {
     return (
       <div className="flex flex-col gap-4">
-        <Breadcrumbs items={[{ label: 'My orders', to: '/app/orders' }, { label: 'Order' }]} />
+        <Breadcrumbs items={[{ label: 'Marketplace orders', to: '/app/orders' }, { label: 'Order' }]} />
         <ErrorState
           title="Order not available"
           message={error ?? 'We could not find this order.'}
@@ -133,7 +133,7 @@ export function OrderDetailPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <Breadcrumbs items={[{ label: 'My orders', to: '/app/orders' }, { label: order.orderNumber }]} />
+      <Breadcrumbs items={[{ label: 'Marketplace orders', to: '/app/orders' }, { label: order.orderNumber }]} />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>

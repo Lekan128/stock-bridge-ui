@@ -45,6 +45,25 @@ export const expectedApi = {
   },
 
   /**
+   * POST /api/expected-deliveries/{id}/email — emails a purchase order to its supplier, and is also
+   * the resend. Answers 200 with the order whatever happened: the outcome is `email` on it, in a
+   * sentence the screen can show as it is.
+   */
+  email(id: string): Promise<ExpectedDelivery> {
+    return api.post<ExpectedDelivery>(`${BASE}/${id}/email`).then((response) => response.data)
+  },
+
+  /**
+   * POST /api/expected-deliveries/{id}/shared?channel= — "the buyer opened WhatsApp" or "copied the
+   * message", written on the order so the line still reads true next week.
+   */
+  shared(id: string, channel: 'WHATSAPP' | 'MESSAGE'): Promise<ExpectedDelivery> {
+    return api
+      .post<ExpectedDelivery>(`${BASE}/${id}/shared`, null, { params: { channel } })
+      .then((response) => response.data)
+  },
+
+  /**
    * POST /api/expected-deliveries/{id}/cancel — returns the cancelled record.
    *
    * A POST rather than a DELETE because the record stays: what you expected and never got is

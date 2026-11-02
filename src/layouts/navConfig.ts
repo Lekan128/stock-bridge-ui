@@ -148,7 +148,7 @@ export const NAV_GROUPS: NavGroup[] = [
       // No permission gate: the storefront is public, so hiding the way to it would only
       // strand a user who is allowed to look at it anyway.
       { path: marketplacePaths.home, label: 'Marketplace', icon: Store, leavesWorkspace: true },
-      { path: '/app/orders', label: 'My Orders', icon: ReceiptText, requiredPermission: PERMISSIONS.VIEW_ORDERS },
+      { path: '/app/orders', label: 'Marketplace orders', icon: ReceiptText, requiredPermission: PERMISSIONS.VIEW_ORDERS },
       {
         path: '/app/addresses',
         label: 'Delivery Addresses',

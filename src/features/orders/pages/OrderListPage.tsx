@@ -76,9 +76,9 @@ export function OrderListPage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">My orders</h1>
+          <h1 className="text-2xl font-semibold text-neutral-900">Marketplace orders</h1>
           <p className="mt-0.5 text-sm text-neutral-500">
-            Everything your company has bought from ProcurePal, and where each order has got to.
+            Bought on Procure Paddy. Everything your company has bought from ProcurePal, and where each order has got to.
           </p>
         </div>
         <Link to={marketplacePaths.home} className={buttonClassName('secondary')}>

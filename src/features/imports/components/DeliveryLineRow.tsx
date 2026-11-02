@@ -22,6 +22,11 @@ export interface DeliveryLineRowProps {
    * word that has to move.
    */
   quantityLabel?: string
+  /**
+   * A purchase order says what is wanted, not what it costs — the supplier answers with the price —
+   * so it shows no price row and no "same as last time". The quantity box is all there is.
+   */
+  hidePrice?: boolean
   onChange: (line: DeliveryLine, patch: Partial<Omit<DeliveryEntry, 'line'>>) => void
 }
 
@@ -45,7 +50,7 @@ function inputTone(invalid: boolean): string {
  *
  * The inputs are 16px on a phone so iOS does not zoom the page when one is focused.
  */
-export function DeliveryLineRow({ line, entry, quantityLabel, onChange }: DeliveryLineRowProps) {
+export function DeliveryLineRow({ line, entry, quantityLabel, hidePrice, onChange }: DeliveryLineRowProps) {
   const quantityId = useId()
   const priceId = useId()
   const priceRef = useRef<HTMLInputElement>(null)
@@ -98,7 +103,7 @@ export function DeliveryLineRow({ line, entry, quantityLabel, onChange }: Delive
         </p>
       )}
 
-      {quantity != null && !showPriceInput && line.lastPrice != null && (
+      {!hidePrice && quantity != null && !showPriceInput && line.lastPrice != null && (
         <p className="mt-1.5 flex flex-wrap items-center justify-end gap-x-2 text-xs text-neutral-500">
           <span>{copy.delivery.priceSame(formatPrice(line.lastPrice), per)}</span>
           <button
@@ -115,7 +120,7 @@ export function DeliveryLineRow({ line, entry, quantityLabel, onChange }: Delive
         </p>
       )}
 
-      {quantity != null && showPriceInput && (
+      {!hidePrice && quantity != null && showPriceInput && (
         <div className="mt-2 flex flex-col items-end gap-1">
           <label htmlFor={priceId} className="sr-only">
             {copy.delivery.priceLabel(line.productName, line.comesIn)}

@@ -108,7 +108,7 @@ function inventoryMenuItems(props: InventoryBarProps, compact: boolean): Overflo
     ...(props.onGiveBack
       ? [{ label: 'Give back or report', icon: <Undo2 className={icon} aria-hidden="true" />, onSelect: props.onGiveBack }]
       : []),
-    { label: 'Expected deliveries', icon: <CalendarClock className={icon} aria-hidden="true" />, onSelect: props.onExpectedDeliveries },
+    { label: 'Purchase orders', icon: <CalendarClock className={icon} aria-hidden="true" />, onSelect: props.onExpectedDeliveries },
     ...(props.canManageProducts
       ? [
           { label: 'Bulk upload', icon: <Upload className={icon} aria-hidden="true" />, onSelect: props.onBulkUpload },

@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ClipboardList, PackageSearch, Search } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
+import { Check, ClipboardList, PackageSearch, Search } from 'lucide-react'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
 import { Button, buttonClassName } from '@/components/Button'
@@ -9,6 +10,9 @@ import { ErrorState } from '@/components/ErrorState'
 import { Skeleton } from '@/components/Skeleton'
 import { TextField } from '@/components/TextField'
 import { useToast } from '@/components/useToast'
+import { queryKeys } from '@/data/queryKeys'
+import { useCompany } from '@/features/company/hooks/useCompany'
+import { SupplierContact } from '@/features/expected/components/SupplierContact'
 import { expectedApi } from '@/features/expected/api/expectedApi'
 import { expectedCopy } from '@/features/expected/copy'
 import { DeliveryLineRow } from '@/features/imports/components/DeliveryLineRow'
@@ -47,6 +51,12 @@ const LIST_PATH = '/app/products/expected'
  *  - **Nothing moves.** No stock is recorded here and none is promised — this is a note about a
  *    promise somebody made on the phone, and it only touches the ledger when the goods turn up
  *    and go through the ordinary delivery screen.
+ *
+ * **Two modes, one page** (`PURCHASE_ORDER_PLAN.md`). The default is **New purchase order**: pick a
+ * supplier, say what you want, and a numbered purchase order is made — a PDF, and something to send
+ * the supplier — with no prices anywhere, because the supplier answers with the price. The link under
+ * the title flips the same page, in place and without losing anything typed, to **Record what you
+ * ordered**: the original "I ordered this by phone, write it down" screen, unchanged.
  */
 export function NewExpectedDeliveryPage() {
   const { user } = useAuth()
@@ -55,7 +65,17 @@ export function NewExpectedDeliveryPage() {
   const permissions = user?.type === 'tenant' ? user.permissions : []
   const canSeeSuppliers = permissions.includes(PERMISSIONS.VIEW_VENDORS)
   const canManageSuppliers = permissions.includes(PERMISSIONS.MANAGE_VENDORS)
+  const canEditCompany = permissions.includes(PERMISSIONS.MANAGE_COMPANY_PROFILE)
   const { vendors, upsert: addVendor } = useVendorOptions(canSeeSuppliers)
+  const queryClient = useQueryClient()
+  const { company } = useCompany()
+
+  // A purchase order needs a supplier to be addressed to, so somebody who cannot see suppliers can
+  // only record (the page is then exactly what it was before purchase orders).
+  const [recordChosen, setRecordChosen] = useState(false)
+  const recordOnly = recordChosen || !canSeeSuppliers
+  const isOrder = !recordOnly
+  const [emailOn, setEmailOn] = useState(false)
 
   const [vendorId, setVendorId] = useState('')
   /** "+ Something not on this list" — every product, while the supplier stays on the order. */
@@ -88,7 +108,22 @@ export function NewExpectedDeliveryPage() {
 
   const filter = vendorId && !showAll ? 'BY_VENDOR' : 'ALL'
   const { lines, loading, error, refetch } = useDeliveryLines(filter, vendorId || undefined)
-  const supplierName = vendors.find((vendor) => vendor.id === vendorId)?.name
+  // A purchase order is often the first thing a supplier is ever asked for, so nothing is linked to
+  // them yet. Making somebody press "Show all products" to get to the list they obviously want is a
+  // dead end with a button on it: show everything straight away, and say why.
+  const supplierHasNoProducts = isOrder && filter === 'BY_VENDOR' && !loading && !error && lines != null && lines.length === 0
+  const [everythingBecauseNoneLinked, setEverythingBecauseNoneLinked] = useState(false)
+  useEffect(() => {
+    if (supplierHasNoProducts) {
+      setEverythingBecauseNoneLinked(true)
+      setShowAll(true)
+    }
+  }, [supplierHasNoProducts])
+  const vendor = vendors.find((entry) => entry.id === vendorId)
+  const supplierName = vendor?.name
+  const supplierEmail = vendor?.email?.trim() || ''
+  const hasPhone = (vendor?.contactPhone ?? '').trim() !== ''
+  const willEmail = isOrder && emailOn && supplierEmail !== ''
 
   const groups = useMemo(
     () => groupByProduct((lines ?? []).filter((line) => matchesSearch(line, search))),
@@ -105,7 +140,8 @@ export function NewExpectedDeliveryPage() {
   const count = totals.lines.length
   // With a line priced nowhere, the sum would understate the order, so the button leaves it out.
   const totalText = count > 0 && !totals.partial ? formatPrice(totals.total) : null
-  const canSubmit = count > 0 && !totals.invalid && !submitting && !needsGoingTo
+  const canSubmit =
+    count > 0 && !totals.invalid && !submitting && !needsGoingTo && (!isOrder || vendorId !== '')
 
   function handleLineChange(line: DeliveryLine, patch: Partial<Omit<DeliveryEntry, 'line'>>) {
     const key = lineKey(line)
@@ -118,6 +154,11 @@ export function NewExpectedDeliveryPage() {
   function handleSupplierChange(nextId: string) {
     setVendorId(nextId)
     setShowAll(false)
+    setEverythingBecauseNoneLinked(false)
+    // "Email this order to Tony" starts on only for a supplier an email has already gone through to
+    // (and whose address has not changed since) — otherwise off, always.
+    const next = vendors.find((entry) => entry.id === nextId)
+    setEmailOn(next?.emailOrders === true && (next.email ?? '').trim() !== '')
   }
 
   async function handleSubmit() {
@@ -125,6 +166,24 @@ export function NewExpectedDeliveryPage() {
     setSubmitting(true)
     setSubmitError(null)
     try {
+      if (isOrder) {
+        // No prices: a purchase order says what is wanted, and the supplier answers with the price.
+        const created = await expectedApi.create({
+          purchaseOrder: true,
+          emailRequested: willEmail,
+          vendorId,
+          ...(goingTo ? { branchId: goingTo } : {}),
+          expectedDate: expectedDate || undefined,
+          note: note.trim() || undefined,
+          lines: totals.lines.map((line) => ({ productId: line.productId, unit: line.unit, quantity: line.quantity })),
+        })
+        // The supplier's "email starts on" and the list both changed on the server.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.vendors.all })
+        void queryClient.invalidateQueries({ queryKey: queryKeys.expected.all })
+        // Straight to the order itself: that page says what was made and how to get it to the supplier.
+        navigate(`${LIST_PATH}/${created.id}`, { replace: true, state: { justCreated: true } })
+        return
+      }
       await expectedApi.create({
         vendorId: vendorId || undefined,
         ...(goingTo ? { branchId: goingTo } : {}),
@@ -136,7 +195,7 @@ export function NewExpectedDeliveryPage() {
       showToast(expectedCopy.create.done, 'success')
       navigate(LIST_PATH, { replace: true })
     } catch (err: unknown) {
-      setSubmitError(isAppError(err) ? err.message : expectedCopy.create.failed)
+      setSubmitError(isAppError(err) ? err.message : isOrder ? expectedCopy.order.failed : expectedCopy.create.failed)
       setSubmitting(false)
     }
   }
@@ -145,8 +204,22 @@ export function NewExpectedDeliveryPage() {
     <div className="flex min-h-full flex-col">
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">{expectedCopy.create.title}</h1>
-          <p className="mt-1 text-sm text-neutral-600">{expectedCopy.create.subtitle}</p>
+          <h1 className="text-2xl font-semibold text-neutral-900">
+            {isOrder ? expectedCopy.order.title : expectedCopy.create.title}
+          </h1>
+          <p className="mt-1 text-sm text-neutral-600">
+            {isOrder ? expectedCopy.order.subtitle : expectedCopy.create.subtitle}
+          </p>
+          {canSeeSuppliers && (
+            <button
+              type="button"
+              onClick={() => setRecordChosen(isOrder)}
+              disabled={submitting}
+              className="mt-2 block rounded-sm text-left text-sm font-medium text-primary-700 hover:underline focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none"
+            >
+              {isOrder ? expectedCopy.order.recordLink : expectedCopy.create.makeOrderLink}
+            </button>
+          )}
           <Link
             to={LIST_PATH}
             className="mt-2 inline-flex items-center gap-1.5 rounded-sm text-sm font-medium text-primary-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
@@ -165,15 +238,24 @@ export function NewExpectedDeliveryPage() {
               <SupplierField
                 id="expected-supplier"
                 label={expectedCopy.create.supplier}
-                placeholderLabel={expectedCopy.create.supplierAny}
+                placeholderLabel={isOrder ? expectedCopy.order.supplierPlaceholder : expectedCopy.create.supplierAny}
                 value={vendorId}
                 disabled={submitting}
                 onChange={handleSupplierChange}
                 vendors={vendors}
                 canCreate={canManageSuppliers}
                 onCreated={addVendor}
-                hint={expectedCopy.create.supplierHint}
+                hint={vendor && isOrder ? undefined : expectedCopy.create.supplierHint}
               />
+              {isOrder && vendor && (
+                <SupplierContact
+                  vendor={vendor}
+                  canEdit={canManageSuppliers}
+                  emailOn={emailOn}
+                  onEmailOnChange={setEmailOn}
+                  onVendorUpdated={addVendor}
+                />
+              )}
             </div>
           )}
           {nowhereToRecord && (
@@ -210,24 +292,28 @@ export function NewExpectedDeliveryPage() {
           <TextField
             id="expected-date"
             type="date"
-            label={expectedCopy.create.date}
-            hint={expectedCopy.create.dateHint}
+            label={isOrder ? expectedCopy.order.needed : expectedCopy.create.date}
+            hint={isOrder ? expectedCopy.order.neededHint : expectedCopy.create.dateHint}
             value={expectedDate}
             disabled={submitting}
             onChange={(event) => setExpectedDate(event.target.value)}
           />
-          <TextField
-            id="expected-reference"
-            label={expectedCopy.create.reference}
-            hint={expectedCopy.create.referenceHint}
-            value={reference}
-            maxLength={200}
-            disabled={submitting}
-            onChange={(event) => setReference(event.target.value)}
-          />
+          {/* Their invoice or order number: it exists once they have answered, so a purchase order does
+              not ask for it. */}
+          {!isOrder && (
+            <TextField
+              id="expected-reference"
+              label={expectedCopy.create.reference}
+              hint={expectedCopy.create.referenceHint}
+              value={reference}
+              maxLength={200}
+              disabled={submitting}
+              onChange={(event) => setReference(event.target.value)}
+            />
+          )}
           <div className="sm:col-span-2">
             <label htmlFor="expected-note" className="mb-1.5 block text-sm font-medium text-neutral-700">
-              {expectedCopy.create.note}
+              {isOrder ? expectedCopy.order.note : expectedCopy.create.note}
             </label>
             <textarea
               id="expected-note"
@@ -240,14 +326,14 @@ export function NewExpectedDeliveryPage() {
               className="w-full rounded-md border border-neutral-200 px-3 py-2 text-base text-neutral-900 placeholder:text-neutral-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none disabled:bg-neutral-50 sm:text-sm"
             />
             <p id="expected-note-hint" className="mt-1.5 text-xs text-neutral-500">
-              {expectedCopy.create.noteHint}
+              {isOrder ? expectedCopy.order.noteHint : expectedCopy.create.noteHint}
             </p>
           </div>
         </section>
 
         <section aria-labelledby="expected-lines-heading" className="flex flex-col gap-3">
           <h2 id="expected-lines-heading" className="text-sm font-semibold text-neutral-900">
-            {expectedCopy.create.linesHeading}
+            {isOrder ? expectedCopy.order.linesHeading : expectedCopy.create.linesHeading}
           </h2>
 
           <div className="relative">
@@ -278,7 +364,11 @@ export function NewExpectedDeliveryPage() {
 
           {!loading && error && <ErrorState title={copy.delivery.loadFailed} message={error} onRetry={refetch} />}
 
-          {!loading && !error && lines && lines.length === 0 && filter === 'BY_VENDOR' && (
+          {isOrder && everythingBecauseNoneLinked && showAll && vendor && (
+            <p className="text-sm text-neutral-600">{expectedCopy.order.noneLinked(vendor.name)}</p>
+          )}
+
+          {!loading && !error && lines && lines.length === 0 && filter === 'BY_VENDOR' && !isOrder && (
             <EmptyState
               icon={PackageSearch}
               title={copy.delivery.supplierEmpty(supplierName ?? expectedCopy.create.supplier)}
@@ -325,7 +415,11 @@ export function NewExpectedDeliveryPage() {
                           key={key}
                           line={line}
                           entry={entries[key]}
-                          quantityLabel={expectedCopy.create.quantityLabel(line.productName, line.comesIn)}
+                          quantityLabel={(isOrder ? expectedCopy.order : expectedCopy.create).quantityLabel(
+                            line.productName,
+                            line.comesIn,
+                          )}
+                          hidePrice={isOrder}
                           onChange={handleLineChange}
                         />
                       )
@@ -374,6 +468,45 @@ export function NewExpectedDeliveryPage() {
 
           {submitError && <ErrorState variant="inline" message={submitError} />}
         </section>
+
+        {isOrder && vendor && (
+          <section aria-labelledby="po-happens-heading" className="flex flex-col gap-2 text-sm text-neutral-700">
+            <h2 id="po-happens-heading" className="text-sm font-semibold text-neutral-900">
+              {expectedCopy.order.happens.heading}
+            </h2>
+            <ul className="flex flex-col gap-1.5">
+              <HappensLine done>{expectedCopy.order.happens.pdf}</HappensLine>
+              {willEmail && <HappensLine done>{expectedCopy.order.happens.emailed(supplierEmail)}</HappensLine>}
+              <HappensLine>
+                {willEmail
+                  ? hasPhone
+                    ? expectedCopy.order.happens.nextAfterEmail
+                    : expectedCopy.order.happens.nextAfterEmailCopyOnly
+                  : supplierEmail && hasPhone
+                    ? expectedCopy.order.happens.nextBoth
+                    : supplierEmail
+                      ? expectedCopy.order.happens.nextEmail
+                      : hasPhone
+                        ? expectedCopy.order.happens.nextWhatsApp
+                        : expectedCopy.order.happens.nextCopy}
+              </HappensLine>
+            </ul>
+            {!supplierEmail && !hasPhone && (
+              <p className="text-neutral-600">{expectedCopy.order.noContact(vendor.name)}</p>
+            )}
+            {company && company.logoUrl == null && canEditCompany && (
+              <p className="text-neutral-600">
+                {expectedCopy.order.noLogo}{' '}
+                <Link
+                  to="/app/company"
+                  className="rounded-sm font-medium text-primary-700 hover:underline focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none"
+                >
+                  {expectedCopy.order.addLogo}
+                </Link>
+              </p>
+            )}
+          </section>
+        )}
       </div>
 
       {/*
@@ -383,20 +516,42 @@ export function NewExpectedDeliveryPage() {
       <div className="sticky -bottom-6 z-10 -mx-6 mt-6 -mb-6 border-t border-neutral-200 bg-white/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur">
         <div className="mx-auto flex max-w-2xl flex-col gap-1">
           <p className="sr-only" aria-live="polite" aria-atomic="true">
-            {expectedCopy.create.totalAnnounce(count, totalText)}
+            {isOrder ? expectedCopy.order.count(count) : expectedCopy.create.totalAnnounce(count, totalText)}
           </p>
           <Button className="w-full" disabled={!canSubmit} loading={submitting} onClick={() => void handleSubmit()}>
-            {submitting
-              ? expectedCopy.create.saving
-              : count === 0
-                ? expectedCopy.create.submitEmpty
-                : expectedCopy.create.submit(count, totalText)}
+            {isOrder
+              ? submitting
+                ? expectedCopy.order.creating
+                : vendorId === ''
+                  ? expectedCopy.order.chooseSupplier
+                  : count === 0
+                    ? expectedCopy.order.submitEmpty
+                    : `${willEmail ? expectedCopy.order.submitAndEmail(supplierName ?? '') : expectedCopy.order.submit} · ${expectedCopy.order.count(count)}`
+              : submitting
+                ? expectedCopy.create.saving
+                : count === 0
+                  ? expectedCopy.create.submitEmpty
+                  : expectedCopy.create.submit(count, totalText)}
           </Button>
-          {count > 0 && totals.partial && (
+          {!isOrder && count > 0 && totals.partial && (
             <p className="text-center text-xs text-neutral-500">{expectedCopy.create.totalPartial}</p>
           )}
         </div>
       </div>
     </div>
+  )
+}
+
+/** One line of "What happens next": a tick for what is done for you, a dot for what you can do after. */
+function HappensLine({ done, children }: { done?: boolean; children: React.ReactNode }) {
+  return (
+    <li className="flex items-start gap-2">
+      {done ? (
+        <Check className="mt-0.5 h-4 w-4 shrink-0 text-accent-600" aria-hidden="true" />
+      ) : (
+        <span className="mt-2 ml-1.5 mr-0.5 h-1 w-1 shrink-0 rounded-full bg-neutral-400" aria-hidden="true" />
+      )}
+      <span>{children}</span>
+    </li>
   )
 }

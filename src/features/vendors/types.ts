@@ -61,6 +61,11 @@ export interface CompanyVendor {
   editable: boolean
   /** DELETE is a deactivation server-side, so an inactive row simply stops appearing in the list. */
   active: boolean
+  /**
+   * "Email the order to this supplier" starts switched on: an email to them has gone through before.
+   * Back off when one bounces or their address is changed. Never a permission.
+   */
+  emailOrders?: boolean
   createdAt: string
   updatedAt: string
 }
@@ -146,4 +151,26 @@ export interface VendorListParams {
   search?: string
   page?: number
   size?: number
+}
+
+/**
+ * A directory row as the update call wants it. PUT replaces everything, so changing one field (the
+ * email, say) means sending the rest back as they were.
+ */
+export function vendorToPayload(vendor: CompanyVendor, changes: Partial<CompanyVendorPayload> = {}): CompanyVendorPayload {
+  return {
+    name: vendor.name,
+    contactPhone: vendor.contactPhone ?? '',
+    email: vendor.email,
+    addressLine1: vendor.addressLine1,
+    addressLine2: vendor.addressLine2,
+    city: vendor.city,
+    state: vendor.state,
+    notes: vendor.notes,
+    bankName: vendor.bankName,
+    bankAccountNumber: vendor.bankAccountNumber,
+    bankAccountName: vendor.bankAccountName,
+    cacNumber: vendor.cacNumber,
+    ...changes,
+  }
 }

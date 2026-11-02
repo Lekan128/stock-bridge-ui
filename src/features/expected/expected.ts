@@ -91,3 +91,40 @@ export function outstandingEntries(expected: ExpectedDelivery): Record<string, D
   }
   return entries
 }
+
+// ---------------------------------------------------------------------- purchase orders ----------
+
+const TIME = new Intl.DateTimeFormat('en-NG', { hour: 'numeric', minute: '2-digit' })
+const SHORT_DATE = new Intl.DateTimeFormat('en-NG', { day: 'numeric', month: 'short' })
+
+/**
+ * When something happened, said the way a person would: "just now", "today at 2:15 pm", "yesterday
+ * at 4:02 pm", "2 Nov, 9:30 am". The order page uses it to answer "did I send it?" a week later
+ * without a timestamp that reads like a log.
+ */
+export function whenText(iso: string, now: Date = new Date()): string {
+  const then = new Date(iso)
+  if (Number.isNaN(then.getTime())) return ''
+  if (now.getTime() - then.getTime() < 60_000) return 'just now'
+  const sameDay = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+  const yesterday = new Date(now)
+  yesterday.setDate(now.getDate() - 1)
+  const time = TIME.format(then).toLowerCase()
+  if (sameDay(then, now)) return `today at ${time}`
+  if (sameDay(then, yesterday)) return `yesterday at ${time}`
+  return `${SHORT_DATE.format(then)}, ${time}`
+}
+
+/** "12 Nov" from the `YYYY-MM-DD` a supplier date arrives as, without a timezone shifting the day. */
+export function shortDate(isoDay: string): string {
+  const [year, month, day] = isoDay.split('-').map(Number)
+  if (!year || !month || !day) return isoDay
+  return SHORT_DATE.format(new Date(year, month - 1, day))
+}
+
+/** True when something happened less than `minutes` ago — used to ask before sending twice. */
+export function isRecent(iso: string, minutes: number, now: Date = new Date()): boolean {
+  const then = new Date(iso).getTime()
+  return !Number.isNaN(then) && now.getTime() - then < minutes * 60_000
+}

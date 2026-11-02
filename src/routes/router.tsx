@@ -160,6 +160,18 @@ const ExpectedDeliveriesPage = lazy(() =>
     default: m.ExpectedDeliveriesPage,
   })),
 )
+const PurchaseOrderPage = lazy(() =>
+  import('@/features/expected/pages/PurchaseOrderPage').then((m) => ({
+    default: m.PurchaseOrderPage,
+  })),
+)
+// The page a supplier opens from the link in an email or WhatsApp message - no account, no
+// workspace. Lazy: nobody reaches it as a cold first paint of the app.
+const PublicPurchaseOrderPage = lazy(() =>
+  import('@/features/publicOrder/PublicPurchaseOrderPage').then((m) => ({
+    default: m.PublicPurchaseOrderPage,
+  })),
+)
 const NewExpectedDeliveryPage = lazy(() =>
   import('@/features/expected/pages/NewExpectedDeliveryPage').then((m) => ({
     default: m.NewExpectedDeliveryPage,
@@ -548,6 +560,10 @@ export function AppRoutes() {
           right. This creates no account at all — it adds a business to a waitlist a super admin
           reviews by hand — so a signed-in buyer who wants to also sell must be able to reach it. */}
         <Route path="/vendor-application" element={<VendorApplicationPage />} />
+        {/* A supplier opening a purchase order (PURCHASE_ORDER_PLAN.md section 3.5). Public and
+          outside every layout on purpose: no login, no navigation, one column for a phone. The
+          long random token in the path is the access check. */}
+        <Route path="/o/:token" element={<PublicPurchaseOrderPage />} />
 
         {/* ------------------------------------------------------- Legacy workspace paths → /app */}
         {/* The workspace moved from `/` to `/app` when `/` became the storefront. These keep every
@@ -742,6 +758,15 @@ export function AppRoutes() {
             element={
               <RequirePermission permission={PERMISSIONS.MANAGE_INVENTORY}>
                 <NewExpectedDeliveryPage />
+              </RequirePermission>
+            }
+          />
+          {/* One purchase order — after "new", which would otherwise read as an id. */}
+          <Route
+            path="products/expected/:id"
+            element={
+              <RequirePermission permission={PERMISSIONS.VIEW_PRODUCTS}>
+                <PurchaseOrderPage />
               </RequirePermission>
             }
           />
