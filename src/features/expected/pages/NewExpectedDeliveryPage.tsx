@@ -12,7 +12,9 @@ import { TextField } from '@/components/TextField'
 import { useToast } from '@/components/useToast'
 import { queryKeys } from '@/data/queryKeys'
 import { useCompany } from '@/features/company/hooks/useCompany'
-import { SupplierContact } from '@/features/expected/components/SupplierContact'
+import { InlineEmailEditor } from '@/features/expected/components/InlineEmailEditor'
+import { mayEditSupplier, SupplierContact } from '@/features/expected/components/SupplierContact'
+import { Switch } from '@/components/Switch'
 import { expectedApi } from '@/features/expected/api/expectedApi'
 import { expectedCopy } from '@/features/expected/copy'
 import { DeliveryLineRow } from '@/features/imports/components/DeliveryLineRow'
@@ -31,6 +33,7 @@ import type { DeliveryLine } from '@/features/imports/types'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { SupplierField } from '@/features/vendors/components/SupplierField'
 import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
+import type { CompanyVendor } from '@/features/vendors/types'
 import { isAppError } from '@/types/api'
 
 const LIST_PATH = '/app/products/expected'
@@ -76,6 +79,9 @@ export function NewExpectedDeliveryPage() {
   const recordOnly = recordChosen || !canSeeSuppliers
   const isOrder = !recordOnly
   const [emailOn, setEmailOn] = useState(false)
+  // Where the supplier's email field is open — at the top beside their details, or at the bottom beside
+  // the switch. One field, one place at a time.
+  const [editingEmail, setEditingEmail] = useState<'top' | 'bottom' | null>(null)
 
   const [vendorId, setVendorId] = useState('')
   /** "+ Something not on this list" — every product, while the supplier stays on the order. */
@@ -151,10 +157,17 @@ export function NewExpectedDeliveryPage() {
     })
   }
 
+  /** A saved email is a new, untried address: the directory row updates and the switch asks again. */
+  function handleVendorUpdated(updated: CompanyVendor) {
+    addVendor(updated)
+    setEmailOn(false)
+  }
+
   function handleSupplierChange(nextId: string) {
     setVendorId(nextId)
     setShowAll(false)
     setEverythingBecauseNoneLinked(false)
+    setEditingEmail(null)
     // "Email this order to Tony" starts on only for a supplier an email has already gone through to
     // (and whose address has not changed since) — otherwise off, always.
     const next = vendors.find((entry) => entry.id === nextId)
@@ -245,15 +258,15 @@ export function NewExpectedDeliveryPage() {
                 vendors={vendors}
                 canCreate={canManageSuppliers}
                 onCreated={addVendor}
-                hint={vendor && isOrder ? undefined : expectedCopy.create.supplierHint}
+                hint={vendor && isOrder ? undefined : isOrder ? expectedCopy.order.supplierHint : expectedCopy.create.supplierHint}
               />
               {isOrder && vendor && (
                 <SupplierContact
                   vendor={vendor}
                   canEdit={canManageSuppliers}
-                  emailOn={emailOn}
-                  onEmailOnChange={setEmailOn}
-                  onVendorUpdated={addVendor}
+                  editing={editingEmail === 'top'}
+                  onEditingChange={(open) => setEditingEmail(open ? 'top' : null)}
+                  onVendorUpdated={handleVendorUpdated}
                 />
               )}
             </div>
@@ -420,6 +433,7 @@ export function NewExpectedDeliveryPage() {
                             line.comesIn,
                           )}
                           hidePrice={isOrder}
+                          showUnitWord={isOrder}
                           onChange={handleLineChange}
                         />
                       )
@@ -476,7 +490,47 @@ export function NewExpectedDeliveryPage() {
             </h2>
             <ul className="flex flex-col gap-1.5">
               <HappensLine done>{expectedCopy.order.happens.pdf}</HappensLine>
-              {willEmail && <HappensLine done>{expectedCopy.order.happens.emailed(supplierEmail)}</HappensLine>}
+            </ul>
+
+            {/* The email choice sits here, above the button it changes — not up beside the supplier, where
+                it is out of sight by the time somebody has scrolled a product list. */}
+            {editingEmail === 'bottom' ? (
+              <InlineEmailEditor
+                vendor={vendor}
+                onSaved={(updated) => {
+                  handleVendorUpdated(updated)
+                  setEditingEmail(null)
+                }}
+                onCancel={() => setEditingEmail(null)}
+              />
+            ) : supplierEmail ? (
+              <div className="flex items-center justify-between gap-3 border-y border-neutral-200 py-3">
+                <span id="po-email-switch-label" className="min-w-0 flex-1 break-words font-medium text-neutral-900">
+                  {expectedCopy.contact.switchLabel(supplierEmail)}
+                </span>
+                <Switch
+                  checked={emailOn}
+                  onChange={setEmailOn}
+                  label={expectedCopy.contact.switchLabel(supplierEmail)}
+                  labelledBy="po-email-switch-label"
+                  disabled={submitting}
+                />
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-y border-neutral-200 py-3 text-neutral-600">
+                <span>{expectedCopy.contact.noEmailToSendTo(vendor.name)}</span>
+                {mayEditSupplier(vendor, canManageSuppliers) && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingEmail('bottom')}
+                    className="rounded-sm font-medium text-primary-700 hover:underline focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none"
+                  >
+                    {expectedCopy.contact.addEmail}
+                  </button>
+                )}
+              </div>
+            )}
+            <ul className="flex flex-col gap-1.5">
               <HappensLine>
                 {willEmail
                   ? hasPhone

@@ -4,6 +4,7 @@ import {
   formatPrice,
   perUnitWords,
   quantityIsInvalid,
+  quantityUnitWord,
   typedPrice,
   validQuantity,
   type DeliveryEntry,
@@ -27,6 +28,11 @@ export interface DeliveryLineRowProps {
    * so it shows no price row and no "same as last time". The quantity box is all there is.
    */
   hidePrice?: boolean
+  /**
+   * Say the unit right after the box ("12 cartons") so the number is never alone. On for purchase
+   * orders, where nothing else on the row says what the number counts.
+   */
+  showUnitWord?: boolean
   onChange: (line: DeliveryLine, patch: Partial<Omit<DeliveryEntry, 'line'>>) => void
 }
 
@@ -50,7 +56,7 @@ function inputTone(invalid: boolean): string {
  *
  * The inputs are 16px on a phone so iOS does not zoom the page when one is focused.
  */
-export function DeliveryLineRow({ line, entry, quantityLabel, hidePrice, onChange }: DeliveryLineRowProps) {
+export function DeliveryLineRow({ line, entry, quantityLabel, hidePrice, showUnitWord, onChange }: DeliveryLineRowProps) {
   const quantityId = useId()
   const priceId = useId()
   const priceRef = useRef<HTMLInputElement>(null)
@@ -84,18 +90,25 @@ export function DeliveryLineRow({ line, entry, quantityLabel, hidePrice, onChang
             {quantityLabel ?? copy.delivery.quantityLabel(line.productName, line.comesIn)}
           </span>
         </label>
-        <input
-          id={quantityId}
-          type="text"
-          inputMode="decimal"
-          autoComplete="off"
-          placeholder="0"
-          value={entry?.quantity ?? ''}
-          onChange={(event) => onChange(line, { quantity: event.target.value })}
-          aria-invalid={quantityInvalid || undefined}
-          aria-describedby={quantityInvalid ? `${quantityId}-error` : undefined}
-          className={`w-24 ${INPUT_CLASS} ${inputTone(quantityInvalid)}`}
-        />
+        <div className="flex items-center gap-2">
+          <input
+            id={quantityId}
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            placeholder="0"
+            value={entry?.quantity ?? ''}
+            onChange={(event) => onChange(line, { quantity: event.target.value })}
+            aria-invalid={quantityInvalid || undefined}
+            aria-describedby={quantityInvalid ? `${quantityId}-error` : undefined}
+            className={`w-24 ${INPUT_CLASS} ${inputTone(quantityInvalid)}`}
+          />
+          {showUnitWord && (
+            <span className="w-16 text-sm text-neutral-600" aria-hidden="true">
+              {quantityUnitWord(line, quantity ?? null)}
+            </span>
+          )}
+        </div>
       </div>
       {quantityInvalid && (
         <p id={`${quantityId}-error`} className="mt-1 text-right text-xs text-danger-600">

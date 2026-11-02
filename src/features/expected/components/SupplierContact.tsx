@@ -1,5 +1,3 @@
-import { useId, useState } from 'react'
-import { Switch } from '@/components/Switch'
 import { expectedCopy } from '@/features/expected/copy'
 import { InlineEmailEditor } from '@/features/expected/components/InlineEmailEditor'
 import type { CompanyVendor } from '@/features/vendors/types'
@@ -8,33 +6,30 @@ export interface SupplierContactProps {
   vendor: CompanyVendor
   /** MANAGE_VENDORS: may add or change the email. Without it the line is read-only. */
   canEdit: boolean
-  /** "Email this order to …" — a choice for this order only, off until turned on. */
-  emailOn: boolean
-  onEmailOnChange: (next: boolean) => void
+  /** The email field is open here. Lifted to the page because "Add one" is offered beside the switch too. */
+  editing: boolean
+  onEditingChange: (editing: boolean) => void
   /** The directory row after the email was saved, so the picker's own list stays current. */
   onVendorUpdated: (vendor: CompanyVendor) => void
 }
 
+/** Whether this supplier's details may be changed from here. A supplier on Procure Paddy manages their own. */
+export function mayEditSupplier(vendor: CompanyVendor, canEdit: boolean): boolean {
+  return canEdit && vendor.kind !== 'VERIFIED' && vendor.editable !== false
+}
+
 /**
- * Under the supplier field: their phone, their email, and the switch that says whether this order
- * is emailed to them (PURCHASE_ORDER_PLAN.md §3.2, §4.3a).
+ * Under the supplier field: their phone and their email, with `Change` / `Add one` right there
+ * (PURCHASE_ORDER_PLAN.md §3.2). The switch that decides whether this order is emailed is NOT here —
+ * it sits in "What happens next", beside the button it explains, because that is where the
+ * decision is made and where somebody scrolling past a long product list will actually see it.
  *
- * The worry behind the switch is a wrong or mistyped address, so the address is always printed next
- * to it and `Change` edits it right there — in place, not in a sheet, because it is one field. Saving
- * a *different* address turns the switch off: the new one has not been tried yet.
+ * The address is edited in place, not in a sheet, because it is one field.
  */
-export function SupplierContact({ vendor, canEdit, emailOn, onEmailOnChange, onVendorUpdated }: SupplierContactProps) {
-  const labelId = useId()
-  const [editing, setEditing] = useState(false)
-
-  // A supplier who is on Procure Paddy keeps their own details; the server refuses edits to them.
+export function SupplierContact({ vendor, canEdit, editing, onEditingChange, onVendorUpdated }: SupplierContactProps) {
   const lockedByThem = vendor.kind === 'VERIFIED' || vendor.editable === false
-  const mayEdit = canEdit && !lockedByThem
+  const mayEdit = mayEditSupplier(vendor, canEdit)
   const email = vendor.email ?? ''
-
-  function startEditing() {
-    setEditing(true)
-  }
 
   return (
     <div className="mt-3 flex flex-col gap-2 text-sm text-neutral-700">
@@ -49,47 +44,32 @@ export function SupplierContact({ vendor, canEdit, emailOn, onEmailOnChange, onV
           vendor={vendor}
           onSaved={(updated) => {
             onVendorUpdated(updated)
-            // A new address has not been tried: the switch asks again.
-            onEmailOnChange(false)
-            setEditing(false)
+            onEditingChange(false)
           }}
-          onCancel={() => setEditing(false)}
+          onCancel={() => onEditingChange(false)}
         />
       ) : email ? (
-        <>
-          <p className="flex flex-wrap items-center gap-x-2">
-            <span>
-              <span className="text-neutral-500">{expectedCopy.contact.emailLabel}</span> <span className="break-all">{email}</span>
-            </span>
-            {mayEdit && (
-              <button
-                type="button"
-                onClick={startEditing}
-                className="rounded-sm font-medium text-primary-700 hover:underline focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none"
-              >
-                {expectedCopy.contact.changeEmail}
-              </button>
-            )}
-          </p>
-          <div className="flex items-center justify-between gap-3 pt-1">
-            <span id={labelId} className="min-w-0 flex-1 break-words text-neutral-900">
-              {expectedCopy.contact.switchLabel(email)}
-            </span>
-            <Switch
-              checked={emailOn}
-              onChange={onEmailOnChange}
-              label={expectedCopy.contact.switchLabel(email)}
-              labelledBy={labelId}
-            />
-          </div>
-        </>
+        <p className="flex flex-wrap items-center gap-x-2">
+          <span>
+            <span className="text-neutral-500">{expectedCopy.contact.emailLabel}</span> <span className="break-all">{email}</span>
+          </span>
+          {mayEdit && (
+            <button
+              type="button"
+              onClick={() => onEditingChange(true)}
+              className="rounded-sm font-medium text-primary-700 hover:underline focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none"
+            >
+              {expectedCopy.contact.changeEmail}
+            </button>
+          )}
+        </p>
       ) : (
         <p className="flex flex-wrap items-center gap-x-2 text-neutral-600">
           <span>{expectedCopy.contact.noEmail(vendor.name)}</span>
           {mayEdit ? (
             <button
               type="button"
-              onClick={startEditing}
+              onClick={() => onEditingChange(true)}
               className="rounded-sm font-medium text-primary-700 hover:underline focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none"
             >
               {expectedCopy.contact.addEmail}

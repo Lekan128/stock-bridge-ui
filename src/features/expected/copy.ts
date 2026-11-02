@@ -93,6 +93,7 @@ export const expectedCopy = {
     recordLink: 'Already ordered by phone? Just record it',
     supplier: 'Supplier',
     supplierPlaceholder: 'Choose a supplier',
+    supplierHint: 'Choose one and we will show you their products, and how you can send them this order.',
     needed: 'Needed by',
     neededHint: 'Optional.',
     note: 'Note for the supplier',
@@ -143,6 +144,8 @@ export const expectedCopy = {
     // A supplier on Procure Paddy keeps their own details; the buyer cannot edit them.
     emailLocked: (supplier: string) => `${supplier} manages their own details, so we can't add one for them.`,
     switchLabel: (address: string) => `Email this order to ${address}`,
+    // Beside where the switch would be: why there is none, and the way to get one.
+    noEmailToSendTo: (supplier: string) => `To email this order, ${supplier} needs an email address.`,
   },
 
   /**

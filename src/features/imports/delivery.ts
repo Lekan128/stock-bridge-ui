@@ -81,6 +81,24 @@ export function perUnitWords(line: Pick<DeliveryLine, 'comesIn' | 'pack'>): stri
   return `per ${tail || head.trim().toLowerCase()}`
 }
 
+/**
+ * The word that goes right after a quantity box, so the number is never alone: "cartons", "bags",
+ * "kg", "pieces". A pack line says its container ("Carton · 12 g" -> "cartons"); a loose line says
+ * the product's own unit ("Loose · kg" -> "kg"). Singular for exactly one, so "1 carton", "2 cartons".
+ *
+ * Plurals are the plain English rule, which is all a pack name ever needs; a unit that is an
+ * abbreviation (kg, g, L) is left exactly as it is.
+ */
+export function quantityUnitWord(line: Pick<DeliveryLine, 'comesIn' | 'pack'>, quantity: number | null): string {
+  const [head, ...rest] = line.comesIn.split(' · ')
+  const word = (line.pack ? head : rest.join(' · ') || head).trim().toLowerCase()
+  if (!/^[a-z ]+$/.test(word) || word.length <= 2) return word
+  if (quantity === 1) return word
+  if (/(s|x|z|ch|sh)$/.test(word)) return `${word}es`
+  if (/[^aeiou]y$/.test(word)) return `${word.slice(0, -1)}ies`
+  return `${word}s`
+}
+
 /** One product's lines, groups in the order the server listed them (supplier, then product). */
 export interface DeliveryProductGroup {
   productId: string
