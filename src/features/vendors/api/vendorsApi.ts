@@ -24,6 +24,14 @@ export const vendorsApi = {
   create: (payload: CompanyVendorPayload) =>
     api.post<CompanyVendor>('/api/company-vendors', payload).then((r) => r.data),
 
+  /**
+   * Sets just the email — to add or fix it in the middle of something else without sending the rest
+   * of the record back (the full update insists on a phone, and a supplier can exist without one).
+   * Saving a different address switches "email orders to them" back off.
+   */
+  setEmail: (id: string, email: string) =>
+    api.put<CompanyVendor>(`/api/company-vendors/${id}/email`, { email }).then((r) => r.data),
+
   /** EXTERNAL only — the server answers 409 for a VERIFIED row, which the UI never asks for. */
   update: (id: string, payload: CompanyVendorPayload) =>
     api.put<CompanyVendor>(`/api/company-vendors/${id}`, payload).then((r) => r.data),

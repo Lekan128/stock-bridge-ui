@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { Button } from '@/components/Button'
 import { expectedCopy } from '@/features/expected/copy'
 import { vendorsApi } from '@/features/vendors/api/vendorsApi'
-import { vendorToPayload, type CompanyVendor } from '@/features/vendors/types'
+import type { CompanyVendor } from '@/features/vendors/types'
 import { isAppError } from '@/types/api'
 
 const LOOKS_LIKE_EMAIL = /^[^\s@]+@[^\s@.]+\.[^\s@]+$/
@@ -48,9 +48,16 @@ export function InlineEmailEditor({ vendor, onSaved, onCancel }: InlineEmailEdit
     setSaving(true)
     setProblem(null)
     try {
-      onSaved(await vendorsApi.update(vendor.id, vendorToPayload(vendor, { email: next })))
+      onSaved(await vendorsApi.setEmail(vendor.id, next))
     } catch (err: unknown) {
-      setProblem(isAppError(err) ? err.message : expectedCopy.contact.emailSaveFailed)
+      // A refusal of the address itself is said in our words, never the server's field names.
+      setProblem(
+        isAppError(err)
+          ? err.status === 400 || err.status === 422
+            ? expectedCopy.contact.emailInvalid
+            : err.message
+          : expectedCopy.contact.emailSaveFailed,
+      )
       setSaving(false)
     }
   }
