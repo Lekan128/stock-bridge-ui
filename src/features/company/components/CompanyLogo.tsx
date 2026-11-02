@@ -10,6 +10,32 @@ interface CompanyLogoProps {
   onUpdated: (company: Company) => void
 }
 
+const LOGO_MAX_EDGE = 512
+
+/**
+ * The picture a logo is sent as: scaled to fit 512 px and saved as a PNG. A PNG because the PDF
+ * library cannot read WebP, and small because a 5 MB photo would otherwise ride along on every
+ * purchase order. If the browser cannot do it for any reason, the original goes as it was and the
+ * server's own checks decide.
+ */
+async function prepareLogo(file: File): Promise<File> {
+  try {
+    const bitmap = await createImageBitmap(file)
+    const scale = Math.min(1, LOGO_MAX_EDGE / Math.max(bitmap.width, bitmap.height))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+    const context = canvas.getContext('2d')
+    if (!context) return file
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    bitmap.close()
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
+    return blob ? new File([blob], 'logo.png', { type: 'image/png' }) : file
+  } catch {
+    return file
+  }
+}
+
 /**
  * The company's logo, top right of Company settings (PURCHASE_ORDER_PLAN.md section 3.6).
  *
@@ -41,7 +67,7 @@ export function CompanyLogo({ company, canEdit, onUpdated }: CompanyLogoProps) {
 
   function handleChosen(file: File | undefined) {
     if (!file) return
-    void run(() => companyApi.setLogo(file), 'Saved')
+    void run(async () => companyApi.setLogo(await prepareLogo(file)), 'Saved')
     // So choosing the same file again still counts as a choice.
     if (inputRef.current) inputRef.current.value = ''
   }
