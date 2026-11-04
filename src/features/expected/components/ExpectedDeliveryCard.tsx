@@ -59,7 +59,7 @@ export function ExpectedDeliveryCard({ expected, onCancel }: ExpectedDeliveryCar
           <h3 className="text-sm font-semibold text-neutral-900">
             {/* The order's own page: what was asked for, and how to get it to the supplier. */}
             <Link
-              to={`/app/products/expected/${expected.id}`}
+              to={`/app/purchase-orders/${expected.id}`}
               className="rounded-sm hover:underline focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none"
             >
               {expected.title}

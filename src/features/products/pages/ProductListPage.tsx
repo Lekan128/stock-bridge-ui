@@ -512,7 +512,6 @@ export function ProductListPage() {
       : undefined,
     onGiveBack: givesHere ? () => setGivenOpen(true) : undefined,
     onRecordSale: recordsSales && canStockOut ? () => navigate('/app/sell') : undefined,
-    onExpectedDeliveries: () => navigate('/app/products/expected'),
     onExport: () => void handleExport(),
     onSkuSettings: () => navigate('/app/products/sku-settings'),
     onManageCategories: () => setManageCategoriesOpen(true),

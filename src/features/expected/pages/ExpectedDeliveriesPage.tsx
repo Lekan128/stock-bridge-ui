@@ -90,7 +90,7 @@ export function ExpectedDeliveriesPage() {
           <p className="mt-1 text-sm text-neutral-600">{expectedCopy.list.subtitle}</p>
         </div>
         {canManage && (
-          <Link to="/app/products/expected/new" className={buttonClassName('primary')}>
+          <Link to="/app/purchase-orders/new" className={buttonClassName('primary')}>
             <Plus className="h-4 w-4" aria-hidden="true" />
             {expectedCopy.list.add}
           </Link>
@@ -139,7 +139,7 @@ export function ExpectedDeliveriesPage() {
           description={openOnly ? expectedCopy.list.emptyOpenBody : expectedCopy.list.emptyAllBody}
           action={
             canManage ? (
-              <Link to="/app/products/expected/new" className={buttonClassName('primary')}>
+              <Link to="/app/purchase-orders/new" className={buttonClassName('primary')}>
                 {expectedCopy.list.add}
               </Link>
             ) : undefined

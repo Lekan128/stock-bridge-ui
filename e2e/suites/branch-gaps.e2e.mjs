@@ -7,7 +7,7 @@
 //   4. Low stock in All branches, grouped by the branch each product is low at.
 //   5. The product page at a branch: "Only at Oshodi so far", and when it was last counted here.
 //   6. A low-stock level for each branch, from the product's settings.
-//   7. Expected deliveries: a Going to field, and the branch on each in All branches.
+//   7. Purchase orders (was Expected deliveries): a Going to field, and the branch on each in All branches.
 //   8. Stock movements in All branches: a Branch filter.
 //   9. A stock sheet upload and quick mode say which branch.
 //  10. On a phone, the branch chip opens a bottom sheet.
@@ -229,16 +229,16 @@ await check('expected deliveries: a Going to field, and the branch on each in Al
     body: { branchId: oshodi.id, lines: [{ productId: rice.id, unit: 'PIECE', quantity: 3 }] },
   })
   const { context, page } = await ownerPage('ALL')
-  await page.goto(`${UI}/app/products/expected/new`)
+  await page.goto(`${UI}/app/purchase-orders/new`)
   const goingTo = page.getByLabel('Going to')
   await goingTo.waitFor()
   assert((await goingTo.locator('option').allInnerTexts()).includes('Oshodi'), 'Oshodi is not offered')
-  await page.goto(`${UI}/app/products/expected`)
+  await page.goto(`${UI}/app/purchase-orders`)
   await page.getByText('Going to Oshodi').first().waitFor()
   await context.close()
   // At a branch, it is going there unless changed - even when the branches load after the screen.
   const at = await ownerPage(oshodi.id)
-  await at.page.goto(`${UI}/app/products/expected/new`)
+  await at.page.goto(`${UI}/app/purchase-orders/new`)
   await at.page.getByLabel('Going to').waitFor()
   await waitFor(async () => (await at.page.getByLabel('Going to').inputValue()) === oshodi.id, 'Going to to be Oshodi')
   await at.context.close()

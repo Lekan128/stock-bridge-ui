@@ -43,7 +43,7 @@ export function ReceivingExpectedBanner({ expected, loading, error }: ReceivingE
         </p>
       )}
       <Link
-        to="/app/products/expected"
+        to="/app/purchase-orders"
         className="mt-1.5 inline-block rounded-sm text-sm font-medium text-primary-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
       >
         {expectedCopy.receive.seeAll}

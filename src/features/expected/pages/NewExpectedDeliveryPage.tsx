@@ -37,7 +37,7 @@ import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
 import type { CompanyVendor } from '@/features/vendors/types'
 import { isAppError } from '@/types/api'
 
-const LIST_PATH = '/app/products/expected'
+const LIST_PATH = '/app/purchase-orders'
 
 /**
  * "Say what you ordered" (`BULK_IMPORT_CX_PLAN.md` task 3.1).

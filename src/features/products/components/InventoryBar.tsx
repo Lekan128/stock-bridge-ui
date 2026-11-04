@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useId, useRef, useState } from 'react'
-import { ArrowLeftRight, CalendarClock, Download, MessageSquarePlus, Plus, Search, Settings, ShoppingBag, SlidersHorizontal, Tags, Truck, Undo2, Upload, Zap } from 'lucide-react'
+import { ArrowLeftRight, Download, MessageSquarePlus, Plus, Search, Settings, ShoppingBag, SlidersHorizontal, Tags, Truck, Undo2, Upload, Zap } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { OverflowMenu, type OverflowMenuItem } from '@/components/OverflowMenu'
@@ -55,7 +55,6 @@ export interface InventoryBarProps {
    * the screen's action, the thing done all day; Record a delivery steps back to secondary.
    */
   onRecordSale?: () => void
-  onExpectedDeliveries: () => void
   onExport: () => void
   onSkuSettings: () => void
   onManageCategories: () => void
@@ -108,7 +107,6 @@ function inventoryMenuItems(props: InventoryBarProps, compact: boolean): Overflo
     ...(props.onGiveBack
       ? [{ label: 'Give back or report', icon: <Undo2 className={icon} aria-hidden="true" />, onSelect: props.onGiveBack }]
       : []),
-    { label: 'Purchase orders', icon: <CalendarClock className={icon} aria-hidden="true" />, onSelect: props.onExpectedDeliveries },
     ...(props.canManageProducts
       ? [
           { label: 'Bulk upload', icon: <Upload className={icon} aria-hidden="true" />, onSelect: props.onBulkUpload },

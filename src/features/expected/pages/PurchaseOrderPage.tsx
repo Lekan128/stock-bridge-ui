@@ -25,7 +25,7 @@ import { useResendVerification } from '@/features/profile/hooks/useResendVerific
 import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
 import { isAppError } from '@/types/api'
 
-const LIST_PATH = '/app/products/expected'
+const LIST_PATH = '/app/purchase-orders'
 const copyText = expectedCopy.page
 
 /** The PDF, opened from the order's own link so a plain click (never a blocked popup) gets the browser's viewer. */

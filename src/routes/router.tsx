@@ -160,6 +160,11 @@ const ExpectedDeliveriesPage = lazy(() =>
     default: m.ExpectedDeliveriesPage,
   })),
 )
+/** products/expected/:id -> purchase-orders/:id, keeping the id. */
+function OldPurchaseOrderRedirect() {
+  const { id } = useParams()
+  return <Navigate to={`/app/purchase-orders/${id ?? ''}`} replace />
+}
 const PurchaseOrderPage = lazy(() =>
   import('@/features/expected/pages/PurchaseOrderPage').then((m) => ({
     default: m.PurchaseOrderPage,
@@ -738,6 +743,11 @@ export function AppRoutes() {
               </RequirePermission>
             }
           />
+          {/* The old addresses, kept so a bookmark or a link already sent still lands somewhere: purchase
+            orders used to live under products/expected. */}
+          <Route path="products/expected" element={<Navigate to="/app/purchase-orders" replace />} />
+          <Route path="products/expected/new" element={<Navigate to="/app/purchase-orders/new" replace />} />
+          <Route path="products/expected/:id" element={<OldPurchaseOrderRedirect />} />
           {/* Expected deliveries — static, so declared above products/:id like the routes either
             side of it.
 
@@ -746,7 +756,7 @@ export function AppRoutes() {
             a hundred bags are on their way is the same authority as saying they arrived. The list
             hides its own write affordances from a reader who lacks the second. */}
           <Route
-            path="products/expected"
+            path="purchase-orders"
             element={
               <RequirePermission permission={PERMISSIONS.VIEW_PRODUCTS}>
                 <ExpectedDeliveriesPage />
@@ -754,7 +764,7 @@ export function AppRoutes() {
             }
           />
           <Route
-            path="products/expected/new"
+            path="purchase-orders/new"
             element={
               <RequirePermission permission={PERMISSIONS.MANAGE_INVENTORY}>
                 <NewExpectedDeliveryPage />
@@ -763,7 +773,7 @@ export function AppRoutes() {
           />
           {/* One purchase order — after "new", which would otherwise read as an id. */}
           <Route
-            path="products/expected/:id"
+            path="purchase-orders/:id"
             element={
               <RequirePermission permission={PERMISSIONS.VIEW_PRODUCTS}>
                 <PurchaseOrderPage />
