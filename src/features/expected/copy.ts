@@ -96,6 +96,7 @@ export const expectedCopy = {
     supplierHint: 'Choose one and we will show you their products, and how you can send them this order.',
     needed: 'Needed by',
     neededHint: 'Optional.',
+    neededInPast: 'Pick today or a day after today.',
     note: 'Note for the supplier',
     noteHint: 'Optional.',
     linesHeading: 'What do you want?',

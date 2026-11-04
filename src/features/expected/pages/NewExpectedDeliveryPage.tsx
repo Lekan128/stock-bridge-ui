@@ -12,6 +12,7 @@ import { TextField } from '@/components/TextField'
 import { useToast } from '@/components/useToast'
 import { queryKeys } from '@/data/queryKeys'
 import { useCompany } from '@/features/company/hooks/useCompany'
+import { todayIso } from '@/features/expected/expected'
 import { InlineEmailEditor } from '@/features/expected/components/InlineEmailEditor'
 import { mayEditSupplier, SupplierContact } from '@/features/expected/components/SupplierContact'
 import { Switch } from '@/components/Switch'
@@ -146,8 +147,15 @@ export function NewExpectedDeliveryPage() {
   const count = totals.lines.length
   // With a line priced nowhere, the sum would understate the order, so the button leaves it out.
   const totalText = count > 0 && !totals.partial ? formatPrice(totals.total) : null
+  // ISO dates compare as text. Only a purchase order refuses a past day.
+  const neededInPast = isOrder && expectedDate !== '' && expectedDate < todayIso()
   const canSubmit =
-    count > 0 && !totals.invalid && !submitting && !needsGoingTo && (!isOrder || vendorId !== '')
+    count > 0 &&
+    !totals.invalid &&
+    !submitting &&
+    !needsGoingTo &&
+    !neededInPast &&
+    (!isOrder || vendorId !== '')
 
   function handleLineChange(line: DeliveryLine, patch: Partial<Omit<DeliveryEntry, 'line'>>) {
     const key = lineKey(line)
@@ -309,6 +317,11 @@ export function NewExpectedDeliveryPage() {
             hint={isOrder ? expectedCopy.order.neededHint : expectedCopy.create.dateHint}
             value={expectedDate}
             disabled={submitting}
+            // A purchase order asks for something still to come, so a day that has passed cannot be
+            // picked — and one typed in by hand is refused below. (Recording what you ordered keeps
+            // the old rule: a missed date is a real, overdue order.)
+            min={isOrder ? todayIso() : undefined}
+            error={neededInPast ? expectedCopy.order.neededInPast : undefined}
             onChange={(event) => setExpectedDate(event.target.value)}
           />
           {/* Their invoice or order number: it exists once they have answered, so a purchase order does
