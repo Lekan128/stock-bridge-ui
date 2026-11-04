@@ -90,7 +90,8 @@ export const expectedCopy = {
   order: {
     title: 'New purchase order',
     subtitle: 'Tell a supplier what you want.',
-    recordLink: 'Already ordered by phone? Just record it',
+    recordLink: 'Already ordered this by phone? Just record it',
+    detailsLink: 'Add a date or a note',
     supplier: 'Supplier',
     supplierPlaceholder: 'Choose a supplier',
     supplierHint: 'Choose one and we will show you their products, and how you can send them this order.',

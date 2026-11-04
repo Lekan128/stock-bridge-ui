@@ -137,13 +137,7 @@ export function ExpectedDeliveriesPage() {
           icon={PackageSearch}
           title={openOnly ? expectedCopy.list.emptyOpenTitle : expectedCopy.list.emptyAllTitle}
           description={openOnly ? expectedCopy.list.emptyOpenBody : expectedCopy.list.emptyAllBody}
-          action={
-            canManage ? (
-              <Link to="/app/purchase-orders/new" className={buttonClassName('primary')}>
-                {expectedCopy.list.add}
-              </Link>
-            ) : undefined
-          }
+          // No second button here: the one in the header is the way to make one (one button per meaning).
         />
       )}
 

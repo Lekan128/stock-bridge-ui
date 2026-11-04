@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { Check, ClipboardList } from 'lucide-react'
+import { Check } from 'lucide-react'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
+import { Breadcrumbs } from '@/components/Breadcrumbs'
 import { Button } from '@/components/Button'
 import { ErrorState } from '@/components/ErrorState'
 import { Switch } from '@/components/Switch'
@@ -95,6 +96,8 @@ export function NewExpectedDeliveryPage() {
   const [entries, setEntries] = useState<Record<string, DeliveryEntry>>({})
   /** The line just added: its quantity box takes the cursor, because "how many?" is what comes next. */
   const [justAdded, setJustAdded] = useState<string | null>(null)
+  /** The optional date / note / reference, tucked away until asked for (or until there is something in them). */
+  const [detailsAsked, setDetailsAsked] = useState(false)
   // "Going to" (MULTI_BRANCH_UX_PLAN.md §5.10): the branch it is for - this one by default, and the
   // delivery shows on that branch's Needs you only. Not asked at a one-branch company (rule 1).
   const branch = useOptionalWorkingBranch()
@@ -159,6 +162,7 @@ export function NewExpectedDeliveryPage() {
   const totals = useMemo(() => tally(entries), [entries])
   /** Lines added but with no quantity typed: they are not sent, and the person is told so. */
   const blankCount = Object.values(entries).filter((entry) => entry.quantity.trim() === '').length
+  const detailsOpen = detailsAsked || expectedDate !== '' || note.trim() !== '' || reference.trim() !== ''
 
   const count = totals.lines.length
   // With a line priced nowhere, the sum would understate the order, so the button leaves it out.
@@ -258,29 +262,10 @@ export function NewExpectedDeliveryPage() {
     <div className="flex min-h-full flex-col">
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">
+          <Breadcrumbs items={[{ label: expectedCopy.list.title, to: LIST_PATH }, { label: isOrder ? expectedCopy.order.title : expectedCopy.create.title }]} />
+          <h1 className="mt-2 text-2xl font-semibold text-neutral-900">
             {isOrder ? expectedCopy.order.title : expectedCopy.create.title}
           </h1>
-          <p className="mt-1 text-sm text-neutral-600">
-            {isOrder ? expectedCopy.order.subtitle : expectedCopy.create.subtitle}
-          </p>
-          {canSeeSuppliers && (
-            <button
-              type="button"
-              onClick={() => setRecordChosen(isOrder)}
-              disabled={submitting}
-              className="mt-2 block rounded-sm text-left text-sm font-medium text-primary-700 hover:underline focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none"
-            >
-              {isOrder ? expectedCopy.order.recordLink : expectedCopy.create.makeOrderLink}
-            </button>
-          )}
-          <Link
-            to={LIST_PATH}
-            className="mt-2 inline-flex items-center gap-1.5 rounded-sm text-sm font-medium text-primary-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-          >
-            <ClipboardList className="h-4 w-4" aria-hidden="true" />
-            {expectedCopy.create.back}
-          </Link>
         </div>
 
         <DraftNote
@@ -356,61 +341,22 @@ export function NewExpectedDeliveryPage() {
               </select>
             </div>
           )}
-          {/*
-            No `max` and no validation: a date in the past is exactly what an overdue order is,
-            and the list is built to show it.
-          */}
-          <TextField
-            id="expected-date"
-            type="date"
-            label={isOrder ? expectedCopy.order.needed : expectedCopy.create.date}
-            hint={isOrder ? expectedCopy.order.neededHint : expectedCopy.create.dateHint}
-            value={expectedDate}
-            disabled={submitting}
-            // A purchase order asks for something still to come, so a day that has passed cannot be
-            // picked — and one typed in by hand is refused below. (Recording what you ordered keeps
-            // the old rule: a missed date is a real, overdue order.)
-            min={isOrder ? todayIso() : undefined}
-            error={neededInPast ? expectedCopy.order.neededInPast : undefined}
-            onChange={(event) => setExpectedDate(event.target.value)}
-          />
-          {/* Their invoice or order number: it exists once they have answered, so a purchase order does
-              not ask for it. */}
-          {!isOrder && (
-            <TextField
-              id="expected-reference"
-              label={expectedCopy.create.reference}
-              hint={expectedCopy.create.referenceHint}
-              value={reference}
-              maxLength={200}
-              disabled={submitting}
-              onChange={(event) => setReference(event.target.value)}
-            />
-          )}
-          <div className="sm:col-span-2">
-            <label htmlFor="expected-note" className="mb-1.5 block text-sm font-medium text-neutral-700">
-              {isOrder ? expectedCopy.order.note : expectedCopy.create.note}
-            </label>
-            <textarea
-              id="expected-note"
-              rows={2}
-              value={note}
-              maxLength={500}
-              disabled={submitting}
-              aria-describedby="expected-note-hint"
-              onChange={(event) => setNote(event.target.value)}
-              className="w-full rounded-md border border-neutral-200 px-3 py-2 text-base text-neutral-900 placeholder:text-neutral-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none disabled:bg-neutral-50 sm:text-sm"
-            />
-            <p id="expected-note-hint" className="mt-1.5 text-xs text-neutral-500">
-              {isOrder ? expectedCopy.order.noteHint : expectedCopy.create.noteHint}
-            </p>
-          </div>
         </section>
 
         <section aria-labelledby="expected-lines-heading" className="flex flex-col gap-4">
           <h2 id="expected-lines-heading" className="text-sm font-semibold text-neutral-900">
             {isOrder ? expectedCopy.order.linesHeading : expectedCopy.create.linesHeading}
           </h2>
+
+          {/* Find a product, add it — the catalog is searched, never listed, so this reads the same with
+              ten products and ten thousand. */}
+          <ProductPicker
+            vendorId={vendorId}
+            supplierName={supplierName}
+            added={added}
+            onAdd={handleAdd}
+            disabled={submitting}
+          />
 
           {/* What has been added, with how many of each. */}
           <div className="flex flex-col gap-2" data-order-lines>
@@ -460,18 +406,72 @@ export function NewExpectedDeliveryPage() {
             {blankCount > 0 && <p className="text-sm text-neutral-600">{expectedCopy.picker.leftOut(blankCount)}</p>}
           </div>
 
-          {/* Find a product, add it — the catalog is searched, never listed, so this reads the same with
-              ten products and ten thousand. */}
-          <ProductPicker
-            vendorId={vendorId}
-            supplierName={supplierName}
-            added={added}
-            onAdd={handleAdd}
-            disabled={submitting}
-          />
-
           {submitError && <ErrorState variant="inline" message={submitError} />}
         </section>
+
+        {/* The optional extras. One quiet line until wanted; opens in place (no dialog), and stays open
+            once there is anything in it so nothing typed is ever hidden. */}
+        {detailsOpen ? (
+          <section aria-label={expectedCopy.order.detailsLink} className="grid gap-4 rounded-lg border border-neutral-200 bg-white p-4 sm:grid-cols-2">
+          {/*
+            No `max` and no validation: a date in the past is exactly what an overdue order is,
+            and the list is built to show it.
+          */}
+          <TextField
+            id="expected-date"
+            type="date"
+            label={isOrder ? expectedCopy.order.needed : expectedCopy.create.date}
+            hint={isOrder ? expectedCopy.order.neededHint : expectedCopy.create.dateHint}
+            value={expectedDate}
+            disabled={submitting}
+            // A purchase order asks for something still to come, so a day that has passed cannot be
+            // picked — and one typed in by hand is refused below. (Recording what you ordered keeps
+            // the old rule: a missed date is a real, overdue order.)
+            min={isOrder ? todayIso() : undefined}
+            error={neededInPast ? expectedCopy.order.neededInPast : undefined}
+            onChange={(event) => setExpectedDate(event.target.value)}
+          />
+          {/* Their invoice or order number: it exists once they have answered, so a purchase order does
+              not ask for it. */}
+          {!isOrder && (
+            <TextField
+              id="expected-reference"
+              label={expectedCopy.create.reference}
+              hint={expectedCopy.create.referenceHint}
+              value={reference}
+              maxLength={200}
+              disabled={submitting}
+              onChange={(event) => setReference(event.target.value)}
+            />
+          )}
+          <div className="sm:col-span-2">
+            <label htmlFor="expected-note" className="mb-1.5 block text-sm font-medium text-neutral-700">
+              {isOrder ? expectedCopy.order.note : expectedCopy.create.note}
+            </label>
+            <textarea
+              id="expected-note"
+              rows={2}
+              value={note}
+              maxLength={500}
+              disabled={submitting}
+              aria-describedby="expected-note-hint"
+              onChange={(event) => setNote(event.target.value)}
+              className="w-full rounded-md border border-neutral-200 px-3 py-2 text-base text-neutral-900 placeholder:text-neutral-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none disabled:bg-neutral-50 sm:text-sm"
+            />
+            <p id="expected-note-hint" className="mt-1.5 text-xs text-neutral-500">
+              {isOrder ? expectedCopy.order.noteHint : expectedCopy.create.noteHint}
+            </p>
+          </div>
+          </section>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setDetailsAsked(true)}
+            className="self-start rounded-sm text-sm font-medium text-primary-700 hover:underline focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none"
+          >
+            {expectedCopy.order.detailsLink}
+          </button>
+        )}
 
         {isOrder && vendor && (
           <section aria-labelledby="po-happens-heading" className="flex flex-col gap-2 text-sm text-neutral-700">
@@ -550,6 +550,17 @@ export function NewExpectedDeliveryPage() {
               </p>
             )}
           </section>
+        )}
+
+        {canSeeSuppliers && (
+          <button
+            type="button"
+            onClick={() => setRecordChosen(isOrder)}
+            disabled={submitting}
+            className="self-start rounded-sm text-left text-sm font-medium text-neutral-600 underline underline-offset-2 hover:text-neutral-900 focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none"
+          >
+            {isOrder ? expectedCopy.order.recordLink : expectedCopy.create.makeOrderLink}
+          </button>
         )}
       </div>
 

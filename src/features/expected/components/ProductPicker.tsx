@@ -49,8 +49,24 @@ export function ProductPicker({ vendorId, supplierName, added, onAdd, disabled }
   const groups = groupByProduct(results ?? [])
   const suggestions = !searching && usual.lines && usual.lines.length > 0 ? groupByProduct(usual.lines) : []
 
+  /** Adding clears the search: the results have done their job, and the line is now on the order below. */
+  function add(line: DeliveryLine) {
+    onAdd(line)
+    setText('')
+  }
+
   function handleEnter() {
-    if (results && results.length === 1 && !added.has(lineKey(results[0]))) onAdd(results[0])
+    if (results && results.length === 1 && !added.has(lineKey(results[0]))) add(results[0])
+  }
+
+  /**
+   * Bring the box to the top of the screen when it is used. On a phone the keyboard rises over the
+   * lower half and the sticky button covers the bottom, so a search that stays where it was is typed
+   * into blind; this puts it — and the results that open beneath it — where they can be seen.
+   */
+  function bringIntoView() {
+    // After the keyboard has finished coming up, or the scroll lands in the wrong place.
+    window.setTimeout(() => inputRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 250)
   }
 
   return (
@@ -68,6 +84,7 @@ export function ProductPicker({ vendorId, supplierName, added, onAdd, disabled }
           disabled={disabled}
           autoComplete="off"
           onChange={(event) => setText(event.target.value)}
+          onFocus={bringIntoView}
           onKeyDown={(event) => {
             // Enter must never submit anything; for a scanner it means "add what you found".
             if (event.key === 'Enter') {
@@ -76,7 +93,7 @@ export function ProductPicker({ vendorId, supplierName, added, onAdd, disabled }
             }
           }}
           placeholder={expectedCopy.picker.placeholder}
-          className="w-full rounded-md border border-neutral-200 bg-white py-2.5 pr-3 pl-9 text-base text-neutral-900 placeholder:text-neutral-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none disabled:bg-neutral-50 sm:text-sm"
+          className="scroll-mt-4 w-full rounded-md border border-neutral-200 bg-white py-2.5 pr-3 pl-9 text-base text-neutral-900 placeholder:text-neutral-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none disabled:bg-neutral-50 sm:text-sm"
         />
       </div>
 
@@ -104,7 +121,7 @@ export function ProductPicker({ vendorId, supplierName, added, onAdd, disabled }
       )}
 
       {groups.length > 0 && (
-        <ResultList groups={groups} added={added} onAdd={onAdd} disabled={disabled} />
+        <ResultList groups={groups} added={added} onAdd={add} disabled={disabled} />
       )}
       {searching && groups.length >= PICKER_LIMIT && (
         <p className="text-xs text-neutral-500">{expectedCopy.picker.narrow}</p>
@@ -115,7 +132,7 @@ export function ProductPicker({ vendorId, supplierName, added, onAdd, disabled }
           <h3 className="text-xs font-medium text-neutral-500">
             {expectedCopy.picker.usualFrom(supplierName ?? expectedCopy.order.supplier.toLowerCase())}
           </h3>
-          <ResultList groups={suggestions} added={added} onAdd={onAdd} disabled={disabled} />
+          <ResultList groups={suggestions} added={added} onAdd={add} disabled={disabled} />
         </div>
       )}
 
