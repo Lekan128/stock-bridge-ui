@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
+import { X } from 'lucide-react'
 import { copy } from '@/features/imports/copy'
 import {
   formatPrice,
@@ -33,6 +34,11 @@ export interface DeliveryLineRowProps {
    * orders, where nothing else on the row says what the number counts.
    */
   showUnitWord?: boolean
+  /** Takes the line off the order (a purchase order is built by adding lines; this is its undo). */
+  onRemove?: (line: DeliveryLine) => void
+  removeLabel?: string
+  /** Put the cursor in the quantity box as the row appears — the next thing after "Add" is "how many". */
+  autoFocus?: boolean
   onChange: (line: DeliveryLine, patch: Partial<Omit<DeliveryEntry, 'line'>>) => void
 }
 
@@ -56,7 +62,17 @@ function inputTone(invalid: boolean): string {
  *
  * The inputs are 16px on a phone so iOS does not zoom the page when one is focused.
  */
-export function DeliveryLineRow({ line, entry, quantityLabel, hidePrice, showUnitWord, onChange }: DeliveryLineRowProps) {
+export function DeliveryLineRow({
+  line,
+  entry,
+  quantityLabel,
+  hidePrice,
+  showUnitWord,
+  onRemove,
+  removeLabel,
+  autoFocus,
+  onChange,
+}: DeliveryLineRowProps) {
   const quantityId = useId()
   const priceId = useId()
   const priceRef = useRef<HTMLInputElement>(null)
@@ -97,6 +113,7 @@ export function DeliveryLineRow({ line, entry, quantityLabel, hidePrice, showUni
             inputMode="decimal"
             autoComplete="off"
             placeholder="0"
+            autoFocus={autoFocus}
             value={entry?.quantity ?? ''}
             onChange={(event) => onChange(line, { quantity: event.target.value })}
             aria-invalid={quantityInvalid || undefined}
@@ -107,6 +124,16 @@ export function DeliveryLineRow({ line, entry, quantityLabel, hidePrice, showUni
             <span className="w-16 text-sm text-neutral-600" aria-hidden="true">
               {quantityUnitWord(line, quantity ?? null)}
             </span>
+          )}
+          {onRemove && (
+            <button
+              type="button"
+              onClick={() => onRemove(line)}
+              aria-label={removeLabel ?? `Remove ${line.productName}, ${line.comesIn}`}
+              className="-mr-1 rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
           )}
         </div>
       </div>

@@ -1,6 +1,7 @@
 import { lineKey, type DeliveryEntry } from '@/features/imports/delivery'
 import type { DeliveryLine } from '@/features/imports/types'
 import type { ExpectedDelivery, ExpectedDeliveryLine } from '@/features/expected/types'
+import type { CompanyVendor } from '@/features/vendors/types'
 
 /**
  * The expected-delivery screens' arithmetic, kept out of the pages so the pages are only layout
@@ -128,3 +129,9 @@ export function isRecent(iso: string, minutes: number, now: Date = new Date()): 
   const then = new Date(iso).getTime()
   return !Number.isNaN(then) && now.getTime() - then < minutes * 60_000
 }
+
+/** Whether this supplier's details may be changed from here. A supplier on Procure Paddy manages their own. */
+export function mayEditSupplier(vendor: CompanyVendor, canEdit: boolean): boolean {
+  return canEdit && vendor.kind !== 'VERIFIED' && vendor.editable !== false
+}
+

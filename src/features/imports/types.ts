@@ -364,6 +364,13 @@ export interface DeliveryLinesParams {
   vendorId?: string
   categoryId?: string
   productIds?: string[]
+  /**
+   * A bounded lookup for a picker: the products whose name, code or barcode contains this text. The
+   * server caps how many come back, so it works the same at thirty products and thirty thousand.
+   */
+  search?: string
+  /** With `vendorId` and no `search`: only that many of the supplier's own products. */
+  limit?: number
 }
 
 export interface DeliveryLineInput {

@@ -1,5 +1,6 @@
 import { expectedCopy } from '@/features/expected/copy'
 import { InlineEmailEditor } from '@/features/expected/components/InlineEmailEditor'
+import { mayEditSupplier } from '@/features/expected/expected'
 import type { CompanyVendor } from '@/features/vendors/types'
 
 export interface SupplierContactProps {
@@ -11,11 +12,6 @@ export interface SupplierContactProps {
   onEditingChange: (editing: boolean) => void
   /** The directory row after the email was saved, so the picker's own list stays current. */
   onVendorUpdated: (vendor: CompanyVendor) => void
-}
-
-/** Whether this supplier's details may be changed from here. A supplier on Procure Paddy manages their own. */
-export function mayEditSupplier(vendor: CompanyVendor, canEdit: boolean): boolean {
-  return canEdit && vendor.kind !== 'VERIFIED' && vendor.editable !== false
 }
 
 /**

@@ -102,6 +102,8 @@ export const expectedCopy = {
     linesHeading: 'What do you want?',
     quantityLabel: (productName: string, comesIn: string) => `${productName}, ${comesIn} — how many you want`,
     chooseSupplier: 'Choose a supplier first',
+    submitOffline: 'Create when online',
+    offlineNote: "You're offline. This purchase order is saved on this phone; create it once you're connected.",
     noneLinked: (supplier: string) => `None of your products are linked to ${supplier} yet, so here is everything.`,
     submit: 'Create purchase order',
     submitAndEmail: (supplier: string) => `Create and email ${supplier}`,
@@ -126,6 +128,30 @@ export const expectedCopy = {
     addLogo: 'Add logo',
     noContact: (supplier: string) =>
       `No phone or email saved for ${supplier}. You can still make the order and send it yourself.`,
+  },
+
+  /**
+   * "What do you want?" — finding a product and adding it. Nothing is listed until it is asked for,
+   * so it reads the same with ten products and ten thousand.
+   */
+  picker: {
+    label: 'Search your products',
+    placeholder: 'Search by name, code or barcode',
+    start: 'Search for a product to add it to this order.',
+    usualFrom: (supplier: string) => `Usually from ${supplier}`,
+    searching: 'Searching…',
+    failed: "We couldn't search just now.",
+    noMatch: (text: string) => `Nothing matches “${text}”.`,
+    addProductFirst: 'Add it on the products page first',
+    narrow: 'Showing the first few. Type more to narrow it down.',
+    add: 'Add',
+    added: 'Added',
+    addLabel: (product: string, comesIn: string) => `Add ${product}, ${comesIn}`,
+    yourOrder: 'Your order',
+    nothingAdded: 'Nothing added yet.',
+    remove: (product: string, comesIn: string) => `Remove ${product}, ${comesIn}`,
+    leftOut: (count: number) =>
+      count === 1 ? '1 item has no quantity yet, so it is left out.' : `${count} items have no quantity yet, so they are left out.`,
   },
 
   /** The supplier's phone and email, and the email switch, under the supplier field. */
@@ -232,6 +258,8 @@ export const expectedCopy = {
     submit: (count: number, total: string | null) =>
       `Save ${pluralItems(count)}${total ? ` · ${total}` : ''}`,
     submitEmpty: 'Type a quantity to add items',
+    submitOffline: 'Save when online',
+    offlineNote: "You're offline. This is saved on this phone; save it once you're connected.",
     totalPartial: 'Total leaves out lines without a price',
     /** Read out politely as the total changes; the visible button says the same. */
     totalAnnounce: (count: number, total: string | null) =>

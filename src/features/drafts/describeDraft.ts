@@ -20,7 +20,7 @@ interface ProductLike {
 
 /**
  * A draft as the sync centre lists it (A6). Keys are `delivery:new`, `delivery:{expectedId}`,
- * `product:new`, `sale:new` and `transfer:new` (see `RecordDeliveryPage`, `ProductFormPage`, `useSaleBasket` and `SendStockPage`); anything else — a key a later
+ * `product:new`, `order:new`, `sale:new` and `transfer:new` (see `RecordDeliveryPage`, `ProductFormPage`, `useSaleBasket` and `SendStockPage`); anything else — a key a later
  * version added — is listed plainly rather than hidden, so logout's count always matches the list.
  */
 export function describeDraft(draft: StoredDraft): DraftSummary {
@@ -37,6 +37,17 @@ export function describeDraft(draft: StoredDraft): DraftSummary {
       title: id === 'new' ? 'Delivery' : 'Delivery for an expected order',
       detail: parts.length > 0 ? parts.join(' · ') : null,
       to: id === 'new' ? '/app/products/receive' : `/app/products/receive?expected=${encodeURIComponent(id)}`,
+    }
+  }
+
+  if (kind === 'order') {
+    // A purchase order (or "record what you ordered") still being typed: how many lines have a quantity.
+    const entries = Object.values((draft.value as DeliveryLike).entries ?? {})
+    const lines = entries.filter((entry) => entry.quantity?.trim()).length || entries.length
+    return {
+      title: 'Purchase order',
+      detail: lines > 0 ? `${lines} ${lines === 1 ? 'item' : 'items'}` : null,
+      to: '/app/purchase-orders/new',
     }
   }
 

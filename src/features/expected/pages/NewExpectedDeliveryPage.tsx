@@ -1,43 +1,46 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { Check, ClipboardList, PackageSearch, Search } from 'lucide-react'
+import { Check, ClipboardList } from 'lucide-react'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
-import { Button, buttonClassName } from '@/components/Button'
-import { EmptyState } from '@/components/EmptyState'
+import { Button } from '@/components/Button'
 import { ErrorState } from '@/components/ErrorState'
-import { Skeleton } from '@/components/Skeleton'
+import { Switch } from '@/components/Switch'
 import { TextField } from '@/components/TextField'
 import { useToast } from '@/components/useToast'
 import { queryKeys } from '@/data/queryKeys'
-import { useCompany } from '@/features/company/hooks/useCompany'
-import { todayIso } from '@/features/expected/expected'
-import { InlineEmailEditor } from '@/features/expected/components/InlineEmailEditor'
-import { mayEditSupplier, SupplierContact } from '@/features/expected/components/SupplierContact'
-import { Switch } from '@/components/Switch'
-import { expectedApi } from '@/features/expected/api/expectedApi'
-import { expectedCopy } from '@/features/expected/copy'
-import { DeliveryLineRow } from '@/features/imports/components/DeliveryLineRow'
-import { copy } from '@/features/imports/copy'
-import {
-  formatPrice,
-  groupByProduct,
-  lineKey,
-  matchesSearch,
-  tally,
-  validQuantity,
-  type DeliveryEntry,
-} from '@/features/imports/delivery'
-import { useDeliveryLines } from '@/features/imports/hooks/useDeliveryLines'
-import type { DeliveryLine } from '@/features/imports/types'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
+import { useCompany } from '@/features/company/hooks/useCompany'
+import { DraftNote } from '@/features/drafts/DraftNote'
+import { useDraft } from '@/features/drafts/useDraft'
+import { expectedApi } from '@/features/expected/api/expectedApi'
+import { InlineEmailEditor } from '@/features/expected/components/InlineEmailEditor'
+import { ProductPicker } from '@/features/expected/components/ProductPicker'
+import { SupplierContact } from '@/features/expected/components/SupplierContact'
+import { expectedCopy } from '@/features/expected/copy'
+import { mayEditSupplier, todayIso } from '@/features/expected/expected'
+import { DeliveryLineRow } from '@/features/imports/components/DeliveryLineRow'
+import { formatPrice, groupByProduct, lineKey, tally, type DeliveryEntry } from '@/features/imports/delivery'
+import type { DeliveryLine } from '@/features/imports/types'
 import { SupplierField } from '@/features/vendors/components/SupplierField'
 import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
 import type { CompanyVendor } from '@/features/vendors/types'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
 
 const LIST_PATH = '/app/purchase-orders'
+
+/** What the form keeps on the phone between visits (`UX_PATTERNS.md` Pattern C: a form that creates something keeps a draft). */
+interface OrderDraft {
+  recordChosen: boolean
+  vendorId: string
+  expectedDate: string
+  reference: string
+  note: string
+  goingTo: string
+  entries: Record<string, DeliveryEntry>
+}
 
 /**
  * "Say what you ordered" (`BULK_IMPORT_CX_PLAN.md` task 3.1).
@@ -85,13 +88,13 @@ export function NewExpectedDeliveryPage() {
   const [editingEmail, setEditingEmail] = useState<'top' | 'bottom' | null>(null)
 
   const [vendorId, setVendorId] = useState('')
-  /** "+ Something not on this list" — every product, while the supplier stays on the order. */
-  const [showAll, setShowAll] = useState(false)
   const [expectedDate, setExpectedDate] = useState('')
   const [reference, setReference] = useState('')
   const [note, setNote] = useState('')
-  const [search, setSearch] = useState('')
+  /** Only what has been added — never the whole catalog. Keyed by `lineKey`. */
   const [entries, setEntries] = useState<Record<string, DeliveryEntry>>({})
+  /** The line just added: its quantity box takes the cursor, because "how many?" is what comes next. */
+  const [justAdded, setJustAdded] = useState<string | null>(null)
   // "Going to" (MULTI_BRANCH_UX_PLAN.md §5.10): the branch it is for - this one by default, and the
   // delivery shows on that branch's Needs you only. Not asked at a one-branch company (rule 1).
   const branch = useOptionalWorkingBranch()
@@ -113,36 +116,49 @@ export function NewExpectedDeliveryPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
-  const filter = vendorId && !showAll ? 'BY_VENDOR' : 'ALL'
-  const { lines, loading, error, refetch } = useDeliveryLines(filter, vendorId || undefined)
-  // A purchase order is often the first thing a supplier is ever asked for, so nothing is linked to
-  // them yet. Making somebody press "Show all products" to get to the list they obviously want is a
-  // dead end with a button on it: show everything straight away, and say why.
-  const supplierHasNoProducts = isOrder && filter === 'BY_VENDOR' && !loading && !error && lines != null && lines.length === 0
-  const [everythingBecauseNoneLinked, setEverythingBecauseNoneLinked] = useState(false)
-  useEffect(() => {
-    if (supplierHasNoProducts) {
-      setEverythingBecauseNoneLinked(true)
-      setShowAll(true)
-    }
-  }, [supplierHasNoProducts])
+  /**
+   * The typing, kept on the phone — so a call, a dropped connection or a closed tab loses nothing, and
+   * the form can be finished once there is signal again.
+   */
+  const draft = useDraft<OrderDraft>('order:new')
+  const [restoredDraft, setRestoredDraft] = useState(false)
+  const online = useOnlineStatus()
   const vendor = vendors.find((entry) => entry.id === vendorId)
   const supplierName = vendor?.name
   const supplierEmail = vendor?.email?.trim() || ''
   const hasPhone = (vendor?.contactPhone ?? '').trim() !== ''
   const willEmail = isOrder && emailOn && supplierEmail !== ''
 
-  const groups = useMemo(
-    () => groupByProduct((lines ?? []).filter((line) => matchesSearch(line, search))),
-    [lines, search],
-  )
-  const totals = useMemo(() => tally(entries), [entries])
+  // An earlier visit's draft: put it back, once, before anything is typed.
+  const { initial: initialDraft, save: saveDraftNow } = draft
+  useEffect(() => {
+    if (!initialDraft) return
+    const saved = initialDraft.value
+    setRecordChosen(saved.recordChosen)
+    setVendorId(saved.vendorId)
+    // A day that has passed since cannot be asked for any more.
+    setExpectedDate(!saved.recordChosen && saved.expectedDate !== '' && saved.expectedDate < todayIso() ? '' : saved.expectedDate)
+    setReference(saved.reference)
+    setNote(saved.note)
+    setGoingTo(saved.goingTo)
+    setEntries((prev) => ({ ...prev, ...saved.entries }))
+    setRestoredDraft(true)
+  }, [initialDraft])
 
-  /** Typed quantities on lines the current list does not include — they are still sent. */
-  const hiddenCount = useMemo(() => {
-    const shown = new Set((lines ?? []).map(lineKey))
-    return Object.entries(entries).filter(([key, entry]) => !shown.has(key) && validQuantity(entry) != null).length
-  }, [lines, entries])
+  // Every change is kept, once there is anything worth keeping.
+  useEffect(() => {
+    if (initialDraft === undefined) return // not until the phone has been checked for a draft
+    const typedSomething = note.trim() !== '' || reference.trim() !== '' || Object.keys(entries).length > 0
+    if (!typedSomething) return
+    saveDraftNow({ recordChosen, vendorId, expectedDate, reference, note, goingTo: pickedGoingTo, entries })
+  }, [recordChosen, vendorId, expectedDate, reference, note, pickedGoingTo, entries, initialDraft, saveDraftNow])
+
+  // The order is what was added, grouped by product the way the picker shows them.
+  const groups = useMemo(() => groupByProduct(Object.values(entries).map((entry) => entry.line)), [entries])
+  const added = useMemo(() => new Set(Object.keys(entries)), [entries])
+  const totals = useMemo(() => tally(entries), [entries])
+  /** Lines added but with no quantity typed: they are not sent, and the person is told so. */
+  const blankCount = Object.values(entries).filter((entry) => entry.quantity.trim() === '').length
 
   const count = totals.lines.length
   // With a line priced nowhere, the sum would understate the order, so the button leaves it out.
@@ -155,7 +171,24 @@ export function NewExpectedDeliveryPage() {
     !submitting &&
     !needsGoingTo &&
     !neededInPast &&
+    online &&
     (!isOrder || vendorId !== '')
+
+  /** Puts a line on the order (once) and sends the cursor to its quantity box. */
+  function handleAdd(line: DeliveryLine) {
+    const key = lineKey(line)
+    setEntries((prev) => (prev[key] ? prev : { ...prev, [key]: { line, quantity: '', price: '', editingPrice: false } }))
+    setJustAdded(key)
+  }
+
+  function handleRemove(line: DeliveryLine) {
+    const key = lineKey(line)
+    setEntries((prev) => {
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+  }
 
   function handleLineChange(line: DeliveryLine, patch: Partial<Omit<DeliveryEntry, 'line'>>) {
     const key = lineKey(line)
@@ -173,8 +206,6 @@ export function NewExpectedDeliveryPage() {
 
   function handleSupplierChange(nextId: string) {
     setVendorId(nextId)
-    setShowAll(false)
-    setEverythingBecauseNoneLinked(false)
     setEditingEmail(null)
     // "Email this order to Tony" starts on only for a supplier an email has already gone through to
     // (and whose address has not changed since) — otherwise off, always.
@@ -198,6 +229,7 @@ export function NewExpectedDeliveryPage() {
           note: note.trim() || undefined,
           lines: totals.lines.map((line) => ({ productId: line.productId, unit: line.unit, quantity: line.quantity })),
         })
+        await draft.finish()
         // The supplier's "email starts on" and the list both changed on the server.
         void queryClient.invalidateQueries({ queryKey: queryKeys.vendors.all })
         void queryClient.invalidateQueries({ queryKey: queryKeys.expected.all })
@@ -213,6 +245,7 @@ export function NewExpectedDeliveryPage() {
         note: note.trim() || undefined,
         lines: totals.lines,
       })
+      await draft.finish()
       showToast(expectedCopy.create.done, 'success')
       navigate(LIST_PATH, { replace: true })
     } catch (err: unknown) {
@@ -249,6 +282,23 @@ export function NewExpectedDeliveryPage() {
             {expectedCopy.create.back}
           </Link>
         </div>
+
+        <DraftNote
+          savedAt={draft.savedAt}
+          restored={restoredDraft}
+          onDiscard={() => {
+            void draft.clear()
+            setRestoredDraft(false)
+            setEntries({})
+            setVendorId('')
+            setExpectedDate('')
+            setReference('')
+            setNote('')
+            setGoingTo('')
+            setEmailOn(false)
+            setEditingEmail(null)
+          }}
+        />
 
         <section className="grid gap-4 rounded-lg border border-neutral-200 bg-white p-4 sm:grid-cols-2">
           {canSeeSuppliers && (
@@ -357,141 +407,68 @@ export function NewExpectedDeliveryPage() {
           </div>
         </section>
 
-        <section aria-labelledby="expected-lines-heading" className="flex flex-col gap-3">
+        <section aria-labelledby="expected-lines-heading" className="flex flex-col gap-4">
           <h2 id="expected-lines-heading" className="text-sm font-semibold text-neutral-900">
             {isOrder ? expectedCopy.order.linesHeading : expectedCopy.create.linesHeading}
           </h2>
 
-          <div className="relative">
-            <Search
-              className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-neutral-500"
-              aria-hidden="true"
-            />
-            <label htmlFor="expected-search" className="sr-only">
-              {copy.delivery.search}
-            </label>
-            <input
-              id="expected-search"
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder={copy.delivery.searchPlaceholder}
-              className="w-full rounded-md border border-neutral-200 bg-white py-2 pr-3 pl-9 text-base text-neutral-900 placeholder:text-neutral-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none sm:text-sm"
-            />
-          </div>
-
-          {loading && (
-            <div role="status" className="flex flex-col gap-3" aria-busy="true" aria-label={copy.common.loading}>
-              {[0, 1, 2].map((index) => (
-                <Skeleton key={index} className="h-24 w-full" />
-              ))}
-            </div>
-          )}
-
-          {!loading && error && <ErrorState title={copy.delivery.loadFailed} message={error} onRetry={refetch} />}
-
-          {isOrder && everythingBecauseNoneLinked && showAll && vendor && (
-            <p className="text-sm text-neutral-600">{expectedCopy.order.noneLinked(vendor.name)}</p>
-          )}
-
-          {!loading && !error && lines && lines.length === 0 && filter === 'BY_VENDOR' && !isOrder && (
-            <EmptyState
-              icon={PackageSearch}
-              title={copy.delivery.supplierEmpty(supplierName ?? expectedCopy.create.supplier)}
-              action={
-                <Button variant="secondary" onClick={() => setShowAll(true)}>
-                  {copy.delivery.supplierEmptyAction}
-                </Button>
-              }
-            />
-          )}
-
-          {!loading && !error && lines && lines.length === 0 && filter === 'ALL' && (
-            <EmptyState
-              icon={PackageSearch}
-              title={copy.delivery.noProductsTitle}
-              description={copy.delivery.noProductsBody}
-              action={
-                <Link to="/app/products" className={buttonClassName('primary')}>
-                  {copy.delivery.noProductsAction}
-                </Link>
-              }
-            />
-          )}
-
-          {!loading && !error && lines && lines.length > 0 && groups.length === 0 && (
-            <p className="rounded-lg border border-neutral-200 bg-white px-4 py-8 text-center text-sm text-neutral-500">
-              {copy.delivery.noMatch(search.trim())}
-            </p>
-          )}
-
-          {!loading && !error && groups.length > 0 && (
-            <ul className="flex flex-col gap-3">
-              {groups.map((group) => (
-                <li key={group.productId} className="rounded-lg border border-neutral-200 bg-white px-4 pt-3">
-                  <h3 className="text-sm font-semibold text-neutral-900">
-                    {group.productName}
-                    <span className="ml-2 text-xs font-normal text-neutral-500">{group.sku}</span>
-                  </h3>
-                  <ul className="divide-y divide-neutral-100">
-                    {group.lines.map((line) => {
-                      const key = lineKey(line)
-                      return (
-                        <DeliveryLineRow
-                          key={key}
-                          line={line}
-                          entry={entries[key]}
-                          quantityLabel={(isOrder ? expectedCopy.order : expectedCopy.create).quantityLabel(
-                            line.productName,
-                            line.comesIn,
-                          )}
-                          hidePrice={isOrder}
-                          showUnitWord={isOrder}
-                          onChange={handleLineChange}
-                        />
-                      )
-                    })}
-                  </ul>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {!loading && hiddenCount > 0 && (
-            <p className="flex flex-wrap items-center gap-x-2 text-sm text-neutral-600">
-              {copy.delivery.hiddenTyped(hiddenCount)}
-              {filter === 'BY_VENDOR' && (
-                <button
-                  type="button"
-                  onClick={() => setShowAll(true)}
-                  className="rounded-sm font-medium text-primary-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-                >
-                  {copy.delivery.showAll}
-                </button>
+          {/* What has been added, with how many of each. */}
+          <div className="flex flex-col gap-2" data-order-lines>
+            <h3 className="text-sm font-semibold text-neutral-900">
+              {expectedCopy.picker.yourOrder}
+              {groups.length > 0 && (
+                <span className="ml-2 text-xs font-normal text-neutral-500">{expectedCopy.order.count(Object.keys(entries).length)}</span>
               )}
-            </p>
-          )}
+            </h3>
 
-          <div className="flex flex-col items-start gap-2 text-sm">
-            {filter === 'BY_VENDOR' && !loading && !error && lines && lines.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setShowAll(true)}
-                className="rounded-sm font-medium text-primary-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-              >
-                {copy.delivery.somethingElse}
-              </button>
+            {groups.length === 0 ? (
+              <p className="text-sm text-neutral-600">{expectedCopy.picker.nothingAdded}</p>
+            ) : (
+              <ul className="flex flex-col gap-3">
+                {groups.map((group) => (
+                  <li key={group.productId} className="rounded-lg border border-neutral-200 bg-white px-4 pt-3">
+                    <h4 className="text-sm font-semibold text-neutral-900">
+                      {group.productName}
+                      <span className="ml-2 text-xs font-normal text-neutral-500">{group.sku}</span>
+                    </h4>
+                    <ul className="divide-y divide-neutral-100">
+                      {group.lines.map((line) => {
+                        const key = lineKey(line)
+                        return (
+                          <DeliveryLineRow
+                            key={key}
+                            line={line}
+                            entry={entries[key]}
+                            quantityLabel={(isOrder ? expectedCopy.order : expectedCopy.create).quantityLabel(
+                              line.productName,
+                              line.comesIn,
+                            )}
+                            hidePrice={isOrder}
+                            showUnitWord={isOrder}
+                            autoFocus={key === justAdded}
+                            onRemove={handleRemove}
+                            removeLabel={expectedCopy.picker.remove(line.productName, line.comesIn)}
+                            onChange={handleLineChange}
+                          />
+                        )
+                      })}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
             )}
-            <p className="text-neutral-600">
-              {copy.delivery.notInCatalog}{' '}
-              <Link
-                to="/app/products"
-                className="rounded-sm font-medium text-primary-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-              >
-                {copy.delivery.notInCatalogLink}
-              </Link>
-            </p>
+            {blankCount > 0 && <p className="text-sm text-neutral-600">{expectedCopy.picker.leftOut(blankCount)}</p>}
           </div>
+
+          {/* Find a product, add it — the catalog is searched, never listed, so this reads the same with
+              ten products and ten thousand. */}
+          <ProductPicker
+            vendorId={vendorId}
+            supplierName={supplierName}
+            added={added}
+            onAdd={handleAdd}
+            disabled={submitting}
+          />
 
           {submitError && <ErrorState variant="inline" message={submitError} />}
         </section>
@@ -593,13 +570,22 @@ export function NewExpectedDeliveryPage() {
                   ? expectedCopy.order.chooseSupplier
                   : count === 0
                     ? expectedCopy.order.submitEmpty
-                    : `${willEmail ? expectedCopy.order.submitAndEmail(supplierName ?? '') : expectedCopy.order.submit} · ${expectedCopy.order.count(count)}`
+                    : !online
+                      ? expectedCopy.order.submitOffline
+                      : `${willEmail ? expectedCopy.order.submitAndEmail(supplierName ?? '') : expectedCopy.order.submit} · ${expectedCopy.order.count(count)}`
               : submitting
                 ? expectedCopy.create.saving
                 : count === 0
                   ? expectedCopy.create.submitEmpty
-                  : expectedCopy.create.submit(count, totalText)}
+                  : !online
+                    ? expectedCopy.create.submitOffline
+                    : expectedCopy.create.submit(count, totalText)}
           </Button>
+          {!online && count > 0 && (
+            <p className="text-center text-xs text-neutral-600">
+              {isOrder ? expectedCopy.order.offlineNote : expectedCopy.create.offlineNote}
+            </p>
+          )}
           {!isOrder && count > 0 && totals.partial && (
             <p className="text-center text-xs text-neutral-500">{expectedCopy.create.totalPartial}</p>
           )}
