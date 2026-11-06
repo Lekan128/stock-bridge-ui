@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react'
 import { ArrowLeft, PackageCheck, Truck } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
+import { PERMISSIONS } from '@/auth/permissions'
+import { useAuth } from '@/auth/useAuth'
+import { buttonClassName } from '@/components/Button'
 import { ProductCard } from '@/features/products/components/ProductCard'
 import { ProductListSkeleton } from '@/features/products/components/ProductListSkeleton'
 import { ProductTable, type ProductSort, type ProductSortField } from '@/features/products/components/ProductTable'
@@ -43,6 +46,16 @@ export function LowStockProductsPage() {
 
   const sorted = useMemo(() => sortProducts(alerts, sort), [alerts, sort])
 
+  // "Order these": a new purchase order with what is low and has nothing on the way already filled in
+  // (the purchase order redesign). The form asks who from first.
+  const { user } = useAuth()
+  const canOrder =
+    user?.type === 'tenant' && (user.permissions.includes(PERMISSIONS.CREATE_PURCHASE_ORDER) || user.permissions.includes(PERMISSIONS.SEND_PURCHASE_ORDER))
+  const toOrder = useMemo(() => {
+    const uncovered = alerts.filter((product) => incomingFor(product).quantity <= 0)
+    return (uncovered.length > 0 ? uncovered : alerts).slice(0, 40).map((product) => product.id)
+  }, [alerts, incomingFor])
+
   // "All branches" (MULTI_BRANCH_UX_PLAN.md §5.1): low anywhere, grouped by the branch it is low at, each
   // with that branch's figure. A product low at two branches is under both.
   const branch = useOptionalWorkingBranch()
@@ -74,6 +87,11 @@ export function LowStockProductsPage() {
           <h1 className="text-2xl font-semibold text-neutral-900">Low-stock products</h1>
           <p className="text-sm text-neutral-500">Products at or below their low-stock threshold.</p>
         </div>
+        {canOrder && toOrder.length > 0 && (
+          <Link to={`/app/purchase-orders/new?products=${toOrder.join(',')}`} className={buttonClassName('secondary', 'ml-auto')}>
+            Order these
+          </Link>
+        )}
       </div>
 
       {/* What an area asked for that its store has none of (Part 5): a buyer's to-do, whatever the levels say. */}

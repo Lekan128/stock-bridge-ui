@@ -51,7 +51,7 @@ export function BarcodeScanField({ onFound, disabled }: BarcodeScanFieldProps) {
   }
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="relative flex flex-col gap-1.5">
       <label htmlFor="delivery-scan" className="sr-only">
         {copy.delivery.scanLabel}
       </label>

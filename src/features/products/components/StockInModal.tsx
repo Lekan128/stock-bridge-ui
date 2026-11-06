@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
+import { ComingOnOrderHint } from '@/features/expected/components/ComingOnOrderHint'
 import { useSheetBranch } from '@/features/branches/useSheetBranch'
 import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronUp, Package, Truck } from 'lucide-react'
@@ -645,6 +646,8 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
       {step === 'form' && (
         <form onSubmit={handleSubmit(goToConfirm)} noValidate className="flex flex-col gap-4">
           {sheetBranch.field}
+          {/* Still owed on a purchase order: receive it there, or it gets counted twice. */}
+          <ComingOnOrderHint productId={product.id} productName={product.name} onLeave={onClose} />
           {/* Quantity and its unit are ONE question — "how much, of what" — so they sit on one
               row with the toggle glued to the input, the way Odoo 18 and Zoho Inventory both
               render a quantity. They stack at 360px rather than shrinking, because a unit label

@@ -121,7 +121,7 @@ await check('the title shares its row with the actions; search, Filters and chip
   assert((await record.getAttribute('class')).includes('bg-action'), 'Record a delivery is not the action')
   assert(!(await add.getAttribute('class')).includes('bg-action'), 'two action buttons')
   await more.click()
-  for (const item of ['Expected deliveries', 'Bulk upload', 'Manage categories', 'SKU settings', 'Download my products']) {
+  for (const item of ['Bulk upload', 'Manage categories', 'SKU settings', 'Download my products']) {
     await page.getByRole('menuitem', { name: item }).waitFor()
   }
   await page.keyboard.press('Escape')

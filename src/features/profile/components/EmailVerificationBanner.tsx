@@ -34,9 +34,11 @@ export function EmailVerificationBanner() {
     // able to find and skip past, not an interruption to announce over whatever they are doing.
     <section
       aria-labelledby="email-verification-banner-title"
-      className="flex shrink-0 flex-col gap-3 border-b border-warning-200 bg-warning-50 px-4 py-3 sm:flex-row sm:items-center sm:px-6"
+      // On a phone it is two short lines beside its buttons: the full explanation took 40% of a 390px
+      // screen and stayed there over every page (purchase order redesign, 2026-11-05).
+      className="flex shrink-0 flex-row flex-wrap items-center gap-x-3 gap-y-2 border-b border-warning-200 bg-warning-50 px-4 py-2.5 sm:flex-nowrap sm:gap-3 sm:py-3 sm:px-6"
     >
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-warning-100 text-warning-700">
+      <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-full bg-warning-100 text-warning-700 sm:flex">
         <MailWarning className="h-4.5 w-4.5" aria-hidden="true" />
       </div>
 
@@ -44,7 +46,10 @@ export function EmailVerificationBanner() {
         <p id="email-verification-banner-title" className="text-sm font-semibold text-warning-900">
           Confirm your email address to place orders
         </p>
-        <p className="mt-0.5 text-sm text-warning-800">
+        <p className="mt-0.5 text-sm text-warning-800 sm:hidden">
+          We sent a link to <strong className="break-all">{address}</strong>.
+        </p>
+        <p className="mt-0.5 hidden text-sm text-warning-800 sm:block">
           Until <strong className="break-all">{address}</strong> is confirmed you cannot place marketplace orders or
           pay for them, and we cannot email you order receipts or delivery updates. Everything else in the app keeps
           working. Click the link we sent you, or send it again.
@@ -52,7 +57,7 @@ export function EmailVerificationBanner() {
 
         {/* The result of the resend is announced where the button is, so a screen reader user
             who just pressed it hears the outcome without hunting for it. */}
-        <p aria-live="polite" className="mt-1 min-h-0 text-sm">
+        <p aria-live="polite" className="min-h-0 text-sm empty:hidden sm:mt-1">
           {feedback && <span className={feedbackClasses[feedback.tone]}>{feedback.message}</span>}
           {throttled && (
             <span className="text-warning-800">
@@ -72,7 +77,16 @@ export function EmailVerificationBanner() {
           className="inline-flex items-center gap-2 rounded-md border border-warning-300 bg-white px-3 py-2 text-sm font-medium text-warning-900 hover:bg-warning-100 focus-visible:ring-2 focus-visible:ring-warning-500 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
         >
           {sending && <Spinner size={16} />}
-          {sending ? 'Sending…' : throttled ? `Try again ${retryLabel}` : 'Resend the link'}
+          {sending ? (
+            'Sending…'
+          ) : throttled ? (
+            `Try again ${retryLabel}`
+          ) : (
+            <>
+              <span className="sm:hidden">Resend</span>
+              <span className="hidden sm:inline">Resend the link</span>
+            </>
+          )}
         </button>
 
         <button

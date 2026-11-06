@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { ErrorState } from '@/components/ErrorState'
 import { CompanyAccountFacts } from '@/features/company/components/CompanyAccountFacts'
+import { CompanyLogo } from '@/features/company/components/CompanyLogo'
 import { CompanyDetailsForm } from '@/features/company/components/CompanyDetailsForm'
 import { CompanyDetailsReadOnly } from '@/features/company/components/CompanyDetailsReadOnly'
 import { CompanySkeleton } from '@/features/company/components/CompanySkeleton'
@@ -33,13 +34,16 @@ export function CompanySettingsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-neutral-900">Company settings</h1>
-        <p className="text-sm text-neutral-500">
-          {canEdit
-            ? "Your company's details as ProcurePal holds them."
-            : "Your company's details as ProcurePal holds them. Only an account owner can change them."}
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-neutral-900">Company settings</h1>
+          <p className="text-sm text-neutral-500">
+            {canEdit
+              ? "Your company's details as ProcurePal holds them."
+              : "Your company's details as ProcurePal holds them. Only an account owner can change them."}
+          </p>
+        </div>
+        {company && <CompanyLogo company={company} canEdit={canEdit} onUpdated={setCompany} />}
       </div>
 
       {canManageBranches && (

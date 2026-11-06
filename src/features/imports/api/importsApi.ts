@@ -316,10 +316,21 @@ interface StockInTemplateParams {
   filter?: StockInFilter
   vendorId?: string
   categoryId?: string
+  /** A picker's bounded lookup — see `DeliveryLinesParams`. */
+  search?: string
+  limit?: number
 }
 
 function stockInTemplateQuery(params: StockInTemplateParams): Record<string, string> {
   const query: Record<string, string> = {}
+  // A picker's bounded lookup (a purchase order's "what do you want"): search text and/or a limit.
+  // Never sent together with the whole-catalog filters, which is what it exists to avoid.
+  if (params.search?.trim() || params.limit != null) {
+    if (params.search?.trim()) query.search = params.search.trim()
+    else if (params.vendorId) query.vendorId = params.vendorId
+    query.limit = String(params.limit ?? 20)
+    return query
+  }
   // `productIds` wins over `filter` when present (contract §3), so it is never sent alongside.
   if (params.productIds?.length) query.productIds = params.productIds.join(',')
   else if (params.filter) {

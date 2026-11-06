@@ -133,6 +133,9 @@ export function ProductDetailPage() {
 
   const canManageInventory = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_INVENTORY)
   const canManageProducts = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_PRODUCTS)
+  // Either order privilege (V78): someone who can only create makes an order that waits for approval.
+  const canOrder =
+    user?.type === 'tenant' && (user.permissions.includes(PERMISSIONS.CREATE_PURCHASE_ORDER) || user.permissions.includes(PERMISSIONS.SEND_PURCHASE_ORDER))
   // Independently grantable since V27 — a role may receive stock, issue it, both or neither,
   // separately from MANAGE_INVENTORY (which still gates Adjust below). See StockController.
   // At a branch the person only views, nothing here records (UX §4.1, "View only").
@@ -277,19 +280,29 @@ export function ProductDetailPage() {
             Count
           </Button>
         )}
+        {/* Running low: the next thing to do is usually to order more (purchase order redesign). */}
+        {canOrder && (product.isLowStock || product.quantityOnHand <= 0) && (
+          <Button variant="secondary" onClick={() => navigate(`/app/purchase-orders/new?products=${product.id}`)}>
+            Order more
+          </Button>
+        )}
       </>
     ) : null
 
   // Edit and the rare, destructive things live in "⋯" (C2, finding U3); Deactivate behind its confirmation.
+  const orderItem: OverflowMenuItem[] = canOrder
+    ? [{ label: 'Order more', onSelect: () => navigate(`/app/purchase-orders/new?products=${product.id}`) }]
+    : []
   const sendItem: OverflowMenuItem[] = canSend
     ? [
+        ...orderItem,
         {
           label: 'Send to another branch',
           icon: <Truck className="h-4 w-4 text-neutral-500" aria-hidden="true" />,
           onSelect: () => navigate(`/app/transfers/send?product=${product.id}`),
         },
       ]
-    : []
+    : orderItem
   const menuItems: OverflowMenuItem[] = canManageProducts
     ? [
         ...sendItem,

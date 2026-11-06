@@ -1,329 +1,323 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { FileSpreadsheet, PackageSearch, Search } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
+import { Check, FileSpreadsheet, Search } from 'lucide-react'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
 import { Button, buttonClassName } from '@/components/Button'
-import { EmptyState } from '@/components/EmptyState'
 import { ErrorState } from '@/components/ErrorState'
 import { Skeleton } from '@/components/Skeleton'
-import { TextField } from '@/components/TextField'
-import { useToast } from '@/components/useToast'
-import { ReceivingExpectedBanner } from '@/features/expected/components/ReceivingExpectedBanner'
-import { outstandingEntries } from '@/features/expected/expected'
-import { useExpectedDelivery } from '@/features/expected/hooks/useExpectedDelivery'
-import { importsApi } from '@/features/imports/api/importsApi'
-import { DeliveryConfirmDialog } from '@/features/imports/components/DeliveryConfirmDialog'
-import { BarcodeScanField } from '@/features/imports/components/BarcodeScanField'
-import { DeliveryLineRow } from '@/features/imports/components/DeliveryLineRow'
-import { copy } from '@/features/imports/copy'
-import {
-  formatPrice,
-  groupByProduct,
-  lineKey,
-  matchesSearch,
-  tally,
-  validQuantity,
-  type DeliveryEntry,
-} from '@/features/imports/delivery'
-import { useDeliveryLines } from '@/features/imports/hooks/useDeliveryLines'
-import type { CommitPreview, DeliveryLine, ImportSession } from '@/features/imports/types'
-import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
+import { invalidateInventory } from '@/data/inventoryCache'
+import { queryKeys } from '@/data/queryKeys'
+import { useApiQuery } from '@/data/useApiQuery'
 import { DraftNote } from '@/features/drafts/DraftNote'
 import { useDraft } from '@/features/drafts/useDraft'
+import { expectedApi } from '@/features/expected/api/expectedApi'
+import { SupplierSearch } from '@/features/expected/components/SupplierSearch'
+import { asDeliveryLine, orderMoney, quantityWords, shortDate } from '@/features/expected/expected'
+import { useRecentSuppliers } from '@/features/expected/hooks/useProductPicker'
+import type { ExpectedDelivery, PageResponse } from '@/features/expected/types'
+import { importsApi } from '@/features/imports/api/importsApi'
+import { BarcodeScanField } from '@/features/imports/components/BarcodeScanField'
+import { ReceiveLineRow } from '@/features/imports/components/ReceiveLineRow'
+import { lineKey, matchesSearch, perUnitWords } from '@/features/imports/delivery'
+import { useDeliveryLines } from '@/features/imports/hooks/useDeliveryLines'
+import { NO_BACK, amount, priceOf, rowKey, tallyRows, words, type ReceiveRow, type SendBack } from '@/features/imports/receive'
+import { receiveCopy as text } from '@/features/imports/receiveCopy'
+import type { DeliveryLine } from '@/features/imports/types'
+import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
-import { useQueryClient } from '@tanstack/react-query'
-import { invalidateInventory } from '@/data/inventoryCache'
-
-const SELECT_CLASS =
-  'w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-base text-neutral-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none disabled:bg-neutral-50 sm:text-sm'
 
 const SPREADSHEET_PATH = '/app/products/import/new?kind=STOCK_IN'
+const NONE = 'NONE'
+const SHOWN_SUGGESTIONS = 8
 
-/** Today in the user's own timezone, as the `YYYY-MM-DD` a date input holds. */
 function todayIso(): string {
   return new Date().toLocaleDateString('en-CA')
 }
 
-/** What Record a delivery keeps on the phone between visits (A5). */
-interface DeliveryDraft {
+/** What Record a delivery keeps on the phone between visits (Pattern C). */
+interface ReceiveDraftV2 {
+  version: 2
   vendorId: string
-  showAll: boolean
+  orderId: string
+  rows: ReceiveRow[]
   deliveryDate: string
   invoiceNo: string
-  entries: Record<string, DeliveryEntry>
 }
 
-/** An import the server has built from the typed lines, waiting on the confirm dialog. */
-interface PendingDelivery {
-  session: ImportSession
-  preview: CommitPreview
+/** After it went in: what to say, and the order to ask about. */
+interface Recorded {
+  importId: string
+  what: string
+  order: ExpectedDelivery | null
+}
+
+/** Rows for an order's lines still owed: Arrived starts at what was ordered (owner, 2026-11-06). */
+function rowsFor(order: ExpectedDelivery): ReceiveRow[] {
+  return order.lines
+    .filter((line) => line.outstanding > 0)
+    .map((line) => ({
+      line: asDeliveryLine(line),
+      ordered: line.outstanding,
+      orderPrice: line.price ?? null,
+      arrived: String(line.outstanding),
+      price: '',
+      back: NO_BACK,
+    }))
+}
+
+function rowFor(line: DeliveryLine): ReceiveRow {
+  return { line, ordered: null, orderPrice: null, arrived: '', price: '', back: NO_BACK }
 }
 
 /**
- * "Record a delivery" (BULK_IMPORT_CX_PLAN.md task 2.1) — a small delivery without a spreadsheet.
+ * Record a delivery, rebuilt around the order (PURCHASE_ORDER_PLAN.md section 11.6; mockups
+ * "Record a Delivery Redesign" A–E and "Purchase Flow Redesign" 5A–5C, owner 2026-11-06).
  *
- * Built for a phone at the gate: supplier, date and invoice once at the top, then that supplier's
- * products with a quantity box per way each is bought, and one button at the bottom that always
- * says how many lines it will add and what they come to.
+ * Who it's from, then "Which order is this?" with the newest open order already chosen. Its lines
+ * show at once with Ordered beside Arrived, so the person at the gate — who may not be who ordered —
+ * only changes what is different, and the line says "5 short" as they type. Some can be sent back
+ * with a reason; that never becomes stock and stays owed on the order. Date, waybill and prices are
+ * one short line each. One button records it (no confirm popup; the result page keeps Undo), and
+ * if anything is still owed the next screen asks once whether it is still coming.
  *
- * Underneath it is the ordinary stock-in import (task 2.2): the typed lines are posted, the server
- * checks them exactly as it checks a sheet, and the same preview, commit and result screens take
- * over. So a line with an error goes to the full review, and anything recorded here can be undone
- * from the result page like any upload.
- *
- * <h2>`?expected=<id>` — receiving something that was written down first</h2>
- * Opened from an expected delivery (task 3.1) the screen is the same screen, filled in: the
- * supplier, the date and their reference come off the order, every line still owed opens with the
- * quantity owed and the price agreed, and a banner says which order is being received. The id
- * rides along on the request, so committing credits that order and closes it once every line is
- * met — and undoing the import takes the credit back. Nothing else about the screen changes, and
- * with no such parameter none of it happens at all.
+ * Underneath it is still the ordinary stock-in import, so a line the server can't take goes to the
+ * full review, and anything recorded can be undone.
  */
 export function RecordDeliveryPage() {
   const queryClient = useQueryClient()
   const { user } = useAuth()
   const navigate = useNavigate()
-  const { showToast } = useToast()
   const [searchParams] = useSearchParams()
-  const expectedId = searchParams.get('expected')
+  const expectedParam = searchParams.get('expected')
   const permissions = user?.type === 'tenant' ? user.permissions : []
   const canSeeSuppliers = permissions.includes(PERMISSIONS.VIEW_VENDORS)
-  const { vendors } = useVendorOptions(canSeeSuppliers)
-
-  const [vendorId, setVendorId] = useState('')
-  /** "+ Something not on this list" — every product, while the supplier stays on the delivery. */
-  const [showAll, setShowAll] = useState(false)
-  const [deliveryDate, setDeliveryDate] = useState(todayIso)
-  const [invoiceNo, setInvoiceNo] = useState('')
-  const [search, setSearch] = useState('')
-  const [entries, setEntries] = useState<Record<string, DeliveryEntry>>({})
-
-  /**
-   * The typing, kept on the phone (A5) — keyed by the expected delivery being received, if any, so
-   * receiving two different orders never mixes their lines.
-   */
-  const draft = useDraft<DeliveryDraft>(`delivery:${expectedId ?? 'new'}`)
-  const [restoredDraft, setRestoredDraft] = useState(false)
+  const canManageSuppliers = permissions.includes(PERMISSIONS.MANAGE_VENDORS)
+  const canSend = permissions.includes(PERMISSIONS.SEND_PURCHASE_ORDER)
+  const { vendors, upsert: addVendor } = useVendorOptions(canSeeSuppliers)
+  const recent = useRecentSuppliers(canSeeSuppliers)
   const online = useOnlineStatus()
 
+  const [vendorId, setVendorId] = useState('')
+  /** The order being received; NONE for "It's not on an order"; '' until one is chosen. */
+  const [orderId, setOrderId] = useState('')
+  const [rows, setRows] = useState<ReceiveRow[]>([])
+  const [deliveryDate, setDeliveryDate] = useState(todayIso)
+  const [invoiceNo, setInvoiceNo] = useState('')
+  const [open, setOpen] = useState<'date' | 'invoice' | 'prices' | null>(null)
+  const [adding, setAdding] = useState(false)
+  const [search, setSearch] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [submitError, setSubmitError] = useState<string | null>(null)
-  const [pending, setPending] = useState<PendingDelivery | null>(null)
-  const [committing, setCommitting] = useState(false)
-  const [commitError, setCommitError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [recorded, setRecorded] = useState<Recorded | null>(null)
+  /** Something was typed or chosen by the person: only then is there a draft worth keeping. */
+  const [touched, setTouched] = useState(false)
 
-  const filter = vendorId && !showAll ? 'BY_VENDOR' : 'ALL'
-  const { lines, loading, error, refetch } = useDeliveryLines(filter, vendorId || undefined)
-  const supplierName = vendors.find((vendor) => vendor.id === vendorId)?.name
+  const supplierName = vendors.find((vendor) => vendor.id === vendorId)?.name ?? ''
 
-  const {
-    expected,
-    loading: expectedLoading,
-    error: expectedError,
-  } = useExpectedDelivery(expectedId)
-
-  /**
-   * Fill the form in from the order being received, once.
-   *
-   * `expected` is set exactly once per id by the hook, so this runs once and never fights the
-   * person typing. Anything already typed in the moment before the order arrived wins over the
-   * pre-fill for the same reason — the two spreads are in that order deliberately.
-   *
-   * The date is deliberately NOT taken from the order. That date is when the delivery was DUE,
-   * and this field is when it ARRIVED — which is today, since that is when somebody is standing
-   * at the gate recording it. They differ exactly when the supplier was late, and filling in the
-   * promised day then would backdate the stock movement by however long the delay was, quietly
-   * changing which stock FIFO draws from and what it cost. The one case where the two agree is
-   * the one where leaving it as today is already right.
-   *
-   * The supplier is filled in, and the list is opened to the whole catalog rather than to that
-   * supplier's products: an order from Tony can contain a product whose usual supplier is Ada,
-   * and filtering to Tony would leave that line typed but off-screen.
-   */
-  useEffect(() => {
-    if (!expected) return
-    // A draft restored for this order already holds what the person chose; the order only fills in
-    // what they haven't.
-    if (!restoredDraft) {
-      if (expected.vendorId != null) setVendorId(expected.vendorId)
-      if (expected.reference != null) setInvoiceNo(expected.reference)
+  // ---------------------------------------------------------------- the orders --------------
+  const fromLink = useApiQuery<ExpectedDelivery>({
+    queryKey: queryKeys.expected.detail(expectedParam),
+    queryFn: () => expectedApi.get(expectedParam as string),
+    fallbackError: text.failed,
+    enabled: expectedParam != null,
+  })
+  const openOrders = useApiQuery<PageResponse<ExpectedDelivery>>({
+    queryKey: ['expected', 'list', 'receive', vendorId],
+    queryFn: () => expectedApi.list({ view: 'OPEN', vendorId, page: 0, size: 5 }),
+    fallbackError: text.failed,
+    enabled: vendorId !== '',
+    persist: false,
+  })
+  // Newest first; only those still owed something. The one opened from its own page is always offered.
+  const orders = useMemo(() => {
+    const listed = (openOrders.data?.content ?? []).filter((order) => order.receivable)
+    const linked = fromLink.data
+    if (linked && linked.receivable && linked.vendorId === vendorId && !listed.some((order) => order.id === linked.id)) {
+      return [linked, ...listed]
     }
-    setShowAll(true)
-    setEntries((prev) => ({ ...outstandingEntries(expected), ...prev }))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expected])
+    return listed
+  }, [openOrders.data, fromLink.data, vendorId])
+  const order = orders.find((entry) => entry.id === orderId) ?? null
 
-  // An earlier visit's draft: put it back, once, before anything is typed.
+  // ---------------------------------------------------------------- the draft --------------
+  const draft = useDraft<ReceiveDraftV2>(`delivery:${expectedParam ?? 'new'}`)
+  const [restoredDraft, setRestoredDraft] = useState(false)
   const { initial: initialDraft, save: saveDraftNow } = draft
+  const started = useRef(false)
   useEffect(() => {
-    if (!initialDraft) return
+    if (!initialDraft || started.current) return
     const saved = initialDraft.value
+    // A draft from the old screen kept its lines another way: it can't be put back.
+    if (saved.version !== 2) {
+      void draft.clear()
+      return
+    }
+    started.current = true
     setVendorId(saved.vendorId)
-    setShowAll(saved.showAll)
+    setOrderId(saved.orderId)
+    setRows(saved.rows)
     setDeliveryDate(saved.deliveryDate > todayIso() ? todayIso() : saved.deliveryDate)
     setInvoiceNo(saved.invoiceNo)
-    setEntries((prev) => ({ ...prev, ...saved.entries }))
     setRestoredDraft(true)
+    setTouched(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialDraft])
-
-  // Every change is kept, once there is anything worth keeping.
   useEffect(() => {
-    if (initialDraft === undefined) return // not until the phone has been checked for a draft
-    const typedSomething =
-      invoiceNo.trim() !== '' || Object.values(entries).some((entry) => entry.quantity.trim() !== '' || entry.price.trim() !== '')
-    if (!typedSomething) return
-    saveDraftNow({ vendorId, showAll, deliveryDate, invoiceNo, entries })
-  }, [vendorId, showAll, deliveryDate, invoiceNo, entries, initialDraft, saveDraftNow])
+    if (initialDraft === undefined || recorded || !touched) return
+    if (rows.length === 0 && invoiceNo.trim() === '') return
+    saveDraftNow({ version: 2, vendorId, orderId, rows, deliveryDate, invoiceNo })
+  }, [initialDraft, recorded, touched, saveDraftNow, vendorId, orderId, rows, deliveryDate, invoiceNo])
 
-  const groups = useMemo(
-    () => groupByProduct((lines ?? []).filter((line) => matchesSearch(line, search))),
-    [lines, search],
-  )
-  const totals = useMemo(() => tally(entries), [entries])
+  // Opened from an order ("Record what arrived"): its supplier, and that order chosen.
+  useEffect(() => {
+    const linked = fromLink.data
+    if (!linked || started.current) return
+    started.current = true
+    if (linked.vendorId) setVendorId(linked.vendorId)
+    setOrderId(linked.id)
+    setRows(rowsFor(linked))
+    if (linked.reference) setInvoiceNo(linked.reference)
+  }, [fromLink.data])
 
-  /** Typed quantities on lines the current list does not include — they are still sent. */
-  const hiddenCount = useMemo(() => {
-    const shown = new Set((lines ?? []).map(lineKey))
-    return Object.entries(entries).filter(([key, entry]) => !shown.has(key) && validQuantity(entry) != null).length
-  }, [lines, entries])
+  // A supplier picked by hand: their newest open order is chosen, or "not on an order" when none.
+  useEffect(() => {
+    if (vendorId === '' || orderId !== '' || !openOrders.data) return
+    const newest = orders[0]
+    if (newest) {
+      setOrderId(newest.id)
+      setRows((current) => [...rowsFor(newest), ...current.filter((row) => row.ordered == null)])
+    } else {
+      setOrderId(NONE)
+    }
+  }, [vendorId, orderId, openOrders.data, orders])
 
-  const today = todayIso()
-  const dateError =
-    deliveryDate === '' ? copy.delivery.dateMissing : deliveryDate > today ? copy.delivery.dateFuture : undefined
+  function chooseSupplier(next: string) {
+    setTouched(true)
+    setVendorId(next)
+    setOrderId('')
+    setRows([])
+    setAdding(false)
+  }
 
-  const count = totals.lines.length
-  // With a line priced nowhere, the sum would understate the delivery, so the button leaves it out.
-  const totalText = count > 0 && !totals.partial ? formatPrice(totals.total) : null
-  // Turning the lines into an import needs the server to check them, so offline the delivery waits
-  // as a draft (A5) and the button says so.
-  const canSubmit = count > 0 && !totals.invalid && !dateError && !submitting && online
+  function chooseOrder(next: string) {
+    setTouched(true)
+    setOrderId(next)
+    const chosen = orders.find((entry) => entry.id === next)
+    // Anything added that isn't on an order stays; the order's own lines are swapped.
+    setRows((current) => [...(chosen ? rowsFor(chosen) : []), ...current.filter((row) => row.ordered == null)])
+  }
 
-  function handleLineChange(line: DeliveryLine, patch: Partial<Omit<DeliveryEntry, 'line'>>) {
+  // ---------------------------------------------------------------- lines ------------------
+  function patchRow(key: string, patch: Partial<ReceiveRow>) {
+    setTouched(true)
+    setRows((current) => current.map((row) => (rowKey(row) === key ? { ...row, ...patch } : row)))
+  }
+  function patchBack(key: string, patch: Partial<SendBack>) {
+    setTouched(true)
+    setRows((current) => current.map((row) => (rowKey(row) === key ? { ...row, back: { ...row.back, ...patch } } : row)))
+  }
+  function addLine(line: DeliveryLine) {
+    setTouched(true)
     const key = lineKey(line)
-    setEntries((prev) => {
-      const current = prev[key] ?? { quantity: '', price: '', editingPrice: false }
-      return { ...prev, [key]: { ...current, line, ...patch } }
-    })
-  }
-
-  /**
-   * A scanned product's lines, made visible and ready to count.
-   *
-   * The scan does not type a quantity - how many arrived is the one thing the scanner cannot know
-   * - so the line is seeded blank, which is enough to put it on screen under its product. The
-   * list is opened to the whole catalog first, because the scanned box may well be from a
-   * supplier other than the one filtering the list, and a row that was added but cannot be seen
-   * is worse than no row at all.
-   */
-  function handleScanned(scanned: DeliveryLine[]) {
-    if (scanned.length === 0) return
-    setShowAll(true)
+    setRows((current) => (current.some((row) => rowKey(row) === key) ? current : [...current, rowFor(line)]))
     setSearch('')
-    setEntries((prev) => {
-      const next = { ...prev }
-      for (const line of scanned) {
-        const key = lineKey(line)
-        next[key] = next[key] ?? { line, quantity: '', price: '', editingPrice: false }
-      }
-      return next
-    })
+    window.setTimeout(() => document.getElementById(`arrived-${key}`)?.focus(), 50)
+  }
+  function removeLine(key: string) {
+    setRows((current) => current.filter((row) => rowKey(row) !== key))
   }
 
-  function handleSupplierChange(nextId: string) {
-    setVendorId(nextId)
-    setShowAll(false)
-  }
+  // What can be added: the supplier's own products first ("From Tony before"), else anything searched.
+  const supplierLines = useDeliveryLines('BY_VENDOR', vendorId || undefined)
+  const allLines = useDeliveryLines('ALL')
+  const onScreen = new Set(rows.map(rowKey))
+  const searching = search.trim() !== ''
+  const addable = (searching ? (allLines.lines ?? []).filter((line) => matchesSearch(line, search)) : (supplierLines.lines ?? []))
+    .filter((line) => !onScreen.has(lineKey(line)))
+    .slice(0, SHOWN_SUGGESTIONS)
+  const noOrder = orderId === NONE || vendorId === ''
+  const showAdder = adding || (noOrder && rows.length === 0)
+
+  // ---------------------------------------------------------------- the button -------------
+  const tally = tallyRows(rows)
+  const today = todayIso()
+  const dateBad = deliveryDate === '' || deliveryDate > today
+  const canSubmit = tally.count > 0 && !tally.invalid && !dateBad && online && !submitting
+  const priced = rows.filter((row) => row.ordered != null && row.orderPrice != null)
+  const changedPrices = priced.filter((row) => amount(row.price) != null && amount(row.price) !== row.orderPrice).length
+  const pricesWord =
+    order && priced.length > 0
+      ? changedPrices > 0
+        ? text.pricesChanged(changedPrices)
+        : text.pricesAsOrder(order.poNumber ?? order.title)
+      : text.pricesLast
 
   async function handleSubmit() {
     if (!canSubmit) return
     setSubmitting(true)
-    setSubmitError(null)
-
-    let session: ImportSession
+    setError(null)
+    let sessionId: string
     try {
-      session = await importsApi.createDelivery({
+      const session = await importsApi.createDelivery({
         deliveryDate,
         invoiceNo: invoiceNo.trim() || undefined,
         vendorId: vendorId || undefined,
-        // Carried through review and commit, so what actually went in is what gets credited
-        // against the order — not what this screen pre-filled.
-        expectedDeliveryId: expectedId ?? undefined,
-        lines: totals.lines,
+        expectedDeliveryId: order?.id,
+        lines: tally.lines,
       })
+      sessionId = session.id
+      // A line the server can't take, or one it wants looked at, goes to the full review: it has the fixes.
+      if (session.errorCount > 0 || session.warningCount > 0) {
+        await draft.finish()
+        navigate(`/app/products/import/${session.id}`)
+        return
+      }
     } catch (err: unknown) {
-      setSubmitError(isAppError(err) ? err.message : copy.delivery.failed)
+      setError(isAppError(err) ? err.message : text.failed)
       setSubmitting(false)
       return
     }
-
-    // A line the server cannot record needs the full review — it has the fixes a dialog does not.
-    if (session.errorCount > 0) {
-      navigate(`/app/products/import/${session.id}`)
-      return
-    }
-
     try {
-      const preview = await importsApi.preview(session.id)
-      setCommitError(null)
-      setPending({ session, preview })
-    } catch {
-      // The lines are saved; posting them again would make a second copy. The review screen can
-      // pick this one up where it stopped.
-      showToast(copy.delivery.previewFailed, 'info')
-      navigate(`/app/products/import/${session.id}`)
+      await importsApi.commit(sessionId)
+      await draft.finish()
+      void invalidateInventory(queryClient)
+      void queryClient.invalidateQueries({ queryKey: queryKeys.expected.all })
+      const what = rows
+        .filter((row) => row.arrived.trim() !== '' && (amount(row.arrived) ?? 0) > 0)
+        .map((row) => ({ row, taken: Math.max(0, (amount(row.arrived) ?? 0) - (row.back.open ? (amount(row.back.quantity) ?? 0) : 0)) }))
+        .filter(({ taken }) => taken > 0)
+        .map(({ row, taken }) => `${words(row, taken)} of ${row.line.productName.toLowerCase()}`)
+        .join(', ')
+      const after = order ? await expectedApi.get(order.id).catch(() => null) : null
+      setRecorded({ importId: sessionId, what, order: after })
+    } catch (err: unknown) {
+      setError(isAppError(err) ? err.message : text.commitFailed)
     } finally {
       setSubmitting(false)
     }
   }
 
-  async function handleCommit() {
-    if (!pending) return
-    const { id } = pending.session
-    setCommitting(true)
-    setCommitError(null)
-    try {
-      const result = await importsApi.commit(id)
-      await draft.finish()
-      void invalidateInventory(queryClient)
-      showToast(copy.delivery.done, 'success')
-      navigate(`/app/products/import/${id}/result`, { replace: true, state: { result } })
-    } catch (err: unknown) {
-      setCommitError(isAppError(err) ? err.message : copy.delivery.commitFailed)
-      setCommitting(false)
-    }
+  if (recorded) {
+    return <AfterRecording recorded={recorded} canSend={canSend} onAnother={() => navigate('/app/products/receive', { replace: true })} />
   }
 
-  /**
-   * "Not yet" throws the unconfirmed import away. The typed lines are still on screen, and the
-   * next press builds a fresh one from whatever they say by then — leaving this one behind would
-   * only put a stale entry in the recent imports list.
-   */
-  function handleCancel() {
-    if (!pending) return
-    void importsApi.discard(pending.session.id).catch(() => undefined)
-    setPending(null)
-  }
-
+  const loadingLinked = expectedParam != null && fromLink.loading && !fromLink.data
   return (
     <div className="flex min-h-full flex-col">
-      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6">
+      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">{copy.delivery.title}</h1>
-          <p className="mt-1 text-sm text-neutral-600">{copy.delivery.subtitle}</p>
+          <h1 className="text-2xl font-semibold text-neutral-900">{text.title}</h1>
           <Link
             to={SPREADSHEET_PATH}
-            className="mt-2 inline-flex items-center gap-1.5 rounded-sm text-sm font-medium text-primary-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+            className="mt-1 inline-flex items-center gap-1.5 rounded-sm text-sm font-medium text-primary-700 hover:underline focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none"
           >
             <FileSpreadsheet className="h-4 w-4" aria-hidden="true" />
-            {copy.delivery.useSheet}
+            {text.useSheet}
           </Link>
         </div>
-
-        {expectedId != null && (
-          <ReceivingExpectedBanner expected={expected} loading={expectedLoading} error={expectedError} />
-        )}
 
         <DraftNote
           savedAt={draft.savedAt}
@@ -331,228 +325,423 @@ export function RecordDeliveryPage() {
           onDiscard={() => {
             void draft.clear()
             setRestoredDraft(false)
-            setEntries({})
+            setRows([])
+            setOrderId('')
             setInvoiceNo('')
             setDeliveryDate(todayIso())
           }}
         />
 
-        <section className="grid gap-4 rounded-lg border border-neutral-200 bg-white p-4 sm:grid-cols-3">
-          {canSeeSuppliers && (
-            <div className="sm:col-span-3">
-              <label htmlFor="delivery-supplier" className="mb-1.5 block text-sm font-medium text-neutral-700">
-                {copy.delivery.supplier}
-              </label>
-              <select
-                id="delivery-supplier"
-                value={vendorId}
-                disabled={submitting}
-                onChange={(event) => handleSupplierChange(event.target.value)}
-                className={SELECT_CLASS}
-              >
-                <option value="">{copy.delivery.supplierAny}</option>
-                {vendors.map((vendor) => (
-                  <option key={vendor.id} value={vendor.id}>
-                    {vendor.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          <TextField
-            id="delivery-date"
-            type="date"
-            label={copy.delivery.date}
-            value={deliveryDate}
-            max={today}
-            required
-            disabled={submitting}
-            error={dateError}
-            onChange={(event) => setDeliveryDate(event.target.value)}
-          />
-          <div className="sm:col-span-2">
-            <TextField
-              id="delivery-invoice"
-              label={copy.delivery.invoiceNo}
-              hint={copy.delivery.invoiceHint}
-              value={invoiceNo}
-              maxLength={200}
+        {loadingLinked ? (
+          <Skeleton className="h-20 w-full" />
+        ) : (
+          canSeeSuppliers && (
+            <SupplierSearch
+              vendors={vendors}
+              recent={recent}
+              value={vendorId}
+              onChange={chooseSupplier}
+              canCreate={canManageSuppliers}
+              onCreated={addVendor}
               disabled={submitting}
-              onChange={(event) => setInvoiceNo(event.target.value)}
+              label={text.whoFrom}
             />
-          </div>
-        </section>
+          )
+        )}
 
-        <section aria-labelledby="delivery-lines-heading" className="flex flex-col gap-3">
-          <h2 id="delivery-lines-heading" className="text-sm font-semibold text-neutral-900">
-            {copy.delivery.linesHeading}
-          </h2>
-
-          {/* Task 3.3: scan the box and its row appears, already in the list below. */}
-          <BarcodeScanField disabled={submitting} onFound={handleScanned} />
-
-          <div className="relative">
-            <Search
-              className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-neutral-500"
-              aria-hidden="true"
-            />
-            <label htmlFor="delivery-search" className="sr-only">
-              {copy.delivery.search}
-            </label>
-            <input
-              id="delivery-search"
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder={copy.delivery.searchPlaceholder}
-              className="w-full rounded-md border border-neutral-200 bg-white py-2 pr-3 pl-9 text-base text-neutral-900 placeholder:text-neutral-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none sm:text-sm"
-            />
-          </div>
-
-          {loading && (
-            <div role="status" className="flex flex-col gap-3" aria-busy="true" aria-label={copy.common.loading}>
-              {[0, 1, 2].map((index) => (
-                <Skeleton key={index} className="h-24 w-full" />
+        {/* "Which order is this?" — the newest is chosen; the person at the gate can see what each holds. */}
+        {vendorId !== '' && orders.length > 0 && (
+          <fieldset className="flex flex-col gap-1.5">
+            <legend className="mb-1.5 text-sm font-semibold text-neutral-900">{text.whichOrder}</legend>
+            <div className="divide-y divide-neutral-100 overflow-hidden rounded-lg border border-neutral-200 bg-white">
+              {orders.map((entry) => (
+                <OrderChoice key={entry.id} order={entry} chosen={orderId === entry.id} onChoose={() => chooseOrder(entry.id)} />
               ))}
+              <label className={`flex cursor-pointer items-center gap-3 px-4 py-2.5 ${orderId === NONE ? 'bg-primary-50' : ''}`}>
+                <input type="radio" name="receive-order" checked={orderId === NONE} onChange={() => chooseOrder(NONE)} className="h-4 w-4 accent-primary-700" />
+                <span className="text-sm font-semibold text-neutral-900">{text.notOnOrder}</span>
+              </label>
             </div>
-          )}
+          </fieldset>
+        )}
+        {vendorId !== '' && openOrders.data && orders.length === 0 && (
+          <p className="text-sm text-neutral-600">{text.noOrdersOpen(supplierName)}</p>
+        )}
 
-          {!loading && error && <ErrorState title={copy.delivery.loadFailed} message={error} onRetry={refetch} />}
+        {(vendorId !== '' || !canSeeSuppliers) && (
+          <section aria-labelledby="receive-lines-heading" className="flex flex-col gap-2">
+            <h2 id="receive-lines-heading" className="text-sm font-semibold text-neutral-900">
+              {text.whatArrived}
+            </h2>
+            {rows.length > 0 && (
+              <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white">
+                <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 border-b border-neutral-200 px-3 py-1.5 text-xs text-neutral-500 sm:px-4">
+                  <span>{text.product}</span>
+                  <span className="text-right">{text.ordered}</span>
+                  <span className="w-16 text-center">{text.arrived}</span>
+                </div>
+                <ul className="divide-y divide-neutral-100" data-on-order>
+                  {rows.map((row) => {
+                    const key = rowKey(row)
+                    return (
+                      <ReceiveLineRow
+                        key={key}
+                        id={`arrived-${key}`}
+                        row={row}
+                        disabled={submitting}
+                        onArrived={(typed) => patchRow(key, { arrived: typed })}
+                        onBack={(patch) => patchBack(key, patch)}
+                        onRemove={row.ordered == null ? () => removeLine(key) : undefined}
+                      />
+                    )
+                  })}
+                </ul>
+              </div>
+            )}
+            {order && rows.some((row) => row.ordered != null) && <p className="text-xs text-neutral-600">{text.changeHint}</p>}
 
-          {!loading && !error && lines && lines.length === 0 && filter === 'BY_VENDOR' && (
-            <EmptyState
-              icon={PackageSearch}
-              title={copy.delivery.supplierEmpty(supplierName ?? copy.delivery.supplier)}
-              action={
-                <Button variant="secondary" onClick={() => setShowAll(true)}>
-                  {copy.delivery.supplierEmptyAction}
-                </Button>
-              }
-            />
-          )}
-
-          {!loading && !error && lines && lines.length === 0 && filter === 'ALL' && (
-            <EmptyState
-              icon={PackageSearch}
-              title={copy.delivery.noProductsTitle}
-              description={copy.delivery.noProductsBody}
-              action={
-                <Link to="/app/products" className={buttonClassName('primary')}>
-                  {copy.delivery.noProductsAction}
-                </Link>
-              }
-            />
-          )}
-
-          {!loading && !error && lines && lines.length > 0 && groups.length === 0 && (
-            <p className="rounded-lg border border-neutral-200 bg-white px-4 py-8 text-center text-sm text-neutral-500">
-              {copy.delivery.noMatch(search.trim())}
-            </p>
-          )}
-
-          {!loading && !error && groups.length > 0 && (
-            <ul className="flex flex-col gap-3">
-              {groups.map((group) => (
-                <li key={group.productId} className="rounded-lg border border-neutral-200 bg-white px-4 pt-3">
-                  <h3 className="text-sm font-semibold text-neutral-900">
-                    {group.productName}
-                    <span className="ml-2 text-xs font-normal text-neutral-500">{group.sku}</span>
-                  </h3>
-                  <ul className="divide-y divide-neutral-100">
-                    {group.lines.map((line) => {
-                      const key = lineKey(line)
-                      return <DeliveryLineRow key={key} line={line} entry={entries[key]} onChange={handleLineChange} />
-                    })}
-                  </ul>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {!loading && hiddenCount > 0 && (
-            <p className="flex flex-wrap items-center gap-x-2 text-sm text-neutral-600">
-              {copy.delivery.hiddenTyped(hiddenCount)}
-              {filter === 'BY_VENDOR' && (
-                <button
-                  type="button"
-                  onClick={() => setShowAll(true)}
-                  className="rounded-sm font-medium text-primary-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-                >
-                  {copy.delivery.showAll}
-                </button>
-              )}
-            </p>
-          )}
-
-          <div className="flex flex-col items-start gap-2 text-sm">
-            {filter === 'BY_VENDOR' && !loading && !error && lines && lines.length > 0 && (
+            {!showAdder && (
               <button
                 type="button"
-                onClick={() => setShowAll(true)}
-                className="rounded-sm font-medium text-primary-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                onClick={() => setAdding(true)}
+                className="self-start rounded-sm text-sm font-medium text-primary-700 hover:underline focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none"
               >
-                {copy.delivery.somethingElse}
+                {text.somethingElse}
               </button>
             )}
-            <p className="text-neutral-600">
-              {copy.delivery.notInCatalog}{' '}
-              <Link
-                to="/app/products"
-                className="rounded-sm font-medium text-primary-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-              >
-                {copy.delivery.notInCatalogLink}
-              </Link>
-            </p>
-          </div>
+            {showAdder && (
+              <div className="flex flex-col gap-2">
+                <BarcodeScanField disabled={submitting} onFound={(found) => found[0] && addLine(found[0])} />
+                <div className="relative">
+                  <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-neutral-500" aria-hidden="true" />
+                  <label htmlFor="receive-search" className="sr-only">
+                    {text.addSearch}
+                  </label>
+                  <input
+                    id="receive-search"
+                    type="search"
+                    value={search}
+                    autoComplete="off"
+                    placeholder={text.addSearch}
+                    onChange={(event) => setSearch(event.target.value)}
+                    className="w-full rounded-md border border-neutral-200 bg-white py-2.5 pr-3 pl-9 text-base text-neutral-900 placeholder:text-neutral-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none sm:text-sm"
+                  />
+                </div>
+                {!searching && vendorId !== '' && addable.length > 0 && (
+                  <h3 className="text-xs font-medium text-neutral-600">{text.addFrom(supplierName)}</h3>
+                )}
+                {searching && allLines.lines && addable.length === 0 && <p className="text-sm text-neutral-600">{text.noMatch(search.trim())}</p>}
+                {(searching ? allLines.loading : supplierLines.loading) && !(searching ? allLines.lines : supplierLines.lines) && (
+                  <Skeleton className="h-14 w-full" />
+                )}
+                {addable.length > 0 && (
+                  <ul className="divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
+                    {addable.map((line) => (
+                      <li key={lineKey(line)} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold text-neutral-900">{line.productName}</span>
+                          <span className="block text-xs text-neutral-600">{line.comesIn}</span>
+                        </span>
+                        <Button variant="secondary" onClick={() => addLine(line)} aria-label={text.addLabel(line.productName, line.comesIn)}>
+                          {text.add}
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </section>
+        )}
 
-          {submitError && <ErrorState variant="inline" message={submitError} />}
-        </section>
+        {rows.length > 0 && (
+          <section className="divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white text-sm">
+            <ShortLine
+              label={text.arrivedOn}
+              value={deliveryDate === today ? text.today : shortDate(deliveryDate)}
+              action={text.change}
+              open={open === 'date'}
+              onToggle={() => setOpen(open === 'date' ? null : 'date')}
+            >
+              <input
+                id="receive-date"
+                type="date"
+                value={deliveryDate}
+                max={today}
+                onChange={(event) => setDeliveryDate(event.target.value)}
+                aria-label={text.arrivedOn}
+                aria-invalid={dateBad || undefined}
+                className="rounded-md border border-neutral-200 bg-white px-3 py-2 text-base sm:text-sm"
+              />
+              {dateBad && <p className="text-xs text-danger-700">{text.dateFuture}</p>}
+            </ShortLine>
+            <ShortLine
+              label={text.waybill}
+              value={invoiceNo.trim() || text.none}
+              muted={invoiceNo.trim() === ''}
+              action={invoiceNo.trim() ? text.change : text.addWord}
+              open={open === 'invoice'}
+              onToggle={() => setOpen(open === 'invoice' ? null : 'invoice')}
+            >
+              <input
+                id="receive-invoice"
+                type="text"
+                maxLength={200}
+                autoFocus
+                value={invoiceNo}
+                onChange={(event) => setInvoiceNo(event.target.value)}
+                aria-label={text.waybill}
+                className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-base sm:text-sm"
+              />
+            </ShortLine>
+            <ShortLine
+              label={text.prices}
+              value={pricesWord}
+              action={text.change}
+              open={open === 'prices'}
+              onToggle={() => setOpen(open === 'prices' ? null : 'prices')}
+            >
+              <ul className="flex flex-col gap-2">
+                {rows
+                  .filter((row) => (amount(row.arrived) ?? 0) > 0)
+                  .map((row) => (
+                    <PriceLine
+                      key={rowKey(row)}
+                      row={row}
+                      poNumber={order?.poNumber ?? ''}
+                      onPrice={(typed) => patchRow(rowKey(row), { price: typed })}
+                      onSendBack={() => patchBack(rowKey(row), { open: true, reason: 'PRICE', quantity: row.arrived })}
+                    />
+                  ))}
+              </ul>
+            </ShortLine>
+          </section>
+        )}
+
+        {error && <ErrorState variant="inline" message={error} />}
       </div>
 
-      {/*
-        Sticky inside <main>, which is the scroll container and carries p-6: the negative offsets
-        take the bar to its edges, and the bottom padding clears a phone's home indicator.
-      */}
       <div className="sticky -bottom-6 z-10 -mx-6 mt-6 -mb-6 border-t border-neutral-200 bg-white/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur">
         <div className="mx-auto flex max-w-2xl flex-col gap-1">
-          <p className="sr-only" aria-live="polite" aria-atomic="true">
-            {copy.delivery.totalAnnounce(count, totalText)}
-          </p>
-          <Button
-            variant="action"
-            className="w-full"
-            disabled={!canSubmit}
-            loading={submitting}
-            onClick={() => void handleSubmit()}
-          >
-            {submitting
-              ? copy.delivery.saving
-              : count === 0
-                ? copy.delivery.submitEmpty
-                : !online
-                  ? 'Submit when online'
-                  : copy.delivery.submit(count, totalText)}
+          <Button variant="action" className="w-full" disabled={!canSubmit} loading={submitting} onClick={() => void handleSubmit()}>
+            {submitting ? text.saving : tally.count === 0 ? text.recordEmpty : !online ? text.recordOffline : text.record(tally.count)}
           </Button>
-          {!online && count > 0 && (
-            <p className="text-center text-xs text-neutral-500">
-              You're offline. This delivery is saved on this phone; submit it once you're connected.
+          {!online && tally.count > 0 && <p className="text-center text-xs text-neutral-600">{text.offline}</p>}
+          {online && (tally.short > 0 || tally.goingBack.length > 0) && (
+            <p className="text-center text-xs text-neutral-600" aria-live="polite">
+              {[tally.short > 0 ? text.linesShort(tally.short) : null, tally.goingBack.length > 0 ? text.goesBack(tally.goingBack.join(', ')) : null]
+                .filter(Boolean)
+                .join(' · ')}
             </p>
-          )}
-          {count > 0 && totals.partial && (
-            <p className="text-center text-xs text-neutral-500">{copy.delivery.totalPartial}</p>
           )}
         </div>
       </div>
+    </div>
+  )
+}
 
-      <DeliveryConfirmDialog
-        preview={pending?.preview ?? null}
-        warningCount={pending?.session.warningCount ?? 0}
-        committing={committing}
-        error={commitError}
-        onConfirm={() => void handleCommit()}
-        onReview={() => pending && navigate(`/app/products/import/${pending.session.id}`)}
-        onClose={handleCancel}
-      />
+function OrderChoice({ order, chosen, onChoose }: { order: ExpectedDelivery; chosen: boolean; onChoose: () => void }) {
+  const owed = order.lines.filter((line) => line.outstanding > 0)
+  const what = owed.slice(0, 3).map((line) => line.productName).join(', ') + (owed.length > 3 ? ` +${owed.length - 3}` : '')
+  return (
+    <label className={`flex cursor-pointer items-start gap-3 px-4 py-2.5 ${chosen ? 'bg-primary-50' : ''}`}>
+      <input type="radio" name="receive-order" checked={chosen} onChange={onChoose} className="mt-0.5 h-4 w-4 accent-primary-700" />
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold text-neutral-900">
+          {order.poNumber ?? order.title} · {text.orderMade(shortDate(order.createdAt.slice(0, 10)), order.createdByName ?? null)}
+        </span>
+        <span className="block text-xs text-neutral-600">{what}</span>
+      </span>
+    </label>
+  )
+}
+
+function ShortLine({
+  label,
+  value,
+  muted,
+  action,
+  open,
+  onToggle,
+  children,
+}: {
+  label: string
+  value: string
+  muted?: boolean
+  action: string
+  open: boolean
+  onToggle: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <div className="px-4 py-2.5">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="flex min-w-0 items-baseline gap-3">
+          <span className="w-24 shrink-0 text-xs text-neutral-500">{label}</span>
+          <span className={`min-w-0 truncate ${muted ? 'text-neutral-500' : 'text-neutral-900'}`}>{value}</span>
+        </span>
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={open}
+          className="shrink-0 rounded-sm font-medium text-primary-700 hover:underline focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none"
+        >
+          {open ? text.done : action}
+        </button>
+      </div>
+      {open && <div className="mt-2 flex flex-col gap-1.5">{children}</div>}
+    </div>
+  )
+}
+
+/** One price in the Prices panel; a price other than the order's says so, beside the order's (mockup 5B). */
+function PriceLine({
+  row,
+  poNumber,
+  onPrice,
+  onSendBack,
+}: {
+  row: ReceiveRow
+  poNumber: string
+  onPrice: (typed: string) => void
+  onSendBack: () => void
+}) {
+  const id = `price-${rowKey(row)}`
+  const typed = amount(row.price)
+  const shown = priceOf(row)
+  const differs = row.orderPrice != null && typed != null && typed !== row.orderPrice
+  const taken = Math.max(0, (amount(row.arrived) ?? 0) - (row.back.open ? (amount(row.back.quantity) ?? 0) : 0))
+  return (
+    <li className="flex flex-col gap-1">
+      <div className="flex items-center justify-between gap-3">
+        <label htmlFor={id} className="min-w-0 text-sm text-neutral-800">
+          {row.line.productName} <span className="text-xs text-neutral-500">{perUnitWords(row.line)}</span>
+        </label>
+        <span className="flex items-center rounded-md border border-neutral-200 bg-white focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-100">
+          <span className="pl-2.5 text-neutral-500" aria-hidden="true">
+            ₦
+          </span>
+          <input
+            id={id}
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            value={row.price}
+            placeholder={shown != null ? new Intl.NumberFormat('en-NG').format(shown) : ''}
+            onChange={(event) => onPrice(event.target.value)}
+            className="w-24 bg-transparent py-1.5 pr-2.5 pl-1 text-right text-base font-semibold tabular-nums focus:outline-none sm:text-sm"
+          />
+        </span>
+      </div>
+      {differs && row.orderPrice != null && typed != null && (
+        <p className="flex flex-wrap items-center gap-x-2 rounded-md bg-warning-50 px-2.5 py-1.5 text-xs text-warning-800">
+          <span className="font-semibold">{text.onTheOrder(orderMoney(row.orderPrice))}</span>
+          {typed > row.orderPrice && taken > 0 && <span>· {text.moreFor(orderMoney((typed - row.orderPrice) * taken), words(row, taken))}</span>}
+          <span className="basis-full">{text.priceDiffers(poNumber)}</span>
+          <button
+            type="button"
+            onClick={onSendBack}
+            className="rounded-sm font-medium text-primary-700 hover:underline focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none"
+          >
+            {text.sendItBack}
+          </button>
+        </p>
+      )}
+    </li>
+  )
+}
+
+/** After it went in (mockups D, 5C): what is now in stock, and — if anything is still owed — is it still coming? */
+function AfterRecording({ recorded, canSend, onAnother }: { recorded: Recorded; canSend: boolean; onAnother: () => void }) {
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [choice, setChoice] = useState<'keep' | 'close' | 'later'>('keep')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const order = recorded.order
+  const owed = order && order.status === 'OPEN' ? order.lines.filter((line) => line.outstanding > 0) : []
+  const po = order?.poNumber ?? order?.title ?? ''
+  const sentBack = new Set(
+    (order?.receipts ?? []).find((receipt) => receipt.importId === recorded.importId)?.sentBack?.map((back) => `${back.productId}|${back.unit}`) ?? [],
+  )
+  const owedWhat = owed.map((line) => `${quantityWords(line.outstanding, line.comesIn).replace(/ \(.*\)$/, '')} of ${line.productName.toLowerCase()}`).join(', ')
+  const wentBack = owed.length > 0 && owed.every((line) => sentBack.has(`${line.productId}|${line.unit}`))
+  const orderHref = order ? `/app/purchase-orders/${order.id}` : null
+
+  async function finish() {
+    if (!order) return
+    if (choice === 'close' && canSend) {
+      setBusy(true)
+      setError(null)
+      try {
+        await expectedApi.cancel(order.id)
+        void queryClient.invalidateQueries({ queryKey: queryKeys.expected.all })
+      } catch (err: unknown) {
+        setError(isAppError(err) ? err.message : text.failed)
+        setBusy(false)
+        return
+      }
+    }
+    navigate(`/app/purchase-orders/${order.id}`, { replace: true })
+  }
+
+  return (
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+      <h1 className="text-2xl font-semibold text-neutral-900">{text.title}</h1>
+      <p className="flex items-start gap-2 rounded-md bg-accent-50 px-3 py-2.5 text-sm text-accent-800" role="status">
+        <Check className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+        {text.recorded(recorded.what)}
+      </p>
+
+      {order && owed.length > 0 && (
+        <fieldset className="flex flex-col gap-3 rounded-lg border border-neutral-200 bg-white p-4">
+          <legend className="sr-only">{text.stillComing(owedWhat)}</legend>
+          <p className="font-semibold text-neutral-900">
+            {wentBack ? text.comeAgain(owedWhat) : text.stillComing(text.cameShort(owedWhat))}
+          </p>
+          <div className="divide-y divide-neutral-100 overflow-hidden rounded-md border border-neutral-200">
+            {(
+              [
+                ['keep', text.keepOpen(po, owedWhat)],
+                ...(canSend ? [['close', text.closeIt(po)]] : []),
+                ['later', text.decideLater],
+              ] as [typeof choice, string][]
+            ).map(([value, label]) => (
+              <label key={value} className={`flex cursor-pointer items-center gap-3 px-3 py-2.5 text-sm ${choice === value ? 'bg-primary-50' : ''}`}>
+                <input type="radio" name="still-coming" checked={choice === value} onChange={() => setChoice(value)} className="h-4 w-4 accent-primary-700" />
+                <span className="font-medium text-neutral-900">{label}</span>
+              </label>
+            ))}
+          </div>
+          {!canSend && <p className="text-xs text-neutral-600">{text.closeNeedsSend}</p>}
+          <Button variant="action" className="w-full" loading={busy} onClick={() => void finish()}>
+            {text.done}
+          </Button>
+          {error && <p role="alert" className="text-sm text-danger-700">{error}</p>}
+        </fieldset>
+      )}
+      {order && owed.length === 0 && <p className="text-sm text-neutral-700">{text.complete(po)}</p>}
+
+      <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+        {orderHref && owed.length === 0 && (
+          <Link to={orderHref} className={buttonClassName('secondary')}>
+            {text.openOrder(po)}
+          </Link>
+        )}
+        <Link
+          to={`/app/products/import/${recorded.importId}/result`}
+          className="self-center rounded-sm font-medium text-primary-700 hover:underline focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none"
+        >
+          {text.seeRecorded}
+        </Link>
+        <button
+          type="button"
+          onClick={onAnother}
+          className="self-center rounded-sm font-medium text-primary-700 hover:underline focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none"
+        >
+          {text.another}
+        </button>
+      </div>
     </div>
   )
 }

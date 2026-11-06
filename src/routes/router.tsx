@@ -160,9 +160,36 @@ const ExpectedDeliveriesPage = lazy(() =>
     default: m.ExpectedDeliveriesPage,
   })),
 )
-const NewExpectedDeliveryPage = lazy(() =>
-  import('@/features/expected/pages/NewExpectedDeliveryPage').then((m) => ({
-    default: m.NewExpectedDeliveryPage,
+/** products/expected/:id -> purchase-orders/:id, keeping the id. */
+function OldPurchaseOrderRedirect() {
+  const { id } = useParams()
+  return <Navigate to={`/app/purchase-orders/${id ?? ''}`} replace />
+}
+const PurchaseOrderPage = lazy(() =>
+  import('@/features/expected/pages/PurchaseOrderPage').then((m) => ({
+    default: m.PurchaseOrderPage,
+  })),
+)
+// The page a supplier opens from the link in an email or WhatsApp message - no account, no
+// workspace. Lazy: nobody reaches it as a cold first paint of the app.
+const PublicPurchaseOrderPage = lazy(() =>
+  import('@/features/publicOrder/PublicPurchaseOrderPage').then((m) => ({
+    default: m.PublicPurchaseOrderPage,
+  })),
+)
+// Price requests (PURCHASE_ORDER_PLAN.md section 11.3): asking, the request page, and the supplier's own page.
+const AskForPricesPage = lazy(() =>
+  import('@/features/expected/pages/AskForPricesPage').then((m) => ({ default: m.AskForPricesPage })),
+)
+const PriceRequestPage = lazy(() =>
+  import('@/features/expected/pages/PriceRequestPage').then((m) => ({ default: m.PriceRequestPage })),
+)
+const PublicPriceRequestPage = lazy(() =>
+  import('@/features/publicOrder/PublicPriceRequestPage').then((m) => ({ default: m.PublicPriceRequestPage })),
+)
+const PurchaseOrderFormPage = lazy(() =>
+  import('@/features/expected/pages/PurchaseOrderFormPage').then((m) => ({
+    default: m.PurchaseOrderFormPage,
   })),
 )
 
@@ -548,6 +575,11 @@ export function AppRoutes() {
           right. This creates no account at all — it adds a business to a waitlist a super admin
           reviews by hand — so a signed-in buyer who wants to also sell must be able to reach it. */}
         <Route path="/vendor-application" element={<VendorApplicationPage />} />
+        {/* A supplier opening a purchase order (PURCHASE_ORDER_PLAN.md section 3.5). Public and
+          outside every layout on purpose: no login, no navigation, one column for a phone. The
+          long random token in the path is the access check. */}
+        <Route path="/o/:token" element={<PublicPurchaseOrderPage />} />
+        <Route path="/q/:token" element={<PublicPriceRequestPage />} />
 
         {/* ------------------------------------------------------- Legacy workspace paths → /app */}
         {/* The workspace moved from `/` to `/app` when `/` became the storefront. These keep every
@@ -722,6 +754,11 @@ export function AppRoutes() {
               </RequirePermission>
             }
           />
+          {/* The old addresses, kept so a bookmark or a link already sent still lands somewhere: purchase
+            orders used to live under products/expected. */}
+          <Route path="products/expected" element={<Navigate to="/app/purchase-orders" replace />} />
+          <Route path="products/expected/new" element={<Navigate to="/app/purchase-orders/new" replace />} />
+          <Route path="products/expected/:id" element={<OldPurchaseOrderRedirect />} />
           {/* Expected deliveries — static, so declared above products/:id like the routes either
             side of it.
 
@@ -730,7 +767,7 @@ export function AppRoutes() {
             a hundred bags are on their way is the same authority as saying they arrived. The list
             hides its own write affordances from a reader who lacks the second. */}
           <Route
-            path="products/expected"
+            path="purchase-orders"
             element={
               <RequirePermission permission={PERMISSIONS.VIEW_PRODUCTS}>
                 <ExpectedDeliveriesPage />
@@ -738,10 +775,43 @@ export function AppRoutes() {
             }
           />
           <Route
-            path="products/expected/new"
+            path="purchase-orders/new"
             element={
-              <RequirePermission permission={PERMISSIONS.MANAGE_INVENTORY}>
-                <NewExpectedDeliveryPage />
+              <RequirePermission anyOf={[PERMISSIONS.CREATE_PURCHASE_ORDER, PERMISSIONS.SEND_PURCHASE_ORDER]}>
+                <PurchaseOrderFormPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="purchase-orders/:id/change"
+            element={
+              <RequirePermission anyOf={[PERMISSIONS.CREATE_PURCHASE_ORDER, PERMISSIONS.SEND_PURCHASE_ORDER]}>
+                <PurchaseOrderFormPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="purchase-orders/ask"
+            element={
+              <RequirePermission anyOf={[PERMISSIONS.CREATE_PURCHASE_ORDER, PERMISSIONS.SEND_PURCHASE_ORDER]}>
+                <AskForPricesPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="purchase-orders/rfq/:id"
+            element={
+              <RequirePermission permission={PERMISSIONS.VIEW_PRODUCTS}>
+                <PriceRequestPage />
+              </RequirePermission>
+            }
+          />
+          {/* One purchase order — after "new", which would otherwise read as an id. */}
+          <Route
+            path="purchase-orders/:id"
+            element={
+              <RequirePermission permission={PERMISSIONS.VIEW_PRODUCTS}>
+                <PurchaseOrderPage />
               </RequirePermission>
             }
           />
