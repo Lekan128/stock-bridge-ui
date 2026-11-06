@@ -41,9 +41,13 @@ export function describeDraft(draft: StoredDraft): DraftSummary {
   }
 
   if (kind === 'order') {
-    // A purchase order (or "record what you ordered") still being typed: how many lines have a quantity.
-    const entries = Object.values((draft.value as DeliveryLike).entries ?? {})
-    const lines = entries.filter((entry) => entry.quantity?.trim()).length || entries.length
+    // A purchase order still being typed: how many items are on it (`items` since the 2026-11-04
+    // redesign; `entries` before it).
+    const value = draft.value as DeliveryLike & { items?: unknown[] }
+    const entries = Object.values(value.entries ?? {})
+    const lines = Array.isArray(value.items)
+      ? value.items.length
+      : entries.filter((entry) => entry.quantity?.trim()).length || entries.length
     return {
       title: 'Purchase order',
       detail: lines > 0 ? `${lines} ${lines === 1 ? 'item' : 'items'}` : null,

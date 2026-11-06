@@ -1,4 +1,5 @@
-import { lineKey, type DeliveryEntry } from '@/features/imports/delivery'
+import { formatNaira, formatNairaWhole } from '@/utils/money'
+import { lineKey, quantityUnitWord, type DeliveryEntry } from '@/features/imports/delivery'
 import type { DeliveryLine } from '@/features/imports/types'
 import type { ExpectedDelivery, ExpectedDeliveryLine } from '@/features/expected/types'
 import type { CompanyVendor } from '@/features/vendors/types'
@@ -42,7 +43,7 @@ export function isOverdue(expected: ExpectedDelivery, today: string = todayIso()
  * ever asked of a line the delivery picker also returned, which carries the real flag. This is
  * the fallback for the other case: a line whose product the current picker is not listing.
  */
-function looksLikePack(comesIn: string): boolean {
+export function looksLikePack(comesIn: string): boolean {
   const tail = comesIn.split(' · ').slice(1).join(' · ').trim()
   return /^\d/.test(tail)
 }
@@ -54,7 +55,7 @@ function looksLikePack(comesIn: string): boolean {
  * The product may have been renamed since the order was placed; the server already resolved that
  * against the live catalog before sending, so these words are current.
  */
-function asDeliveryLine(line: ExpectedDeliveryLine): DeliveryLine {
+export function asDeliveryLine(line: ExpectedDeliveryLine): DeliveryLine {
   return {
     productId: line.productId,
     productName: line.productName,
@@ -91,6 +92,24 @@ export function outstandingEntries(expected: ExpectedDelivery): Record<string, D
     }
   }
   return entries
+}
+
+/**
+ * Each line of the order being received, by the delivery screen's `lineKey`, with what to say beside
+ * its quantity box: "5 bags ordered", or "12 bags still to come · 8 arrived" on a part-arrived order.
+ */
+export function orderedByKey(expected: ExpectedDelivery): Map<string, string> {
+  const notes = new Map<string, string>()
+  for (const line of expected.lines) {
+    const amount = (value: number) => quantityWords(value, line.comesIn).replace(/ \(.*\)$/, '')
+    notes.set(
+      lineKey(asDeliveryLine(line)),
+      line.receivedQuantity > 0
+        ? `${amount(line.outstanding)} still to come · ${amount(line.receivedQuantity)} arrived`
+        : `${amount(line.quantity)} ordered`,
+    )
+  }
+  return notes
 }
 
 // ---------------------------------------------------------------------- purchase orders ----------
@@ -135,3 +154,52 @@ export function mayEditSupplier(vendor: CompanyVendor, canEdit: boolean): boolea
   return canEdit && vendor.kind !== 'VERIFIED' && vendor.editable !== false
 }
 
+
+/**
+ * A quantity said the same way everywhere a purchase order shows one: "20 bags (50 kg)", "4 kg",
+ * "1 piece". The form, the order page, the list and the message all use this, so one order never
+ * reads "20 bags" in one place and "2 × Bag · 50 kg" in another.
+ */
+export function quantityWords(quantity: number, comesIn: string): string {
+  const pack = looksLikePack(comesIn)
+  const word = quantityUnitWord({ comesIn, pack }, quantity)
+  const amount = formatQuantity(quantity)
+  const size = pack ? comesIn.split(' · ').slice(1).join(' · ').trim() : ''
+  return size ? `${amount} ${word} (${size})` : `${amount} ${word}`
+}
+
+/** 20, 2.5, 1,200 — no trailing zeros, thousands grouped. */
+export function formatQuantity(value: number): string {
+  return new Intl.NumberFormat('en-NG', { maximumFractionDigits: 2 }).format(value)
+}
+
+/** The plural word for a way of buying, for the unit chooser on a line: "bags", "kg", "cartons". */
+export function unitChoiceWord(line: { comesIn: string; pack: boolean }): string {
+  return quantityUnitWord(line, 2)
+}
+
+/** "Tomorrow", "Thu 12 Nov" — a needed-by day, said the short way. */
+export function neededWords(isoDay: string, today: string = todayIso()): string {
+  if (isoDay === today) return 'Today'
+  if (isoDay === addDays(today, 1)) return 'Tomorrow'
+  const [year, month, day] = isoDay.split('-').map(Number)
+  if (!year || !month || !day) return isoDay
+  return new Intl.DateTimeFormat('en-NG', { weekday: 'short', day: 'numeric', month: 'short' }).format(
+    new Date(year, month - 1, day),
+  )
+}
+
+/** An ISO day plus some days, without a timezone moving it. */
+export function addDays(isoDay: string, days: number): string {
+  const [year, month, day] = isoDay.split('-').map(Number)
+  const date = new Date(year, month - 1, day + days)
+  return date.toLocaleDateString('en-CA')
+}
+
+/**
+ * Money on a purchase order: "₦45,000", and "₦45,000.50" only when there are kobo. Whole naira are
+ * shown whole because a trailing ".00" on every line of an order is noise; nothing is rounded away.
+ */
+export function orderMoney(value: number): string {
+  return Number.isInteger(value) ? formatNairaWhole(value) : formatNaira(value)
+}

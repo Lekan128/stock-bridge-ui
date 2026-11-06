@@ -1,32 +1,37 @@
 import { useState } from 'react'
-import { Link, useLocation, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { Check, ChevronLeft, Truck } from 'lucide-react'
+import { Check, ChevronLeft } from 'lucide-react'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
-import { Badge } from '@/components/Badge'
+import { api } from '@/api/client'
 import { Button, buttonClassName } from '@/components/Button'
 import { ErrorState } from '@/components/ErrorState'
+import { OverflowMenu, type OverflowMenuItem } from '@/components/OverflowMenu'
 import { Skeleton } from '@/components/Skeleton'
 import { useToast } from '@/components/useToast'
-import { api } from '@/api/client'
 import { queryKeys } from '@/data/queryKeys'
 import { useApiQuery } from '@/data/useApiQuery'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { expectedApi } from '@/features/expected/api/expectedApi'
+import { ApprovalStep } from '@/features/expected/components/ApprovalStep'
 import { CancelExpectedDialog } from '@/features/expected/components/CancelExpectedDialog'
 import { InlineEmailEditor } from '@/features/expected/components/InlineEmailEditor'
+import { StatusPill } from '@/features/expected/components/StatusPill'
+import { statusOf } from '@/features/expected/orderStatus'
 import { expectedCopy } from '@/features/expected/copy'
-import { isOverdue, isRecent, shortDate, whenText } from '@/features/expected/expected'
+import { isRecent, looksLikePack, mayEditSupplier, neededWords, orderMoney, quantityWords, shortDate, whenText } from '@/features/expected/expected'
 import type { ExpectedDelivery } from '@/features/expected/types'
 import { copy } from '@/features/imports/copy'
+import { quantityUnitWord } from '@/features/imports/delivery'
+import { receiveCopy } from '@/features/imports/receiveCopy'
 import { useEmailVerification } from '@/features/profile/hooks/useEmailVerification'
 import { useResendVerification } from '@/features/profile/hooks/useResendVerification'
 import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
 import { isAppError } from '@/types/api'
 
 const LIST_PATH = '/app/purchase-orders'
-const copyText = expectedCopy.page
+const text = expectedCopy.next
 
 /** The PDF, opened from the order's own link so a plain click (never a blocked popup) gets the browser's viewer. */
 function pdfHref(token: string): string {
@@ -34,25 +39,32 @@ function pdfHref(token: string): string {
   return `${base}/api/public/purchase-orders/${token}/pdf`
 }
 
+type Channel = 'WHATSAPP' | 'EMAIL' | 'COPY'
+
 /**
- * One purchase order — where you land right after making it, and where "did I send it?" is answered
- * a week later (`PURCHASE_ORDER_PLAN.md` §3.3, §3.4).
+ * One purchase order (redesign 2026-11-04, owner-approved mockups D–F).
  *
- * The part that must not confuse is "Send it to Tony": one line per way of getting it to them, each
- * with a plain status and at most one thing to press. Nothing is claimed that we cannot know — email
- * is "Emailed" (the provider took it), WhatsApp is only ever "you opened it", never "delivered".
- * A way that cannot work for this supplier (no phone, no email) says so, or is left out; it is never
- * a disabled button with a riddle on it.
+ * The top always answers "what do I do now?" — one "Next step" box whose one navy button changes with
+ * the order: Send → Receive → Receive the rest → Order again. The other ways to send sit under it as
+ * quiet links. Below: the items with how much has arrived, then a short history that answers "did I
+ * send it?" a week later. Change, Order again, the PDF and Call it off live in ⋯.
+ *
+ * Nothing is claimed that we can't know: email is "Sent by email" (the provider took it), WhatsApp is
+ * only ever "You opened WhatsApp", never "delivered".
  */
 export function PurchaseOrderPage() {
   const { id = '' } = useParams()
   const location = useLocation()
-  const justCreated = (location.state as { justCreated?: boolean } | null)?.justCreated === true
+  const navigate = useNavigate()
+  const state = (location.state as { justCreated?: boolean; send?: string; changed?: boolean } | null) ?? {}
   const { user } = useAuth()
   const { showToast } = useToast()
   const queryClient = useQueryClient()
   const permissions = user?.type === 'tenant' ? user.permissions : []
   const canManage = permissions.includes(PERMISSIONS.MANAGE_INVENTORY)
+  // V78: sending, changing a sent order and calling off are for whoever can send; asking is for anyone who can create.
+  const canSend = permissions.includes(PERMISSIONS.SEND_PURCHASE_ORDER)
+  const canCreate = canSend || permissions.includes(PERMISSIONS.CREATE_PURCHASE_ORDER)
   const canManageSuppliers = permissions.includes(PERMISSIONS.MANAGE_VENDORS)
   const canSeeSuppliers = permissions.includes(PERMISSIONS.VIEW_VENDORS)
   const { vendors, upsert: addVendor } = useVendorOptions(canSeeSuppliers)
@@ -63,7 +75,7 @@ export function PurchaseOrderPage() {
   const result = useApiQuery<ExpectedDelivery>({
     queryKey: queryKeys.expected.detail(id),
     queryFn: () => expectedApi.get(id),
-    fallbackError: copyText.loadFailed,
+    fallbackError: expectedCopy.page.loadFailed,
   })
   const order = result.data ?? null
   const { setData } = result
@@ -71,20 +83,20 @@ export function PurchaseOrderPage() {
   const [sending, setSending] = useState(false)
   const [askAgain, setAskAgain] = useState(false)
   const [editingEmail, setEditingEmail] = useState(false)
+  const [showWays, setShowWays] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
   const [copyFailed, setCopyFailed] = useState(false)
   const [cancelOpen, setCancelOpen] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [cancelError, setCancelError] = useState<string | null>(null)
+  const [askClose, setAskClose] = useState(false)
 
-  const vendor = order?.vendorId ? vendors.find((entry) => entry.id === order.vendorId) : undefined
-  const supplier = order?.vendorName ?? 'the supplier'
-
-  /** Replace what is on screen with what the server just said, and tell the rest of the app. */
   function adopt(updated: ExpectedDelivery) {
     setData(updated)
     void queryClient.invalidateQueries({ queryKey: queryKeys.vendors.all })
     void queryClient.invalidateQueries({ queryKey: ['expected', 'list'] })
+    void queryClient.invalidateQueries({ queryKey: ['expected', 'counts'] })
   }
 
   async function sendEmail() {
@@ -95,7 +107,7 @@ export function PurchaseOrderPage() {
     try {
       adopt(await expectedApi.email(order.id))
     } catch (err: unknown) {
-      setActionError(isAppError(err) ? err.message : copyText.email.failed)
+      setActionError(isAppError(err) ? err.message : expectedCopy.page.email.failed)
     } finally {
       setSending(false)
     }
@@ -104,9 +116,9 @@ export function PurchaseOrderPage() {
   async function record(channel: 'WHATSAPP' | 'MESSAGE') {
     if (!order) return
     try {
-      setData(await expectedApi.shared(order.id, channel))
+      adopt(await expectedApi.shared(order.id, channel))
     } catch {
-      // Writing it down is a nicety: failing to must never get in the way of the thing they just did.
+      // Writing it down is a nicety: failing to must never get in the way of what they just did.
     }
   }
 
@@ -115,19 +127,22 @@ export function PurchaseOrderPage() {
     setCopyFailed(false)
     try {
       await navigator.clipboard.writeText(order.share.message)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 2000)
       void record('MESSAGE')
     } catch {
       setCopyFailed(true)
     }
   }
 
-  async function handleCancel() {
+  async function handleCancel(short = false) {
     if (!order) return
     setCancelling(true)
     setCancelError(null)
     try {
       adopt(await expectedApi.cancel(order.id))
-      showToast(expectedCopy.cancel.done, 'success')
+      showToast(short ? text.closedToast : expectedCopy.cancel.done, 'success')
+      setAskClose(false)
       setCancelOpen(false)
     } catch (err: unknown) {
       setCancelError(isAppError(err) ? err.message : expectedCopy.cancel.failed)
@@ -140,7 +155,7 @@ export function PurchaseOrderPage() {
     return (
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-4" role="status" aria-busy="true" aria-label={copy.common.loading}>
         <Skeleton className="h-8 w-2/3" />
-        <Skeleton className="h-40 w-full" />
+        <Skeleton className="h-32 w-full" />
         <Skeleton className="h-40 w-full" />
       </div>
     )
@@ -149,228 +164,416 @@ export function PurchaseOrderPage() {
     return (
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
         <BackLink />
-        <ErrorState title={copyText.loadFailed} message={result.error ?? copyText.notFound} onRetry={result.refetch} />
+        <ErrorState title={expectedCopy.page.loadFailed} message={result.error ?? expectedCopy.page.notFound} onRetry={result.refetch} />
       </div>
     )
   }
 
   const isPo = order.poNumber != null
-  const calledOff = order.status === 'CANCELLED'
+  const vendor = order.vendorId ? vendors.find((entry) => entry.id === order.vendorId) : undefined
+  const supplier = order.vendorName ?? expectedCopy.page.theSupplier
   const share = order.share ?? null
-  const overdue = isOverdue(order)
-  const goingTo =
-    branch?.isMultiBranch && order.branchId ? branch.nameOf(order.branchId) : undefined
   const address = (vendor?.email ?? '').trim() || (order.email?.toAddress ?? '')
-  const hasPhoneRoute = share?.whatsappUrl != null
-  const nothingToSendWith = isPo && !calledOff && address === '' && !hasPhoneRoute
+  const canFixEmail = vendor != null && mayEditSupplier(vendor, canManageSuppliers)
+  const latestEmail = order.email ?? null
+  const emailProblem =
+    latestEmail != null && latestEmail.status !== 'SENT' && order.waitingToBeSent && order.sentVia == null
+  const someArrived = order.lines.some((line) => line.receivedQuantity > 0)
+  // A priced order (plan section 11.4): every line has a price, so the table adds Amount and a total.
+  const priced = order.lines.length > 0 && order.lines.every((line) => line.price != null)
+  const columns = 2 + (someArrived ? 1 : 0) + (priced ? 1 : 0)
+  const goingTo = branch?.isMultiBranch && order.branchId ? branch.nameOf(order.branchId) : undefined
+  const status = statusOf(order)
+  const held = order.approval?.status === 'WAITING' || order.approval?.status === 'CHANGE_ASKED'
+  const isAsker = order.approval?.askedBy != null && order.approval.askedBy === user?.id
 
-  const subtitle = [
-    order.vendorName,
-    order.expectedDate ? copyText.needed(shortDate(order.expectedDate)) : null,
-    goingTo ? copyText.deliverTo(goingTo) : null,
+  // The way to offer first: what was picked on the form, else what has worked for this supplier.
+  const preferred: Channel =
+    state.send === 'EMAIL' && address
+      ? 'EMAIL'
+      : state.send === 'WHATSAPP' && share?.whatsappUrl
+        ? 'WHATSAPP'
+        : vendor?.emailOrders && address
+          ? 'EMAIL'
+          : share?.whatsappUrl
+            ? 'WHATSAPP'
+            : address
+              ? 'EMAIL'
+              : 'COPY'
+
+  const meta = [
+    order.expectedDate ? `${expectedCopy.form.neededBy} ${neededWords(order.expectedDate)}` : null,
+    goingTo,
   ].filter(Boolean)
+
+  // ---------------------------------------------------------------- ⋯ ---------------------------
+  const menu: OverflowMenuItem[] = []
+  if (share) menu.push({ label: text.menuPdf, onSelect: () => window.open(pdfHref(share.token), '_blank', 'noopener') })
+  if (canCreate && isPo && order.status === 'OPEN') {
+    menu.push({ label: text.menuChange, onSelect: () => navigate(`${LIST_PATH}/${order.id}/change`) })
+  }
+  if (canCreate && order.vendorId) menu.push({ label: text.menuAgain, onSelect: () => navigate(`${LIST_PATH}/new?again=${order.id}`) })
+  if (canSend && isPo && order.status === 'OPEN' && !order.waitingToBeSent && !held) {
+    menu.push({ label: text.menuSendAgain, onSelect: () => setShowWays(true) })
+  }
+  if (order.status === 'OPEN' && (isPo ? canSend || (held && isAsker) : canManage)) {
+    menu.push({ label: text.menuCallOff, tone: 'danger', onSelect: () => setCancelOpen(true) })
+  }
+
+  // ---------------------------------------------------------------- the ways to send it ----------
+  function wayButton(channel: Channel, main: boolean) {
+    if (!order || !share) return null
+    if (channel === 'WHATSAPP' && share.whatsappUrl) {
+      return (
+        <a
+          key="wa"
+          href={share.whatsappUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={() => void record('WHATSAPP')}
+          className={main ? buttonClassName('action', 'w-full') : linkClass}
+        >
+          {text.sendWhatsApp}
+        </a>
+      )
+    }
+    if (channel === 'EMAIL' && address) {
+      const recently = latestEmail?.status === 'SENT' && isRecent(latestEmail.sentAt, 10)
+      const onClick = () => (recently && !askAgain ? setAskAgain(true) : void sendEmail())
+      return main ? (
+        <Button key="em" variant="action" className="w-full" loading={sending} onClick={onClick}>
+          {text.sendEmail(address)}
+        </Button>
+      ) : (
+        <button key="em" type="button" className={linkClass} onClick={onClick} disabled={sending}>
+          {sending ? expectedCopy.page.email.sending : text.sendEmail(address)}
+        </button>
+      )
+    }
+    if (channel === 'COPY') {
+      return main ? (
+        <Button key="cp" variant="action" className="w-full" disabled={!share.message} onClick={() => void copyMessage()}>
+          {copied ? text.copied : text.copy}
+        </Button>
+      ) : (
+        <button key="cp" type="button" className={linkClass} disabled={!share.message} onClick={() => void copyMessage()}>
+          {copied ? text.copied : text.copy}
+        </button>
+      )
+    }
+    return null
+  }
+
+  function otherWays(except: Channel | null) {
+    if (!share) return null
+    const links = (['WHATSAPP', 'EMAIL', 'COPY'] as Channel[])
+      .filter((channel) => channel !== except)
+      .map((channel) => wayButton(channel, false))
+      .filter(Boolean)
+    return (
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-neutral-600">
+        {except && <span>{text.or}</span>}
+        {links}
+        <a href={pdfHref(share.token)} target="_blank" rel="noopener noreferrer" className={linkClass}>
+          {text.pdf}
+        </a>
+      </div>
+    )
+  }
+
+  // ---------------------------------------------------------------- next step -----------------
+  let nextStep: React.ReactNode = null
+  const receiveHref = `/app/products/receive?expected=${order.id}`
+  if (order.status === 'CANCELLED') {
+    nextStep = (
+      <NextBox say={someArrived ? text.closedShort('') : text.calledOff} note={someArrived ? text.closedShortNote : text.calledOffNote}>
+        {canManage && order.vendorId && (
+          <Link to={`${LIST_PATH}/new?again=${order.id}`} className={buttonClassName('secondary', 'w-full')}>
+            {text.orderAgain}
+          </Link>
+        )}
+      </NextBox>
+    )
+  } else if (order.status === 'RECEIVED') {
+    const last = order.receipts && order.receipts.length > 0 ? order.receipts[order.receipts.length - 1] : null
+    nextStep = (
+      <NextBox say={text.allArrived(last ? shortDate(last.receivedAt.slice(0, 10)) : '')}>
+        {canManage && order.vendorId && (
+          <Link to={`${LIST_PATH}/new?again=${order.id}`} className={buttonClassName('action', 'w-full')}>
+            {text.orderAgain}
+          </Link>
+        )}
+        <div className="text-sm">
+          <Link to="/app/purchases" className={linkClass}>
+            {text.seeDeliveries}
+          </Link>
+        </div>
+      </NextBox>
+    )
+  } else if (isPo && held) {
+    nextStep = (
+      <ApprovalStep
+        order={order}
+        supplier={supplier}
+        canSend={canSend}
+        isAsker={isAsker}
+        changeHref={`${LIST_PATH}/${order.id}/change`}
+        onUpdated={adopt}
+      />
+    )
+  } else if (isPo && order.waitingToBeSent && canSend && !someArrived) {
+    // Two different email troubles, said differently (2026-11-05): the supplier's address bounced
+    // (fix the address), or our side refused to send (your own email isn't confirmed, a daily cap) -
+    // never "didn't reach tony@" when Tony's address was never tried.
+    const bounced = emailProblem && (latestEmail?.status === 'BOUNCED' || latestEmail?.status === 'COMPLAINED')
+    const refused = emailProblem && !bounced
+    const say = bounced
+      ? text.emailProblem(latestEmail?.toAddress ?? address)
+      : refused
+        ? text.emailNotSent(supplier)
+        : state.justCreated
+          ? text.made(order.poNumber ?? '', supplier)
+          : (order.revision ?? 1) > 1 && order.sentVia != null
+            ? text.changed(supplier)
+            : order.approval?.status === 'APPROVED'
+              ? text.approvedSend(supplier)
+              : text.notSent(supplier)
+    const note = bounced ? text.emailProblemNote : refused ? (latestEmail?.problem ?? undefined) : undefined
+    // After a failed email, offer another way first - the order still has to reach the supplier today.
+    const otherThanEmail: Channel = share?.whatsappUrl ? 'WHATSAPP' : 'COPY'
+    const mainWay: Channel = bounced || (refused && !emailVerified) ? otherThanEmail : preferred
+    const fixFirst = bounced && canFixEmail
+    nextStep = (
+      <NextBox say={say} tick={state.justCreated && !emailProblem} note={note}>
+        {fixFirst && !editingEmail && (
+          <Button variant="action" className="w-full" onClick={() => setEditingEmail(true)}>
+            {text.fixEmail}
+          </Button>
+        )}
+        {editingEmail && vendor && (
+          <InlineEmailEditor
+            vendor={vendor}
+            onSaved={(updated) => {
+              addVendor(updated)
+              setEditingEmail(false)
+            }}
+            onCancel={() => setEditingEmail(false)}
+          />
+        )}
+        {!fixFirst && wayButton(mainWay, true)}
+        {askAgain && <AskAgain onYes={() => void sendEmail()} onNo={() => setAskAgain(false)} />}
+        {otherWays(fixFirst ? null : mainWay)}
+        {refused && !emailVerified && (
+          <div className="text-sm">
+            <button
+              type="button"
+              className={linkClass}
+              disabled={confirmation.sending || confirmation.throttled}
+              onClick={() => void confirmation.resend()}
+            >
+              {expectedCopy.page.email.confirmMine}
+            </button>
+            {confirmation.feedback && <p role="status" className="mt-1 text-neutral-600">{confirmation.feedback.message}</p>}
+          </div>
+        )}
+        {/* The supplier can turn up before anybody marked it sent: receiving is never locked away. */}
+        {order.receivable && (
+          <div className="border-t border-neutral-100 pt-2 text-sm">
+            <Link to={receiveHref} className={linkClass}>
+              {text.receiveEarly}
+            </Link>
+          </div>
+        )}
+      </NextBox>
+    )
+  } else if (order.receivable) {
+    const owed = order.lines.filter((line) => line.outstanding > 0)
+    const say = someArrived
+      ? owed.length === 1
+        ? text.stillToCome(`${quantityWords(owed[0].outstanding, owed[0].comesIn).replace(/ \(.*\)$/, '')} of ${owed[0].productName.toLowerCase()}`)
+        : text.itemsToCome(owed.length)
+      : !isPo
+        ? text.writtenDown(supplier)
+        : order.sentVia === 'PHONE'
+          ? text.byPhone(order.sentAt ? whenText(order.sentAt) : '')
+          : (order.sentVia === 'WHATSAPP' ? text.sentWhatsApp : order.sentVia === 'MESSAGE' ? text.sentMessage : text.sentEmail)(
+              supplier,
+              order.sentAt ? whenText(order.sentAt) : '',
+            )
+    nextStep = (
+      <NextBox say={say} note={!someArrived && order.sentVia === 'PHONE' ? text.byPhoneNote(supplier) : undefined}>
+        {canManage && (
+          <Link to={receiveHref} className={buttonClassName('action', 'w-full')}>
+            {someArrived ? text.receiveRest : text.receive}
+          </Link>
+        )}
+        {/* Came short and the rest won't follow: close it in place, keeping what arrived. */}
+        {canManage && someArrived && !askClose && (
+          <div className="text-sm">
+            <button type="button" className={linkClass} onClick={() => setAskClose(true)}>
+              {text.restNotComing}
+            </button>
+          </div>
+        )}
+        {canManage && someArrived && askClose && (
+          <div className="flex flex-col gap-2 rounded-md bg-neutral-50 p-3 text-sm text-neutral-800">
+            <p>
+              {text.closeAsk(
+                order.poNumber ?? order.title,
+                owed.length === 1
+                  ? quantityWords(owed[0].outstanding, owed[0].comesIn).replace(/ \(.*\)$/, '') + ' of ' + owed[0].productName.toLowerCase()
+                  : text.itemsToCome(owed.length).replace(' still to come', ''),
+              )}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="secondary" loading={cancelling} onClick={() => void handleCancel(true)}>
+                {text.closeYes}
+              </Button>
+              <Button variant="quiet" onClick={() => setAskClose(false)}>
+                {text.closeNo}
+              </Button>
+            </div>
+            {cancelError && <p role="alert" className="text-danger-700">{cancelError}</p>}
+          </div>
+        )}
+        {canSend && isPo && !showWays && (
+          <div className="text-sm">
+            <button type="button" className={linkClass} onClick={() => setShowWays(true)}>
+              {order.sentVia === 'PHONE' ? text.sendAfterAll(supplier) : text.sendAgain}
+            </button>
+          </div>
+        )}
+        {showWays && (
+          <>
+            {askAgain && <AskAgain onYes={() => void sendEmail()} onNo={() => setAskAgain(false)} />}
+            {otherWays(null)}
+          </>
+        )}
+      </NextBox>
+    )
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
       <div>
         <BackLink />
-        <div className="mt-3 flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+        <div className="mt-3 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            {isPo && justCreated && !calledOff ? (
-              <>
-                <h1 className="flex items-center gap-2 text-2xl font-semibold text-neutral-900">
-                  <Check className="h-6 w-6 shrink-0 text-accent-600" aria-hidden="true" />
-                  {copyText.ready(order.poNumber ?? '')}
-                </h1>
-                <p className="mt-1 text-sm text-neutral-600">{copyText.readySub}</p>
-              </>
-            ) : (
-              <h1 className="text-2xl font-semibold text-neutral-900">{isPo ? order.poNumber : order.title}</h1>
-            )}
-            {subtitle.length > 0 && <p className="mt-1 text-sm text-neutral-600">{subtitle.join(' · ')}</p>}
+            <p className="flex flex-wrap items-center gap-2 text-sm text-neutral-600">
+              {isPo ? expectedCopy.page.poLabel(order.poNumber ?? '') : expectedCopy.rows.writtenDown}
+              <StatusPill status={status} />
+              {(order.revision ?? 1) > 1 && <span className="text-xs text-neutral-500">{expectedCopy.page.revised(order.revision ?? 1)}</span>}
+            </p>
+            <h1 className="mt-1 text-2xl font-semibold text-neutral-900">{order.vendorName ?? order.title}</h1>
+            {meta.length > 0 && <p className="mt-1 text-sm text-neutral-600">{meta.join(' · ')}</p>}
           </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {(order.revision ?? 1) > 1 && <Badge variant="info">{copyText.revised(order.revision ?? 1)}</Badge>}
-            {overdue && <Badge variant="warning">{expectedCopy.list.overdue}</Badge>}
-            {order.status === 'RECEIVED' && <Badge variant="success">{expectedCopy.list.statusReceived}</Badge>}
-            {calledOff && <Badge variant="neutral">{copyText.calledOff}</Badge>}
-          </div>
+          {menu.length > 0 && <OverflowMenu items={menu} label={text.menuLabel(order.poNumber ?? order.title)} />}
         </div>
       </div>
 
-      {/* ------------------------------------------------------------------ send it ---------- */}
-      {isPo && (
-        <section aria-labelledby="po-send-heading" className="flex flex-col gap-1">
-          <h2 id="po-send-heading" className="text-sm font-semibold text-neutral-900">
-            {copyText.sendHeading(supplier)}
-          </h2>
-          {calledOff ? (
-            <p className="text-sm text-neutral-600">{copyText.calledOffNote}</p>
-          ) : (
-            <ul className="divide-y divide-neutral-200 border-y border-neutral-200">
-              {/* Email ------------------------------------------------------------------- */}
-              <Channel label={copyText.email.label} channel="email">
-                {editingEmail && vendor ? (
-                  <InlineEmailEditor
-                    vendor={vendor}
-                    onSaved={(updated) => {
-                      addVendor(updated)
-                      setEditingEmail(false)
-                    }}
-                    onCancel={() => setEditingEmail(false)}
-                  />
-                ) : (
-                  <EmailStatus
-                    order={order}
-                    supplier={supplier}
-                    address={address}
-                    sending={sending}
-                    askAgain={askAgain}
-                    canManage={canManage}
-                    canEditAddress={canManageSuppliers && vendor != null && vendor.kind !== 'VERIFIED' && vendor.editable !== false}
-                    emailVerified={emailVerified}
-                    confirmation={confirmation}
-                    onSend={() => void sendEmail()}
-                    onAskAgain={() => setAskAgain(true)}
-                    onCancelAsk={() => setAskAgain(false)}
-                    onEditAddress={() => setEditingEmail(true)}
-                  />
-                )}
-                {actionError && (
-                  <p role="alert" className="mt-1.5 text-sm text-danger-700">
-                    {actionError}
-                  </p>
-                )}
-              </Channel>
-
-              {/* WhatsApp: only when there is a number it can use — never a disabled button. */}
-              {share?.whatsappUrl && (
-                <Channel label={copyText.whatsapp.label} channel="whatsapp">
-                  {share.whatsappOpenedAt && (
-                    <p className="pt-2 text-sm text-neutral-700">
-                      {copyText.whatsapp.openedAt(whenText(share.whatsappOpenedAt))}
-                    </p>
-                  )}
-                  {canManage && (
-                    <div className={share.whatsappOpenedAt ? 'mt-2' : ''}>
-                      <a
-                        href={share.whatsappUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={() => void record('WHATSAPP')}
-                        className={buttonClassName(share.whatsappOpenedAt ? 'quiet' : 'secondary')}
-                      >
-                        {share.whatsappOpenedAt ? copyText.whatsapp.again : copyText.whatsapp.send}
-                      </a>
-                    </div>
-                  )}
-                </Channel>
-              )}
-
-              {/* The message, for anyone who would rather paste it into their own app. */}
-              {share && (
-                <Channel label={copyText.message.label} channel="message">
-                  {share.messageCopiedAt && (
-                    <p className="pt-2 text-sm text-neutral-700">
-                      {copyText.message.copiedAt(whenText(share.messageCopiedAt))}
-                    </p>
-                  )}
-                  <div className={share.messageCopiedAt ? 'mt-2' : ''}>
-                    <Button
-                      variant={share.messageCopiedAt ? 'quiet' : 'secondary'}
-                      disabled={!share.message}
-                      onClick={() => void copyMessage()}
-                    >
-                      {share.messageCopiedAt ? copyText.message.again : copyText.message.copy}
-                    </Button>
-                  </div>
-                  {copyFailed && (
-                    <div className="mt-2 flex flex-col gap-1">
-                      <p role="alert" className="text-sm text-danger-700">
-                        {copyText.message.copyFailed}
-                      </p>
-                      <textarea
-                        readOnly
-                        rows={6}
-                        value={share.message ?? ''}
-                        onFocus={(event) => event.currentTarget.select()}
-                        aria-label={copyText.message.label}
-                        className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-800"
-                      />
-                    </div>
-                  )}
-                </Channel>
-              )}
-
-              {/* The PDF — the browser's own viewer, with print and download in its toolbar. */}
-              {share && (
-                <Channel label={copyText.pdf.label} channel="pdf">
-                  <div>
-                    <a
-                      href={pdfHref(share.token)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={buttonClassName('secondary')}
-                    >
-                      {copyText.pdf.open}
-                    </a>
-                  </div>
-                </Channel>
-              )}
-            </ul>
-          )}
-          {nothingToSendWith && <p className="mt-1 text-sm text-neutral-600">{copyText.nothingToSendWith(supplier)}</p>}
-        </section>
+      {nextStep}
+      {actionError && (
+        <p role="alert" className="-mt-3 text-sm text-danger-700">
+          {actionError}
+        </p>
       )}
-
-      {/* --------------------------------------------------------------- what was asked ------- */}
-      <section aria-labelledby="po-items-heading" className="flex flex-col gap-1">
-        <h2 id="po-items-heading" className="text-sm font-semibold text-neutral-900">
-          {copyText.itemsHeading}
-        </h2>
-        <ul className="divide-y divide-neutral-200 border-y border-neutral-200">
-          {order.lines.map((line) => (
-            <li key={line.id} className="flex items-baseline justify-between gap-3 py-2.5 text-sm">
-              <span className="min-w-0">
-                <span className="font-medium text-neutral-900">{line.productName}</span>
-                {line.receivedQuantity > 0 && (
-                  <span className="mt-0.5 block text-xs text-neutral-500">
-                    {line.receivedQuantity} of {line.quantity} arrived
-                  </span>
-                )}
-              </span>
-              <span className="shrink-0 tabular-nums text-neutral-700">
-                {line.quantity} × {line.comesIn}
-              </span>
-            </li>
-          ))}
-        </ul>
-        {order.note != null && <p className="mt-1 text-sm text-neutral-600">{order.note}</p>}
-      </section>
-
-      {/* ---------------------------------------------------------------------- actions ------- */}
-      {(order.receivable || order.status === 'OPEN') && (
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            {order.receivable && (
-              <Link
-                to={`/app/products/receive?expected=${order.id}`}
-                aria-label={expectedCopy.list.receiveLabel(order.title)}
-                className={buttonClassName('action', 'w-full sm:w-auto')}
-              >
-                <Truck className="h-4 w-4" aria-hidden="true" />
-                {expectedCopy.list.receive}
-              </Link>
-            )}
-            {canManage && order.status === 'OPEN' && (
-              <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setCancelOpen(true)}>
-                {expectedCopy.list.cancel}
-              </Button>
-            )}
-          </div>
-          {isPo && order.receivable && <p className="text-sm text-neutral-600">{copyText.receiveHint}</p>}
+      {copyFailed && share?.message && (
+        <div className="-mt-3 flex flex-col gap-1">
+          <p role="alert" className="text-sm text-danger-700">
+            {expectedCopy.page.message.copyFailed}
+          </p>
+          <textarea
+            readOnly
+            rows={6}
+            value={share.message}
+            onFocus={(event) => event.currentTarget.select()}
+            aria-label={expectedCopy.page.message.label}
+            className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-800"
+          />
         </div>
       )}
+
+      {/* ------------------------------------------------------------------- items ---------- */}
+      <section aria-labelledby="po-items-heading" className="flex flex-col gap-2">
+        <h2 id="po-items-heading" className="text-sm font-semibold text-neutral-900">
+          {text.itemsHeading}
+        </h2>
+        <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-neutral-200 text-left text-xs text-neutral-500">
+                <th scope="col" className="px-4 py-2 font-medium">{text.product}</th>
+                <th scope="col" className="px-4 py-2 text-right font-medium">{text.ordered}</th>
+                {someArrived && <th scope="col" className="px-4 py-2 text-right font-medium">{text.arrived}</th>}
+                {priced && <th scope="col" className="px-4 py-2 text-right font-medium">{text.amount}</th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-100">
+              {order.lines.map((line) => {
+                const done = line.receivedQuantity >= line.quantity
+                return (
+                  <tr key={line.id}>
+                    <td className="px-4 py-2.5 font-medium text-neutral-900">
+                      {line.productName}
+                      {priced && line.price != null && (
+                        <span className="block text-xs font-normal text-neutral-600">
+                          {text.pricePer(orderMoney(line.price), quantityUnitWord({ comesIn: line.comesIn, pack: looksLikePack(line.comesIn) }, 1))}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums text-neutral-800">
+                      {quantityWords(line.quantity, line.comesIn)}
+                    </td>
+                    {someArrived && (
+                      <td className={`px-4 py-2.5 text-right whitespace-nowrap tabular-nums ${done ? 'text-accent-700' : 'text-neutral-800'}`}>
+                        {line.receivedQuantity > 0 ? line.receivedQuantity : '—'}
+                        {done && <Check className="ml-1 inline h-4 w-4" aria-label="all arrived" />}
+                      </td>
+                    )}
+                    {priced && (
+                      <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums text-neutral-900">
+                        {line.price != null ? orderMoney(Math.round(line.price * line.quantity * 100) / 100) : '—'}
+                      </td>
+                    )}
+                  </tr>
+                )
+              })}
+            </tbody>
+            {priced && (
+              <tfoot className="border-t border-neutral-200">
+                {order.deliveryCharge != null && (
+                  <tr>
+                    <th scope="row" colSpan={columns - 1} className="px-4 pt-2.5 pb-1 text-left font-normal text-neutral-600">
+                      {text.deliveryRow}
+                    </th>
+                    <td className="px-4 pt-2.5 pb-1 text-right tabular-nums text-neutral-900">
+                      {order.deliveryCharge === 0 ? text.deliveryFree : orderMoney(order.deliveryCharge)}
+                    </td>
+                  </tr>
+                )}
+                <tr>
+                  <th scope="row" colSpan={columns - 1} className="px-4 pt-1.5 pb-3 text-left font-semibold text-neutral-900">
+                    {text.totalRow}
+                  </th>
+                  <td className="px-4 pt-1.5 pb-3 text-right text-base font-semibold tabular-nums text-neutral-900">
+                    {orderMoney(order.total ?? 0)}
+                  </td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+        {!priced && order.poNumber != null && <p className="text-xs text-neutral-500">{text.noPrices}</p>}
+        {order.note != null && (
+          <p className="text-sm text-neutral-700">
+            <span className="text-neutral-500">{text.noteHeading(supplier)}: </span>
+            {order.note}
+          </p>
+        )}
+      </section>
+
+      {/* ----------------------------------------------------------------- history ---------- */}
+      <History order={order} supplier={supplier} />
 
       <CancelExpectedDialog
         expected={cancelOpen ? order : null}
@@ -385,6 +588,9 @@ export function PurchaseOrderPage() {
   )
 }
 
+const linkClass =
+  'rounded-sm font-medium text-primary-700 hover:underline focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none disabled:text-neutral-400'
+
 function BackLink() {
   return (
     <Link
@@ -392,140 +598,104 @@ function BackLink() {
       className="inline-flex items-center gap-1 rounded-sm text-sm font-medium text-primary-700 hover:underline focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none"
     >
       <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-      {copyText.back}
+      {expectedCopy.page.back}
     </Link>
   )
 }
 
-/** One way of getting it to the supplier: its name on the left, its status and its one action beside it. */
-function Channel({ label, channel, children }: { label: string; channel: string; children: React.ReactNode }) {
+/** The "Next step" box: what is true now in one sentence, then the one thing to press. */
+function NextBox({ say, note, tick, children }: { say: string; note?: string; tick?: boolean; children?: React.ReactNode }) {
   return (
-    <li className="grid grid-cols-[5.5rem_1fr] items-start gap-x-3 py-3" data-channel={channel}>
-      <span className="pt-2 text-sm text-neutral-500">{label}</span>
-      <div className="min-w-0">{children}</div>
-    </li>
+    <section aria-label={say} className="flex flex-col gap-3 rounded-lg border border-neutral-200 bg-white p-4">
+      <div>
+        <p className="flex items-start gap-2 text-base font-semibold text-neutral-900">
+          {tick && <Check className="mt-0.5 h-5 w-5 shrink-0 text-accent-600" aria-hidden="true" />}
+          {say}
+        </p>
+        {note && <p className="mt-1 text-sm text-neutral-600">{note}</p>}
+      </div>
+      {children}
+    </section>
   )
 }
 
-interface EmailStatusProps {
-  order: ExpectedDelivery
-  supplier: string
-  address: string
-  sending: boolean
-  askAgain: boolean
-  canManage: boolean
-  canEditAddress: boolean
-  emailVerified: boolean
-  confirmation: ReturnType<typeof useResendVerification>
-  onSend: () => void
-  onAskAgain: () => void
-  onCancelAsk: () => void
-  onEditAddress: () => void
+function AskAgain({ onYes, onNo }: { onYes: () => void; onNo: () => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm text-neutral-700">
+      <span>{text.sentAgainAsk}</span>
+      <Button variant="secondary" onClick={onYes}>
+        {text.sentAgainYes}
+      </Button>
+      <Button variant="quiet" onClick={onNo}>
+        {text.sentAgainNo}
+      </Button>
+    </div>
+  )
 }
 
-/**
- * The email line, in every state it can be in. The wording of a problem comes from the server as a
- * sentence and is shown as it is; what this decides is the one thing to press next.
- */
-function EmailStatus(props: EmailStatusProps) {
-  const { order, supplier, address, sending, askAgain, canManage, canEditAddress, emailVerified, confirmation } = props
-  const text = copyText.email
-  const latest = order.email ?? null
-  // The address was corrected after the attempt: what is on screen is about the old one.
-  const addressChanged = latest != null && latest.toAddress != null && address !== '' && latest.toAddress.toLowerCase() !== address.toLowerCase()
-
-  const line = (children: React.ReactNode) => <p className="pt-2 text-sm text-neutral-700">{children}</p>
-  const actions = (children: React.ReactNode) => <div className="mt-2 flex flex-wrap items-center gap-2">{children}</div>
-
-  if (sending) {
-    return line(text.sending)
+/** What happened to this order, newest first — built from what is already stored on it. */
+function History({ order, supplier }: { order: ExpectedDelivery; supplier: string }) {
+  const events: { at: string; text: React.ReactNode; good?: boolean }[] = []
+  const approval = order.approval
+  // Made and sent for approval in one go is one line, not two.
+  const madeForApproval =
+    approval?.askedAt != null && Math.abs(new Date(approval.askedAt).getTime() - new Date(order.createdAt).getTime()) < 60_000
+  if (!madeForApproval) {
+    events.push({ at: order.createdAt, text: order.createdByName ? text.madeBy(order.createdByName) : text.madeAnon })
   }
-
-  // Nothing tried yet, or the address changed since the last attempt.
-  if (latest == null || addressChanged) {
-    if (address === '') {
-      return (
+  if (order.email) {
+    events.push({
+      at: order.email.sentAt,
+      text: order.email.status === 'SENT' ? text.emailed(order.email.toAddress ?? '') : text.emailFailed(order.email.toAddress ?? ''),
+    })
+  }
+  if (order.share?.whatsappOpenedAt) events.push({ at: order.share.whatsappOpenedAt, text: text.whatsappOpened(supplier) })
+  if (order.share?.messageCopiedAt) events.push({ at: order.share.messageCopiedAt, text: text.messageCopied })
+  if (order.sentVia === 'PHONE' && order.sentAt) events.push({ at: order.sentAt, text: text.orderedByPhone })
+  if (approval?.askedAt) events.push({ at: approval.askedAt, text: text.sentForApproval(approval.askedByName ?? '') })
+  if (approval?.changeAskedAt) {
+    events.push({ at: approval.changeAskedAt, text: text.changeAskedBy(approval.changeAskedByName ?? '', approval.changeNote ?? '') })
+  }
+  if (approval?.approvedAt) events.push({ at: approval.approvedAt, good: true, text: text.approvedBy(approval.approvedByName ?? '') })
+  for (const receipt of order.receipts ?? []) {
+    events.push({
+      at: receipt.receivedAt,
+      good: true,
+      text: (
         <>
-          {line(text.noAddress(supplier))}
-          {canEditAddress && canManage && actions(<Button variant="secondary" onClick={props.onEditAddress}>{text.add}</Button>)}
-        </>
-      )
-    }
-    return (
-      <>
-        {line(text.notSent)}
-        {canManage && actions(<Button variant="secondary" onClick={props.onSend}>{text.send(address)}</Button>)}
-      </>
-    )
-  }
-
-  if (latest.status === 'SENT') {
-    return (
-      <>
-        {line(text.sentTo(latest.toAddress ?? address, whenText(latest.sentAt)))}
-        {canManage &&
-          (askAgain ? (
-            <div className="mt-2 flex flex-col gap-2">
-              <p className="text-sm text-neutral-700">{text.sendAgainAsk}</p>
-              {actions(
-                <>
-                  <Button variant="secondary" onClick={props.onSend}>{text.sendAgainYes}</Button>
-                  <Button variant="quiet" onClick={props.onCancelAsk}>{text.sendAgainNo}</Button>
-                </>,
+          {text.received(receipt.receivedByName ?? null, receipt.lineCount)}{' '}
+          <Link to={`/app/products/import/${receipt.importId}/result`} className={linkClass}>
+            {text.seeDelivery}
+          </Link>
+          {(receipt.sentBack ?? []).map((back, index) => (
+            <span key={index} className="block text-neutral-600">
+              {text.sentBack(
+                `${quantityWords(back.quantity, back.comesIn).replace(/ \(.*\)$/, '')} of ${back.productName.toLowerCase()}`,
+                back.reason === 'OTHER' && back.note ? back.note : receiveCopy.reasons[back.reason],
               )}
-            </div>
-          ) : (
-            actions(
-              <Button variant="quiet" onClick={isRecent(latest.sentAt, 10) ? props.onAskAgain : props.onSend}>
-                {text.sendAgain}
-              </Button>,
-            )
+            </span>
           ))}
-      </>
-    )
+        </>
+      ),
+    })
   }
+  events.sort((a, b) => b.at.localeCompare(a.at))
 
-  if (latest.status === 'BOUNCED') {
-    return (
-      <>
-        {line(latest.problem ?? text.failed)}
-        {canManage && canEditAddress && actions(<Button variant="secondary" onClick={props.onEditAddress}>{text.fix}</Button>)}
-      </>
-    )
-  }
-
-  if (latest.status === 'COMPLAINED') {
-    return line(latest.problem ?? text.failed)
-  }
-
-  // FAILED: the server's sentence, and the one thing that fixes it.
   return (
-    <>
-      {line(latest.problem ?? text.failed)}
-      {canManage &&
-        actions(
-          !emailVerified ? (
-            <>
-              <Button variant="secondary" loading={confirmation.sending} disabled={confirmation.throttled} onClick={() => void confirmation.resend()}>
-                {text.confirmMine}
-              </Button>
-              {address !== '' && (
-                <Button variant="quiet" onClick={props.onSend}>
-                  {text.tryAgain}
-                </Button>
-              )}
-            </>
-          ) : address === '' ? (
-            canEditAddress ? <Button variant="secondary" onClick={props.onEditAddress}>{text.add}</Button> : null
-          ) : (
-            <Button variant="secondary" onClick={props.onSend}>{text.tryAgain}</Button>
-          ),
-        )}
-      {confirmation.feedback && (
-        <p className="mt-1.5 text-sm text-neutral-600" role="status">
-          {confirmation.feedback.message}
-        </p>
-      )}
-    </>
+    <section aria-labelledby="po-history-heading" className="flex flex-col gap-2">
+      <h2 id="po-history-heading" className="text-sm font-semibold text-neutral-900">
+        {text.historyHeading}
+      </h2>
+      <ul className="flex flex-col gap-2">
+        {events.map((event, index) => (
+          <li key={index} className="grid grid-cols-[0.75rem_1fr] gap-2 text-sm text-neutral-700">
+            <span className={`mt-1.5 h-2 w-2 rounded-full ${event.good ? 'bg-accent-600' : 'bg-neutral-400'}`} aria-hidden="true" />
+            <span>
+              {event.text} <span className="text-neutral-500">· {whenText(event.at)}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }

@@ -57,6 +57,13 @@ export const PERMISSIONS = {
   CHANGE_SELLING_PRICES: 'CHANGE_SELLING_PRICES',
   /** V53: send stock to another branch. Given to every role holding STOCK_OUT; can be taken away. */
   SEND_STOCK: 'SEND_STOCK',
+  /**
+   * V78 (PURCHASE_ORDER_PLAN.md section 11.5): make purchase orders that wait for approval, or approve
+   * and send them. Both given to every role holding MANAGE_INVENTORY; an owner takes SEND away from a
+   * role that should only ask.
+   */
+  CREATE_PURCHASE_ORDER: 'CREATE_PURCHASE_ORDER',
+  SEND_PURCHASE_ORDER: 'SEND_PURCHASE_ORDER',
 
   /**
    * The buying company's own vendor directory — `/api/company-vendors` (V11).

@@ -177,9 +177,19 @@ const PublicPurchaseOrderPage = lazy(() =>
     default: m.PublicPurchaseOrderPage,
   })),
 )
-const NewExpectedDeliveryPage = lazy(() =>
-  import('@/features/expected/pages/NewExpectedDeliveryPage').then((m) => ({
-    default: m.NewExpectedDeliveryPage,
+// Price requests (PURCHASE_ORDER_PLAN.md section 11.3): asking, the request page, and the supplier's own page.
+const AskForPricesPage = lazy(() =>
+  import('@/features/expected/pages/AskForPricesPage').then((m) => ({ default: m.AskForPricesPage })),
+)
+const PriceRequestPage = lazy(() =>
+  import('@/features/expected/pages/PriceRequestPage').then((m) => ({ default: m.PriceRequestPage })),
+)
+const PublicPriceRequestPage = lazy(() =>
+  import('@/features/publicOrder/PublicPriceRequestPage').then((m) => ({ default: m.PublicPriceRequestPage })),
+)
+const PurchaseOrderFormPage = lazy(() =>
+  import('@/features/expected/pages/PurchaseOrderFormPage').then((m) => ({
+    default: m.PurchaseOrderFormPage,
   })),
 )
 
@@ -569,6 +579,7 @@ export function AppRoutes() {
           outside every layout on purpose: no login, no navigation, one column for a phone. The
           long random token in the path is the access check. */}
         <Route path="/o/:token" element={<PublicPurchaseOrderPage />} />
+        <Route path="/q/:token" element={<PublicPriceRequestPage />} />
 
         {/* ------------------------------------------------------- Legacy workspace paths → /app */}
         {/* The workspace moved from `/` to `/app` when `/` became the storefront. These keep every
@@ -766,8 +777,32 @@ export function AppRoutes() {
           <Route
             path="purchase-orders/new"
             element={
-              <RequirePermission permission={PERMISSIONS.MANAGE_INVENTORY}>
-                <NewExpectedDeliveryPage />
+              <RequirePermission anyOf={[PERMISSIONS.CREATE_PURCHASE_ORDER, PERMISSIONS.SEND_PURCHASE_ORDER]}>
+                <PurchaseOrderFormPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="purchase-orders/:id/change"
+            element={
+              <RequirePermission anyOf={[PERMISSIONS.CREATE_PURCHASE_ORDER, PERMISSIONS.SEND_PURCHASE_ORDER]}>
+                <PurchaseOrderFormPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="purchase-orders/ask"
+            element={
+              <RequirePermission anyOf={[PERMISSIONS.CREATE_PURCHASE_ORDER, PERMISSIONS.SEND_PURCHASE_ORDER]}>
+                <AskForPricesPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="purchase-orders/rfq/:id"
+            element={
+              <RequirePermission permission={PERMISSIONS.VIEW_PRODUCTS}>
+                <PriceRequestPage />
               </RequirePermission>
             }
           />

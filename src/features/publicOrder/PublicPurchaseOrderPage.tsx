@@ -4,7 +4,7 @@ import { api } from '@/api/client'
 import { Button } from '@/components/Button'
 import { Logo } from '@/components/Logo'
 import { Skeleton } from '@/components/Skeleton'
-import { shortDate } from '@/features/expected/expected'
+import { orderMoney, shortDate } from '@/features/expected/expected'
 import { isAppError } from '@/types/api'
 
 /** What the API sends for `GET /api/public/purchase-orders/{token}` — only what is on the PDF. */
@@ -17,8 +17,11 @@ interface PublicPurchaseOrder {
   note?: string | null
   buyer: { name: string; phone?: string | null; address?: string | null; logoUrl?: string | null }
   deliverTo?: { name?: string | null; address?: string | null; phone?: string | null } | null
-  lines: { productName: string; comesIn: string; quantity: number }[]
+  /** `price` / `amount` only on an order made with prices (since 2026-11-06). */
+  lines: { productName: string; comesIn: string; quantity: number; price?: number | null; amount?: number | null }[]
   pdfPath: string
+  deliveryCharge?: number | null
+  total?: number | null
 }
 
 type State =
@@ -38,6 +41,11 @@ const words = {
   neededNone: 'As soon as you can',
   note: 'Note',
   ask: 'Please reply to them with your price, and when they can expect delivery.',
+  askPriced: 'Please confirm this order with them, and say when they can expect delivery.',
+  each: (price: string) => `${price} each`,
+  delivery: 'Delivery',
+  deliveryFree: 'Free',
+  total: 'Total',
   pdf: 'View / print PDF',
   questions: (phone: string) => `Questions? Call ${phone}`,
   calledOffTitle: (buyer: string) => `${buyer} called this order off`,
@@ -144,6 +152,7 @@ function Order({ order }: { order: PublicPurchaseOrder }) {
   const base = String(api.defaults.baseURL ?? '').replace(/\/$/, '')
   const pdfUrl = `${base}${order.pdfPath}`
   const { buyer, deliverTo } = order
+  const priced = order.total != null
 
   if (order.calledOff) {
     return (
@@ -177,12 +186,38 @@ function Order({ order }: { order: PublicPurchaseOrder }) {
         <ul className="divide-y divide-neutral-200 border-y border-neutral-200 bg-white">
           {order.lines.map((line, index) => (
             <li key={`${line.productName}-${index}`} className="flex items-baseline justify-between gap-3 px-1 py-3 text-sm">
-              <span className="min-w-0 font-medium">{line.productName}</span>
+              <span className="min-w-0">
+                <span className="block font-medium">{line.productName}</span>
+                {priced && (
+                  <span className="block text-xs tabular-nums text-neutral-600">
+                    {line.quantity} × {line.comesIn}
+                    {line.price != null ? ` · ${words.each(orderMoney(line.price))}` : ''}
+                  </span>
+                )}
+              </span>
               <span className="shrink-0 tabular-nums text-neutral-700">
-                {line.quantity} × {line.comesIn}
+                {priced && line.amount != null ? (
+                  <span className="font-semibold text-neutral-900">{orderMoney(line.amount)}</span>
+                ) : (
+                  <>
+                    {line.quantity} × {line.comesIn}
+                  </>
+                )}
               </span>
             </li>
           ))}
+          {priced && order.deliveryCharge != null && (
+            <li className="flex items-baseline justify-between gap-3 px-1 py-3 text-sm">
+              <span className="text-neutral-600">{words.delivery}</span>
+              <span className="tabular-nums">{order.deliveryCharge === 0 ? words.deliveryFree : orderMoney(order.deliveryCharge)}</span>
+            </li>
+          )}
+          {priced && (
+            <li className="flex items-baseline justify-between gap-3 px-1 py-3 text-base">
+              <span className="font-semibold">{words.total}</span>
+              <span className="font-semibold tabular-nums">{orderMoney(order.total ?? 0)}</span>
+            </li>
+          )}
         </ul>
       </section>
 
@@ -206,7 +241,7 @@ function Order({ order }: { order: PublicPurchaseOrder }) {
         )}
       </dl>
 
-      <p className="text-sm text-neutral-800">{words.ask}</p>
+      <p className="text-sm text-neutral-800">{priced ? words.askPriced : words.ask}</p>
 
       <div className="flex flex-col gap-3">
         <a
