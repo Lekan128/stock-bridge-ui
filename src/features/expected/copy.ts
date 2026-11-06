@@ -337,6 +337,7 @@ export const expectedCopy = {
     askForPrices: 'Ask for prices',
     rfqSuppliers: (count: number) => (count === 1 ? '1 supplier' : `${count} suppliers`),
     rfqReplied: (done: number, all: number) => `${done} of ${all} replied`,
+    rfqRepliesClosed: 'Replies closed',
     rfqBecame: (orders: string) => `Became ${orders}`,
     rfqClosed: 'Closed',
     pillAsking: 'Asking',

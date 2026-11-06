@@ -31,7 +31,11 @@ const words = {
   remark: (buyer: string) => `Anything to tell ${buyer}? (optional)`,
   remarkHint: 'How long the price holds, a different brand, only part of the amount…',
   send: (total: string | null) => (total ? `Send my prices · ${total}` : 'Send my prices'),
-  sendNote: (buyer: string) => `${buyer} sees them straight away. You can change them until they decide.`,
+  sendNote: (buyer: string, day: string | null) =>
+    day ? `${buyer} sees them straight away. You can change them until ${day}.` : `${buyer} sees them straight away. You can change them until they decide.`,
+  repliesClosed: (day: string) => `Replies closed on ${day}`,
+  closedWithReply: (buyer: string) => `Your prices are with ${buyer}. To change them, call ${buyer}.`,
+  closedNoReply: (buyer: string) => `${buyer} isn't taking prices for this any more.`,
   sending: 'Sending…',
   none: 'Type a price for at least one item, or tap “I can’t do any of it”.',
   cantDoIt: "I can't do any of it",
@@ -160,6 +164,8 @@ export function PublicPriceRequestPage() {
   }
 
   const page = state.kind === 'ready' ? state.page : null
+  // Takes prices: the buyer hasn't decided, and the Reply by day hasn't passed (plan section 12.1).
+  const takes = page != null && page.state === 'OPEN' && !page.repliesClosed
   const total = useMemo(() => {
     if (!page) return null
     let sum = 0
@@ -256,9 +262,20 @@ export function PublicPriceRequestPage() {
               </section>
             )}
 
-            {page.reply && !editing && <Sent page={page} onChange={page.state === 'OPEN' ? () => setEditing(true) : undefined} />}
+            {/* Past the Reply by day (plan section 12.1): what they sent, read-only, and who to call. */}
+            {page.state === 'OPEN' && page.repliesClosed && (
+              <section className="flex flex-col gap-1 rounded-lg border border-neutral-200 bg-white p-4" data-replies-closed>
+                <p className="font-semibold">{words.repliesClosed(page.replyBy ? shortDate(page.replyBy) : '')}</p>
+                <p className="text-sm text-neutral-600">
+                  {page.reply ? words.closedWithReply(page.buyerName) : words.closedNoReply(page.buyerName)}
+                  {page.buyerPhone ? ` ${page.buyerPhone}` : ''}
+                </p>
+              </section>
+            )}
 
-            {page.state === 'OPEN' && editing && (
+            {page.reply && !(takes && editing) && <Sent page={page} onChange={takes ? () => setEditing(true) : undefined} />}
+
+            {takes && editing && (
               <>
                 <p className="text-xs text-neutral-600">{words.replyingAs(page.supplierName)}</p>
                 <ul className="divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
@@ -396,13 +413,13 @@ export function PublicPriceRequestPage() {
         )}
       </div>
 
-      {page && page.state === 'OPEN' && editing && (
+      {page && takes && editing && (
         <div className="fixed inset-x-0 bottom-0 border-t border-neutral-200 bg-white/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur">
           <div className="mx-auto flex max-w-xl flex-col gap-1">
             <Button variant="action" className="w-full" loading={sending} disabled={total == null} onClick={() => void send(false)}>
               {sending ? words.sending : words.send(total != null ? orderMoney(total) : null)}
             </Button>
-            <p className="text-center text-xs text-neutral-600">{error ?? (total == null ? words.none : words.sendNote(page.buyerName))}</p>
+            <p className="text-center text-xs text-neutral-600">{error ?? (total == null ? words.none : words.sendNote(page.buyerName, page.replyBy ? shortDate(page.replyBy) : null))}</p>
           </div>
         </div>
       )}

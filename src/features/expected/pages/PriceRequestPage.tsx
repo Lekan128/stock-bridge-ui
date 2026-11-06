@@ -11,7 +11,8 @@ import { Skeleton } from '@/components/Skeleton'
 import { useApiQuery } from '@/data/useApiQuery'
 import {
   priceRequestsApi,
-  type PriceOption,
+  type Pick,
+  type PickedItem,
   type PriceRequest,
   type PriceRequestLine,
   type PriceRequestSupplier,
@@ -28,7 +29,12 @@ const text = {
   replied: (rfq: string, done: number, all: number) => `${rfq} · ${done} of ${all} replied`,
   done: (rfq: string) => `${rfq} · Done`,
   closed: (rfq: string) => `${rfq} · Closed`,
-  replyBy: (day: string) => `reply by ${day}`,
+  repliesClose: (day: string) => `Replies close ${day}`,
+  repliesClosed: (day: string) => `Replies closed ${day}`,
+  changeDay: 'Change',
+  moreTime: 'Give more time',
+  newDay: 'Replies close on',
+  saveDay: 'Save',
   sentHeading: (sent: number, all: number) => `Sent to ${sent} of ${all}`,
   sharedWhatsApp: (when: string) => `Shared on WhatsApp · ${when}`,
   copied: (when: string) => `Message copied · ${when}`,
@@ -58,11 +64,20 @@ const text = {
   byDay: (day: string) => `by ${day}`,
   late: (day: string) => `${day}, after you need it`,
   notes: 'Their notes',
-  orderFrom: 'Order from',
-  cheapest: (total: string) => `Cheapest for each item · ${total}`,
-  cheapestNote: (count: number, names: string) => `${count} orders: ${names}. Each delivery charge is included.`,
-  everything: (name: string, total: string) => `Everything from ${name} · ${total}`,
-  partly: (covered: number, all: number) => `Only ${covered} of ${all} items`,
+  choose: 'Choose who to order from',
+  chooseHint: 'Each item starts on the lowest price. Tap another supplier to order from them instead.',
+  cheapestAll: 'Cheapest for each',
+  allFrom: (name: string) => `All from ${name}`,
+  notNow: 'Not now',
+  more: (amount: string) => `+${amount}`,
+  ordered: 'Ordered',
+  dearer: (name: string, amount: string, lowest: string, lowestName: string) =>
+    `Ordered from ${name} at ${amount} · lowest was ${lowest} from ${lowestName}`,
+  summary: (parts: string) => parts,
+  supplierItems: (name: string, count: number) => `${name} ${count === 1 ? '1 item' : `${count} items`}`,
+  inclDelivery: (amount: string) => `incl. ${amount} delivery`,
+  moreThanCheapest: (amount: string) => `${amount} more than the cheapest`,
+  pickOne: 'Pick a supplier for at least one item',
   make: (count: number) => (count === 1 ? 'Make the purchase order' : `Make ${count} purchase orders`),
   makeNote: 'You can still change them before they are sent.',
   dontWait: (names: string) => `You don't have to wait for ${names}`,
@@ -108,7 +123,9 @@ export function PriceRequestPage() {
   const { setData } = result
 
   const [typing, setTyping] = useState<string | null>(null)
-  const [choice, setChoice] = useState<string | null>(null)
+  // The buyer's picks, item by item (plan section 12.2); an item not touched stays on the lowest.
+  const [overrides, setOverrides] = useState<Record<string, string | null>>({})
+  const [editingDay, setEditingDay] = useState(false)
   const [busy, setBusy] = useState(false)
   const [askClose, setAskClose] = useState(false)
   const [copied, setCopied] = useState<string | null>(null)
@@ -168,17 +185,28 @@ export function PriceRequestPage() {
           ? text.replied(request.rfqNumber, answered.length, request.suppliers.length)
           : text.asking(request.rfqNumber)
   const what = request.lines.map((line) => `${line.productName} ${quantityWords(line.quantity, line.comesIn).replace(/ \(.*\)$/, '')}`).join(', ')
-  const options = request.options
-  const selected = choice ?? (options[0] ? optionKey(options[0]) : null)
-  const chosenOption = options.find((option) => optionKey(option) === selected) ?? null
+  const choosing = open && canAct && replied.length > 0
+  const priceOf = (supplierId: string | null | undefined, lineId: string) =>
+    request.suppliers.find((supplier) => supplier.id === supplierId)?.quotes.find((quote) => quote.lineId === lineId)?.price ?? null
+  // A pick of a supplier who no longer prices that item (they changed their reply) falls back to the lowest.
+  const pickOf = (lineId: string): string | null => {
+    if (lineId in overrides) {
+      const chosen = overrides[lineId]
+      if (chosen == null || priceOf(chosen, lineId) != null) return chosen
+    }
+    return request.lowestByLine[lineId] ?? null
+  }
+  const plan = summarise(request, pickOf)
   const waitingFor = request.suppliers.filter((supplier) => supplier.status !== 'REPLIED' && supplier.status !== 'DECLINED').map((s) => s.vendorName)
 
+  const lines = request.lines
   async function make() {
-    if (!chosenOption) return
+    if (plan.orders.length === 0) return
     setBusy(true)
     setError(null)
     try {
-      const made = await priceRequestsApi.choose(id, chosenOption.kind, chosenOption.supplierId ?? undefined)
+      const picks: Pick[] = lines.map((line) => ({ lineId: line.id, supplierId: pickOf(line.id) }))
+      const made = await priceRequestsApi.choose(id, picks)
       void queryClient.invalidateQueries({ queryKey: ['price-requests'] })
       void queryClient.invalidateQueries({ queryKey: ['expected'] })
       navigate(made.orderIds.length === 1 ? `${LIST_PATH}/${made.orderIds[0]}` : `${LIST_PATH}/rfq/${id}`, { replace: made.orderIds.length === 1 })
@@ -208,10 +236,19 @@ export function PriceRequestPage() {
         <div>
           <Breadcrumbs items={[{ label: text.list, to: `${LIST_PATH}?view=RFQ` }, { label: request.rfqNumber }]} />
           <h1 className="mt-2 text-2xl font-semibold text-neutral-900">{title}</h1>
-          <p className="mt-1 text-sm text-neutral-600">
-            {what}
-            {request.replyBy && open ? ` · ${text.replyBy(shortDate(request.replyBy))}` : ''}
-          </p>
+          <p className="mt-1 text-sm text-neutral-600">{what}</p>
+          {open && request.replyBy && (
+            <ReplyByLine
+              request={request}
+              canAct={canAct}
+              editing={editingDay}
+              onEdit={setEditingDay}
+              onSaved={(next) => {
+                adopt(next)
+                setEditingDay(false)
+              }}
+            />
+          )}
         </div>
 
         {request.status === 'DONE' && (
@@ -231,7 +268,8 @@ export function PriceRequestPage() {
           </section>
         )}
 
-        {open && (
+        {/* Sending, while someone hasn't answered yet; once all have, there's nothing to do here. */}
+        {open && answered.length < request.suppliers.length && (
           <section aria-labelledby="rfq-sent" className="flex flex-col gap-2">
             <h2 id="rfq-sent" className="text-sm font-semibold text-neutral-900">
               {text.sentHeading(sent.length, request.suppliers.length)}
@@ -251,7 +289,7 @@ export function PriceRequestPage() {
                       </span>
                       {wasSent && <Check className="h-4 w-4 shrink-0 text-accent-600" aria-label="sent" />}
                     </div>
-                    {canAct && supplier.status !== 'REPLIED' && supplier.status !== 'DECLINED' && (
+                    {canAct && !request.repliesClosed && supplier.status !== 'REPLIED' && supplier.status !== 'DECLINED' && (
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
                         {supplier.whatsappUrl && (
                           <a
@@ -314,7 +352,6 @@ export function PriceRequestPage() {
                         </>
                       )}
                     </span>
-                    {supplier.remark && <span className="mt-1 block text-sm text-neutral-800">“{supplier.remark}”</span>}
                   </span>
                   {open && canAct && (
                     <Button variant="secondary" onClick={() => setTyping(supplier.id)}>
@@ -327,40 +364,18 @@ export function PriceRequestPage() {
           </ul>
         </section>
 
-        {replied.length > 0 && (
-          <Compare request={request} />
-        )}
-
-        {open && canAct && options.length > 0 && (
-          <section aria-labelledby="rfq-choose" className="flex flex-col gap-2">
-            <h2 id="rfq-choose" className="text-sm font-semibold text-neutral-900">
-              {text.orderFrom}
-            </h2>
-            <div className="divide-y divide-neutral-100 overflow-hidden rounded-lg border border-neutral-200 bg-white">
-              {options.map((option) => {
-                const key = optionKey(option)
-                const on = key === selected
-                return (
-                  <label key={key} className={`flex cursor-pointer items-start gap-3 px-4 py-3 ${on ? 'bg-primary-50' : ''}`}>
-                    <input type="radio" name="rfq-option" checked={on} onChange={() => setChoice(key)} className="mt-0.5 h-4 w-4 accent-primary-700" />
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold text-neutral-900">
-                        {option.kind === 'CHEAPEST' ? text.cheapest(orderMoney(option.total)) : text.everything(option.suppliers[0], orderMoney(option.total))}
-                      </span>
-                      {option.kind === 'CHEAPEST' && (
-                        <span className="block text-xs text-neutral-600">{text.cheapestNote(option.orders, option.suppliers.join(', '))}</span>
-                      )}
-                      {option.linesCovered < request.lines.length && (
-                        <span className="block text-xs text-warning-800">{text.partly(option.linesCovered, request.lines.length)}</span>
-                      )}
-                    </span>
-                  </label>
-                )
-              })}
-            </div>
-            {waitingFor.length > 0 && <p className="text-xs text-neutral-600">{text.dontWait(waitingFor.join(', '))}</p>}
-          </section>
-        )}
+        {replied.length > 0 &&
+          (choosing ? (
+            <Choose
+              request={request}
+              pickOf={pickOf}
+              onPick={(lineId, supplierId) => setOverrides((all) => ({ ...all, [lineId]: supplierId }))}
+              onPickAll={(next) => setOverrides(next)}
+            />
+          ) : (
+            <Compare request={request} />
+          ))}
+        {choosing && waitingFor.length > 0 && <p className="-mt-4 text-xs text-neutral-600">{text.dontWait(waitingFor.join(', '))}</p>}
 
         {open && canAct && (
           <div className="text-sm">
@@ -386,13 +401,29 @@ export function PriceRequestPage() {
         {error && <ErrorState variant="inline" message={error} />}
       </div>
 
-      {open && canAct && chosenOption && (
-        <div className="sticky -bottom-6 z-10 -mx-6 mt-6 -mb-6 border-t border-neutral-200 bg-white/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur">
-          <div className="mx-auto flex max-w-2xl flex-col gap-1">
-            <Button variant="action" className="w-full" loading={busy} onClick={() => void make()}>
-              {text.make(chosenOption.orders)}
+      {choosing && (
+        // What the picks will make, always in view (plan section 12.2): who, how many, the total and its delivery.
+        <div className="sticky -bottom-6 z-10 -mx-6 mt-6 -mb-6 border-t border-neutral-200 bg-white/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur" data-choose-summary>
+          <div className="mx-auto flex max-w-2xl flex-col gap-2">
+            {plan.orders.length > 0 && (
+              <div className="flex items-start justify-between gap-3 text-sm">
+                <div className="min-w-0">
+                  <p className="text-neutral-900">{plan.orders.map((order) => text.supplierItems(order.name, order.items)).join(' · ')}</p>
+                  <p className="text-xs text-neutral-600">
+                    {[
+                      plan.delivery > 0 ? text.inclDelivery(orderMoney(plan.delivery)) : null,
+                      plan.overCheapest > 0 ? text.moreThanCheapest(orderMoney(plan.overCheapest)) : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                </div>
+                <p className="shrink-0 font-semibold text-neutral-900 tabular-nums">{orderMoney(plan.total)}</p>
+              </div>
+            )}
+            <Button variant="action" className="w-full" loading={busy} disabled={plan.orders.length === 0} onClick={() => void make()}>
+              {plan.orders.length === 0 ? text.pickOne : text.make(plan.orders.length)}
             </Button>
-            <p className="text-center text-xs text-neutral-600">{text.makeNote}</p>
           </div>
         </div>
       )}
@@ -400,15 +431,230 @@ export function PriceRequestPage() {
   )
 }
 
-function optionKey(option: PriceOption): string {
-  return option.kind === 'CHEAPEST' ? 'CHEAPEST' : `SUPPLIER:${option.supplierId}`
+/**
+ * What the picks will make (plan section 12.2): one order per supplier picked, its items, and the total - each
+ * supplier's delivery charge counted once - beside what the cheapest for the same items would cost.
+ */
+function summarise(request: PriceRequest, pickOf: (lineId: string) => string | null) {
+  const byId = new Map(request.suppliers.map((supplier) => [supplier.id, supplier]))
+  const amountOf = (supplierId: string, lineId: string) =>
+    byId.get(supplierId)?.quotes.find((quote) => quote.lineId === lineId)?.amount ?? 0
+  const orders = new Map<string, { name: string; items: number; amount: number }>()
+  let cheapest = 0
+  const cheapestFrom = new Set<string>()
+  for (const line of request.lines) {
+    const picked = pickOf(line.id)
+    if (picked == null) continue
+    const order = orders.get(picked) ?? { name: byId.get(picked)?.vendorName ?? '', items: 0, amount: 0 }
+    order.items += 1
+    order.amount += amountOf(picked, line.id)
+    orders.set(picked, order)
+    const lowest = request.lowestByLine[line.id]
+    if (lowest) {
+      cheapest += amountOf(lowest, line.id)
+      cheapestFrom.add(lowest)
+    }
+  }
+  const charge = (supplierId: string) => byId.get(supplierId)?.deliveryCharge ?? 0
+  const delivery = [...orders.keys()].reduce((sum, supplierId) => sum + charge(supplierId), 0)
+  const total = [...orders.values()].reduce((sum, order) => sum + order.amount, 0) + delivery
+  cheapest += [...cheapestFrom].reduce((sum, supplierId) => sum + charge(supplierId), 0)
+  return { orders: [...orders.values()], delivery, total, overCheapest: Math.max(0, Math.round((total - cheapest) * 100) / 100) }
+}
+
+/**
+ * "Replies close Mon 10 Nov · Change" / "Replies closed Mon 10 Nov · Give more time" (plan section 12.1): the day
+ * suppliers' links stop taking prices, and moving it, in place.
+ */
+function ReplyByLine({
+  request,
+  canAct,
+  editing,
+  onEdit,
+  onSaved,
+}: {
+  request: PriceRequest
+  canAct: boolean
+  editing: boolean
+  onEdit: (editing: boolean) => void
+  onSaved: (next: PriceRequest) => void
+}) {
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' })
+  const [day, setDay] = useState(request.replyBy && request.replyBy >= today ? request.replyBy : today)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const said = shortDate(request.replyBy ?? today)
+
+  async function save() {
+    setBusy(true)
+    setError(null)
+    try {
+      onSaved(await priceRequestsApi.giveMoreTime(request.id, day))
+    } catch (err: unknown) {
+      setError(isAppError(err) ? err.message : text.failed)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (editing) {
+    return (
+      <div className="mt-2 flex flex-wrap items-end gap-2" data-reply-by-editor>
+        <label className="flex flex-col gap-1 text-sm text-neutral-800">
+          {text.newDay}
+          <input
+            type="date"
+            value={day}
+            min={today}
+            onChange={(event) => setDay(event.target.value)}
+            className="min-h-11 rounded-md border border-neutral-300 bg-white px-3 text-base text-neutral-900 sm:text-sm"
+          />
+        </label>
+        <Button variant="secondary" loading={busy} disabled={!day || day < today} onClick={() => void save()}>
+          {text.saveDay}
+        </Button>
+        <Button variant="quiet" onClick={() => onEdit(false)}>
+          {text.cancel}
+        </Button>
+        {error && <p className="w-full text-sm text-danger-700">{error}</p>}
+      </div>
+    )
+  }
+  return (
+    <p className={`mt-0.5 text-sm ${request.repliesClosed ? 'text-warning-800' : 'text-neutral-600'}`} data-reply-by>
+      {request.repliesClosed ? text.repliesClosed(said) : text.repliesClose(said)}
+      {canAct && (
+        <>
+          {' · '}
+          <button type="button" onClick={() => onEdit(true)} className="font-medium text-primary-700 hover:underline">
+            {request.repliesClosed ? text.moreTime : text.changeDay}
+          </button>
+        </>
+      )}
+    </p>
+  )
+}
+
+/**
+ * Choosing (plan section 12.2; owner, 2026-11-06: "they can pick the supplier, but price is the default"): one block
+ * per item, its suppliers' prices as the choice - starting on the lowest - and "Not now". Quick picks set every item
+ * at once. Delivery days and their notes sit below, so quality or speed can win.
+ */
+function Choose({
+  request,
+  pickOf,
+  onPick,
+  onPickAll,
+}: {
+  request: PriceRequest
+  pickOf: (lineId: string) => string | null
+  onPick: (lineId: string, supplierId: string | null) => void
+  onPickAll: (picks: Record<string, string | null>) => void
+}) {
+  const replied = request.suppliers.filter((supplier) => supplier.status === 'REPLIED')
+  const others = request.suppliers.filter((supplier) => supplier.status !== 'REPLIED')
+  const priced = (supplier: PriceRequestSupplier, lineId: string) =>
+    supplier.quotes.find((quote) => quote.lineId === lineId)?.price != null
+  return (
+    <section aria-labelledby="rfq-choose" className="flex flex-col gap-2" data-choose>
+      <div>
+        <h2 id="rfq-choose" className="text-sm font-semibold text-neutral-900">
+          {text.choose}
+        </h2>
+        <p className="text-xs text-neutral-600">{text.chooseHint}</p>
+      </div>
+      {replied.length > 1 && (
+        <div className="flex flex-wrap gap-x-4 text-sm" data-quick-picks>
+          <button type="button" onClick={() => onPickAll({})} className={linkClass}>
+            {text.cheapestAll}
+          </button>
+          {replied.map((supplier) => (
+            <button
+              key={supplier.id}
+              type="button"
+              onClick={() =>
+                onPickAll(
+                  Object.fromEntries(
+                    request.lines.map((line) => [line.id, priced(supplier, line.id) ? supplier.id : pickOf(line.id)]),
+                  ),
+                )
+              }
+              className={linkClass}
+            >
+              {text.allFrom(supplier.vendorName)}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
+        {request.lines.map((line) => {
+          const rows = replied
+            .filter((supplier) => priced(supplier, line.id))
+            .map((supplier) => ({ supplier, quote: supplier.quotes.find((quote) => quote.lineId === line.id)! }))
+            .sort((a, b) => (a.quote.price ?? 0) - (b.quote.price ?? 0))
+          const lowestAmount = rows[0]?.quote.amount ?? 0
+          const chosen = pickOf(line.id)
+          const name = `pick-${line.id}`
+          return (
+            <fieldset key={line.id} className="flex flex-col gap-0.5 px-4 py-3" data-choose-line={line.productName}>
+              <legend className="contents">
+                <span className="block pb-1 text-sm font-semibold text-neutral-900">
+                  {line.productName}{' '}
+                  <span className="text-xs font-normal text-neutral-600">· {quantityWords(line.quantity, line.comesIn).replace(/ \(.*\)$/, '')}</span>
+                </span>
+              </legend>
+              {rows.map(({ supplier, quote }) => {
+                const on = chosen === supplier.id
+                const lowest = supplier.id === request.lowestByLine[line.id]
+                const extra = (quote.amount ?? 0) - lowestAmount
+                return (
+                  <label
+                    key={supplier.id}
+                    className={`-mx-2 flex min-h-11 cursor-pointer items-center gap-3 rounded-md px-2 text-sm tabular-nums ${on ? 'bg-primary-50' : 'hover:bg-neutral-50'}`}
+                  >
+                    <input type="radio" name={name} checked={on} onChange={() => onPick(line.id, supplier.id)} className="h-4 w-4 shrink-0 accent-primary-700" />
+                    <span className={`min-w-0 flex-1 ${on ? 'font-semibold text-neutral-900' : 'text-neutral-800'}`}>
+                      {supplier.vendorName}
+                      {lowest && <span className="ml-1.5 rounded-full bg-accent-50 px-1.5 py-0.5 text-[11px] font-bold text-accent-700">{text.lowest}</span>}
+                    </span>
+                    <span className="shrink-0 text-right text-neutral-800">
+                      {orderMoney(quote.price ?? 0)} · {orderMoney(quote.amount ?? 0)}
+                      {extra > 0 && <span className="ml-1.5 text-xs text-neutral-500">{text.more(orderMoney(extra))}</span>}
+                    </span>
+                  </label>
+                )
+              })}
+              <label className={`-mx-2 flex min-h-11 cursor-pointer items-center gap-3 rounded-md px-2 text-sm ${chosen == null ? 'bg-neutral-100' : 'hover:bg-neutral-50'}`}>
+                <input type="radio" name={name} checked={chosen == null} onChange={() => onPick(line.id, null)} className="h-4 w-4 shrink-0 accent-primary-700" />
+                <span className="text-neutral-700">{text.notNow}</span>
+              </label>
+              {others.map((supplier) => (
+                <p key={supplier.id} className="flex justify-between gap-3 pl-7 text-sm text-neutral-500">
+                  <span>{supplier.vendorName}</span>
+                  <span>{supplier.status === 'DECLINED' ? text.declined : text.noReply}</span>
+                </p>
+              ))}
+              {replied
+                .filter((supplier) => !priced(supplier, line.id))
+                .map((supplier) => (
+                  <p key={supplier.id} className="flex justify-between gap-3 pl-7 text-sm text-neutral-500">
+                    <span>{supplier.vendorName}</span>
+                    <span>{text.cantSupply}</span>
+                  </p>
+                ))}
+            </fieldset>
+          )
+        })}
+        <DeliveryAndNotes request={request} />
+      </div>
+    </section>
+  )
 }
 
 /** One block per item, each supplier's price with the lowest marked; delivery with its day; their notes (mockup 1I). */
 function Compare({ request }: { request: PriceRequest }) {
   const replied = request.suppliers.filter((supplier) => supplier.status === 'REPLIED')
   const others = request.suppliers.filter((supplier) => supplier.status !== 'REPLIED')
-  const noted = replied.filter((supplier) => supplier.remark)
   return (
     <section aria-labelledby="rfq-compare" className="flex flex-col gap-2">
       <h2 id="rfq-compare" className="text-sm font-semibold text-neutral-900">
@@ -416,8 +662,27 @@ function Compare({ request }: { request: PriceRequest }) {
       </h2>
       <div className="divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
         {request.lines.map((line) => (
-          <CompareLine key={line.id} line={line} replied={replied} others={others} lowest={request.lowestByLine[line.id]} />
+          <CompareLine
+            key={line.id}
+            line={line}
+            replied={replied}
+            others={others}
+            lowest={request.lowestByLine[line.id]}
+            picked={request.picked?.find((item) => item.lineId === line.id)}
+          />
         ))}
+        <DeliveryAndNotes request={request} />
+      </div>
+    </section>
+  )
+}
+
+/** Each supplier's delivery charge and day (amber after Needed by), and their notes in their words (mockup 1I). */
+function DeliveryAndNotes({ request }: { request: PriceRequest }) {
+  const replied = request.suppliers.filter((supplier) => supplier.status === 'REPLIED')
+  const noted = replied.filter((supplier) => supplier.remark)
+  return (
+    <>
         <div className="flex flex-col gap-1 px-4 py-3">
           <p className="text-sm font-semibold text-neutral-900">{text.delivery}</p>
           {replied.map((supplier) => {
@@ -444,8 +709,7 @@ function Compare({ request }: { request: PriceRequest }) {
             ))}
           </div>
         )}
-      </div>
-    </section>
+    </>
   )
 }
 
@@ -454,11 +718,14 @@ function CompareLine({
   replied,
   others,
   lowest,
+  picked,
 }: {
   line: PriceRequestLine
   replied: PriceRequestSupplier[]
   others: PriceRequestSupplier[]
   lowest?: string
+  /** Once it became orders: who this item went to (plan section 12.2). */
+  picked?: PickedItem
 }) {
   const rows = replied
     .map((supplier) => ({ supplier, quote: supplier.quotes.find((quote) => quote.lineId === line.id) }))
@@ -475,6 +742,9 @@ function CompareLine({
             <span>
               {supplier.vendorName}
               {best && <span className="ml-1.5 rounded-full bg-accent-50 px-1.5 py-0.5 text-[11px] font-bold">{text.lowest}</span>}
+              {picked?.supplierId === supplier.id && (
+                <span className="ml-1.5 rounded-full bg-primary-50 px-1.5 py-0.5 text-[11px] font-bold text-primary-700">{text.ordered}</span>
+              )}
             </span>
             <span>{quote?.price != null ? `${orderMoney(quote.price)} · ${orderMoney(quote.amount ?? 0)}` : text.cantSupply}</span>
           </p>
@@ -486,6 +756,12 @@ function CompareLine({
           <span>{supplier.status === 'DECLINED' ? text.declined : text.noReply}</span>
         </p>
       ))}
+      {/* A dearer pick, said once, so it can be explained later (plan section 12.2). */}
+      {picked && picked.lowestPrice != null && picked.price > picked.lowestPrice && picked.lowestVendorName && (
+        <p className="text-xs text-neutral-600" data-dearer-pick>
+          {text.dearer(picked.vendorName, orderMoney(picked.price), orderMoney(picked.lowestPrice), picked.lowestVendorName)}
+        </p>
+      )}
     </div>
   )
 }

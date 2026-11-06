@@ -76,6 +76,27 @@ export interface PriceRequest {
   /** Line id → the supplier row with the lowest price for it. */
   lowestByLine: Record<string, string>
   options: PriceOption[]
+  /** The Reply by day has passed (plan section 12.1): suppliers' links take no more prices. */
+  repliesClosed: boolean
+  /** Once it became orders: what each item went to, beside the lowest offered. */
+  picked: PickedItem[]
+}
+
+/** One item of a request that became orders (plan section 12.2). */
+export interface PickedItem {
+  lineId: string
+  supplierId: string
+  vendorName: string
+  price: number
+  lowestPrice?: number | null
+  lowestVendorName?: string | null
+  orderNumber?: string | null
+}
+
+/** What the buyer picked for one item: a supplier row, or null for "Not now". */
+export interface Pick {
+  lineId: string
+  supplierId: string | null
 }
 
 export interface PriceRequestRow {
@@ -87,6 +108,8 @@ export interface PriceRequestRow {
   suppliers: number
   replied: number
   orderNumbers: string[]
+  replyBy?: string | null
+  repliesClosed: boolean
 }
 
 export interface PriceReplyInput {
@@ -118,6 +141,8 @@ export interface PublicPriceRequest {
   deliverTo?: string | null
   lines: { id: string; productName: string; comesIn: string; quantity: number }[]
   state: 'OPEN' | 'ORDERED' | 'CLOSED'
+  /** The Reply by day has passed: show what they sent, read-only. */
+  repliesClosed: boolean
   orderNumber?: string | null
   orderUrl?: string | null
   reply?: {
@@ -153,8 +178,13 @@ export const priceRequestsApi = {
   reply(id: string, supplierId: string, body: PriceReplyInput): Promise<PriceRequest> {
     return api.put<PriceRequest>(`${BASE}/${id}/suppliers/${supplierId}/reply`, body).then((r) => r.data)
   },
-  choose(id: string, kind: 'CHEAPEST' | 'SUPPLIER', supplierId?: string): Promise<{ orderIds: string[] }> {
-    return api.post<{ orderIds: string[] }>(`${BASE}/${id}/choose`, { kind, supplierId }).then((r) => r.data)
+  /** Makes the orders from the buyer's pick for each item (plan section 12.2). */
+  choose(id: string, picks: Pick[]): Promise<{ orderIds: string[] }> {
+    return api.post<{ orderIds: string[] }>(`${BASE}/${id}/choose`, { kind: 'PICKED', picks }).then((r) => r.data)
+  },
+  /** "Give more time": a new Reply by, while nothing is decided (plan section 12.1). */
+  giveMoreTime(id: string, replyBy: string): Promise<PriceRequest> {
+    return api.post<PriceRequest>(`${BASE}/${id}/reply-by`, { replyBy }).then((r) => r.data)
   },
   close(id: string): Promise<PriceRequest> {
     return api.post<PriceRequest>(`${BASE}/${id}/close`).then((r) => r.data)
