@@ -124,7 +124,8 @@ export function AskForPricesPage() {
 
   const blank = items.some((item) => quantityOf(item) == null)
   const invalid = items.some(quantityInvalid)
-  const canSubmit = items.length > 0 && !blank && !invalid && vendorIds.length > 0 && online && !submitting
+  // Replies close at the end of Reply by (plan section 12.1), so it's always a day from today on.
+  const canSubmit = items.length > 0 && !blank && !invalid && vendorIds.length > 0 && replyBy !== '' && replyBy >= todayIso() && online && !submitting
   const label = submitting
     ? text.asking
     : items.length === 0

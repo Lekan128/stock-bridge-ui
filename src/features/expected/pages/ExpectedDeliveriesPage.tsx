@@ -288,7 +288,7 @@ function RfqRow({ row }: { row: PriceRequestRow }) {
   const meta = [
     row.products.slice(0, 3).join(', ') + (row.products.length > 3 ? '…' : ''),
     row.status === 'OPEN'
-      ? text.rfqReplied(row.replied, row.suppliers)
+      ? text.rfqReplied(row.replied, row.suppliers) + (row.repliesClosed ? ` · ${text.rfqRepliesClosed}` : '')
       : row.status === 'DONE' && row.orderNumbers.length > 0
         ? text.rfqBecame(row.orderNumbers.join(', '))
         : text.rfqClosed,

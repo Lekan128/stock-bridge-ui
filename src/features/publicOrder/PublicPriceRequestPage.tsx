@@ -6,7 +6,7 @@ import { Logo } from '@/components/Logo'
 import { Skeleton } from '@/components/Skeleton'
 import { priceRequestsApi, type PriceReplyInput, type PublicPriceRequest } from '@/features/expected/api/priceRequestsApi'
 import { orderMoney, shortDate } from '@/features/expected/expected'
-import { perUnitWords, quantityUnitWord } from '@/features/imports/delivery'
+import { quantityUnitWord } from '@/features/imports/delivery'
 import { isAppError } from '@/types/api'
 
 const words = {
@@ -16,13 +16,17 @@ const words = {
       .filter(Boolean)
       .join(' · '),
   replyingAs: (supplier: string) => `Replying as ${supplier}`,
-  your: (per: string) => `your price ${per}`,
+  howTo: (units: string[]) =>
+    `Type your price for one ${units.length > 1 ? `${units.slice(0, -1).join(', one ')} or one ${units[units.length - 1]}` : units[0]}. We add up the totals.`,
+  per: (unit: string) => `per ${unit}`,
+  priceOf: (product: string, unit: string) => `Your price for one ${unit} of ${product}`,
   forAll: (amount: string, count: string) => `${amount} for ${count}`,
   dontHave: "I don't have this",
   haveIt: 'I have this after all',
   notSupplying: "You don't have this",
-  delivery: (where: string | null) => (where ? `Delivery to ${where}` : 'Delivery'),
-  deliveryHint: 'Leave it at 0 if delivery is free',
+  deliveryHeading: 'Delivery',
+  deliveryCharge: (where: string | null) => (where ? `Delivery charge to ${where}` : 'Delivery charge'),
+  deliveryHint: 'Leave it at 0 if delivery is free.',
   when: 'When can you deliver?',
   byNeeded: (day: string) => `By ${day}`,
   asSoon: 'As soon as asked',
@@ -31,7 +35,11 @@ const words = {
   remark: (buyer: string) => `Anything to tell ${buyer}? (optional)`,
   remarkHint: 'How long the price holds, a different brand, only part of the amount…',
   send: (total: string | null) => (total ? `Send my prices · ${total}` : 'Send my prices'),
-  sendNote: (buyer: string) => `${buyer} sees them straight away. You can change them until they decide.`,
+  sendNote: (buyer: string, day: string | null) =>
+    day ? `${buyer} sees them straight away. You can change them until ${day}.` : `${buyer} sees them straight away. You can change them until they decide.`,
+  repliesClosed: (day: string) => `Replies closed on ${day}`,
+  closedWithReply: (buyer: string) => `Your prices are with ${buyer}. To change them, call ${buyer}.`,
+  closedNoReply: (buyer: string) => `${buyer} isn't taking prices for this any more.`,
   sending: 'Sending…',
   none: 'Type a price for at least one item, or tap “I can’t do any of it”.',
   cantDoIt: "I can't do any of it",
@@ -70,6 +78,17 @@ function money(text: string): number | null {
   if (cleaned === '') return null
   const value = Number(cleaned)
   return Number.isFinite(value) && value >= 0 ? Math.round(value * 100) / 100 : null
+}
+
+/** A typed amount with its thousands marked once they leave the box: "1200" → "1,200" (left as typed if not a number). */
+function tidy(text: string): string {
+  const value = money(text)
+  return value == null ? text : new Intl.NumberFormat('en-NG', { maximumFractionDigits: 2 }).format(value)
+}
+
+/** One of what's asked for, as the supplier says it: "bag", "carton", "kg". */
+function unitOf(line: { comesIn: string; quantity: number }): string {
+  return quantityUnitWord({ comesIn: line.comesIn, pack: /·/.test(line.comesIn) && !/^loose/i.test(line.comesIn) }, 1)
 }
 
 function storageKey(token: string): string {
@@ -160,6 +179,8 @@ export function PublicPriceRequestPage() {
   }
 
   const page = state.kind === 'ready' ? state.page : null
+  // Takes prices: the buyer hasn't decided, and the Reply by day hasn't passed (plan section 12.1).
+  const takes = page != null && page.state === 'OPEN' && !page.repliesClosed
   const total = useMemo(() => {
     if (!page) return null
     let sum = 0
@@ -256,11 +277,26 @@ export function PublicPriceRequestPage() {
               </section>
             )}
 
-            {page.reply && !editing && <Sent page={page} onChange={page.state === 'OPEN' ? () => setEditing(true) : undefined} />}
+            {/* Past the Reply by day (plan section 12.1): what they sent, read-only, and who to call. */}
+            {page.state === 'OPEN' && page.repliesClosed && (
+              <section className="flex flex-col gap-1 rounded-lg border border-neutral-200 bg-white p-4" data-replies-closed>
+                <p className="font-semibold">{words.repliesClosed(page.replyBy ? shortDate(page.replyBy) : '')}</p>
+                <p className="text-sm text-neutral-600">
+                  {page.reply ? words.closedWithReply(page.buyerName) : words.closedNoReply(page.buyerName)}
+                  {page.buyerPhone ? ` ${page.buyerPhone}` : ''}
+                </p>
+              </section>
+            )}
 
-            {page.state === 'OPEN' && editing && (
+            {page.reply && !(takes && editing) && <Sent page={page} onChange={takes ? () => setEditing(true) : undefined} />}
+
+            {takes && editing && (
               <>
                 <p className="text-xs text-neutral-600">{words.replyingAs(page.supplierName)}</p>
+                {/* Said once, first (owner, 2026-11-06: a first-time supplier may not know it's the price of ONE pack). */}
+                <p className="rounded-md bg-primary-50 px-3 py-2 text-sm text-neutral-900" data-price-how>
+                  {words.howTo([...new Set(page.lines.map((line) => unitOf(line)))])}
+                </p>
                 <ul className="divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
                   {page.lines.map((line) => {
                     const id = `price-${line.id}`
@@ -268,16 +304,16 @@ export function PublicPriceRequestPage() {
                     const price = money(draft.prices[line.id] ?? '')
                     const shape = { comesIn: line.comesIn, pack: /·/.test(line.comesIn) && !/^loose/i.test(line.comesIn) }
                     const count = `${new Intl.NumberFormat('en-NG').format(line.quantity)} ${quantityUnitWord(shape, line.quantity)}`
+                    const unit = unitOf(line)
                     return (
                       <li key={line.id} className="px-4 py-3">
                         <div className="flex items-center justify-between gap-3">
-                          <label htmlFor={id} className="min-w-0">
+                          <div className="min-w-0">
                             <span className="block font-semibold">{line.productName}</span>
-                            <span className="block text-xs text-neutral-600">
-                              {count} · {cannot ? words.notSupplying : words.your(perUnitWords(shape))}
-                            </span>
-                          </label>
+                            <span className="block text-sm text-neutral-600">{cannot ? words.notSupplying : count}</span>
+                          </div>
                           {!cannot && (
+                            // The unit is on the box itself, where the eye is while typing: "₦ 1,200 per carton".
                             <span className="flex items-center rounded-md border border-neutral-300 bg-white focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-100">
                               <span className="pl-2.5 text-neutral-500" aria-hidden="true">
                                 ₦
@@ -287,14 +323,19 @@ export function PublicPriceRequestPage() {
                                 type="text"
                                 inputMode="decimal"
                                 autoComplete="off"
+                                aria-label={words.priceOf(line.productName, unit)}
                                 value={draft.prices[line.id] ?? ''}
                                 onChange={(event) => patch({ prices: { ...draft.prices, [line.id]: event.target.value } })}
-                                className="w-28 bg-transparent py-2 pr-2.5 pl-1 text-right text-base font-semibold tabular-nums focus:outline-none"
+                                onBlur={() => patch({ prices: { ...draft.prices, [line.id]: tidy(draft.prices[line.id] ?? '') } })}
+                                className="w-24 bg-transparent py-2 pl-1 text-right text-base font-semibold tabular-nums focus:outline-none"
                               />
+                              <span className="pr-2.5 pl-1 text-sm whitespace-nowrap text-neutral-600" aria-hidden="true">
+                                {words.per(unit)}
+                              </span>
                             </span>
                           )}
                         </div>
-                        <p className="mt-1 flex flex-wrap gap-x-2 text-xs text-neutral-600">
+                        <p className="mt-1 flex flex-wrap gap-x-2 text-sm text-neutral-600">
                           {!cannot && price != null && <span className="tabular-nums">{words.forAll(orderMoney(price * line.quantity), count)}</span>}
                           <button
                             type="button"
@@ -307,9 +348,16 @@ export function PublicPriceRequestPage() {
                       </li>
                     )
                   })}
-                  <li className="flex items-center justify-between gap-3 px-4 py-3">
+                </ul>
+
+                {/* Delivery is its own thing, not a line of the order (owner, 2026-11-06): its charge and its day. */}
+                <section aria-labelledby="price-delivery-heading" className="flex flex-col gap-4 rounded-lg border border-neutral-200 bg-white px-4 py-3" data-delivery>
+                  <h2 id="price-delivery-heading" className="font-semibold">
+                    {words.deliveryHeading}
+                  </h2>
+                  <div className="flex items-center justify-between gap-3">
                     <label htmlFor="price-delivery" className="min-w-0">
-                      <span className="block font-semibold">{words.delivery(page.deliverTo ?? null)}</span>
+                      <span className="block text-sm text-neutral-800">{words.deliveryCharge(page.deliverTo ?? null)}</span>
                       <span className="block text-xs text-neutral-600">{words.deliveryHint}</span>
                     </label>
                     <span className="flex items-center rounded-md border border-neutral-300 bg-white focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-100">
@@ -324,42 +372,42 @@ export function PublicPriceRequestPage() {
                         placeholder="0"
                         value={draft.delivery}
                         onChange={(event) => patch({ delivery: event.target.value })}
+                        onBlur={() => patch({ delivery: tidy(draft.delivery) })}
                         className="w-28 bg-transparent py-2 pr-2.5 pl-1 text-right text-base font-semibold tabular-nums focus:outline-none"
                       />
                     </span>
-                  </li>
-                </ul>
-
-                <fieldset className="flex flex-col gap-2">
-                  <legend className="mb-1 text-sm font-medium text-neutral-800">{words.when}</legend>
-                  <div className="flex flex-wrap gap-2">
-                    {[
-                      ['NEEDED', page.neededBy ? words.byNeeded(shortDate(page.neededBy)) : words.asSoon],
-                      ['OTHER', words.anotherDay],
-                    ].map(([value, label]) => (
-                      <button
-                        key={value}
-                        type="button"
-                        aria-pressed={draft.when === value}
-                        onClick={() => patch({ when: draft.when === value ? null : (value as Draft['when']) })}
-                        className={`rounded-full border px-3 py-1.5 text-sm ${
-                          draft.when === value ? 'border-primary-100 bg-primary-100 font-semibold text-primary-900' : 'border-neutral-300 bg-white text-neutral-800'
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    ))}
                   </div>
-                  {draft.when === 'OTHER' && (
-                    <input
-                      type="date"
-                      aria-label={words.anotherDayLabel}
-                      value={draft.day}
-                      onChange={(event) => patch({ day: event.target.value })}
-                      className="self-start rounded-md border border-neutral-300 bg-white px-3 py-2 text-base"
-                    />
-                  )}
-                </fieldset>
+                  <fieldset className="flex flex-col gap-2">
+                    <legend className="mb-1 text-sm text-neutral-800">{words.when}</legend>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        ['NEEDED', page.neededBy ? words.byNeeded(shortDate(page.neededBy)) : words.asSoon],
+                        ['OTHER', words.anotherDay],
+                      ].map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          aria-pressed={draft.when === value}
+                          onClick={() => patch({ when: draft.when === value ? null : (value as Draft['when']) })}
+                          className={`rounded-full border px-3 py-1.5 text-sm ${
+                            draft.when === value ? 'border-primary-100 bg-primary-100 font-semibold text-primary-900' : 'border-neutral-300 bg-white text-neutral-800'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {draft.when === 'OTHER' && (
+                      <input
+                        type="date"
+                        aria-label={words.anotherDayLabel}
+                        value={draft.day}
+                        onChange={(event) => patch({ day: event.target.value })}
+                        className="self-start rounded-md border border-neutral-300 bg-white px-3 py-2 text-base"
+                      />
+                    )}
+                  </fieldset>
+                </section>
 
                 <div className="flex flex-col gap-1">
                   <label htmlFor="price-remark" className="text-sm font-medium text-neutral-800">
@@ -396,13 +444,13 @@ export function PublicPriceRequestPage() {
         )}
       </div>
 
-      {page && page.state === 'OPEN' && editing && (
+      {page && takes && editing && (
         <div className="fixed inset-x-0 bottom-0 border-t border-neutral-200 bg-white/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur">
           <div className="mx-auto flex max-w-xl flex-col gap-1">
             <Button variant="action" className="w-full" loading={sending} disabled={total == null} onClick={() => void send(false)}>
               {sending ? words.sending : words.send(total != null ? orderMoney(total) : null)}
             </Button>
-            <p className="text-center text-xs text-neutral-600">{error ?? (total == null ? words.none : words.sendNote(page.buyerName))}</p>
+            <p className="text-center text-xs text-neutral-600">{error ?? (total == null ? words.none : words.sendNote(page.buyerName, page.replyBy ? shortDate(page.replyBy) : null))}</p>
           </div>
         </div>
       )}

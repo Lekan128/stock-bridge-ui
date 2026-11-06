@@ -38,6 +38,7 @@ const SUITES = [
   'chain',
   'branch-gaps',
   'areas',
+  'price-requests',
   'surfaces',
   'chaos',
   'metrics',
