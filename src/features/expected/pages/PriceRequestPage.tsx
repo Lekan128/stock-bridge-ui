@@ -18,7 +18,7 @@ import {
   type PriceRequestSupplier,
 } from '@/features/expected/api/priceRequestsApi'
 import { orderMoney, quantityWords, shortDate, whenText } from '@/features/expected/expected'
-import { perUnitWords } from '@/features/imports/delivery'
+import { quantityUnitWord } from '@/features/imports/delivery'
 import { isAppError } from '@/types/api'
 
 const LIST_PATH = '/app/purchase-orders'
@@ -91,7 +91,7 @@ const text = {
   // Typed reply
   pricesOf: (name: string) => `${name}'s prices`,
   typedTag: 'typed by you',
-  pricePer: (per: string) => `price ${per}`,
+  per: (unit: string) => `per ${unit}`,
   cantSupplyToggle: "Can't supply",
   canSupplyToggle: 'Can supply after all',
   deliveryTo: 'Delivery',
@@ -830,9 +830,7 @@ function TypedReply({
               <div className="flex items-center justify-between gap-3">
                 <label htmlFor={id} className="min-w-0 text-sm text-neutral-800">
                   {line.productName}{' '}
-                  <span className="text-xs text-neutral-500">
-                    · {quantityWords(line.quantity, line.comesIn).replace(/ \(.*\)$/, '')} · {text.pricePer(perUnitWords(shape))}
-                  </span>
+                  <span className="text-xs text-neutral-500">· {quantityWords(line.quantity, line.comesIn).replace(/ \(.*\)$/, '')}</span>
                 </label>
                 {!cannot[line.id] && (
                   <span className="flex items-center rounded-md border border-neutral-200 bg-white focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-100">
@@ -846,8 +844,12 @@ function TypedReply({
                       autoComplete="off"
                       value={prices[line.id] ?? ''}
                       onChange={(event) => setPrices((current) => ({ ...current, [line.id]: event.target.value }))}
-                      className="w-24 bg-transparent py-1.5 pr-2.5 pl-1 text-right text-base font-semibold tabular-nums focus:outline-none sm:text-sm"
+                      className="w-20 bg-transparent py-1.5 pl-1 text-right text-base font-semibold tabular-nums focus:outline-none sm:text-sm"
                     />
+                    {/* The unit on the box, as on the supplier's own page: the price of ONE. */}
+                    <span className="pr-2.5 pl-1 text-xs whitespace-nowrap text-neutral-600" aria-hidden="true">
+                      {text.per(quantityUnitWord(shape, 1))}
+                    </span>
                   </span>
                 )}
               </div>

@@ -244,6 +244,31 @@ await check("replies close on the Reply by day: the supplier's link is read-only
   await supplierContext.close()
 })
 
+// ------------------------------------------------------------------------------------------ 3
+await check("the supplier's page says it's the price of one, on the box, and delivery is its own section", async () => {
+  const request = await api('/api/price-requests', {
+    token,
+    method: 'POST',
+    body: { lines: [{ productId: rice.id, unit: 'KG', quantity: 20 }, { productId: oil.id, unit: 'KG', quantity: 10 }], vendorIds: [tony.id], replyBy: lagosDay(2) },
+  })
+  const link = sql(`SELECT token FROM price_request_suppliers WHERE id = '${request.suppliers[0].id}';`)
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } })
+  const supplier = await context.newPage()
+  await supplier.goto(`${UI}/q/${link}`)
+  await supplier.locator('[data-price-how]').getByText('Type your price for one kg. We add up the totals.').waitFor()
+  const box = supplier.getByLabel('Your price for one kg of Rice')
+  await box.fill('1200')
+  await supplier.getByText('₦24,000 for 20 kg').waitFor()
+  await box.blur()
+  assert((await box.inputValue()) === '1,200', `the price reads ${await box.inputValue()}`)
+  const delivery = supplier.locator('[data-delivery]')
+  await delivery.getByText('Delivery charge').waitFor()
+  await delivery.getByText('When can you deliver?').waitFor()
+  await supplier.waitForTimeout(300)
+  await supplier.screenshot({ path: SHOTS + '7-supplier-reply.png', fullPage: true })
+  await context.close()
+})
+
 await browser.close()
 const failed = results.filter(([status]) => status === 'FAIL')
 console.log(`\n${results.length - failed.length}/${results.length} passed`)
