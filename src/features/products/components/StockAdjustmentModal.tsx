@@ -11,10 +11,12 @@ import { StockFigure } from '@/features/products/components/StockFigure'
 import { StockReceipt } from '@/features/products/components/StockReceipt'
 import { submitStockWrite } from '@/features/outbox/outboxStore'
 import { stockCountSchema, type StockCountFormValues } from '@/features/products/schemas'
-import type { StockMutationResponse } from '@/features/products/types'
+import type { Product, StockMutationResponse } from '@/features/products/types'
 import type { AreaFigure } from '@/features/branches/types'
-import { formatQuantity, stockUnitWord } from '@/features/products/unitCopy'
-import { roundQuantity } from '@/features/products/unitSet'
+import { formatQuantity, pluraliseUnitNoun, stockUnitWord, unitNoun } from '@/features/products/unitCopy'
+import { countUnits, productsOwnUnits, roundQuantity, toBaseQuantity, unitOptionsForProduct } from '@/features/products/unitSet'
+import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
+import type { UseFormRegisterReturn } from 'react-hook-form'
 import { CountShortfall } from '@/features/branches/CountShortfall'
 import { areaShortAs, lastCountedPhrase, type ShortAs } from '@/features/branches/areas'
 import { isAppError } from '@/types/api'
@@ -29,6 +31,8 @@ export interface StockAdjustmentModalProps {
   stockUnit: string
   /** Counted in pieces: a fraction of one is refused. Measured (kg, L): to 3 places (UNITS_PLAN.md Part 0). */
   countedInWholeUnits?: boolean
+  /** The product, for its units: counted as "2 bags + 7 dericas" when it has a pack (UNITS_PLAN.md Part 4). */
+  product?: Product
   onClose: () => void
   onSuccess: (result: StockMutationResponse) => void
   /** Saved on this phone instead of sent (A4); gets the waiting write's id, for Undo (B2). */
@@ -50,6 +54,7 @@ export function StockAdjustmentModal({
   areaStock,
   stockUnit,
   countedInWholeUnits = true,
+  product,
   onClose,
   onSuccess,
   onQueued,
@@ -83,15 +88,40 @@ export function StockAdjustmentModal({
     defaultValues: { countedQuantity: '', note: '' },
   })
 
+  // Counted the way a store is (UNITS_PLAN.md Part 4): whole packs, and what's left in the usual unit - "2 bags +
+  // 7 dericas". Without a pack, one box in the usual unit (else the stock unit).
+  const { options: unitsOfMeasure } = useUnitOfMeasureOptions()
+  const offered = product ? productsOwnUnits(unitOptionsForProduct(product, unitsOfMeasure)) : []
+  const pair = product && offered.length > 0 ? countUnits(product, offered) : null
+  const big = pair?.big ?? null
+  const small = pair?.small ?? null
+  const [bigText, setBigText] = useState('')
   const typed = watch('countedQuantity').trim()
-  const counted = /^\d+(\.\d{1,3})?$/.test(typed) ? Number(typed) : null
+  const parse = (text: string) => (/^\d+(\.\d{1,3})?$/.test(text) ? Number(text) : null)
+  const bigTyped = big != null && bigText.trim() !== ''
+  const bigNumber = bigTyped ? parse(bigText.trim()) : 0
+  const smallNumber = typed === '' ? 0 : parse(typed)
+  const counted =
+    (typed !== '' || bigTyped) && bigNumber != null && smallNumber != null
+      ? roundQuantity((big ? toBaseQuantity(bigNumber, big) : 0) + (small ? toBaseQuantity(smallNumber, small) : smallNumber))
+      : null
   const difference = counted == null ? null : roundQuantity(counted - currentQuantity)
+  // "= 164.2 kg" under boxes that aren't the stock unit.
+  const inStockUnits = counted != null && (big != null || (small != null && !small.isStockUnit)) ? formatQuantity(counted, stockUnit) : null
 
   async function onSubmit(values: StockCountFormValues) {
     setFormError(null)
-    const countedQuantity = Number(values.countedQuantity)
+    if (values.countedQuantity === '' && !bigTyped) {
+      setError('countedQuantity', { message: 'Enter how much is on the shelf.' })
+      return
+    }
+    if (counted == null) {
+      setError('countedQuantity', { message: 'Enter a number, 0 or greater, to 3 decimal places.' })
+      return
+    }
+    const countedQuantity = counted
     if (countedInWholeUnits && !Number.isInteger(countedQuantity)) {
-      setError('countedQuantity', { message: `Enter a whole number of ${stockUnitWord(stockUnit, 2)}.` })
+      setError('countedQuantity', { message: `That isn't a whole number of ${stockUnitWord(stockUnit, 2)}.` })
       return
     }
     try {
@@ -163,15 +193,54 @@ export function StockAdjustmentModal({
       }
     >
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
-        <TextField
-          label={`How much is on the shelf now? (${stockUnit})`}
-          inputMode={countedInWholeUnits ? 'numeric' : 'decimal'}
-          autoFocus
-          error={errors.countedQuantity?.message}
-          // When it was last counted there (Part 3.5), so nobody counts what's just been counted.
-          hint={lastCounted ? `${lastCounted}.` : undefined}
-          {...register('countedQuantity')}
-        />
+        {big && small ? (
+          // Two boxes, one sentence: "[2] bags + [7] dericas" (UNITS_PLAN.md Part 4).
+          <fieldset aria-describedby={errors.countedQuantity?.message ? 'count-error' : lastCounted ? 'count-hint' : undefined}>
+            <legend className="mb-1.5 text-sm font-medium text-neutral-700">How much is on the shelf now?</legend>
+            <div className="flex flex-wrap items-center gap-2" data-count-pair>
+              <CountBox
+                id="count-big"
+                label={`${pluraliseUnitNoun(unitNoun(big), 2)} on the shelf`}
+                noun={pluraliseUnitNoun(unitNoun(big), bigNumber ?? 2)}
+                value={bigText}
+                onChange={setBigText}
+                autoFocus
+              />
+              <span aria-hidden="true" className="text-sm text-neutral-500">
+                +
+              </span>
+              <CountBox
+                id="count-small"
+                label={`${pluraliseUnitNoun(small.isStockUnit ? stockUnitWord(stockUnit, 1) : unitNoun(small), 2)} on the shelf`}
+                noun={small.isStockUnit ? stockUnitWord(stockUnit, smallNumber ?? 2) : pluraliseUnitNoun(unitNoun(small), smallNumber ?? 2)}
+                registered={register('countedQuantity')}
+              />
+            </div>
+            {inStockUnits && <p className="mt-1.5 text-sm text-neutral-700" data-count-total>= {inStockUnits}</p>}
+            {errors.countedQuantity?.message ? (
+              <p id="count-error" role="alert" className="mt-1.5 text-xs text-danger-600">
+                {errors.countedQuantity.message}
+              </p>
+            ) : (
+              lastCounted && (
+                <p id="count-hint" className="mt-1.5 text-xs text-neutral-500">
+                  {lastCounted}.
+                </p>
+              )
+            )}
+          </fieldset>
+        ) : (
+          <TextField
+            label={`How much is on the shelf now? (${small && !small.isStockUnit ? pluraliseUnitNoun(unitNoun(small), 2) : stockUnit})`}
+            inputMode={countedInWholeUnits && (!small || small.isStockUnit) ? 'numeric' : 'decimal'}
+            autoFocus
+            error={errors.countedQuantity?.message}
+            // When it was last counted there (Part 3.5), so nobody counts what's just been counted - and, in a
+            // measure, what that comes to.
+            hint={[inStockUnits ? `= ${inStockUnits}.` : null, lastCounted ? `${lastCounted}.` : null].filter(Boolean).join(' ') || undefined}
+            {...register('countedQuantity')}
+          />
+        )}
         {/* The difference, before anything is recorded (C3, D1): set as a figure, because it is
             the thing a count is for. */}
         {difference != null && (
@@ -217,5 +286,40 @@ export function StockAdjustmentModal({
         <FormError message={formError} />
       </form>
     </Sheet>
+  )
+}
+
+/** One box of a count in two units: the number, its unit after it ("bags"), labelled for a screen reader. */
+function CountBox({
+  id,
+  label,
+  noun,
+  value,
+  onChange,
+  registered,
+  autoFocus,
+}: {
+  id: string
+  label: string
+  noun: string
+  value?: string
+  onChange?: (value: string) => void
+  registered?: UseFormRegisterReturn
+  autoFocus?: boolean
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <label htmlFor={id} className="sr-only">
+        {label}
+      </label>
+      <input
+        id={id}
+        inputMode="decimal"
+        autoFocus={autoFocus}
+        className="w-20 rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-900 tabular-nums focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
+        {...(registered ?? { value, onChange: (event: React.ChangeEvent<HTMLInputElement>) => onChange?.(event.target.value) })}
+      />
+      <span className="text-sm text-neutral-700">{noun}</span>
+    </div>
   )
 }

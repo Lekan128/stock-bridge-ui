@@ -142,6 +142,7 @@ export function useStockActions({
         areaStock={active.product.areaStock}
         stockUnit={resolveUnitSymbol(active.product.unitOfMeasure, options)}
         countedInWholeUnits={isCountedInWholeUnits(active.product.unitOfMeasure, options)}
+        product={active.product}
         onClose={close}
         onSuccess={(result) => succeeded('count', result)}
         onQueued={queued}

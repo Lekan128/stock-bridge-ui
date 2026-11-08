@@ -376,7 +376,7 @@ const quantityField = z
  * means anything — §7.1's *no quantity field offers a unit with no conversion factor* holds
  * structurally there, not by validation here.
  */
-export function makeStockInSchema(vendorRequired: boolean) {
+export function makeStockInSchema() {
   return z
     .object({
       quantity: quantityField,
@@ -391,9 +391,7 @@ export function makeStockInSchema(vendorRequired: boolean) {
       note: noteField,
     })
     .superRefine((values, ctx) => {
-      if (vendorRequired && values.companyVendorId.trim().length === 0) {
-        ctx.addIssue({ code: 'custom', path: ['companyVendorId'], message: `Choose a ${supplierLower}` })
-      }
+      // No supplier is an answer (STOCK_SHEETS_AND_AREA_COUNT_PLAN.md Part 3): nothing to require here.
       // Both or neither — mirrors the server's `PackagingUnitAndSizeRequiredTogetherException`,
       // and more immediately: a pack with no size is not a conversion, so `unitSet.buildPackOption`
       // would return null and the toggle would silently gain no option at all.
@@ -454,7 +452,8 @@ export const stockCountSchema = z.object({
   countedQuantity: z
     .string()
     .trim()
-    .min(1, 'Enter how much is on the shelf')
+    // Optional here: counted in two units (UNITS_PLAN.md Part 4), "2 bags" alone is a whole answer. The sheet
+    // says when nothing at all was typed.
     .refine((v) => v.length === 0 || isNonNegativeStockQuantity(v), 'Enter a number, 0 or greater, to 3 decimal places'),
   note: z.string().trim().max(1000, 'Must be 1000 characters or fewer'),
 })

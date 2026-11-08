@@ -43,6 +43,8 @@ export interface UnitConfigurable {
   unitOfMeasure?: string | null
   packagingUnit?: string | null
   packagingSize?: number | null
+  /** The product's own units (UNITS_PLAN.md Part 1). Hidden ones are left out of the set. */
+  measures?: { name: string; size: number; hidden?: boolean }[] | null
 }
 
 /** A pack, wherever it comes from: the product's own, a supplier's default, or a one-off
@@ -246,6 +248,7 @@ export function buildUnitOptions(input: BuildUnitOptionsInput): UnitOption[] {
   } else {
     add({ code: stockCode, label: stockSymbol, factorToStockUnit: 1, isStockUnit: true, isDefault: false, isPack: false })
     add(buildPackOption(product, stockSymbol, unitsOfMeasure))
+    for (const option of measureOptions(product)) add(option)
     for (const pack of supplier ?? []) add(buildPackOption(pack, stockSymbol, unitsOfMeasure))
     for (const option of sameCategoryBaseOptions(stockCode, unitsOfMeasure)) add(option)
   }
@@ -284,6 +287,24 @@ export function buildUnitOptions(input: BuildUnitOptionsInput): UnitOption[] {
  * behaviour rather than to a wrong number. Cross-category is never attempted: weight to volume
  * is not a conversion without a density, and offering it would be worse than not offering it.
  */
+/**
+ * The product's own units as members of its set (UNITS_PLAN.md Part 1), after its pack - the server's step 2b. Named
+ * by their name alone: a derica is the same every time.
+ */
+function measureOptions(product: UnitConfigurable): UnitOption[] {
+  return (product.measures ?? [])
+    .filter((measure) => !measure.hidden && measure.size > 0)
+    .map((measure) => ({
+      code: measure.name,
+      label: measure.name,
+      factorToStockUnit: measure.size,
+      isStockUnit: false,
+      isDefault: false,
+      isPack: false,
+      isMeasure: true,
+    }))
+}
+
 function sameCategoryBaseOptions(stockCode: string, unitsOfMeasure: UnitOfMeasureOption[]): UnitOption[] {
   const stockUnit = unitsOfMeasure.find((option) => option.code === stockCode)
   const stockFactor = stockUnit?.factorToCanonical
@@ -372,7 +393,7 @@ export function unitOptionsForSupplier(
  * short, and the full set stays one disclosure away.
  */
 export function productsOwnUnits(options: UnitOption[]): UnitOption[] {
-  const own = options.filter((option) => option.isStockUnit || option.isPack)
+  const own = options.filter((option) => option.isStockUnit || option.isPack || option.isMeasure)
   return own.length > 0 ? own : options
 }
 
@@ -399,6 +420,47 @@ export function defaultUnitOption(options: UnitOption[]): UnitOption {
  * Never undefined — a set always has a stock-unit entry (§2.1 step 1), and the fallbacks exist
  * only so a caller holding an empty array gets a working form rather than a crash.
  */
+/**
+ * A member of the set as the server names it (`UnitOptions.key`): a pack by its container and size ("BAG:50"),
+ * anything else by its code ("KG", "Derica").
+ */
+export function unitKey(option: UnitOption): string {
+  return option.isPack ? `${option.code}:${roundHalfUp(option.factorToStockUnit, 9)}` : option.code
+}
+
+/**
+ * Where a stock-out, count, move or quick mode starts for this product (UNITS_PLAN.md Part 2): its "Used and counted
+ * in" unit when it has one in `options` - the cook's Derica - else `fallback`. Deliveries keep starting in the pack.
+ */
+export function usedInOption(
+  product: { usedInUnit?: string | null },
+  options: UnitOption[],
+  fallback: UnitOption,
+): UnitOption {
+  const key = product.usedInUnit
+  if (!key) return fallback
+  return (
+    options.find((option) => unitKey(option).toLowerCase() === key.toLowerCase()) ??
+    options.find((option) => !option.isPack && option.code.toLowerCase() === key.toLowerCase()) ??
+    fallback
+  )
+}
+
+/**
+ * The units a count is made in (UNITS_PLAN.md Part 4, D-U5): how a cook counts a half-used store - "2 bags + 7
+ * dericas". The product's pack, and its usual unit for using it (else its stock unit). One unit only - the usual
+ * one, else the stock unit - for a product with no pack.
+ */
+export function countUnits(
+  product: { usedInUnit?: string | null },
+  offered: UnitOption[],
+): { big: UnitOption | null; small: UnitOption } {
+  const stock = stockUnitOption(offered)
+  const big = offered.find((option) => option.isPack && option.isDefault) ?? offered.find((option) => option.isPack) ?? null
+  const usual = usedInOption(product, offered, stock)
+  return { big, small: usual.isPack ? stock : usual }
+}
+
 export function stockUnitOption(options: UnitOption[]): UnitOption {
   return options.find((option) => option.isStockUnit) ?? options[0] ?? { ...NO_UNIT_OPTION }
 }

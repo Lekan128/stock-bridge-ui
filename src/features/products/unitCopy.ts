@@ -209,7 +209,8 @@ export function unitNoun(option: UnitOption): string {
  */
 export function pluraliseUnitNoun(noun: string, quantity: number): string {
   if (quantity === 1) return noun
-  if (!/^[A-Za-z]{3,}$/.test(noun)) return noun
+  // A kitchen's own unit can be two words (UNITS_PLAN.md Part 1): "small bowl" → "small bowls".
+  if (!/^([A-Za-z]+ )*[A-Za-z]{3,}$/.test(noun)) return noun
   if (noun.endsWith('s')) return noun
   // "box" → "boxes", "pouch" → "pouches", "dish" → "dishes" (owner's test: "2 boxs").
   if (/(x|z|ch|sh)$/i.test(noun)) return `${noun}es`

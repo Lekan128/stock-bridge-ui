@@ -1,3 +1,4 @@
+import { ProductUnitsField, unitsDraftFrom, unitsPayload, type UnitsDraft } from '@/features/products/components/ProductUnitsField'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { useEffect, useRef, useState } from 'react'
@@ -243,6 +244,8 @@ export function ProductFormPage() {
   const { showsSellingPrice, requiresSellingPrice } = useSellingPolicy()
   /** The pack a company's selling price is typed per ("CARTON"), or null for the stock unit (V47). */
   const [priceUnitCode, setPriceUnitCode] = useState<string | null>(null)
+  // The product's own units and where its stock-outs start (UNITS_PLAN.md Parts 1-2), beside the form's fields.
+  const [units, setUnits] = useState<UnitsDraft>(() => unitsDraftFrom(null))
   // Fresh from the server, never a cached copy: this fills the form, and saving a cached copy
   // could write another phone's newer edits back to old values. Offline it shows the error.
   const { product, loading: loadingProduct, error: productError, refetch: refetchProduct } = useProduct(id, {
@@ -416,6 +419,7 @@ export function ProductFormPage() {
       categoryId: product.categoryId ?? '',
     })
     setPriceUnitCode(!requiresSellingPrice ? (product.unitPriceEnteredUnit ?? null) : null)
+    setUnits(unitsDraftFrom(product))
   }, [product, reset, unitOfMeasureOptions, baseOptions, requiresSellingPrice])
 
   /**
@@ -575,6 +579,16 @@ export function ProductFormPage() {
         ),
       )
     : null
+  // The live set, for the Units section: the product's own pack to start in, and the standard units (g, t) that
+  // need no setting up.
+  const liveUnitSet = watchedStockUnitCode
+    ? unitOptionsForProduct(
+        { unitOfMeasure: watchedStockUnitCode, packagingUnit: watchedPackCode, packagingSize: unitsPerPackNumber },
+        unitOfMeasureOptions,
+      )
+    : []
+  const livePackOption = liveUnitSet.find((option) => option.isPack) ?? null
+  const standardUnits = liveUnitSet.filter((option) => !option.isStockUnit && !option.isPack && !option.isMeasure).map((option) => option.label)
   /** True when the quantity fields are counting packs, i.e. when a conversion is happening at all. */
   const countsInPacks = quantityOption != null && !quantityOption.isStockUnit
   /** The pack's noun ("basket") when this row counts in packs — §9.2's cost is per one of these. */
@@ -807,6 +821,12 @@ export function ProductFormPage() {
 
   async function save(values: ProductFormValues) {
     setFormError(null)
+    // The product's own units go with the rest (UNITS_PLAN.md Part 1); one still being typed is said here.
+    const unitFields = unitsPayload(units)
+    if ('problem' in unitFields) {
+      setFormError(unitFields.problem)
+      return
+    }
     try {
       const willReview = isVendor && isEdit && changedIdentityLabels(values).length > 0
       // §9.1 — both catalog quantities count packs when the row declares one. The wire is
@@ -821,6 +841,7 @@ export function ProductFormPage() {
               {
                 ...toProductUpdatePayload(values, product?.categoryId),
                 ...companyPriceFields(values),
+                ...unitFields,
                 lowStockThreshold,
                 removeImage: removeImage || undefined,
               },
@@ -836,6 +857,7 @@ export function ProductFormPage() {
               {
                 ...toProductPayload(values),
                 ...companyPriceFields(values),
+                ...(unitFields.measures.length > 0 ? unitFields : {}),
                 lowStockThreshold,
                 initialVendor: initialVendor && {
                   ...initialVendor,
@@ -1397,6 +1419,16 @@ export function ProductFormPage() {
                 )}
               </p>
             )}
+            {/* A product's own units (UNITS_PLAN.md Parts 1-2): rice bought in bags, used in dericas. */}
+            <ProductUnitsField
+              draft={units}
+              onChange={setUnits}
+              stockUnitCode={watchedStockUnitCode ?? ''}
+              stockSymbol={stockUnitLabel ?? ''}
+              standardUnits={standardUnits}
+              packOption={livePackOption}
+              stockWord={stockUnitLabel ?? ''}
+            />
           </div>
         </div>
 

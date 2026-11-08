@@ -368,5 +368,7 @@ export function toProduct(row: CatalogRow): Product {
     // Every branch's figure the person sees: Send stock shows both ends' (MULTI_BRANCH_UX_PLAN.md §5.4).
     branchStock: row.branchStock,
     areaStock: row.areaStock,
+    measures: row.measures,
+    usedInUnit: row.usedInUnit ?? null,
   }
 }

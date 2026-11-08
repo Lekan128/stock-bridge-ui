@@ -27,6 +27,7 @@ import {
   resolveUnitSymbol,
   stockUnitOption,
   toBaseQuantity,
+  usedInOption,
 } from '@/features/products/unitSet'
 import { unitsFor } from '@/features/selling/sale/saleLine'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
@@ -281,7 +282,7 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
           const options = unitsFor(product, catalogue)
           const typed = options.find((o) => o.code === line.enteredUnit && !o.isStockUnit)
           const per = typed ? toBaseQuantity(1, typed) : 1
-          const inPacks = typed != null && per > 0 && left % per === 0
+          const inPacks = typed != null && per > 0 && Math.abs(left / per - Math.round(left / per)) < 1e-9
           addProduct(
             product,
             String(inPacks ? left / per : left),
@@ -329,7 +330,8 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
     setLines((current) => {
       if (current.some((line) => line.product.id === product.id)) return current
       const options = unitsFor(product, catalogue)
-      const option = options.find((o) => o.label === unitLabel) ?? openingOption(options)
+      // The product's usual unit for using it (UNITS_PLAN.md Part 2), else its pack.
+      const option = options.find((o) => o.label === unitLabel) ?? usedInOption(product, options, openingOption(options))
       return [{ key: product.id, product, unitLabel: option.label, quantity }, ...current]
     })
     if (focus) window.requestAnimationFrame(() => document.getElementById(`move-qty-${product.id}`)?.focus())

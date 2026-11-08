@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { ComingOnOrderHint } from '@/features/expected/components/ComingOnOrderHint'
 import { useSheetBranch } from '@/features/branches/useSheetBranch'
 import { useEffect, useState } from 'react'
-import { ChevronDown, ChevronUp, Package, Truck } from 'lucide-react'
+import { ChevronDown, ChevronUp, Package } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
@@ -50,6 +50,7 @@ import {
   unitOptionsForSupplier,
 } from '@/features/products/unitSet'
 import type { ProductVendor } from '@/features/products/vendors/types'
+import { AddSupplierInPlace } from '@/features/vendors/components/AddSupplierInPlace'
 import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
 import { StockReceipt } from '@/features/products/components/StockReceipt'
 import { Link } from 'react-router-dom'
@@ -210,15 +211,22 @@ function withDeliveryPack(options: UnitOption[], deliveryPack: UnitOption | null
  * states purchase price **per purchase unit** and converts to base for costing, which is exactly
  * what the price field and its live per-stock-unit line do here.
  */
+/** The supplier select's two actions, kept apart from any supplier id. */
+const OTHER_SUPPLIER = '__other__'
+const ADD_SUPPLIER = '__add__'
+
 export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInModalProps) {
   const { user } = useAuth()
   // Where this delivery lands (MULTI_BRANCH_UX_PLAN.md §5.2): in the title, or asked first in "All branches".
   const sheetBranch = useSheetBranch()
   const canViewVendors = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.VIEW_VENDORS)
   const canManageProducts = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_PRODUCTS)
+  const canManageVendors = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_VENDORS)
   const { showsSellingPrice } = useSellingPolicy()
   const online = useOnlineStatus()
-  const { vendors: directoryVendors } = useVendorOptions(canViewVendors)
+  const { vendors: directoryVendors, upsert: upsertVendor } = useVendorOptions(canViewVendors)
+  /** "+ Add a supplier", opened in place (STOCK_SHEETS_AND_AREA_COUNT_PLAN.md Part 3). */
+  const [addingSupplier, setAddingSupplier] = useState(false)
   const { data: productVendors, loading: productVendorsLoading } = useProductVendors(product.id)
   const { options: unitOfMeasureOptions, packagingOptions } = useUnitOfMeasureOptions()
 
@@ -257,14 +265,17 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
     id: v.id,
     label: v.kind === 'VERIFIED' ? `${v.name} (ProcurePal ${UNIT_COPY.SELLER.toLowerCase()})` : v.name,
   }))
-  const vendorFieldVisible = supplierOverride || activeProductVendors.length !== 1
+  // One supplier control (STOCK_SHEETS_AND_AREA_COUNT_PLAN.md Part 3): the product's suppliers, "No supplier",
+  // the rest of the directory, and adding one. Shown whenever there is anyone to choose or a way to add one.
   const vendorOptions: { id: string; label: string }[] =
     supplierOverride || activeProductVendors.length === 0
       ? directoryOptions
       : activeProductVendors.map((v) => ({ id: v.companyVendorId, label: v.companyVendorName }))
-  const vendorRequired = vendorFieldVisible && vendorOptions.length > 0
+  const othersInDirectory =
+    !supplierOverride && canViewVendors && activeDirectoryVendors.some((v) => !activeProductVendors.some((p) => p.companyVendorId === v.id))
+  const vendorFieldVisible = vendorOptions.length > 0 || canManageVendors
 
-  const schema = makeStockInSchema(vendorRequired)
+  const schema = makeStockInSchema()
   const {
     register,
     handleSubmit,
@@ -296,6 +307,7 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
   }, [productVendorsLoading, defaultVendor?.companyVendorId])
 
   const companyVendorId = watch('companyVendorId')
+  const supplierField = register('companyVendorId')
   const quantityStr = watch('quantity')
   const unitPriceStr = watch('unitPrice')
   const overridePackUnit = watch('packagingUnit')
@@ -417,17 +429,15 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
   const showMore =
     moreOpen ||
     packOverride ||
-    supplierOverride ||
     Boolean(errors.unitPrice || errors.packagingUnit || errors.packagingSize || errors.note)
   const moreSummary =
     [
       unitPriceNumber != null && unitPriceNumber > 0 ? `${formatPricePerOption(unitPriceNumber, selectedOption)}` : null,
       packOverride ? 'a different pack' : null,
-      supplierOverride ? 'a different supplier' : null,
       noteText ? 'a note' : null,
     ]
       .filter(Boolean)
-      .join(' · ') || 'price, note, a different pack or supplier'
+      .join(' · ') || 'price, note, a different pack'
   const basePriceNumber = unitPriceNumber == null ? null : toBasePrice(unitPriceNumber, selectedOption)
   /** True when the price field's own unit is not the stock unit, i.e. when a division is happening
    *  between what is typed and what is stored (§3.2). The two price echoes below are gated on it
@@ -723,46 +733,54 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
             <div>
               <label htmlFor="stock-in-supplier" className="mb-1.5 block text-sm font-medium text-neutral-700">
                 {UNIT_COPY.SUPPLIER}
-                {supplierOverride && (
-                  <span className="font-normal text-neutral-500">
-                    {' '}
-                    (any {UNIT_COPY.SUPPLIER.toLowerCase()} in your directory, not just this product&apos;s)
-                  </span>
-                )}
               </label>
               {productVendorsLoading ? (
                 <p className="text-sm text-neutral-500">Loading {UNIT_COPY.SUPPLIERS.toLowerCase()}…</p>
-              ) : vendorOptions.length === 0 ? (
-                <p className="text-sm text-neutral-500">No {UNIT_COPY.SUPPLIERS.toLowerCase()} in your directory yet.</p>
               ) : (
                 <select
                   id="stock-in-supplier"
                   className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
-                  {...register('companyVendorId')}
+                  {...supplierField}
+                  value={addingSupplier ? ADD_SUPPLIER : companyVendorId}
+                  onChange={(event) => {
+                    const value = event.target.value
+                    if (value === OTHER_SUPPLIER) return setSupplierOverride(true)
+                    if (value === ADD_SUPPLIER) return setAddingSupplier(true)
+                    setAddingSupplier(false)
+                    void supplierField.onChange(event)
+                  }}
                 >
-                  <option value="">Choose a {UNIT_COPY.SUPPLIER.toLowerCase()}</option>
                   {vendorOptions.map((v) => (
                     <option key={v.id} value={v.id}>
                       {v.label}
                     </option>
                   ))}
+                  {/* A choice, not an empty box: the line reads "Supplier: No supplier", nothing forgotten. */}
+                  <option value="">No {UNIT_COPY.SUPPLIER.toLowerCase()}</option>
+                  {othersInDirectory && <option value={OTHER_SUPPLIER}>Other {UNIT_COPY.SUPPLIER.toLowerCase()}…</option>}
+                  {canManageVendors && (
+                    <option value={ADD_SUPPLIER} disabled={!online}>
+                      {online ? `+ Add a ${UNIT_COPY.SUPPLIER.toLowerCase()}` : `Add a ${UNIT_COPY.SUPPLIER.toLowerCase()} (needs a connection)`}
+                    </option>
+                  )}
                 </select>
+              )}
+              {addingSupplier && (
+                <div className="mt-2">
+                  <AddSupplierInPlace
+                    onCancel={() => setAddingSupplier(false)}
+                    onAdded={(vendor) => {
+                      upsertVendor(vendor)
+                      // New to this product: it's in the directory list, picked.
+                      setSupplierOverride(true)
+                      setAddingSupplier(false)
+                      setValue('companyVendorId', vendor.id)
+                    }}
+                  />
+                </div>
               )}
               {errors.companyVendorId?.message && <p className="mt-1.5 text-xs text-danger-600">{errors.companyVendorId.message}</p>}
             </div>
-          )}
-
-          {/* The single-supplier case hides the picker above (comment at §7.3) and used to leave
-              this screen naming no supplier at all — "Use a different supplier" was the only
-              supplier-related text on the form, which reads as an offer to CHOOSE one rather than
-              a way to override the one already silently selected. A user with exactly one supplier
-              on file had no way to confirm who it was without clicking that link and reading the
-              directory it opens. Named plainly instead, the same "state the fact, don't make the
-              reader infer it" rule §7.2 already applies to price and quantity. */}
-          {!vendorFieldVisible && defaultVendor && (
-            <p className="text-sm text-neutral-600">
-              {UNIT_COPY.SUPPLIER}: <span className="font-medium text-neutral-900">{defaultVendor.companyVendorName}</span>
-            </p>
           )}
 
           {/* Everything optional, folded into one line (C3, U5): the price, a note, a pack this delivery
@@ -786,18 +804,6 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
             {/* Named action 1. Only offered when there is somewhere else to go: with no directory
                 (or no permission to read it) this would reveal an empty select, which reads as
                 broken rather than as "nothing to choose". */}
-            {!supplierOverride && canViewVendors && activeDirectoryVendors.length > 0 && (
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setSupplierOverride(true)}
-                  className="flex items-center gap-1.5 rounded-sm text-sm font-medium text-primary-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-                >
-                  <Truck className="h-4 w-4" aria-hidden="true" />
-                  Use a different {UNIT_COPY.SUPPLIER.toLowerCase()}
-                </button>
-              </div>
-            )}
 
             {/* Named action 2 — plan §6.2. Says what it reveals, and what it reveals is one idea
                 (a Pack) plus one explicit decision about it, not four unrelated controls.
@@ -972,12 +978,8 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
             <p className="text-sm text-neutral-700">
               Adding <span className="font-semibold text-neutral-900">{quantityBothWays}</span> of{' '}
               <span className="font-semibold text-neutral-900">{product.name}</span>
-              {confirmVendorName && (
-                <>
-                  {' '}
-                  from <span className="font-semibold text-neutral-900">{confirmVendorName}</span>
-                </>
-              )}
+              {' '}
+              from <span className="font-semibold text-neutral-900">{confirmVendorName || `no ${UNIT_COPY.SUPPLIER.toLowerCase()}`}</span>
               {priceBothWays && (
                 <>
                   {' '}

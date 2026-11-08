@@ -30,6 +30,7 @@ import {
   stockUnitOption,
   toBaseQuantity,
   unitOptionsForProduct,
+  usedInOption,
 } from '@/features/products/unitSet'
 import { StockReceipt } from '@/features/products/components/StockReceipt'
 import { OutReasonChooser, OutReasonLink } from '@/features/stock/components/OutReasonField'
@@ -258,7 +259,9 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
    * away in the toggle, and a code the user has picked (`unitCode`) always wins over this.
    */
   const selectedOption =
-    (unitCode == null ? undefined : unitOptions.find((option) => option.label === unitCode)) ?? stockUnitOption(unitOptions)
+    (unitCode == null ? undefined : unitOptions.find((option) => option.label === unitCode)) ??
+    // The product's usual unit for using it, the cook's Derica (UNITS_PLAN.md Part 2), else the stock unit.
+    usedInOption(product, unitOptions, stockUnitOption(unitOptions))
   const stockUnitText = stockUnitLabel(unitOptions)
 
   /**
@@ -273,7 +276,9 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
   const packOption = unitOptions.find((option) => option.isPack) ?? null
   // Of what the sheet's branch and area hold, said on the line under the title (Part 1).
   const onHandHere = sheetBranch.onHand(product)
-  const onHandInPacks = packOption == null ? null : formatQuantityInUnit(fromBaseQuantity(onHandHere, packOption), packOption)
+  // Said in the product's usual unit for using it when it has one, the cook's dericas (UNITS_PLAN.md Part 2).
+  const restateIn = usedInOption(product, unitOptions, packOption ?? stockUnitOption(unitOptions))
+  const onHandInPacks = restateIn.isStockUnit ? null : formatQuantityInUnit(fromBaseQuantity(onHandHere, restateIn), restateIn)
 
   /**
    * What the unit control actually offers: the product's own ways of counting (its stock unit and

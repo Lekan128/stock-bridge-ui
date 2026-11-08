@@ -129,6 +129,11 @@ function query(q: CatalogQuery): CatalogQueryResult {
     if (q.status === 'active' && !row.active) continue
     if (q.status === 'inactive' && row.active) continue
     if (q.categoryId && row.categoryId !== q.categoryId) continue
+    if (q.countedInArea) {
+      const at = stored.areaStock?.find((figure) => figure.areaId === q.countedInArea!.areaId)?.lastCountedAt
+      const counted = at != null && Date.parse(at) >= q.countedInArea.since
+      if (counted !== q.countedInArea.counted) continue
+    }
     if (term && !row._name.includes(term) && !row._sku.includes(term) && !row._barcode.includes(term)) continue
     // Not the chosen areas' product: counted for "N other products", listed only when searched for or shown,
     // and never in the stock chips - it isn't out there, it just isn't theirs.

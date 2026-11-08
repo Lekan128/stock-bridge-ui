@@ -39,6 +39,10 @@ export interface CatalogRow {
   branchStock?: BranchFigure[]
   /** Areas inside a branch (V60): this product in each area of those branches that have areas. */
   areaStock?: AreaFigure[]
+  /** The product's own units (UNITS_PLAN.md Part 1, V82), so the phone offers "Derica" offline. */
+  measures?: { name: string; size: number; hidden?: boolean }[]
+  /** Where its stock-outs and counts start (Part 2). */
+  usedInUnit?: string | null
 }
 
 export interface SnapshotPage {
@@ -87,6 +91,11 @@ export interface CatalogQuery {
   areaIds?: string[]
   /** In an area view, list the products those areas have never had as well ("Show them"). */
   showOthers?: boolean
+  /**
+   * A count of one area (STOCK_SHEETS_AND_AREA_COUNT_PLAN.md Part 5): only the rows that area has counted since
+   * `since` (`counted: true`, "Counted today"), or only those it hasn't (`false`, "To count").
+   */
+  countedInArea?: { areaId: string; since: number; counted: boolean }
 }
 
 export interface CatalogQueryResult {
@@ -127,5 +136,6 @@ export interface CatalogMeta {
  * The row shape this app reads. Raise it when rows gain a field the app relies on, so a phone's copy taken
  * before is downloaded afresh: the change feed only sends products that changed, so old rows never gain it.
  * 2: area figures say whether the area has had the product (`carried`, Part 3.6).
+ * 3: a product's own units and where its stock-outs start (UNITS_PLAN.md Parts 1-2).
  */
-export const CATALOG_ROW_FORMAT = 2
+export const CATALOG_ROW_FORMAT = 3

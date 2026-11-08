@@ -8,7 +8,7 @@ import { movesApi } from '@/features/moves/movesApi'
 import { requestsApi } from '@/features/requests/requestsApi'
 import { WaitingMovesLine } from '@/features/moves/WaitingMovesLine'
 import { usePendingStock } from '@/features/outbox/useOutbox'
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { Fragment, useEffect, useRef, useState, type RefObject } from 'react'
 import { Delete, Search, X } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -24,6 +24,7 @@ import type { OutReason, Product, UnitOption } from '@/features/products/types'
 import {
   formatEnteredAndBase,
   formatNumber,
+  formatQuantityInUnit,
   pluraliseUnitNoun,
   roundsToZeroMessage,
   stockUnitWord,
@@ -32,7 +33,9 @@ import {
 import {
   convertsCleanly,
   convertsToWholeCount,
+  countUnits,
   defaultUnitOption,
+  fromBaseQuantity,
   isCountedInWholeUnits,
   productsOwnUnits,
   resolveUnitSymbol,
@@ -41,9 +44,12 @@ import {
   stockUnitOption,
   toBaseQuantity,
   unitOptionsForProduct,
+  usedInOption,
 } from '@/features/products/unitSet'
 import { OUT_REASONS, outReasonLabel } from '@/features/stock/outReasons'
 import { useProductFinder } from '@/features/catalog/useProductFinder'
+import { useCatalogState } from '@/features/catalog/useCatalog'
+import { CountList, type CountedHere } from '@/features/quick/CountList'
 import { formatMoney } from '@/features/selling/money'
 import { MySalesToday } from '@/features/selling/sale/MySalesToday'
 import { SaleBasketEditor } from '@/features/selling/sale/SaleBasketEditor'
@@ -95,6 +101,8 @@ interface SessionEntry {
   areaName?: string
   /** An ask (Part 5): what to tell the Store's people on WhatsApp. */
   share?: AskShare
+  /** When it was recorded: a count today moves the product to "Counted today" (sheets plan Part 5). */
+  at?: number
   undone?: boolean
 }
 
@@ -334,7 +342,24 @@ export function QuickModePage() {
             onRecorded={recorded}
           />
         ) : (
-          <FindStep inputRef={searchRef} place={place} onPick={setProduct} />
+          <FindStep
+            inputRef={searchRef}
+            place={place}
+            onPick={setProduct}
+            // The closing count, from a list (sheets plan Part 5): only at a branch with areas, so a shop with
+            // 3,000 products is never handed a 3,000-line list.
+            countList={
+              mode === 'count' && place.areaId && place.areaName
+                ? {
+                    areaId: place.areaId,
+                    areaName: place.areaName,
+                    countedHere: session
+                      .filter((entry) => entry.mode === 'count' && !entry.undone && entry.areaName === place.areaName)
+                      .map((entry) => ({ productId: entry.productId, productName: entry.productName, summary: entry.summary, at: entry.at ?? Date.now() })),
+                  }
+                : null
+            }
+          />
         )}
 
         <SessionList entries={session} onUndone={(key) => setSession((all) => all.map((e) => (e.key === key ? { ...e, undone: true } : e)))} />
@@ -353,9 +378,20 @@ interface Place {
   areaName: string | undefined
 }
 
-function FindStep({ inputRef, place, onPick }: { inputRef: RefObject<HTMLInputElement | null>; place: Place; onPick: (product: Product) => void }) {
+function FindStep({
+  inputRef,
+  place,
+  onPick,
+  countList,
+}: {
+  inputRef: RefObject<HTMLInputElement | null>
+  place: Place
+  onPick: (product: Product) => void
+  countList: { areaId: string; areaName: string; countedHere: CountedHere[] } | null
+}) {
   const [term, setTerm] = useState('')
   const { search, results, onEnter } = useProductFinder(term, onPick)
+  const catalog = useCatalogState()
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -396,6 +432,9 @@ function FindStep({ inputRef, place, onPick }: { inputRef: RefObject<HTMLInputEl
           </li>
         ))}
       </ul>
+      {!search && countList && catalog.phase === 'ready' && (
+        <CountList areaId={countList.areaId} areaName={countList.areaName} countedHere={countList.countedHere} onPick={onPick} />
+      )}
     </div>
   )
 }
@@ -452,12 +491,21 @@ function AmountStep({
   const offered = productsOwnUnits(unitOptions)
   // §9.3, as in the sheets: a delivery in the pack, an issue and a count in the stock unit.
   const [unitLabel, setUnitLabel] = useState<string>(
-    () => (mode === 'in' ? defaultUnitOption(unitOptions) : stockUnitOption(unitOptions)).label,
+    // A stock-out or count starts in the product's usual unit, the cook's Derica (UNITS_PLAN.md Part 2).
+    () => (mode === 'in' ? defaultUnitOption(unitOptions) : usedInOption(product, offered, stockUnitOption(unitOptions))).label,
   )
   const option: UnitOption = offered.find((o) => o.label === unitLabel) ?? stockUnitOption(unitOptions)
+  const usualOption = usedInOption(product, offered, stockUnitOption(unitOptions))
+  const usual = usualOption.isStockUnit ? null : usualOption
   const stockText = stockUnitLabel(unitOptions)
   const symbol = resolveUnitSymbol(product.unitOfMeasure, options)
   const [typed, setTyped] = useState('')
+  // A count of a product with a pack is made in two units (UNITS_PLAN.md Part 4): whole bags, then what's left
+  // in its usual unit - "2 bags + 7 dericas". The keypad types into whichever box is chosen.
+  const pair = mode === 'count' ? countUnits(product, offered) : null
+  const twoUnits = pair?.big != null && pair.big.label !== pair.small.label ? pair : null
+  const [typedSmall, setTypedSmall] = useState('')
+  const [box, setBox] = useState<'big' | 'small'>('big')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   // A count at a branch with areas (Part 3.5): what a shortfall becomes - the area's answer, or this count's.
@@ -465,16 +513,23 @@ function AmountStep({
   const countedArea = mode === 'count' && areaId ? branches.flatMap((b) => b.areas ?? []).find((a) => a.id === areaId) : undefined
   const [shortChosen, setShortChosen] = useState<ShortAs | null>(null)
 
-  // A delivery from a product with suppliers must name one; the preferred one is the default.
+  // The preferred supplier to start; "No supplier" is a choice too (sheets plan Part 3). '' is none, null untouched.
   const vendors = useProductVendors(mode === 'in' ? product.id : undefined)
   const supplierList = vendors.data
   const [vendorId, setVendorId] = useState<string | null>(null)
   const chosenVendor =
-    supplierList.find((v) => v.companyVendorId === vendorId) ?? supplierList.find((v) => v.isPreferred) ?? supplierList[0]
+    vendorId === ''
+      ? undefined
+      : (supplierList.find((v) => v.companyVendorId === vendorId) ?? supplierList.find((v) => v.isPreferred) ?? supplierList[0])
 
   const quantity = typed === '' || typed === '.' ? 0 : Number(typed)
-  const base = toBaseQuantity(quantity, option)
-  const amountText = formatEnteredAndBase(quantity, option, base, stockText)
+  const smallQuantity = typedSmall === '' || typedSmall === '.' ? 0 : Number(typedSmall)
+  const base = twoUnits
+    ? roundQuantity(toBaseQuantity(quantity, twoUnits.big!) + toBaseQuantity(smallQuantity, twoUnits.small))
+    : toBaseQuantity(quantity, option)
+  const amountText = twoUnits
+    ? `${formatQuantityInUnit(quantity, twoUnits.big!)} + ${formatQuantityInUnit(smallQuantity, twoUnits.small)} (${formatNumber(base)} ${stockUnitWord(symbol, base)})`
+    : formatEnteredAndBase(quantity, option, base, stockText)
   // The reason rides on the summary, so the stamp, the session list and the outbox all repeat it.
   const summary = reason ? `${amountText} · ${outReasonLabel(reason)}` : amountText
   const wholeOnly = isCountedInWholeUnits(product.unitOfMeasure, options)
@@ -483,10 +538,19 @@ function AmountStep({
   // after that sale, or the difference it shows is off by exactly that sale.
   const pending = usePendingStock(product.id, areaId)
   const appSays = roundQuantity(placeFigure(product, place).quantity + pending.delta)
-  const difference = mode === 'count' && typed !== '' ? roundQuantity(toBaseQuantity(quantity, option) - appSays) : null
+  const anyTyped = typed !== '' || (twoUnits != null && typedSmall !== '')
+  const difference = mode === 'count' && anyTyped ? roundQuantity(base - appSays) : null
 
   function problem(): string | null {
-    if (typed === '') return 'Type how many.'
+    if (!anyTyped) return 'Type how many.'
+    if (twoUnits) {
+      const pieces: [number, UnitOption][] = [[quantity, twoUnits.big!], [smallQuantity, twoUnits.small]]
+      for (const [amount, unit] of pieces) {
+        if (amount > 0 && !convertsCleanly(amount, unit)) return roundsToZeroMessage(amount, unit, stockText)
+      }
+      if (wholeOnly && !Number.isInteger(base)) return `That doesn't come to a whole number of ${stockUnitWord(symbol, 2)}.`
+      return null
+    }
     if (mode !== 'count' && quantity <= 0) return 'Type a number above 0.'
     // More than is here: said now, so an offline stock out isn't refused later in the sync centre.
     if (mode === 'out' && base > appSays) {
@@ -502,10 +566,11 @@ function AmountStep({
 
   function press(key: string) {
     setError(null)
-    if (key === 'back') return setTyped((t) => t.slice(0, -1))
-    if (key === '.' && typed.includes('.')) return
-    if (typed.replace('.', '').length >= 7) return
-    setTyped((t) => (t === '0' && key !== '.' ? key : t + key))
+    const [current, set] = twoUnits && box === 'small' ? [typedSmall, setTypedSmall] : [typed, setTyped]
+    if (key === 'back') return set((t) => t.slice(0, -1))
+    if (key === '.' && current.includes('.')) return
+    if (current.replace('.', '').length >= 7) return
+    set((t) => (t === '0' && key !== '.' ? key : t + key))
   }
 
   async function record() {
@@ -520,7 +585,7 @@ function AmountStep({
               kind: 'COUNT',
               productId: product.id,
               productName: product.name,
-              summary: `${formatNumber(base)} ${stockUnitWord(symbol, base)}`,
+              summary: twoUnits ? amountText : `${formatNumber(base)} ${stockUnitWord(symbol, base)}`,
               payload: { countedQuantity: base, areaId, shortAs: shortChosen ?? undefined },
             })
           : mode === 'in'
@@ -555,6 +620,7 @@ function AmountStep({
         productName: product.name,
         summary,
         ...(outcome.status === 'sent' ? { movementId: outcome.response.movement?.id } : { opId: outcome.op.id }),
+        at: Date.now(),
       }
       onRecorded(entry, outcome.status === 'sent' ? 'synced' : 'recorded')
       setSaving(false)
@@ -571,6 +637,8 @@ function AmountStep({
           <p className="truncate text-lg font-semibold">{product.name}</p>
           <p className="text-sm text-neutral-500">
             {place.areaName ? `In the ${place.areaName}:` : 'On hand'} {formatNumber(appSays)} {stockUnitWord(symbol, appSays)}
+            {/* And in its usual unit, the cook's dericas (UNITS_PLAN.md Part 2). */}
+            {usual && appSays > 0 && ` (${formatQuantityInUnit(fromBaseQuantity(appSays, usual), usual)})`}
           </p>
         </div>
         <button type="button" onClick={onBack} className="h-11 shrink-0 rounded-md px-3 text-base font-medium text-primary-700 hover:bg-primary-50">
@@ -591,12 +659,14 @@ function AmountStep({
                 {v.companyVendorName}
               </option>
             ))}
+            <option value="">No supplier</option>
           </select>
         </label>
       )}
 
-      {offered.length > 1 && (
-        <div role="group" aria-label="Counted in" className="flex gap-2">
+      {offered.length > 1 && !twoUnits && (
+        // Four or more (a product with its own units, Part 1) sit two to a row, so none is squeezed on a phone.
+        <div role="group" aria-label="Counted in" className={offered.length > 3 ? 'grid grid-cols-2 gap-2' : 'flex gap-2'}>
           {offered.map((o) => (
             <button
               key={o.label}
@@ -616,11 +686,46 @@ function AmountStep({
       {/* The figure being typed, big enough to read at arm's length. */}
       <div className="rounded-lg border-2 border-neutral-200 px-4 py-3" aria-live="polite">
         <p className="text-sm text-neutral-500">{mode === 'count' ? 'On the shelf now' : mode === 'in' ? 'How many arrived' : 'How many went out'}</p>
-        <p className="mt-1 flex items-baseline gap-2 tabular-nums" data-quick-amount>
-          <span className="text-5xl font-semibold">{typed || '0'}</span>
-          <span className="text-xl text-neutral-500">{pluraliseUnitNoun(unitNoun(option), quantity || 2)}</span>
-        </p>
-        {quantity > 0 && !option.isStockUnit && <p className="mt-1 text-base text-neutral-600">{amountText}</p>}
+        {twoUnits ? (
+          // Two boxes, the chosen one outlined; the keypad types into it (UNITS_PLAN.md Part 4).
+          <div className="mt-1 grid grid-cols-[1fr_auto_1fr] items-center gap-2" role="group" aria-label="Count in two units" data-quick-amount>
+            {(['big', 'small'] as const).map((which, index) => {
+              const unit = which === 'big' ? twoUnits.big! : twoUnits.small
+              const text = which === 'big' ? typed : typedSmall
+              const amount = which === 'big' ? quantity : smallQuantity
+              const noun = unit.isStockUnit ? stockUnitWord(symbol, amount || 2) : pluraliseUnitNoun(unitNoun(unit), amount || 2)
+              return (
+                <Fragment key={which}>
+                  {index === 1 && (
+                    <span aria-hidden="true" className="text-2xl text-neutral-400">
+                      +
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    aria-pressed={box === which}
+                    aria-label={`${text || '0'} ${noun}. Type ${pluraliseUnitNoun(unit.isStockUnit ? stockUnitWord(symbol, 1) : unitNoun(unit), 2)}`}
+                    onClick={() => setBox(which)}
+                    className={`flex min-h-16 flex-col items-start rounded-md border-2 px-3 py-1.5 text-left tabular-nums ${
+                      box === which ? 'border-primary-600 bg-primary-50' : 'border-neutral-200'
+                    }`}
+                  >
+                    <span className="text-4xl leading-tight font-semibold">{text || '0'}</span>
+                    <span className="text-base text-neutral-600">{noun}</span>
+                  </button>
+                </Fragment>
+              )
+            })}
+          </div>
+        ) : (
+          <p className="mt-1 flex items-baseline gap-2 tabular-nums" data-quick-amount>
+            <span className="text-5xl font-semibold">{typed || '0'}</span>
+            <span className="text-xl text-neutral-500">{pluraliseUnitNoun(unitNoun(option), quantity || 2)}</span>
+          </p>
+        )}
+        {twoUnits
+          ? anyTyped && <p className="mt-1 text-base text-neutral-600" data-quick-total>= {formatNumber(base)} {stockUnitWord(symbol, base)}</p>
+          : quantity > 0 && !option.isStockUnit && <p className="mt-1 text-base text-neutral-600">{amountText}</p>}
         {difference != null && (
           <div className="mt-2 flex items-baseline gap-2">
             {difference === 0 ? (
@@ -678,7 +783,7 @@ function AmountStep({
         disabled={saving}
         className="h-16 rounded-lg bg-action text-lg font-semibold text-white hover:bg-action-hover disabled:opacity-60"
       >
-        {saving ? 'Recording…' : typed ? `${ACTION[mode]} ${summary}` : 'Record'}
+        {saving ? 'Recording…' : anyTyped ? `${ACTION[mode]} ${twoUnits ? `${formatNumber(base)} ${stockUnitWord(symbol, base)}` : summary}` : 'Record'}
       </button>
       {!online && <p className="text-center text-sm text-neutral-600">Offline: it's saved on this phone and sent when you're back.</p>}
     </div>
