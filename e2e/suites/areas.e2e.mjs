@@ -501,6 +501,44 @@ await check('quick mode at a branch with areas: Move in the row, Count a link be
   await page.getByRole('button', { name: 'Area: All areas. Change area' }).waitFor()
 })
 
+// --------------------------------------------------------------- 6b (sheets plan Part 4)
+await check("quick mode shows the Kitchen's figure, not the branch's: search, the product line, count and stock out", async () => {
+  const areaIds = Object.fromEntries((await api('/api/branches', { token: ownerToken })).json.branches[0].areas.map((a) => [a.name, a.id]))
+  const beans = await createProduct(ownerToken, owner.unique, 'Beans')
+  await api(`/api/products/${beans.id}/stock/stock-in`, { token: ownerToken, method: 'POST', body: { quantity: 30, areaId: areaIds.Store } })
+  await api(`/api/products/${beans.id}/stock/stock-in`, { token: ownerToken, method: 'POST', body: { quantity: 12, areaId: areaIds.Kitchen } })
+  const never = await createProduct(ownerToken, owner.unique, 'Beans flour')
+  await api(`/api/products/${never.id}/stock/stock-in`, { token: ownerToken, method: 'POST', body: { quantity: 5, areaId: areaIds.Store } })
+  await page.setViewportSize({ width: 360, height: 780 })
+  await page.goto(`${UI}/app/quick?mode=out`)
+  const areaTitle = page.getByRole('button', { name: /^Recording in the .+\. Change area$/ })
+  if ((await areaTitle.getAttribute('aria-label')) !== 'Recording in the Kitchen. Change area') {
+    await areaTitle.click()
+    await page.getByRole('menuitemradio', { name: 'Kitchen' }).click()
+  }
+  await page.locator('#quick-search').fill('Beans')
+  const row = page.getByRole('button', { name: /^Beans AR-/ })
+  await waitFor(async () => /12\s*pieces/.test(await row.innerText().catch(() => '')), "the search row to read the Kitchen's 12")
+  await page.getByRole('button', { name: /^Beans flour/ }).getByText('Not in Kitchen').waitFor()
+  await page.screenshot({ path: SHOTS + '13e-quick-kitchen-figures.png' })
+  await row.click()
+  await page.getByText('In the Kitchen: 12 pieces').waitFor()
+  const keypad = page.getByRole('group', { name: 'Keypad' })
+  for (const key of ['1', '5']) await keypad.getByRole('button', { name: key, exact: true }).click()
+  await page.getByRole('button', { name: /^Stock out 15 / }).click()
+  await page.getByRole('alert').getByText('The Kitchen has 12 pieces.').waitFor()
+  await page.screenshot({ path: SHOTS + '13f-quick-more-than-the-kitchen.png' })
+  await page.getByRole('button', { name: 'Change', exact: true }).click()
+  await page.getByRole('button', { name: 'Count stock' }).click()
+  await page.locator('#quick-search').fill('Beans')
+  await page.getByRole('button', { name: /^Beans AR-/ }).click()
+  for (const key of ['1', '0']) await keypad.getByRole('button', { name: key, exact: true }).click()
+  // The difference is against the Kitchen's 12, not the branch's 42.
+  await waitFor(async () => /−\s*2|-\s*2/.test(await page.locator('[data-quick-amount]').locator('..').innerText()), 'the count to show −2')
+  await page.getByRole('button', { name: 'Done counting' }).click()
+  await page.setViewportSize({ width: 1280, height: 900 })
+})
+
 // ------------------------------------------------------------------------------------- 5c (Part 3)
 await check('a route used a few times offers its usual items, most often first, each one tap', async () => {
   const flourId = (await api(`/api/products?search=Flour`, { token: ownerToken })).json.content?.find?.((p) => p.name === 'Flour')?.id

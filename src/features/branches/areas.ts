@@ -58,6 +58,25 @@ export function figureInArea(product: Product, areaId: string | undefined): numb
 }
 
 /**
+ * What one place holds of the product (STOCK_SHEETS_AND_AREA_COUNT_PLAN.md Part 4): the area's figure, else
+ * the branch's, else the product's own - so quick mode's search says the Kitchen's 12, not the branch's 42.
+ * `carried` is false where the area has never had it ("Not in Kitchen"): the row stays, as it may be
+ * arriving there for the first time.
+ */
+export function placeFigure(
+  product: Product,
+  place: { branchId?: string | null; areaId?: string | null },
+): { quantity: number; carried: boolean } {
+  if (place.areaId && product.areaStock != null) {
+    const figure = product.areaStock.find((entry) => entry.areaId === place.areaId)
+    if (!figure) return { quantity: 0, carried: false }
+    return { quantity: figure.quantityOnHand, carried: figure.carried !== false || figure.quantityOnHand !== 0 }
+  }
+  const atBranch = place.branchId ? product.branchStock?.find((entry) => entry.branchId === place.branchId) : undefined
+  return { quantity: atBranch ? atBranch.quantityOnHand : product.quantityOnHand, carried: true }
+}
+
+/**
  * What happens in an area (D-A12, STOCK_AREAS_PART_3_5.md), one question with three answers: stock is
  * **stored** there (counted; a shortfall is missing), **worked with** (counted; a shortfall is what was used),
  * or what it's given is **used up** (no figure).

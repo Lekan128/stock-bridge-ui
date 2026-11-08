@@ -1,7 +1,7 @@
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { useSheetArea } from '@/features/branches/useSheetBranch'
 import { CountShortfall } from '@/features/branches/CountShortfall'
-import { areaShortAs, type ShortAs } from '@/features/branches/areas'
+import { areaShortAs, placeFigure, type ShortAs } from '@/features/branches/areas'
 import { QuickAreaTitle } from '@/features/quick/QuickAreaTitle'
 import { MoveEditor, type Moved } from '@/features/moves/MoveEditor'
 import { movesApi } from '@/features/moves/movesApi'
@@ -118,6 +118,8 @@ export function QuickModePage() {
   // Where in the branch every scan lands, at a branch with a choice of areas (V60). Chosen once for the
   // session, like the reason; a sale chooses its own on the basket.
   const area = useSheetArea(branch && !branch.isAll ? branch.working : null)
+  // Every figure here is this place's: the area's, else the branch's (sheets plan Part 4).
+  const place: Place = { branchId: branch && !branch.isAll ? branch.working?.id : undefined, areaId: area.areaId, areaName: area.areaName }
   const [params, setParams] = useSearchParams()
   // The buttons along the top (owner, 2026-11-01): the person's own choice of up to four, kept on their account,
   // else the app's for where they work - never one their role doesn't give them. Count they may do but didn't
@@ -327,12 +329,12 @@ export function QuickModePage() {
             mode={mode}
             product={product}
             reason={mode === 'out' ? outReason : null}
-            areaId={area.areaId}
+            place={place}
             onBack={() => setProduct(null)}
             onRecorded={recorded}
           />
         ) : (
-          <FindStep inputRef={searchRef} onPick={setProduct} />
+          <FindStep inputRef={searchRef} place={place} onPick={setProduct} />
         )}
 
         <SessionList entries={session} onUndone={(key) => setSession((all) => all.map((e) => (e.key === key ? { ...e, undone: true } : e)))} />
@@ -344,7 +346,14 @@ export function QuickModePage() {
 
 // --------------------------------------------------------------------------------------- find
 
-function FindStep({ inputRef, onPick }: { inputRef: RefObject<HTMLInputElement | null>; onPick: (product: Product) => void }) {
+/** Where quick mode records, and so whose figures it shows. */
+interface Place {
+  branchId: string | undefined
+  areaId: string | undefined
+  areaName: string | undefined
+}
+
+function FindStep({ inputRef, place, onPick }: { inputRef: RefObject<HTMLInputElement | null>; place: Place; onPick: (product: Product) => void }) {
   const [term, setTerm] = useState('')
   const { search, results, onEnter } = useProductFinder(term, onPick)
 
@@ -383,7 +392,7 @@ function FindStep({ inputRef, onPick }: { inputRef: RefObject<HTMLInputElement |
       <ul className="flex flex-col gap-2">
         {results.map((product) => (
           <li key={product.id}>
-            <FoundRow product={product} onPick={onPick} />
+            <FoundRow product={product} place={place} onPick={onPick} />
           </li>
         ))}
       </ul>
@@ -391,9 +400,10 @@ function FindStep({ inputRef, onPick }: { inputRef: RefObject<HTMLInputElement |
   )
 }
 
-function FoundRow({ product, onPick }: { product: Product; onPick: (product: Product) => void }) {
+function FoundRow({ product, place, onPick }: { product: Product; place: Place; onPick: (product: Product) => void }) {
   const { options } = useUnitOfMeasureOptions()
   const unit = resolveUnitSymbol(product.unitOfMeasure, options)
+  const here = placeFigure(product, place)
   return (
     <button
       type="button"
@@ -404,9 +414,14 @@ function FoundRow({ product, onPick }: { product: Product; onPick: (product: Pro
         <span className="block truncate text-base font-semibold text-neutral-900">{product.name}</span>
         <span className="block truncate text-sm text-neutral-500">{product.sku}</span>
       </span>
-      <span className="shrink-0 text-right text-base font-semibold tabular-nums">
-        {formatNumber(product.quantityOnHand)} <span className="text-sm font-normal text-neutral-500">{stockUnitWord(unit, product.quantityOnHand)}</span>
-      </span>
+      {here.carried ? (
+        <span className="shrink-0 text-right text-base font-semibold tabular-nums">
+          {formatNumber(here.quantity)} <span className="text-sm font-normal text-neutral-500">{stockUnitWord(unit, here.quantity)}</span>
+        </span>
+      ) : (
+        // Never had here: the row stays - it may be arriving here for the first time.
+        <span className="shrink-0 text-right text-sm text-neutral-500">Not in {place.areaName}</span>
+      )}
     </button>
   )
 }
@@ -417,7 +432,7 @@ function AmountStep({
   mode,
   product,
   reason,
-  areaId,
+  place,
   onBack,
   onRecorded,
 }: {
@@ -425,13 +440,14 @@ function AmountStep({
   product: Product
   /** The session's stock-out reason, or null for none given. */
   reason: OutReason | null
-  /** The session's area (V60), at a branch with a choice of them. */
-  areaId: string | undefined
+  /** Where the session records: its area (V60) at a branch with a choice of them. */
+  place: Place
   onBack: () => void
   onRecorded: (entry: SessionEntry, kind: StampKind) => void
 }) {
   const { options } = useUnitOfMeasureOptions()
   const online = useOnlineStatus()
+  const areaId = place.areaId
   const unitOptions = unitOptionsForProduct(product, options)
   const offered = productsOwnUnits(unitOptions)
   // §9.3, as in the sheets: a delivery in the pack, an issue and a count in the stock unit.
@@ -465,13 +481,18 @@ function AmountStep({
   // What the app says is on hand counts this phone's own changes not yet folded into the figure (the
   // list shows them as "−3 kg waiting"): a count right after a sale must compare against the stock
   // after that sale, or the difference it shows is off by exactly that sale.
-  const pending = usePendingStock(product.id)
-  const appSays = product.quantityOnHand + pending.delta
+  const pending = usePendingStock(product.id, areaId)
+  const appSays = placeFigure(product, place).quantity + pending.delta
   const difference = mode === 'count' && typed !== '' ? exactBaseQuantity(quantity, option) - appSays : null
 
   function problem(): string | null {
     if (typed === '') return 'Type how many.'
     if (mode !== 'count' && quantity <= 0) return 'Type a number above 0.'
+    // More than is here: said now, so an offline stock out isn't refused later in the sync centre.
+    if (mode === 'out' && base > appSays) {
+      const has = `${formatNumber(Math.max(appSays, 0))} ${stockUnitWord(symbol, Math.max(appSays, 0))}`
+      return place.areaName ? `The ${place.areaName} has ${has}.` : `There ${appSays === 1 ? 'is' : 'are'} ${has} here.`
+    }
     if (quantity > 0 && !convertsCleanly(quantity, option)) return roundsToZeroMessage(quantity, option, stockText)
     if (!convertsToWholeCount(quantity, option, wholeOnly) || (mode === 'count' && !Number.isInteger(exactBaseQuantity(quantity, option)))) {
       return `That doesn't come to a whole number of ${stockUnitWord(symbol, 2)}.`
@@ -549,7 +570,7 @@ function AmountStep({
         <div className="min-w-0">
           <p className="truncate text-lg font-semibold">{product.name}</p>
           <p className="text-sm text-neutral-500">
-            On hand {formatNumber(appSays)} {stockUnitWord(symbol, appSays)}
+            {place.areaName ? `In the ${place.areaName}:` : 'On hand'} {formatNumber(appSays)} {stockUnitWord(symbol, appSays)}
           </p>
         </div>
         <button type="button" onClick={onBack} className="h-11 shrink-0 rounded-md px-3 text-base font-medium text-primary-700 hover:bg-primary-50">
