@@ -25,6 +25,7 @@ import {
   formatEnteredAndBase,
   formatNumber,
   formatQuantityInUnit,
+  formatRestated,
   pluraliseUnitNoun,
   roundsToZeroMessage,
   stockUnitWord,
@@ -35,7 +36,6 @@ import {
   convertsToWholeCount,
   countUnits,
   defaultUnitOption,
-  fromBaseQuantity,
   isCountedInWholeUnits,
   productsOwnUnits,
   resolveUnitSymbol,
@@ -638,7 +638,7 @@ function AmountStep({
           <p className="text-sm text-neutral-500">
             {place.areaName ? `In the ${place.areaName}:` : 'On hand'} {formatNumber(appSays)} {stockUnitWord(symbol, appSays)}
             {/* And in its usual unit, the cook's dericas (UNITS_PLAN.md Part 2). */}
-            {usual && appSays > 0 && ` (${formatQuantityInUnit(fromBaseQuantity(appSays, usual), usual)})`}
+            {usual && appSays > 0 && ` (${formatRestated(appSays, usual)})`}
           </p>
         </div>
         <button type="button" onClick={onBack} className="h-11 shrink-0 rounded-md px-3 text-base font-medium text-primary-700 hover:bg-primary-50">

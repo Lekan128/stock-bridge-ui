@@ -249,7 +249,10 @@ export function ProductUnitsField({
       )}
 
       {standardUnits.length > 0 && (
-        <p className="text-xs text-neutral-500">{standardUnits.join(' and ')} work out by themselves.</p>
+        <p className="text-xs text-neutral-500">
+          {standardUnits.length > 1 ? `${standardUnits.slice(0, -1).join(', ')} and ${standardUnits.at(-1)}` : standardUnits[0]} work out by
+          themselves.
+        </p>
       )}
 
       {hidden.length > 0 && (

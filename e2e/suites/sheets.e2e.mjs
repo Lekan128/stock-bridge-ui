@@ -215,10 +215,11 @@ await check('stock out: a suggested delivery line follows the quantity until you
 
 await check('count: the difference from what the app says is shown before anything is recorded', async () => {
   await page.getByRole('button', { name: 'Count', exact: true }).click()
-  await dialog.getByLabel(/How much is on the shelf/).fill('1096')
+  // A product in bags is counted in two boxes, bags and what's left in kg (UNITS_PLAN.md Part 4); all in kg here.
+  await dialog.getByLabel('kg on the shelf').fill('1096')
   await dialog.getByText('vs what the app says').waitFor()
   await dialog.locator('[data-stock-figure]').getByText('−4').waitFor()
-  await dialog.getByLabel(/How much is on the shelf/).fill('1100')
+  await dialog.getByLabel('kg on the shelf').fill('1100')
   await dialog.getByText('Matches what the app says.').waitFor()
   await page.screenshot({ path: SHOTS + '5-count.png' })
   await page.keyboard.press('Escape')

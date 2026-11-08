@@ -255,6 +255,17 @@ export function formatCount(quantity: number, unitLabel: string): string {
   return formatQuantity(quantity, unitLabel)
 }
 
+/**
+ * A stock figure restated in one of the product's own units, which are only roughly right (a heaped derica isn't a
+ * level one, UNITS_PLAN.md §3): `"about 254.7 dericas"`, never `"254.667 dericas"`. A pack keeps its exact figure.
+ */
+export function formatRestated(stockQuantity: number, option: UnitOption): string {
+  const inUnit = option.factorToStockUnit > 0 ? stockQuantity / option.factorToStockUnit : 0
+  if (!option.isMeasure) return formatQuantityInUnit(Math.round(inUnit * 1000) / 1000, option)
+  const rounded = Math.round(inUnit * 10) / 10
+  return `${rounded === inUnit ? '' : 'about '}${formatQuantityInUnit(rounded, option)}`
+}
+
 /** `(20, {label: "Bag of 50 kg", ...})` → `"20 bags"`. The sentence form of a unit option. */
 export function formatQuantityInUnit(quantity: number, option: UnitOption): string {
   return formatQuantity(quantity, unitNoun(option))

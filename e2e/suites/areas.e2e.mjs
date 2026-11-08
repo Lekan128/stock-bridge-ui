@@ -504,10 +504,10 @@ await check('quick mode at a branch with areas: Move in the row, Count a link be
 // --------------------------------------------------------------- 6b (sheets plan Part 4)
 await check("quick mode shows the Kitchen's figure, not the branch's: search, the product line, count and stock out", async () => {
   const areaIds = Object.fromEntries((await api('/api/branches', { token: ownerToken })).json.branches[0].areas.map((a) => [a.name, a.id]))
-  const beans = await createProduct(ownerToken, owner.unique, 'Beans')
+  const beans = await createProduct(ownerToken, owner.unique, 'Cowpea')
   await api(`/api/products/${beans.id}/stock/stock-in`, { token: ownerToken, method: 'POST', body: { quantity: 30, areaId: areaIds.Store } })
   await api(`/api/products/${beans.id}/stock/stock-in`, { token: ownerToken, method: 'POST', body: { quantity: 12, areaId: areaIds.Kitchen } })
-  const never = await createProduct(ownerToken, owner.unique, 'Beans flour')
+  const never = await createProduct(ownerToken, owner.unique, 'Yam flour')
   await api(`/api/products/${never.id}/stock/stock-in`, { token: ownerToken, method: 'POST', body: { quantity: 5, areaId: areaIds.Store } })
   await page.setViewportSize({ width: 360, height: 780 })
   await page.goto(`${UI}/app/quick?mode=out`)
@@ -516,10 +516,11 @@ await check("quick mode shows the Kitchen's figure, not the branch's: search, th
     await areaTitle.click()
     await page.getByRole('menuitemradio', { name: 'Kitchen' }).click()
   }
-  await page.locator('#quick-search').fill('Beans')
-  const row = page.getByRole('button', { name: /^Beans AR-/ })
+  await page.locator('#quick-search').fill('Yam flour')
+  await page.getByRole('button', { name: /^Yam flour/ }).getByText('Not in Kitchen').waitFor()
+  await page.locator('#quick-search').fill('Cowpea')
+  const row = page.getByRole('button', { name: /^Cowpea AR-/ })
   await waitFor(async () => /12\s*pieces/.test(await row.innerText().catch(() => '')), "the search row to read the Kitchen's 12")
-  await page.getByRole('button', { name: /^Beans flour/ }).getByText('Not in Kitchen').waitFor()
   await page.screenshot({ path: SHOTS + '13e-quick-kitchen-figures.png' })
   await row.click()
   await page.getByText('In the Kitchen: 12 pieces').waitFor()
@@ -530,13 +531,47 @@ await check("quick mode shows the Kitchen's figure, not the branch's: search, th
   await page.screenshot({ path: SHOTS + '13f-quick-more-than-the-kitchen.png' })
   await page.getByRole('button', { name: 'Change', exact: true }).click()
   await page.getByRole('button', { name: 'Count stock' }).click()
-  await page.locator('#quick-search').fill('Beans')
-  await page.getByRole('button', { name: /^Beans AR-/ }).click()
+  await page.locator('#quick-search').fill('Cowpea')
+  await page.getByRole('button', { name: /^Cowpea AR-/ }).click()
   for (const key of ['1', '0']) await keypad.getByRole('button', { name: key, exact: true }).click()
   // The difference is against the Kitchen's 12, not the branch's 42.
   await waitFor(async () => /−\s*2|-\s*2/.test(await page.locator('[data-quick-amount]').locator('..').innerText()), 'the count to show −2')
   await page.getByRole('button', { name: 'Done counting' }).click()
   await page.setViewportSize({ width: 1280, height: 900 })
+  // Out of the way of the checks below, which count this company's products.
+  for (const id of [beans.id, never.id]) await api(`/api/products/${id}`, { token: ownerToken, method: 'DELETE' })
+})
+
+// --------------------------------------------------------------- 6c (sheets plan Part 5)
+await check("the closing count lists what the Kitchen has: the eggs nobody knew about are counted to 0", async () => {
+  const areaIds = Object.fromEntries((await api('/api/branches', { token: ownerToken })).json.branches[0].areas.map((a) => [a.name, a.id]))
+  const eggs = await createProduct(ownerToken, owner.unique, 'Eggs')
+  await api(`/api/products/${eggs.id}/stock/stock-in`, { token: ownerToken, method: 'POST', body: { quantity: 30, areaId: areaIds.Store } })
+  await api('/api/area-moves', {
+    token: ownerToken,
+    method: 'POST',
+    body: { id: randomUUID(), fromAreaId: areaIds.Store, toAreaId: areaIds.Kitchen, lines: [{ productId: eggs.id, quantity: 30 }] },
+  })
+  await page.setViewportSize({ width: 360, height: 780 })
+  await page.goto(`${UI}/app/quick?mode=count`)
+  const areaTitle = page.getByRole('button', { name: /^Recording in the .+\. Change area$/ })
+  if ((await areaTitle.getAttribute('aria-label')) !== 'Recording in the Kitchen. Change area') {
+    await areaTitle.click()
+    await page.getByRole('menuitemradio', { name: 'Kitchen' }).click()
+  }
+  const toCount = page.getByRole('region', { name: /^To count in the Kitchen/ })
+  const eggsRow = toCount.getByRole('button', { name: /^Eggs/ })
+  await waitFor(async () => /30\s*pieces/.test(await eggsRow.innerText().catch(() => '')), 'Eggs 30 on the list before anything is typed')
+  await page.screenshot({ path: SHOTS + '13g-count-list.png' })
+  await eggsRow.click()
+  await page.getByRole('group', { name: 'Keypad' }).getByRole('button', { name: '0', exact: true }).click()
+  await page.getByRole('button', { name: /^Record count: 0/ }).click()
+  await page.getByRole('region', { name: /^Counted today/ }).getByText('Eggs').waitFor()
+  assert((await toCount.getByRole('button', { name: /^Eggs/ }).count()) === 0, 'Eggs is still to count')
+  await page.screenshot({ path: SHOTS + '13h-counted-today.png' })
+  await waitFor(async () => (await areaFigures(ownerToken, eggs.id)).Kitchen === 0, 'the Kitchen to have no eggs')
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await api(`/api/products/${eggs.id}`, { token: ownerToken, method: 'DELETE' })
 })
 
 // ------------------------------------------------------------------------------------- 5c (Part 3)

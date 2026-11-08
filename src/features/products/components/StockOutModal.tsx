@@ -14,17 +14,16 @@ import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeas
 import { stockOutSchema, type StockOutFormValues } from '@/features/products/schemas'
 import type { OutReason, Product, StockOutPayload } from '@/features/products/types'
 import {
-  UNIT_COPY,
   formatEnteredAndBase,
   formatQuantity,
-  formatQuantityInUnit,
+  formatRestated,
   howYouCountIt,
   roundsToZeroMessage,
+  UNIT_COPY,
   unitNoun,
 } from '@/features/products/unitCopy'
 import {
   convertsCleanly,
-  fromBaseQuantity,
   productsOwnUnits,
   stockUnitLabel,
   stockUnitOption,
@@ -278,7 +277,7 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
   const onHandHere = sheetBranch.onHand(product)
   // Said in the product's usual unit for using it when it has one, the cook's dericas (UNITS_PLAN.md Part 2).
   const restateIn = usedInOption(product, unitOptions, packOption ?? stockUnitOption(unitOptions))
-  const onHandInPacks = restateIn.isStockUnit ? null : formatQuantityInUnit(fromBaseQuantity(onHandHere, restateIn), restateIn)
+  const onHandInPacks = restateIn.isStockUnit ? null : formatRestated(onHandHere, restateIn)
 
   /**
    * What the unit control actually offers: the product's own ways of counting (its stock unit and
