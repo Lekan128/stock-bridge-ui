@@ -13,7 +13,8 @@ import { submitStockWrite } from '@/features/outbox/outboxStore'
 import { stockCountSchema, type StockCountFormValues } from '@/features/products/schemas'
 import type { StockMutationResponse } from '@/features/products/types'
 import type { AreaFigure } from '@/features/branches/types'
-import { formatQuantity } from '@/features/products/unitCopy'
+import { formatQuantity, stockUnitWord } from '@/features/products/unitCopy'
+import { roundQuantity } from '@/features/products/unitSet'
 import { CountShortfall } from '@/features/branches/CountShortfall'
 import { areaShortAs, lastCountedPhrase, type ShortAs } from '@/features/branches/areas'
 import { isAppError } from '@/types/api'
@@ -26,6 +27,8 @@ export interface StockAdjustmentModalProps {
   areaStock?: AreaFigure[]
   /** The stock unit's short form ("kg"), for every figure on screen. */
   stockUnit: string
+  /** Counted in pieces: a fraction of one is refused. Measured (kg, L): to 3 places (UNITS_PLAN.md Part 0). */
+  countedInWholeUnits?: boolean
   onClose: () => void
   onSuccess: (result: StockMutationResponse) => void
   /** Saved on this phone instead of sent (A4); gets the waiting write's id, for Undo (B2). */
@@ -46,6 +49,7 @@ export function StockAdjustmentModal({
   currentQuantity: branchQuantity,
   areaStock,
   stockUnit,
+  countedInWholeUnits = true,
   onClose,
   onSuccess,
   onQueued,
@@ -72,6 +76,7 @@ export function StockAdjustmentModal({
     register,
     handleSubmit,
     watch,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<StockCountFormValues>({
     resolver: zodResolver(stockCountSchema),
@@ -79,12 +84,16 @@ export function StockAdjustmentModal({
   })
 
   const typed = watch('countedQuantity').trim()
-  const counted = /^\d+$/.test(typed) ? Number(typed) : null
-  const difference = counted == null ? null : counted - currentQuantity
+  const counted = /^\d+(\.\d{1,3})?$/.test(typed) ? Number(typed) : null
+  const difference = counted == null ? null : roundQuantity(counted - currentQuantity)
 
   async function onSubmit(values: StockCountFormValues) {
     setFormError(null)
     const countedQuantity = Number(values.countedQuantity)
+    if (countedInWholeUnits && !Number.isInteger(countedQuantity)) {
+      setError('countedQuantity', { message: `Enter a whole number of ${stockUnitWord(stockUnit, 2)}.` })
+      return
+    }
     try {
       const outcome = await submitStockWrite({
         kind: 'COUNT',
@@ -156,7 +165,7 @@ export function StockAdjustmentModal({
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
         <TextField
           label={`How much is on the shelf now? (${stockUnit})`}
-          inputMode="numeric"
+          inputMode={countedInWholeUnits ? 'numeric' : 'decimal'}
           autoFocus
           error={errors.countedQuantity?.message}
           // When it was last counted there (Part 3.5), so nobody counts what's just been counted.

@@ -33,10 +33,10 @@ import {
   convertsCleanly,
   convertsToWholeCount,
   defaultUnitOption,
-  exactBaseQuantity,
   isCountedInWholeUnits,
   productsOwnUnits,
   resolveUnitSymbol,
+  roundQuantity,
   stockUnitLabel,
   stockUnitOption,
   toBaseQuantity,
@@ -482,8 +482,8 @@ function AmountStep({
   // list shows them as "−3 kg waiting"): a count right after a sale must compare against the stock
   // after that sale, or the difference it shows is off by exactly that sale.
   const pending = usePendingStock(product.id, areaId)
-  const appSays = placeFigure(product, place).quantity + pending.delta
-  const difference = mode === 'count' && typed !== '' ? exactBaseQuantity(quantity, option) - appSays : null
+  const appSays = roundQuantity(placeFigure(product, place).quantity + pending.delta)
+  const difference = mode === 'count' && typed !== '' ? roundQuantity(toBaseQuantity(quantity, option) - appSays) : null
 
   function problem(): string | null {
     if (typed === '') return 'Type how many.'
@@ -494,7 +494,7 @@ function AmountStep({
       return place.areaName ? `The ${place.areaName} has ${has}.` : `There ${appSays === 1 ? 'is' : 'are'} ${has} here.`
     }
     if (quantity > 0 && !convertsCleanly(quantity, option)) return roundsToZeroMessage(quantity, option, stockText)
-    if (!convertsToWholeCount(quantity, option, wholeOnly) || (mode === 'count' && !Number.isInteger(exactBaseQuantity(quantity, option)))) {
+    if (!convertsToWholeCount(quantity, option, wholeOnly)) {
       return `That doesn't come to a whole number of ${stockUnitWord(symbol, 2)}.`
     }
     return null
@@ -520,8 +520,8 @@ function AmountStep({
               kind: 'COUNT',
               productId: product.id,
               productName: product.name,
-              summary: `${formatNumber(exactBaseQuantity(quantity, option))} ${stockUnitWord(symbol, exactBaseQuantity(quantity, option))}`,
-              payload: { countedQuantity: exactBaseQuantity(quantity, option), areaId, shortAs: shortChosen ?? undefined },
+              summary: `${formatNumber(base)} ${stockUnitWord(symbol, base)}`,
+              payload: { countedQuantity: base, areaId, shortAs: shortChosen ?? undefined },
             })
           : mode === 'in'
             ? await submitStockWrite({

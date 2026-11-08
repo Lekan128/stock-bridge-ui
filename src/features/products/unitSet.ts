@@ -430,7 +430,28 @@ export function findUnitOption(options: UnitOption[], code: string | null | unde
  */
 export function toBaseQuantity(quantity: number, option: UnitOption): number {
   if (!Number.isFinite(quantity)) return 0
-  return roundHalfUp(quantity * option.factorToStockUnit, 0)
+  return roundHalfUp(quantity * option.factorToStockUnit, QUANTITY_DECIMALS)
+}
+
+/**
+ * Places a stock quantity is kept to (UNITS_PLAN.md Part 0, V81): to the gram for kg, the millilitre for litres.
+ * Until V81 stock was whole numbers and 12.6 kg was recorded as 13.
+ */
+export const QUANTITY_DECIMALS = 3
+
+/** A stock figure with the floating-point noise taken off: `0.1 + 0.2` is `0.3`, as the server keeps it. */
+export function roundQuantity(value: number): number {
+  return roundHalfUp(value, QUANTITY_DECIMALS)
+}
+
+/**
+ * Whether `quantity` of `option` can be recorded (UNITS_PLAN.md Part 0): above 0, coming to something at the
+ * ledger's three places, and - for a product counted in pieces - a whole number of them. Half an egg is still
+ * refused; 2.5 kg of rice no longer is.
+ */
+export function isRecordableQuantity(quantity: number, option: UnitOption, countedInWholeUnits: boolean): boolean {
+  if (!Number.isFinite(quantity) || quantity <= 0) return false
+  return convertsCleanly(quantity, option) && convertsToWholeCount(quantity, option, countedInWholeUnits)
 }
 
 /**

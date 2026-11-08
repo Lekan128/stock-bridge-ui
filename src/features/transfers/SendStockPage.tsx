@@ -13,7 +13,7 @@ import { productsApi } from '@/features/products/api/productsApi'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import type { Product, UnitOption } from '@/features/products/types'
 import { formatNumber, stockUnitWord, unitNoun } from '@/features/products/unitCopy'
-import { resolveUnitSymbol, stockUnitOption, toBaseQuantity } from '@/features/products/unitSet'
+import { isCountedInWholeUnits, isRecordableQuantity, resolveUnitSymbol, stockUnitOption, toBaseQuantity } from '@/features/products/unitSet'
 import { unitsFor } from '@/features/selling/sale/saleLine'
 import { useTransfers } from '@/features/transfers/useTransfers'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
@@ -191,7 +191,10 @@ export function SendStockPage() {
     const options = unitsFor(line.product, catalogue)
     const option = options.find((o) => o.label === line.unitLabel) ?? stockUnitOption(options)
     const quantity = Number(line.quantity)
-    const valid = line.quantity.trim() !== '' && Number.isInteger(quantity) && quantity > 0
+    // 2.5 kg moves; half a piece doesn't (UNITS_PLAN.md Part 0).
+    const valid =
+      line.quantity.trim() !== '' &&
+      isRecordableQuantity(quantity, option, isCountedInWholeUnits(line.product.unitOfMeasure, catalogue))
     const base = valid ? toBaseQuantity(quantity, option) : 0
     const has = figureAt(line.product, fromBranchId)
     return { line, options, option, quantity, valid, base, has, short: has != null && base > has }

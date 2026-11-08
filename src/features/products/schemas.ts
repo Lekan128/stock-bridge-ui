@@ -56,14 +56,12 @@ function isPositiveNumber(value: string): boolean {
 }
 
 /**
- * Still integer-only, and deliberately: the only field left using this is the stock ADJUSTMENT's
- * `newQuantity`, which is a count in **stock units** and therefore whole by construction —
- * §3.1 stores every base quantity rounded HALF_UP at scale 0, so "1,000.5 kg on hand" is not a
- * state the ledger can hold. A pack count and a base-unit count are different things and this is
- * the line between them; do not widen it without a reason from §9.1.
+ * A count in **stock units**, to the ledger's three places (UNITS_PLAN.md Part 0, V81): "12.6 kg on hand" is a
+ * state the ledger holds now. Whether a fraction is allowed at all - not for pieces - is the form's question,
+ * since only it knows the product.
  */
-function isNonNegativeInteger(value: string): boolean {
-  return isNonNegativeNumber(value) && Number.isInteger(Number(value))
+function isNonNegativeStockQuantity(value: string): boolean {
+  return isNonNegativeNumber(value) && /^\d*(\.\d{0,3})?$/.test(value)
 }
 
 /** §9.1's two error messages. Composed once so the pack-counting fields all fail the same way,
@@ -433,17 +431,15 @@ export type StockOutFormValues = z.infer<typeof stockOutSchema>
 /**
  * Stock adjustment — a correction that SETS the on-hand figure rather than moving it.
  *
- * The one quantity on this feature that is still a whole number, and it stays one on purpose:
- * `StockAdjustmentModal` has no "Counted in" control, so `newQuantity` is read directly as **stock
- * units**, and §3.1 keeps every base quantity at HALF_UP scale 0. §9.1's decimals apply to counts
- * of packs; this is not one. If this modal ever grows a unit toggle, this refinement moves with it.
+ * `newQuantity` is read directly as **stock units**, to the ledger's three places since V81
+ * (UNITS_PLAN.md Part 0).
  */
 export const stockAdjustmentSchema = z.object({
   newQuantity: z
     .string()
     .trim()
     .min(1, 'New quantity is required')
-    .refine((v) => v.length === 0 || isNonNegativeInteger(v), 'Enter a whole number, 0 or greater'),
+    .refine((v) => v.length === 0 || isNonNegativeStockQuantity(v), 'Enter a number, 0 or greater, to 3 decimal places'),
   note: z.string().trim().min(1, 'A reason is required').max(1000, 'Must be 1000 characters or fewer'),
 })
 
@@ -459,7 +455,7 @@ export const stockCountSchema = z.object({
     .string()
     .trim()
     .min(1, 'Enter how much is on the shelf')
-    .refine((v) => v.length === 0 || isNonNegativeInteger(v), 'Enter a whole number, 0 or greater'),
+    .refine((v) => v.length === 0 || isNonNegativeStockQuantity(v), 'Enter a number, 0 or greater, to 3 decimal places'),
   note: z.string().trim().max(1000, 'Must be 1000 characters or fewer'),
 })
 

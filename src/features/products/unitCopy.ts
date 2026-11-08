@@ -754,5 +754,5 @@ export function notAWholeCountMessage(
 }
 
 export function roundsToZeroMessage(quantity: number, option: UnitOption, stockUnitLabel: string): string {
-  return `${formatQuantityInUnit(quantity, option)} is less than one whole ${stockUnitLabel} — enter a larger amount, or change this product's ${UNIT_COPY.STOCK_UNIT.toLowerCase()}.`
+  return `${formatQuantityInUnit(quantity, option)} is too little to record — the smallest amount is 0.001 ${stockUnitLabel}.`
 }

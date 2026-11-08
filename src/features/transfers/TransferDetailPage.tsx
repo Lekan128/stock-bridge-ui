@@ -17,7 +17,7 @@ import { submitTransfer } from '@/features/outbox/outboxStore'
 import { formatDateTime } from '@/features/products/formatters'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import { formatNumber, stockUnitWord } from '@/features/products/unitCopy'
-import { resolveUnitSymbol } from '@/features/products/unitSet'
+import { isCountedInWholeUnits, resolveUnitSymbol } from '@/features/products/unitSet'
 import { transfersApi } from '@/features/transfers/transfersApi'
 import { isOpen, STATUS_LABEL, type Transfer, type TransferLine, type TransferStatus } from '@/features/transfers/types'
 import { transferKeys, usePendingTransfers, useTransfer } from '@/features/transfers/useTransfers'
@@ -37,6 +37,15 @@ const UNDO_MS = 2 * 60 * 1000
 /** "10 crates" as typed when it was typed in a pack, else the stock-unit figure - the server words it. */
 function sentText(line: TransferLine): string {
   return line.sentText ?? formatNumber(line.quantitySent)
+}
+
+/** A figure this line can take (UNITS_PLAN.md Part 0): to 3 places in kg or litres, whole in pieces. */
+function useQuantityRule() {
+  const { options } = useUnitOfMeasureOptions()
+  return (line: TransferLine, quantity: number) =>
+    Number.isFinite(quantity) &&
+    /^\d+(\.\d{1,3})?$/.test(String(quantity)) &&
+    (!isCountedInWholeUnits(line.unitOfMeasure, options) || Number.isInteger(quantity))
 }
 
 /** "3 pieces", "2 kg": a figure in this line's stock unit. */
@@ -364,6 +373,7 @@ function WaybillLines({ transfer }: { transfer: Transfer }) {
 function ReceiveForm({ transfer, onDone }: { transfer: Transfer; onDone: (next: Transfer) => void }) {
   const { showToast } = useToast()
   const amount = useAmount()
+  const allowed = useQuantityRule()
   const [entries, setEntries] = useState<Record<string, ReceiveEntry>>(() =>
     Object.fromEntries(transfer.lines.map((line) => [line.productId, { received: String(line.onTheWay), why: 'missing' as Shortfall }])),
   )
@@ -375,7 +385,7 @@ function ReceiveForm({ transfer, onDone }: { transfer: Transfer; onDone: (next: 
     const entry = entries[line.productId]
     const typed = entry.received.trim()
     const received = typed === '' ? 0 : Number(typed)
-    const valid = typed === '' || (Number.isInteger(received) && received >= 0)
+    const valid = typed === '' || (allowed(line, received) && received >= 0)
     const short = Math.max(0, line.onTheWay - received)
     return { line, entry, received, valid, short, extra: Math.max(0, received - line.onTheWay) }
   })
@@ -518,12 +528,13 @@ function FoundForm({ transfer, onDone }: { transfer: Transfer; onDone: (next: Tr
   const [open, setOpen] = useState(false)
   const [productId, setProductId] = useState(missingLines[0]?.productId ?? '')
   const [quantity, setQuantity] = useState('')
+  const allowed = useQuantityRule()
   const [branchId, setBranchId] = useState(transfer.toBranchId)
   const [saving, setSaving] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const line = missingLines.find((entry) => entry.productId === productId) ?? missingLines[0]
   const amount = Number(quantity)
-  const valid = line != null && Number.isInteger(amount) && amount > 0 && amount <= line.quantityMissing
+  const valid = line != null && allowed(line, amount) && amount > 0 && amount <= line.quantityMissing
 
   if (!open) {
     return (

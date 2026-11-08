@@ -20,7 +20,14 @@ import { productsApi } from '@/features/products/api/productsApi'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import type { Product, UnitOption } from '@/features/products/types'
 import { formatNumber, formatQuantityInUnit, packRemainderPhrase, pluraliseUnitNoun, stockUnitWord, unitNoun } from '@/features/products/unitCopy'
-import { packRemainder, resolveUnitSymbol, stockUnitOption, toBaseQuantity } from '@/features/products/unitSet'
+import {
+  isCountedInWholeUnits,
+  isRecordableQuantity,
+  packRemainder,
+  resolveUnitSymbol,
+  stockUnitOption,
+  toBaseQuantity,
+} from '@/features/products/unitSet'
 import { unitsFor } from '@/features/selling/sale/saleLine'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
@@ -359,7 +366,10 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
     const options = unitsFor(line.product, catalogue)
     const option = options.find((o) => o.label === line.unitLabel) ?? stockUnitOption(options)
     const quantity = Number(line.quantity)
-    const valid = line.quantity.trim() !== '' && Number.isInteger(quantity) && quantity > 0
+    // 2.5 kg moves; half a piece doesn't (UNITS_PLAN.md Part 0).
+    const valid =
+      line.quantity.trim() !== '' &&
+      isRecordableQuantity(quantity, option, isCountedInWholeUnits(line.product.unitOfMeasure, catalogue))
     const base = valid ? toBaseQuantity(quantity, option) : 0
     const has = fromAreaId ? figureIn(line.product, fromAreaId) : undefined
     const toHas = to?.keepsStock ? figureIn(line.product, to.id) : undefined
