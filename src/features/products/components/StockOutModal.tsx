@@ -271,8 +271,9 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
    * rounding it to 20 would quietly lose 10 kg.
    */
   const packOption = unitOptions.find((option) => option.isPack) ?? null
-  const onHandInPacks =
-    packOption == null ? null : formatQuantityInUnit(fromBaseQuantity(product.quantityOnHand, packOption), packOption)
+  // Of what the sheet's branch and area hold, said on the line under the title (Part 1).
+  const onHandHere = sheetBranch.onHand(product)
+  const onHandInPacks = packOption == null ? null : formatQuantityInUnit(fromBaseQuantity(onHandHere, packOption), packOption)
 
   /**
    * What the unit control actually offers: the product's own ways of counting (its stock unit and
@@ -483,7 +484,18 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
       open
       onClose={onClose}
       size={choosingLots ? 'xl' : 'md'}
-      title={step === 'form' ? `Stock out${sheetBranch.titleSuffix}` : queued ? 'Saved on this phone' : result ? 'Stock out recorded' : 'Recording stock out'}
+      // What and where before anything is typed (STOCK_SHEETS_AND_AREA_COUNT_PLAN.md Part 1): the product in the
+      // title, the place and its figure on the line under it - the Kitchen can only give out what it has.
+      title={
+        step === 'form'
+          ? `Stock out · ${product.name}`
+          : queued
+            ? 'Saved on this phone'
+            : result
+              ? `Stock out recorded · ${product.name}`
+              : `Recording stock out · ${product.name}`
+      }
+      subtitle={step === 'form' ? sheetBranch.line(formatQuantity(onHandHere, stockUnitText), onHandInPacks) : undefined}
       footer={
         step === 'form' ? (
           <>
@@ -506,18 +518,6 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
     >
       {step === 'form' && (
         <form onSubmit={handleSubmit(() => void submit())} noValidate className="flex flex-col gap-4">
-          {sheetBranch.field}
-          {/* Base units, and said so (plan §3's P2 — this figure used to be rendered bare), with
-              the pack equivalent beside it so the balance is legible to someone counting bags on a
-              shelf as well as to the ledger. See `onHandInPacks`. */}
-          <p className="text-sm text-neutral-500">
-            {/* At a branch with areas, the figure of the area chosen above (V60): the Kitchen can only
-                give out what the Kitchen has. */}
-            {sheetBranch.areaName ? `In the ${sheetBranch.areaName}` : `Current ${UNIT_COPY.ON_HAND.toLowerCase()}`}:{' '}
-            {formatQuantity(sheetBranch.onHand(product), stockUnitText)}
-            {!sheetBranch.areaId && onHandInPacks && ` (${onHandInPacks})`}
-          </p>
-
           <div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-2">
               <div className="flex-1">

@@ -24,6 +24,7 @@ import {
   formatPricePer,
   formatPricePerOption,
   formatQuantity,
+  formatQuantityInUnit,
   howYouCountIt,
   priceBasisNote,
   notAWholeCountMessage,
@@ -37,6 +38,7 @@ import {
   convertsToWholeCount,
   defaultUnitOption,
   exactBaseQuantity,
+  fromBaseQuantity,
   isCountedInWholeUnits,
   productsOwnUnits,
   resolveUnitLabel,
@@ -339,6 +341,13 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
   const selectedOption =
     (unitCode == null ? undefined : unitOptions.find((option) => option.label === unitCode)) ?? defaultUnitOption(unitOptions)
   const stockUnitText = stockUnitLabel(unitOptions)
+  // What the sheet's branch and area hold now, on the line under the title (Part 1), with its packs beside it.
+  const onHandHere = sheetBranch.onHand(product)
+  const usualPack = unitOptions.find((option) => option.isPack) ?? null
+  const placeLine = sheetBranch.line(
+    formatQuantity(onHandHere, stockUnitText),
+    usualPack ? formatQuantityInUnit(fromBaseQuantity(onHandHere, usualPack), usualPack) : null,
+  )
 
   /**
    * What the unit control actually offers: the product's own ways of counting (its stock unit and
@@ -600,17 +609,20 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
       open
       onClose={onClose}
       size="lg"
+      // What and where before anything is typed (STOCK_SHEETS_AND_AREA_COUNT_PLAN.md Part 1): the product in the
+      // title, the place and its figure on the line under it.
       title={
         step === 'form'
-          ? `Stock in${sheetBranch.titleSuffix}`
+          ? `Stock in · ${product.name}`
           : step === 'confirm'
-            ? `Confirm stock in${sheetBranch.titleSuffix}`
+            ? `Confirm stock in · ${product.name}`
             : queued
               ? 'Saved on this phone'
               : result
-                ? 'Stock in recorded'
-                : 'Recording stock in'
+                ? `Stock in recorded · ${product.name}`
+                : `Recording stock in · ${product.name}`
       }
+      subtitle={step === 'form' || step === 'confirm' ? placeLine : undefined}
       footer={
         step === 'form' ? (
           <>
@@ -645,7 +657,6 @@ export function StockInModal({ product, onClose, onSuccess, onQueued }: StockInM
     >
       {step === 'form' && (
         <form onSubmit={handleSubmit(goToConfirm)} noValidate className="flex flex-col gap-4">
-          {sheetBranch.field}
           {/* Still owed on a purchase order: receive it there, or it gets counted twice. */}
           <ComingOnOrderHint productId={product.id} productName={product.name} onLeave={onClose} />
           {/* Quantity and its unit are ONE question — "how much, of what" — so they sit on one

@@ -56,11 +56,6 @@ export function StockAdjustmentModal({
   // The area counted, at a branch with a choice of them (V60): its books are the Kitchen's, not the branch's.
   const areaFigure = sheetBranch.areaId ? areaStock?.find((figure) => figure.areaId === sheetBranch.areaId) : undefined
   const currentQuantity = sheetBranch.areaId ? (areaFigure?.quantityOnHand ?? 0) : branchQuantity
-  const countedAt = sheetBranch.areaId
-    ? sheetBranch.areaName
-    : branchContext?.isMultiBranch
-      ? branchContext.nameOf(sheetBranch.branchId ?? branchContext.working?.id)
-      : undefined
   // What a shortfall becomes (Part 3.5): the area's answer - used in a kitchen, missing in a store - unless
   // changed for this count.
   const area = sheetBranch.areaId
@@ -142,7 +137,10 @@ export function StockAdjustmentModal({
     <Sheet
       open
       onClose={onClose}
-      title={`Count stock${sheetBranch.titleSuffix}`}
+      // What and where before anything is typed (STOCK_SHEETS_AND_AREA_COUNT_PLAN.md Part 1). The line carries
+      // what the app says is there, so the field's hint needn't say it again.
+      title={`Count · ${productName}`}
+      subtitle={sheetBranch.line(formatQuantity(currentQuantity, stockUnit))}
       size="sm"
       footer={
         <>
@@ -156,21 +154,13 @@ export function StockAdjustmentModal({
       }
     >
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
-        {sheetBranch.field}
         <TextField
           label={`How much is on the shelf now? (${stockUnit})`}
           inputMode="numeric"
           autoFocus
           error={errors.countedQuantity?.message}
-          hint={
-            // At a branch the figure is that branch's, so say whose (UX §5.2: "Oshodi's books say 40").
-            // …and when it was last counted there (Part 3.5), so nobody counts what's just been counted.
-            `${
-              countedAt
-                ? `${countedAt}'s books say ${formatQuantity(currentQuantity, stockUnit)}.`
-                : `The app says ${formatQuantity(currentQuantity, stockUnit)}.`
-            }${lastCounted ? ` ${lastCounted}.` : ''}`
-          }
+          // When it was last counted there (Part 3.5), so nobody counts what's just been counted.
+          hint={lastCounted ? `${lastCounted}.` : undefined}
           {...register('countedQuantity')}
         />
         {/* The difference, before anything is recorded (C3, D1): set as a figure, because it is

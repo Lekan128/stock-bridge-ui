@@ -5,6 +5,7 @@ import { deliveryArea, figureInArea, hasAreas, stockAreas } from '@/features/bra
 import { useWorkArea } from '@/features/branches/workArea'
 import type { Area, Branch } from '@/features/branches/types'
 import { SheetChoices } from '@/features/branches/SheetChoices'
+import { SheetPlaceLine, type PlacePart } from '@/features/branches/SheetPlaceLine'
 import type { Product } from '@/features/products/types'
 
 function lastUsedKey(userId: string) {
@@ -33,31 +34,34 @@ function write(key: string, value: string) {
 }
 
 export interface SheetBranch {
-  /** " · Oshodi", " · Kitchen", " · Oshodi · Kitchen" for the sheet's title (rule 3); empty otherwise. */
-  titleSuffix: string
-  /** "Which branch?" (in "All branches") and "Which area?" (at a branch with areas), first on the sheet; else null. */
-  field: ReactNode
+  /**
+   * The line under the sheet's title (STOCK_SHEETS_AND_AREA_COUNT_PLAN.md Part 1): where it records, each
+   * part with a choice changed right there, and `figure` ("12 bags") as "12 bags here". Null figure: none
+   * said (no branch chosen yet, or the sheet has none to say). Nothing at all at a one-shop company without a
+   * figure.
+   */
+  line: (figure: string | null, inPacks?: string | null) => ReactNode
   /** The branch the sheet itself chose ("All branches"); undefined when the phone's branch applies. */
   branchId: string | undefined
   /** The area chosen on the sheet (V60); undefined at a branch without a choice of areas. */
   areaId: string | undefined
   /** Its name, for "Kitchen's books say 8". */
   areaName: string | undefined
-  /** How many of `product` the sheet's area holds, where it has areas and the product says; else its figure. */
+  /** How many of `product` the sheet's branch and area hold; else its figure. */
   onHand: (product: Product) => number
-  /** "All branches" with nothing chosen: the write can't be made yet. */
+  /** "All branches" with nothing chosen: the write can't be made yet (and there's no figure to say). */
   missing: boolean
   /** Remember the choices for the next sheet, once the write is made. */
   remember: () => void
 }
 
 /**
- * Where a stock sheet records (MULTI_BRANCH_UX_PLAN.md §5.2, rule 3; STOCK_AREAS_PART_1.md). At a branch,
- * the sheet says so in its title and the write is stamped with that branch by `submitStockWrite`. In "All
- * branches" the sheet asks first: a segmented choice up to four branches, a select above that, the last
- * one used preselected. Then, at a branch with two or more areas that keep stock, the same for the area:
- * pre-filled with the last one this person used there, else where deliveries arrive. At a one-branch
- * company with no areas: nothing at all.
+ * Where a stock sheet records (MULTI_BRANCH_UX_PLAN.md §5.2, rule 3; STOCK_AREAS_PART_1.md; and the line under
+ * the title, STOCK_SHEETS_AND_AREA_COUNT_PLAN.md Part 1). At a branch, the line names it and the write is
+ * stamped with that branch by `submitStockWrite`. In "All branches" the line starts "Choose a branch ⌄", the
+ * last one used preselected. Then, at a branch with two or more areas that keep stock, the area: pre-filled
+ * with the last one this person used there, else where deliveries arrive, changed on the line. At a
+ * one-branch company with no areas: only the figure.
  */
 export function useSheetBranch(): SheetBranch {
   const { user } = useAuth()
@@ -68,12 +72,33 @@ export function useSheetBranch(): SheetBranch {
   })
   const sheetBranch: Branch | null = !isMultiBranch || !isAll ? working : (recordable.find((branch) => branch.id === chosen) ?? null)
   const area = useSheetArea(sheetBranch)
-  const onHand = (product: Product) => figureInArea(product, area.areaId) ?? product.quantityOnHand
+  // A sheet opened from "All branches" holds the company's figure; the branch it records at says its own.
+  const onHand = (product: Product) =>
+    figureInArea(product, area.areaId) ??
+    (isMultiBranch && isAll && sheetBranch ? product.branchStock?.find((figure) => figure.branchId === sheetBranch.id)?.quantityOnHand : undefined) ??
+    product.quantityOnHand
+  const areaPart: PlacePart[] = area.areaName
+    ? [
+        {
+          key: 'area',
+          label: area.areaName,
+          choice:
+            area.choices.length >= 2
+              ? {
+                  caption: 'Record in',
+                  ariaLabel: `Recording in the ${area.areaName}. Change area`,
+                  options: area.choices,
+                  currentId: area.areaId,
+                  onPick: area.pick,
+                }
+              : undefined,
+        },
+      ]
+    : []
 
   if (!isMultiBranch) {
     return {
-      titleSuffix: area.titleSuffix,
-      field: area.field,
+      line: (figure, inPacks) => <SheetPlaceLine parts={areaPart} figure={figure} inPacks={inPacks} />,
       branchId: undefined,
       areaId: area.areaId,
       areaName: area.areaName,
@@ -83,9 +108,9 @@ export function useSheetBranch(): SheetBranch {
     }
   }
   if (!isAll) {
+    const branchPart: PlacePart[] = working ? [{ key: 'branch', label: working.name }] : []
     return {
-      titleSuffix: `${working ? ` · ${working.name}` : ''}${area.titleSuffix}`,
-      field: area.field,
+      line: (figure, inPacks) => <SheetPlaceLine parts={[...branchPart, ...areaPart]} figure={figure} inPacks={inPacks} />,
       branchId: undefined,
       areaId: area.areaId,
       areaName: area.areaName,
@@ -96,42 +121,19 @@ export function useSheetBranch(): SheetBranch {
   }
 
   const chosenName = recordable.find((branch) => branch.id === chosen)?.name
-  const field = (
-    <>
-      <div>
-        <p id="sheet-branch-label" className="mb-1.5 text-sm font-medium text-neutral-800">
-          Which branch?
-        </p>
-        {recordable.length <= 4 ? (
-          <SheetChoices
-            labelledBy="sheet-branch-label"
-            options={recordable}
-            chosen={chosen}
-            onChoose={setChosen}
-          />
-        ) : (
-          <select
-            aria-labelledby="sheet-branch-label"
-            value={chosen ?? ''}
-            onChange={(event) => setChosen(event.target.value || null)}
-            className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
-          >
-            <option value="">Choose a branch</option>
-            {recordable.map((branch) => (
-              <option key={branch.id} value={branch.id}>
-                {branch.name}
-              </option>
-            ))}
-          </select>
-        )}
-      </div>
-      {area.field}
-    </>
-  )
-
+  const branchPart: PlacePart = {
+    key: 'branch',
+    label: chosenName ?? 'Choose a branch',
+    choice: {
+      caption: 'Record at',
+      ariaLabel: chosenName ? `Recording at ${chosenName}. Change branch` : 'Choose a branch',
+      options: recordable,
+      currentId: chosen ?? undefined,
+      onPick: setChosen,
+    },
+  }
   return {
-    titleSuffix: `${chosenName ? ` · ${chosenName}` : ''}${area.titleSuffix}`,
-    field,
+    line: (figure, inPacks) => <SheetPlaceLine parts={[branchPart, ...areaPart]} figure={chosen == null ? null : figure} inPacks={inPacks} />,
     branchId: chosen ?? undefined,
     areaId: area.areaId,
     areaName: area.areaName,
@@ -158,6 +160,8 @@ export function useSheetArea(branch: Branch | null): {
   choices: Area[]
   /** Choose `areaId` and remember it - for someone placed in areas, as where this phone is for them. */
   choose: (areaId: string) => void
+  /** Choose `areaId` for this sheet only (a panel's pick never moves the top bar, Part 3.6). */
+  pick: (areaId: string) => void
 } {
   const { user } = useAuth()
   const work = useWorkArea(branch)
@@ -166,7 +170,7 @@ export function useSheetArea(branch: Branch | null): {
   // The choice is per branch: switching the sheet's branch must never carry the Kitchen of one to the next.
   const [chosen, setChosen] = useState<{ branchId: string; areaId: string } | null>(null)
   if (!branch || !hasAreas(branch) || areas.length === 0 || (!work.limited && areas.length < 2)) {
-    return { titleSuffix: '', field: null, areaId: undefined, areaName: undefined, remember: () => {}, choices: [], choose: () => {} }
+    return { titleSuffix: '', field: null, areaId: undefined, areaName: undefined, remember: () => {}, choices: [], choose: () => {}, pick: () => {} }
   }
   // The area chosen in the top bar is where it records, said in the title - one area to choose from, no
   // question. With more, the question stays, that area already picked: stocking in at the Store from the
@@ -185,6 +189,7 @@ export function useSheetArea(branch: Branch | null): {
       remember: () => {},
       choices: areas,
       choose: work.choose,
+      pick: () => {},
     }
   }
   const labelId = `sheet-area-label-${branch.id}`
@@ -232,5 +237,6 @@ export function useSheetArea(branch: Branch | null): {
       if (user?.id) write(lastAreaKey(user.id, branch.id), areaId)
       work.choose(areaId)
     },
+    pick: (areaId: string) => setChosen({ branchId: branch.id, areaId }),
   }
 }

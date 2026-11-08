@@ -82,6 +82,15 @@ async function login(clientIdentifier, username) {
   return (await api('/api/auth/login', { method: 'POST', body: { clientIdentifier, username, password: PASSWORD } })).json
 }
 
+/** Records the sheet in `name`, changed on the line under its title (STOCK_SHEETS_AND_AREA_COUNT_PLAN.md Part 1). */
+async function sheetArea(sheet, name) {
+  const chooser = sheet.getByRole('button', { name: /^Recording in the .+\. Change area$/ })
+  if ((await chooser.getAttribute('aria-label')) === `Recording in the ${name}. Change area`) return
+  await chooser.click()
+  await sheet.getByRole('menuitemradio', { name }).click()
+  await sheet.getByRole('button', { name: `Recording in the ${name}. Change area` }).waitFor()
+}
+
 async function createProduct(token, unique, name, extra = { unitOfMeasure: 'PIECE' }) {
   const form = new FormData()
   form.append('product', new Blob([JSON.stringify({ name, sku: `AR-${name.slice(0, 4)}-${unique}`, ...extra })], { type: 'application/json' }))
@@ -207,13 +216,13 @@ await check('the product page and Inventory say where it is, zeros left out', as
 await check('a stock-in sheet asks which area, and records into the Kitchen', async () => {
   await page.getByRole('button', { name: 'Stock in' }).first().click()
   await dialog.waitFor()
-  await dialog.getByText('Which area?').waitFor()
-  assert(
-    (await dialog.getByRole('radio', { name: 'Store' }).getAttribute('aria-checked')) === 'true',
-    'the sheet does not start at the delivery area',
-  )
-  await dialog.getByRole('radio', { name: 'Kitchen' }).click()
-  await dialog.getByRole('heading', { name: /Stock in · Kitchen/ }).waitFor()
+  // What and where on the sheet itself (STOCK_SHEETS_AND_AREA_COUNT_PLAN.md Part 1): the product in the title,
+  // the area on the line under it - starting where deliveries arrive, changed right there.
+  await dialog.getByRole('heading', { name: 'Stock in · Rice' }).waitFor()
+  await dialog.getByRole('button', { name: 'Recording in the Store. Change area' }).click()
+  await dialog.getByRole('menuitemradio', { name: 'Kitchen' }).click()
+  await dialog.getByRole('button', { name: 'Recording in the Kitchen. Change area' }).waitFor()
+  await dialog.locator('[data-sheet-place]').getByText(/here/).waitFor()
   await dialog.getByLabel('Quantity').fill('3')
   await dialog.getByRole('button', { name: 'Continue' }).click()
   await dialog.getByRole('button', { name: 'Confirm' }).click()
@@ -235,11 +244,8 @@ await check('a stock-out from the Kitchen is judged against the Kitchen, and the
   await page.getByRole('heading', { name: 'Rice', level: 1 }).waitFor()
   await page.getByRole('button', { name: 'Stock out' }).first().click()
   await dialog.waitFor()
-  assert(
-    (await dialog.getByRole('radio', { name: 'Kitchen' }).getAttribute('aria-checked')) === 'true',
-    'the sheet did not remember the Kitchen',
-  )
-  await dialog.getByText(/In the Kitchen: 3/).waitFor()
+  await dialog.getByRole('button', { name: 'Recording in the Kitchen. Change area' }).waitFor()
+  await dialog.locator('[data-sheet-place]').getByText(/^3 pieces here/).waitFor()
   await dialog.getByLabel('Quantity').fill('5')
   await dialog.getByRole('button', { name: 'Confirm' }).click()
   await dialog.getByText('Not enough in stock').waitFor()
@@ -568,8 +574,8 @@ await check('the owner places a cook in the Kitchen; the cook records there with
   const before = (await areaFigures(ownerToken, rice.id)).Kitchen
   await cookPage.getByRole('button', { name: 'Stock out' }).first().click()
   const cookSheet = cookPage.getByRole('dialog')
-  await cookSheet.getByRole('heading', { name: /Kitchen/ }).waitFor()
-  assert((await cookSheet.getByText('Which area?').count()) === 0, 'the cook is asked which area')
+  await cookSheet.locator('[data-sheet-place]').getByText('Kitchen').waitFor()
+  assert((await cookSheet.getByRole('button', { name: /Change area/ }).count()) === 0, 'the cook is asked which area')
   await cookSheet.getByLabel('Quantity').fill('1')
   await cookSheet.getByRole('button', { name: 'Confirm' }).click()
   await cookSheet.getByRole('button', { name: 'Done' }).click()
@@ -596,25 +602,24 @@ await check('a barman in the Bar and the Kitchen chooses where this phone is, an
   await barPage.getByRole('heading', { name: 'Rice', level: 1 }).waitFor()
   // On "All my areas" (the default, Part 3.6), a panel asks which of his areas.
   await barPage.getByRole('button', { name: 'Stock in' }).first().click()
-  await barPage.getByRole('dialog').getByText('Which area?').waitFor()
+  await barPage.getByRole('dialog').getByRole('button', { name: /^Recording in the (Bar|Kitchen)\. Change area$/ }).waitFor()
   await barPage.keyboard.press('Escape')
   await barPage.getByRole('button', { name: 'Area: All my areas. Change area' }).click()
   await barPage.getByRole('menuitemradio', { name: 'Bar' }).click()
   await barPage.getByRole('button', { name: 'Area: Bar. Change area' }).waitFor()
   await barPage.getByRole('button', { name: 'Stock in' }).first().click()
   const barSheet = barPage.getByRole('dialog')
-  await barSheet.getByRole('heading', { name: /Stock in · Bar/ }).waitFor()
-  // The question stays, the Bar already picked; another area is one tap, for this record only (owner,
+  // The choice stays, the Bar already picked; another area is one tap, for this record only (owner,
   // 2026-10-31: no going back and forth to the top bar).
-  assert((await barSheet.getByRole('radio', { name: 'Bar' }).getAttribute('aria-checked')) === 'true', 'the Bar is not picked')
-  await barSheet.getByRole('radio', { name: 'Kitchen' }).click()
-  await barSheet.getByRole('heading', { name: /Stock in · Kitchen/ }).waitFor()
+  await barSheet.getByRole('button', { name: 'Recording in the Bar. Change area' }).click()
+  await barSheet.getByRole('menuitemradio', { name: 'Kitchen' }).click()
+  await barSheet.getByRole('button', { name: 'Recording in the Kitchen. Change area' }).waitFor()
   await barPage.keyboard.press('Escape')
   await barPage.getByRole('button', { name: 'Area: Bar. Change area' }).waitFor()
   await barPage.getByRole('button', { name: 'Area: Bar. Change area' }).click()
   await barPage.getByRole('menuitemradio', { name: 'Kitchen' }).click()
   await barPage.getByRole('button', { name: 'Stock in' }).first().click()
-  await barSheet.getByRole('heading', { name: /Stock in · Kitchen/ }).waitFor()
+  await barSheet.getByRole('button', { name: 'Recording in the Kitchen. Change area' }).waitFor()
   await barPage.waitForTimeout(500)
   await barPage.screenshot({ path: SHOTS + '12-barman-sheet.png' })
   await barPage.keyboard.press('Escape')
@@ -723,8 +728,7 @@ await check('the top bar is where you are: All my areas sums his areas, one area
   await waitFor(async () => (await page.locator('[data-stock-figure]').first().innerText()).startsWith(String(at.Store)), `the Store's ${at.Store}`)
   // …and records there: the Store already picked.
   await page.getByRole('button', { name: 'Stock in' }).first().click()
-  await page.getByRole('dialog').getByRole('heading', { name: /Stock in · Store/ }).waitFor()
-  assert((await page.getByRole('dialog').getByRole('radio', { name: 'Store' }).getAttribute('aria-checked')) === 'true', 'the Store is not picked')
+  await page.getByRole('dialog').getByRole('button', { name: 'Recording in the Store. Change area' }).waitFor()
   await page.keyboard.press('Escape')
   await page.getByRole('button', { name: 'Area: Store. Change area' }).click()
   await page.getByRole('menuitemradio', { name: 'All areas' }).click()
@@ -740,7 +744,7 @@ await check("the Kitchen's closing count records what's short as used there, and
   await page.getByRole('heading', { name: 'Rice', level: 1 }).waitFor()
   await page.getByRole('button', { name: 'Count', exact: true }).first().click()
   const sheet = page.getByRole('dialog')
-  await sheet.getByRole('radio', { name: 'Kitchen' }).click()
+  await sheetArea(sheet, 'Kitchen')
   await sheet.getByText('Anything short is recorded as used at the Kitchen.').waitFor()
   await sheet.getByLabel(/How much is on the shelf now/).fill(String(kitchenBefore - 2))
   await sheet.getByText('2 pieces short: recorded as used at the Kitchen.').waitFor()
@@ -753,7 +757,7 @@ await check("the Kitchen's closing count records what's short as used there, and
 
   // Counting the same shelf again: nothing more used; the sheet says when it was last counted.
   await page.getByRole('button', { name: 'Count', exact: true }).first().click()
-  await sheet.getByRole('radio', { name: 'Kitchen' }).click()
+  await sheetArea(sheet, 'Kitchen')
   await sheet.getByText(/Last counted today/).waitFor()
   await sheet.getByLabel(/How much is on the shelf now/).fill(String(kitchenBefore - 2))
   await sheet.getByRole('button', { name: 'Record count' }).click()
@@ -772,7 +776,7 @@ await check('a count can record its shortfall as missing instead, for that count
   await page.getByRole('heading', { name: 'Rice', level: 1 }).waitFor()
   await page.getByRole('button', { name: 'Count', exact: true }).first().click()
   const sheet = page.getByRole('dialog')
-  await sheet.getByRole('radio', { name: 'Kitchen' }).click()
+  await sheetArea(sheet, 'Kitchen')
   await sheet.getByLabel(/How much is on the shelf now/).fill(String(kitchenBefore - 1))
   await sheet.getByRole('button', { name: 'Change: record it as missing' }).click()
   await sheet.getByText('1 piece short: recorded as missing from the Kitchen.').waitFor()
