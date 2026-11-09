@@ -206,7 +206,9 @@ function CountRow({
   const symbol = resolveUnitSymbol(product.unitOfMeasure, options)
   const wholeOnly = isCountedInWholeUnits(product.unitOfMeasure, options)
   const area = (useOptionalWorkingBranch()?.branches ?? []).flatMap((b) => b.areas ?? []).find((a) => a.id === areaId)
-  const shortAs = shortChosen ?? (area ? areaShortAs(area) : 'MISSING')
+  // Used only where stock is used bit by bit; a Store's shortfall is missing, with nothing to switch.
+  const usedHere = area?.shortIsUsed === true
+  const shortAs = usedHere ? (shortChosen ?? (area ? areaShortAs(area) : 'MISSING')) : 'MISSING'
   const pending = usePendingStock(product.id, areaId)
   const appSays = roundQuantity((figureInArea(product, areaId) ?? product.quantityOnHand) + pending.delta)
 
@@ -343,13 +345,15 @@ function CountRow({
                     Count in two units
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => setShortChosen(shortAs === 'USED' ? 'MISSING' : 'USED')}
-                  className="min-h-10 px-2 font-medium text-primary-700"
-                >
-                  {shortAs === 'USED' ? 'Short is missing' : 'Short is used'}
-                </button>
+                {usedHere && (
+                  <button
+                    type="button"
+                    onClick={() => setShortChosen(shortAs === 'USED' ? 'MISSING' : 'USED')}
+                    className="min-h-10 px-2 font-medium text-primary-700"
+                  >
+                    {shortAs === 'USED' ? 'Record short as missing' : 'Record short as used'}
+                  </button>
+                )}
               </>
             )}
             {typedAny && (
