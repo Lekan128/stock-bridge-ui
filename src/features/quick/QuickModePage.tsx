@@ -8,7 +8,7 @@ import { movesApi } from '@/features/moves/movesApi'
 import { requestsApi } from '@/features/requests/requestsApi'
 import { WaitingMovesLine } from '@/features/moves/WaitingMovesLine'
 import { usePendingStock } from '@/features/outbox/useOutbox'
-import { Fragment, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { Fragment, useEffect, useRef, useState, type RefObject } from 'react'
 import { Delete, Search, X } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -49,7 +49,7 @@ import {
 import { OUT_REASONS, outReasonLabel } from '@/features/stock/outReasons'
 import { useProductFinder } from '@/features/catalog/useProductFinder'
 import { useCatalogState } from '@/features/catalog/useCatalog'
-import { CountList, type CountedHere } from '@/features/quick/CountList'
+import { CountList, type CountedHere, type RowCounted } from '@/features/quick/CountList'
 import { formatMoney } from '@/features/selling/money'
 import { MySalesToday } from '@/features/selling/sale/MySalesToday'
 import { SaleBasketEditor } from '@/features/selling/sale/SaleBasketEditor'
@@ -142,8 +142,6 @@ export function QuickModePage() {
   const mode: Mode = requested && quickTabs.available.includes(requested) ? requested : (tabs[0]?.value ?? 'in')
 
   const [product, setProduct] = useState<Product | null>(null)
-  // A product counted from the list, opened in place in it rather than on a screen of its own (owner, 2026-11-09).
-  const [listPick, setListPick] = useState<Product | null>(null)
   const [flash, setFlash] = useState<{ kind: StampKind; text: string } | null>(null)
   const [session, setSession] = useState<SessionEntry[]>([])
   /**
@@ -177,7 +175,6 @@ export function QuickModePage() {
   function chooseMode(next: Mode) {
     setParams({ mode: next }, { replace: true })
     setProduct(null)
-    setListPick(null)
   }
 
   function saleRecorded(sale: RecordedSale) {
@@ -354,27 +351,14 @@ export function QuickModePage() {
             countList={
               mode === 'count' && place.areaId && place.areaName
                 ? {
-                    picked: listPick
-                      ? {
-                          productId: listPick.id,
-                          content: (
-                            <AmountStep
-                              key={`${listPick.id}-count`}
-                              mode="count"
-                              product={listPick}
-                              reason={null}
-                              place={place}
-                              onBack={() => setListPick(null)}
-                              backLabel="Close"
-                              onRecorded={(entry, kind) => {
-                                setListPick(null)
-                                recorded(entry, kind)
-                              }}
-                            />
-                          ),
-                        }
-                      : null,
-                    onPick: setListPick,
+                    // Counted on its row (owner, 2026-11-09): into This session, no stamp screen in between.
+                    onCounted: (row: RowCounted) => {
+                      area.remember()
+                      setSession((current) => [
+                        { key: crypto.randomUUID(), mode: 'count', at: Date.now(), areaName: area.areaName, ...row },
+                        ...current,
+                      ])
+                    },
                     areaId: place.areaId,
                     areaName: place.areaName,
                     countedHere: session
@@ -415,8 +399,7 @@ function FindStep({
     areaId: string
     areaName: string
     countedHere: CountedHere[]
-    picked: { productId: string; content: ReactNode } | null
-    onPick: (product: Product) => void
+    onCounted: (row: RowCounted) => void
   } | null
 }) {
   const [term, setTerm] = useState('')
@@ -467,8 +450,8 @@ function FindStep({
           areaId={countList.areaId}
           areaName={countList.areaName}
           countedHere={countList.countedHere}
-          onPick={countList.onPick}
-          picked={countList.picked}
+          onPick={onPick}
+          onCounted={countList.onCounted}
         />
       )}
     </div>
@@ -510,7 +493,6 @@ function AmountStep({
   place,
   onBack,
   onRecorded,
-  backLabel = 'Change',
 }: {
   mode: Exclude<Mode, 'sell' | 'move' | 'ask'>
   product: Product
@@ -520,8 +502,6 @@ function AmountStep({
   place: Place
   onBack: () => void
   onRecorded: (entry: SessionEntry, kind: StampKind) => void
-  /** "Change" on its own screen; "Close" when it's opened in place in the count list. */
-  backLabel?: string
 }) {
   const { options } = useUnitOfMeasureOptions()
   const online = useOnlineStatus()
@@ -691,7 +671,7 @@ function AmountStep({
           </p>
         </div>
         <button type="button" onClick={onBack} className="h-11 shrink-0 rounded-md px-3 text-base font-medium text-primary-700 hover:bg-primary-50">
-          {backLabel}
+          Change
         </button>
       </div>
 
