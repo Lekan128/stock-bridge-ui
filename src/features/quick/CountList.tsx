@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, type ReactNode } from 'react'
 import { Check } from 'lucide-react'
 import { useCatalogList } from '@/features/catalog/useCatalog'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
@@ -30,12 +30,15 @@ export function CountList({
   areaName,
   countedHere,
   onPick,
+  picked,
 }: {
   areaId: string
   areaName: string
   /** Counted in this session, or waiting on this phone, before the catalogue hears of it. */
   countedHere: CountedHere[]
   onPick: (product: Product) => void
+  /** The row being counted, opened in place (owner, 2026-11-09: no new screen) - its keypad and Record. */
+  picked?: { productId: string; content: ReactNode } | null
 }) {
   const { options } = useUnitOfMeasureOptions()
   const since = useMemo(() => {
@@ -94,6 +97,13 @@ export function CountList({
             {rows.map((product) => {
               const figure = figureInArea(product, areaId) ?? product.quantityOnHand
               const unit = resolveUnitSymbol(product.unitOfMeasure, options)
+              if (picked?.productId === product.id) {
+                return (
+                  <li key={product.id} className="rounded-lg border-2 border-primary-600 bg-white p-3" data-counting-here>
+                    {picked.content}
+                  </li>
+                )
+              }
               return (
                 <li key={product.id}>
                   <button
@@ -120,7 +130,12 @@ export function CountList({
             Counted today · {formatNumber(countedRows.length)}
           </h2>
           <ul className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
-            {countedRows.map((row) => (
+            {countedRows.map((row) =>
+              row.product && picked?.productId === row.product.id ? (
+                <li key={row.key} className="p-3" data-counting-here>
+                  {picked.content}
+                </li>
+              ) : (
               <li key={row.key}>
                 <button
                   type="button"
@@ -136,7 +151,8 @@ export function CountList({
                   </span>
                 </button>
               </li>
-            ))}
+              ),
+            )}
           </ul>
         </section>
       )}

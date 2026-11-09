@@ -535,7 +535,7 @@ await check("quick mode shows the Kitchen's figure, not the branch's: search, th
   await page.getByRole('button', { name: /^Cowpea AR-/ }).click()
   for (const key of ['1', '0']) await keypad.getByRole('button', { name: key, exact: true }).click()
   // The difference is against the Kitchen's 12, not the branch's 42.
-  await waitFor(async () => /−\s*2|-\s*2/.test(await page.locator('[data-quick-amount]').locator('..').innerText()), 'the count to show −2')
+  await page.locator('[data-stock-figure]').getByText('−2').waitFor()
   await page.getByRole('button', { name: 'Done counting' }).click()
   await page.setViewportSize({ width: 1280, height: 900 })
   // Out of the way of the checks below, which count this company's products.
@@ -564,7 +564,10 @@ await check("the closing count lists what the Kitchen has: the eggs nobody knew 
   await waitFor(async () => /30\s*pieces/.test(await eggsRow.innerText().catch(() => '')), 'Eggs 30 on the list before anything is typed')
   await page.screenshot({ path: SHOTS + '13g-count-list.png' })
   await eggsRow.click()
+  // Counted in place, in the list (owner, 2026-11-09): no screen of its own.
+  await toCount.locator('[data-counting-here]').waitFor()
   await page.getByRole('group', { name: 'Keypad' }).getByRole('button', { name: '0', exact: true }).click()
+  await page.screenshot({ path: SHOTS + '13g2-counting-in-place.png' })
   await page.getByRole('button', { name: /^Record count: 0/ }).click()
   await page.getByRole('region', { name: /^Counted today/ }).getByText('Eggs').waitFor()
   assert((await toCount.getByRole('button', { name: /^Eggs/ }).count()) === 0, 'Eggs is still to count')

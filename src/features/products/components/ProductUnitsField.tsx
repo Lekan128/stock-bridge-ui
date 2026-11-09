@@ -82,6 +82,7 @@ export function ProductUnitsField({
   stockUnitCode,
   stockSymbol,
   standardUnits,
+  otherKinds,
   packOption,
   stockWord,
 }: {
@@ -93,6 +94,8 @@ export function ProductUnitsField({
   stockSymbol: string
   /** "g and t": the same-kind units that need no setting up. */
   standardUnits: string[]
+  /** Standard units of another kind it can also be used in, each with its conversion: "L" for oil kept in kg. */
+  otherKinds: string[]
   /** The product's own pack, for the "start in" choice. */
   packOption: UnitOption | null
   /** "kg", "pieces": the stock unit as the choice lists it. */
@@ -129,13 +132,13 @@ export function ProductUnitsField({
   }
 
   const startChoices: { key: string; label: string }[] = [
-    { key: '', label: `${stockWord} (what it's counted in)` },
+    { key: '', label: `${stockWord}, the stock unit` },
     ...(packOption ? [{ key: `${packOption.code}:${packOption.factorToStockUnit}`, label: packOption.label }] : []),
     ...shown.filter((row) => row.name.trim() && !rowProblem(row, draft.measures)).map((row) => ({ key: row.name.trim(), label: row.name.trim() })),
   ]
 
   return (
-    <div className="flex flex-col gap-3" data-product-units>
+    <div id="units" className="flex scroll-mt-24 flex-col gap-3" data-product-units>
       <div>
         <h3 className="text-sm font-medium text-neutral-700">Also used in</h3>
         <p className="mt-0.5 text-xs text-neutral-500">
@@ -231,6 +234,25 @@ export function ProductUnitsField({
               Name your own
             </button>
           </div>
+          {/* Standard units of another kind (owner, 2026-11-09): litres of oil kept in kg, pieces of yam kept in kg.
+              Same-kind ones (g for kg) need nothing, so they aren't offered. */}
+          {otherKinds.some((name) => !taken.has(name.toLowerCase())) && (
+            <>
+              <p className="mt-3 mb-1.5 text-xs font-medium text-neutral-600">Standard units, with what one holds</p>
+              <div className="flex flex-wrap gap-2">
+                {otherKinds.filter((name) => !taken.has(name.toLowerCase())).map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => add(name)}
+                    className="h-9 rounded-full border border-neutral-300 bg-white px-3 text-sm font-medium text-neutral-800 hover:border-primary-400 hover:text-primary-800"
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
           <button type="button" onClick={() => setAdding(false)} className="mt-2 text-xs font-medium text-neutral-600 hover:underline">
             Close
           </button>
@@ -277,7 +299,7 @@ export function ProductUnitsField({
       {startChoices.length > 1 && (
         <div>
           <label htmlFor={startId} className="mb-1.5 block text-sm font-medium text-neutral-700">
-            Start stock out and counts in
+            Used and counted in
           </label>
           <select
             id={startId}
@@ -291,7 +313,10 @@ export function ProductUnitsField({
               </option>
             ))}
           </select>
-          <p className="mt-1.5 text-xs text-neutral-500">Also moves and quick mode. Deliveries start in the pack. Anyone can switch while recording.</p>
+          <p className="mt-1.5 text-xs text-neutral-500">
+            Stock out, counts, moves and quick mode open in this. Stock is still kept in {stockSymbol}, and deliveries
+            open in the pack. Anyone can switch while recording.
+          </p>
         </div>
       )}
     </div>

@@ -110,13 +110,17 @@ await check('the product form: Add a unit → Derica 0.6 kg, Cup 0.2 kg; stock-o
   await units.getByText('Type a number above 0.').waitFor()
   await cup.fill('0.2')
   await units.getByText('g and t work out by themselves.').waitFor({ timeout: 5000 }).catch(() => {})
-  await units.getByLabel('Start stock out and counts in').selectOption({ label: 'Derica' })
+  await units.getByLabel('Used and counted in').selectOption({ label: 'Derica' })
   await page.screenshot({ path: SHOTS + '1b-units-filled.png', fullPage: true })
   await page.getByRole('button', { name: 'Save changes' }).click()
   await waitFor(async () => {
     const detail = (await api(`/api/products/${rice.id}`, { token })).json
     return detail.measures?.length === 2 && detail.usedInUnit === 'Derica'
   }, 'the product to keep Derica and Cup')
+  // The product page says them, where the rest of how it's counted is.
+  await page.goto(`${UI}/app/products/${rice.id}`)
+  await page.locator('[data-product-measures]').getByText('Derica = 0.6 kg · Cup = 0.2 kg').waitFor()
+  await page.getByText('Stock out and counts open in Derica').waitFor()
 })
 
 // ------------------------------------------------------------------------------------------ 2
@@ -173,6 +177,10 @@ await check('count in two units: 2 bags + 7 dericas = 164.2 kg, in quick mode an
   await sheet.getByLabel('bags on the shelf').fill('1')
   await sheet.getByLabel('dericas on the shelf').fill('10')
   await sheet.locator('[data-count-total]').getByText('= 86 kg').waitFor()
+  // Each box's unit can change: 1 bag + 10 cups.
+  await sheet.getByLabel('Unit: dericas').selectOption({ label: 'cups' })
+  await sheet.locator('[data-count-total]').getByText('= 82 kg').waitFor()
+  await page.screenshot({ path: SHOTS + '4c-count-sheet-cups.png' })
   await page.screenshot({ path: SHOTS + '4b-count-sheet-two-units.png' })
   await sheet.getByRole('button', { name: 'Cancel' }).click()
 })

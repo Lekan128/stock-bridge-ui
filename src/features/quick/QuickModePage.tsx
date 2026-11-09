@@ -8,7 +8,7 @@ import { movesApi } from '@/features/moves/movesApi'
 import { requestsApi } from '@/features/requests/requestsApi'
 import { WaitingMovesLine } from '@/features/moves/WaitingMovesLine'
 import { usePendingStock } from '@/features/outbox/useOutbox'
-import { Fragment, useEffect, useRef, useState, type RefObject } from 'react'
+import { Fragment, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { Delete, Search, X } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -142,6 +142,8 @@ export function QuickModePage() {
   const mode: Mode = requested && quickTabs.available.includes(requested) ? requested : (tabs[0]?.value ?? 'in')
 
   const [product, setProduct] = useState<Product | null>(null)
+  // A product counted from the list, opened in place in it rather than on a screen of its own (owner, 2026-11-09).
+  const [listPick, setListPick] = useState<Product | null>(null)
   const [flash, setFlash] = useState<{ kind: StampKind; text: string } | null>(null)
   const [session, setSession] = useState<SessionEntry[]>([])
   /**
@@ -175,6 +177,7 @@ export function QuickModePage() {
   function chooseMode(next: Mode) {
     setParams({ mode: next }, { replace: true })
     setProduct(null)
+    setListPick(null)
   }
 
   function saleRecorded(sale: RecordedSale) {
@@ -351,6 +354,27 @@ export function QuickModePage() {
             countList={
               mode === 'count' && place.areaId && place.areaName
                 ? {
+                    picked: listPick
+                      ? {
+                          productId: listPick.id,
+                          content: (
+                            <AmountStep
+                              key={`${listPick.id}-count`}
+                              mode="count"
+                              product={listPick}
+                              reason={null}
+                              place={place}
+                              onBack={() => setListPick(null)}
+                              backLabel="Close"
+                              onRecorded={(entry, kind) => {
+                                setListPick(null)
+                                recorded(entry, kind)
+                              }}
+                            />
+                          ),
+                        }
+                      : null,
+                    onPick: setListPick,
                     areaId: place.areaId,
                     areaName: place.areaName,
                     countedHere: session
@@ -387,7 +411,13 @@ function FindStep({
   inputRef: RefObject<HTMLInputElement | null>
   place: Place
   onPick: (product: Product) => void
-  countList: { areaId: string; areaName: string; countedHere: CountedHere[] } | null
+  countList: {
+    areaId: string
+    areaName: string
+    countedHere: CountedHere[]
+    picked: { productId: string; content: ReactNode } | null
+    onPick: (product: Product) => void
+  } | null
 }) {
   const [term, setTerm] = useState('')
   const { search, results, onEnter } = useProductFinder(term, onPick)
@@ -433,7 +463,13 @@ function FindStep({
         ))}
       </ul>
       {!search && countList && catalog.phase === 'ready' && (
-        <CountList areaId={countList.areaId} areaName={countList.areaName} countedHere={countList.countedHere} onPick={onPick} />
+        <CountList
+          areaId={countList.areaId}
+          areaName={countList.areaName}
+          countedHere={countList.countedHere}
+          onPick={countList.onPick}
+          picked={countList.picked}
+        />
       )}
     </div>
   )
@@ -474,6 +510,7 @@ function AmountStep({
   place,
   onBack,
   onRecorded,
+  backLabel = 'Change',
 }: {
   mode: Exclude<Mode, 'sell' | 'move' | 'ask'>
   product: Product
@@ -483,6 +520,8 @@ function AmountStep({
   place: Place
   onBack: () => void
   onRecorded: (entry: SessionEntry, kind: StampKind) => void
+  /** "Change" on its own screen; "Close" when it's opened in place in the count list. */
+  backLabel?: string
 }) {
   const { options } = useUnitOfMeasureOptions()
   const online = useOnlineStatus()
@@ -502,8 +541,18 @@ function AmountStep({
   const [typed, setTyped] = useState('')
   // A count of a product with a pack is made in two units (UNITS_PLAN.md Part 4): whole bags, then what's left
   // in its usual unit - "2 bags + 7 dericas". The keypad types into whichever box is chosen.
+  // Each box's unit is changed with the unit buttons below it ("1 bag + 1 cup", owner 2026-11-09), and a product
+  // with no pack gets a second box from "+ Another unit".
   const pair = mode === 'count' ? countUnits(product, offered) : null
-  const twoUnits = pair?.big != null && pair.big.label !== pair.small.label ? pair : null
+  const [twoOn, setTwoOn] = useState(false)
+  const [bigLabel, setBigLabel] = useState<string | null>(null)
+  const [smallLabel, setSmallLabel] = useState<string | null>(null)
+  const smallUnit = pair ? (offered.find((o) => o.label === smallLabel) ?? pair.small) : null
+  const bigUnit =
+    pair && smallUnit && (pair.big != null || twoOn)
+      ? (offered.find((o) => o.label === bigLabel) ?? pair.big ?? offered.find((o) => o.label !== smallUnit.label) ?? null)
+      : null
+  const twoUnits = bigUnit && smallUnit ? { big: bigUnit, small: smallUnit } : null
   const [typedSmall, setTypedSmall] = useState('')
   const [box, setBox] = useState<'big' | 'small'>('big')
   const [error, setError] = useState<string | null>(null)
@@ -642,7 +691,7 @@ function AmountStep({
           </p>
         </div>
         <button type="button" onClick={onBack} className="h-11 shrink-0 rounded-md px-3 text-base font-medium text-primary-700 hover:bg-primary-50">
-          Change
+          {backLabel}
         </button>
       </div>
 
@@ -664,22 +713,34 @@ function AmountStep({
         </label>
       )}
 
-      {offered.length > 1 && !twoUnits && (
-        // Four or more (a product with its own units, Part 1) sit two to a row, so none is squeezed on a phone.
-        <div role="group" aria-label="Counted in" className={offered.length > 3 ? 'grid grid-cols-2 gap-2' : 'flex gap-2'}>
-          {offered.map((o) => (
-            <button
-              key={o.label}
-              type="button"
-              aria-pressed={o.label === option.label}
-              onClick={() => setUnitLabel(o.label)}
-              className={`h-11 flex-1 rounded-md border-2 px-2 text-base font-medium ${
-                o.label === option.label ? 'border-primary-600 bg-primary-50 text-primary-800' : 'border-neutral-200 text-neutral-700'
-              }`}
-            >
-              {o.label}
-            </button>
-          ))}
+      {offered.length > 1 && (
+        // Four or more (a product with its own units, Part 1) sit two to a row, so none is squeezed on a phone. In a
+        // count in two units, they set the unit of the box being typed in.
+        <div
+          role="group"
+          aria-label={twoUnits ? `Counted in, for the ${box === 'big' ? 'first' : 'second'} box` : 'Counted in'}
+          className={offered.length > 3 ? 'grid grid-cols-2 gap-2' : 'flex gap-2'}
+        >
+          {offered.map((o) => {
+            const chosen = twoUnits ? (box === 'big' ? twoUnits.big : twoUnits.small) : option
+            return (
+              <button
+                key={o.label}
+                type="button"
+                aria-pressed={o.label === chosen.label}
+                onClick={() => {
+                  if (!twoUnits) return setUnitLabel(o.label)
+                  if (box === 'big') setBigLabel(o.label)
+                  else setSmallLabel(o.label)
+                }}
+                className={`h-11 flex-1 rounded-md border-2 px-2 text-base font-medium ${
+                  o.label === chosen.label ? 'border-primary-600 bg-primary-50 text-primary-800' : 'border-neutral-200 text-neutral-700'
+                }`}
+              >
+                {o.label}
+              </button>
+            )
+          })}
         </div>
       )}
 
@@ -718,10 +779,29 @@ function AmountStep({
             })}
           </div>
         ) : (
-          <p className="mt-1 flex items-baseline gap-2 tabular-nums" data-quick-amount>
-            <span className="text-5xl font-semibold">{typed || '0'}</span>
-            <span className="text-xl text-neutral-500">{pluraliseUnitNoun(unitNoun(option), quantity || 2)}</span>
-          </p>
+          <div className="mt-1 flex items-baseline justify-between gap-2">
+            <p className="flex items-baseline gap-2 tabular-nums" data-quick-amount>
+              <span className="text-5xl font-semibold">{typed || '0'}</span>
+              <span className="text-xl text-neutral-500">{pluraliseUnitNoun(unitNoun(option), quantity || 2)}</span>
+            </p>
+            {mode === 'count' && offered.length > 1 && (
+              <button
+                type="button"
+                onClick={() => {
+                  // What's typed stays with the unit it was typed in, now the second box.
+                  setSmallLabel(option.label)
+                  setTypedSmall(typed)
+                  setTyped('')
+                  setBigLabel(offered.find((o) => o.label !== option.label)?.label ?? null)
+                  setTwoOn(true)
+                  setBox('big')
+                }}
+                className="inline-flex min-h-11 shrink-0 items-center px-1 text-base font-medium text-primary-700"
+              >
+                + Another unit
+              </button>
+            )}
+          </div>
         )}
         {twoUnits
           ? anyTyped && <p className="mt-1 text-base text-neutral-600" data-quick-total>= {formatNumber(base)} {stockUnitWord(symbol, base)}</p>

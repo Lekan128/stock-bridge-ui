@@ -420,6 +420,8 @@ export function ProductFormPage() {
     })
     setPriceUnitCode(!requiresSellingPrice ? (product.unitPriceEnteredUnit ?? null) : null)
     setUnits(unitsDraftFrom(product))
+    // "Add a unit" / "Change" on the product page lands here.
+    if (window.location.hash === '#units') window.requestAnimationFrame(() => document.getElementById('units')?.scrollIntoView())
   }, [product, reset, unitOfMeasureOptions, baseOptions, requiresSellingPrice])
 
   /**
@@ -589,6 +591,12 @@ export function ProductFormPage() {
     : []
   const livePackOption = liveUnitSet.find((option) => option.isPack) ?? null
   const standardUnits = liveUnitSet.filter((option) => !option.isStockUnit && !option.isPack && !option.isMeasure).map((option) => option.label)
+  // Standard units of another kind, each needing its conversion on this product: L for oil kept in kg.
+  const stockCategory = unitOfMeasureOptions.find((option) => option.code === watchedStockUnitCode)?.category
+  const otherKinds = ['KG', 'G', 'LITER', 'ML', 'PIECE']
+    .map((code) => unitOfMeasureOptions.find((option) => option.code === code))
+    .filter((option): option is NonNullable<typeof option> => option != null && option.category !== stockCategory)
+    .map((option) => (option.code === 'PIECE' ? 'Piece' : resolveUnitSymbol(option.code, unitOfMeasureOptions)))
   /** True when the quantity fields are counting packs, i.e. when a conversion is happening at all. */
   const countsInPacks = quantityOption != null && !quantityOption.isStockUnit
   /** The pack's noun ("basket") when this row counts in packs — §9.2's cost is per one of these. */
@@ -1426,6 +1434,7 @@ export function ProductFormPage() {
               stockUnitCode={watchedStockUnitCode ?? ''}
               stockSymbol={stockUnitLabel ?? ''}
               standardUnits={standardUnits}
+              otherKinds={otherKinds}
               packOption={livePackOption}
               stockWord={stockUnitLabel ?? ''}
             />

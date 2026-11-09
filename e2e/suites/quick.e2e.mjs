@@ -110,6 +110,8 @@ await check('from Inventory on a phone, one tap opens quick mode, full screen, w
   const box = await page.locator('.fixed.inset-0').first().boundingBox()
   assert(box.width >= 389 && box.height >= 843, 'not full screen')
   // The app's own words, and each mode says what it does (it said Receive / Issue / Count, unexplained).
+  // The row keeps its place, empty, until the person's own buttons are known.
+  await page.getByRole('group', { name: 'What are you doing?' }).getByRole('button', { name: 'Stock in' }).waitFor()
   const modes = await page.getByRole('group', { name: 'What are you doing?' }).getByRole('button').allInnerTexts()
   assert(JSON.stringify(modes) === JSON.stringify(['Stock in', 'Stock out', 'Count']), `modes: ${modes}`)
   await page.getByText('Goods coming in, like a delivery or a return. Adds them to your stock.').waitFor()
