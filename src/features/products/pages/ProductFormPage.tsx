@@ -1860,7 +1860,9 @@ export function ProductFormPage() {
         </div>
         {/* Adding: Next, step by step, and Create only on Review. Editing: Save from any section, since what's required
             is already filled in (owner, 2026-11-10). Kept at the bottom of a phone's screen. */}
-        <div className="sticky bottom-0 z-10 flex items-center justify-end gap-2 border-t border-neutral-200 bg-neutral-50 px-4 py-3 sm:rounded-b-xl sm:px-7">
+        {/* Pinned to the bottom on a phone, where Next is always in reach; at the end of the card on a wider screen, so it
+            never covers a field (owner, 2026-11-10: "hidden"). */}
+        <div className="sticky bottom-0 z-10 flex items-center justify-end gap-2 border-t border-neutral-200 bg-neutral-50 px-4 py-3 sm:static sm:rounded-b-xl sm:px-7">
           {!isEdit && stepIndex > 0 ? (
             <Button variant="secondary" type="button" onClick={() => goTo(steps[stepIndex - 1].id)}>
               Back

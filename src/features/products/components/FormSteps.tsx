@@ -83,7 +83,7 @@ export function FormSteps({
                 {index < steps.length - 1 && (
                   <span
                     aria-hidden="true"
-                    className={`absolute top-9 bottom-0 left-[1.375rem] w-px ${step.done ? 'bg-accent-400' : 'bg-neutral-200'}`}
+                    className={`absolute top-8 -bottom-2 left-[1.375rem] w-px ${step.done ? 'bg-accent-400' : 'bg-neutral-200'}`}
                   />
                 )}
                 <button
