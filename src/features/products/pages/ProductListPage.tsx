@@ -130,7 +130,7 @@ export function ProductListPage() {
   const canStockInSheet = canImport && recordsHere
   const canStockIn = recordsHere && permissions.includes(PERMISSIONS.STOCK_IN)
   const canStockOut = recordsHere && permissions.includes(PERMISSIONS.STOCK_OUT)
-  // A count corrects the figure, as the product page's Count does: whoever manages the stock here.
+  // Count stock (the "⋯" page) corrects figures, as the product page's Count does: whoever manages the stock here.
   const canCount = recordsHere && permissions.includes(PERMISSIONS.MANAGE_INVENTORY)
   // Select rows → Send (MULTI_BRANCH_UX_PLAN.md §5.4): from the branch this phone is at.
   const branch = useOptionalWorkingBranch()
@@ -261,9 +261,7 @@ export function ProductListPage() {
   // The device catalogue and caches update through the outbox; the server's paged list is refetched.
   const stockActions = useStockActions({ onChanged: () => (onDevice ? undefined : refetch()) })
   const quickActions: ProductQuickActions | undefined =
-    canStockIn || canStockOut || canCount
-      ? { canStockIn, canStockOut, canCount, onAction: (kind, product) => stockActions.open(kind, product) }
-      : undefined
+    canStockIn || canStockOut ? { canStockIn, canStockOut, onAction: (kind, product) => stockActions.open(kind, product) } : undefined
 
   // Stock bought from ProcurePal and not yet received. Surfaced beside — never inside — the
   // quantity on hand, so "12 usable, 20 incoming" can never be misread as 32 usable.
@@ -317,7 +315,7 @@ export function ProductListPage() {
         searchRef.current?.focus()
         return
       }
-      if (!['j', 'k', 'i', 'o', 'c'].includes(event.key)) return
+      if (!['j', 'k', 'i', 'o'].includes(event.key)) return
       const rows = [...document.querySelectorAll<HTMLElement>('[data-product-row]')].filter((row) => row.offsetParent !== null)
       if (rows.length === 0) return
       const current = rows.findIndex((row) => row.contains(document.activeElement))
@@ -337,9 +335,6 @@ export function ProductListPage() {
       } else if (event.key === 'o' && canStockOut) {
         event.preventDefault()
         stockActions.open('out', product)
-      } else if (event.key === 'c' && canCount) {
-        event.preventDefault()
-        stockActions.open('count', product)
       }
     }
     document.addEventListener('keydown', onKeyDown)
@@ -518,6 +513,8 @@ export function ProductListPage() {
         : { label: 'Move stock', onSelect: () => moveSheet.open([], 'move') }
       : undefined,
     onGiveBack: givesHere ? () => setGivenOpen(true) : undefined,
+    // A list to count down, not a button on every row (owner, 2026-11-10).
+    onCountStock: canCount ? () => navigate('/app/products/count') : undefined,
     onRecordSale: recordsSales && canStockOut ? () => navigate('/app/sell') : undefined,
     onExport: () => void handleExport(),
     onSkuSettings: () => navigate('/app/products/sku-settings'),
@@ -713,11 +710,7 @@ export function ProductListPage() {
             {' '}· <Kbd>o</Kbd> stock out
           </>
         )}
-        {canCount && (
-          <>
-            {' '}· <Kbd>c</Kbd> count
-          </>
-        )}{' '}
+{' '}
         · <Kbd>Enter</Kbd> open
       </p>
 

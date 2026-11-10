@@ -19,6 +19,21 @@ export function stockAreas(branch: Branch | null | undefined): Area[] {
   return (branch?.areas ?? []).filter((area) => area.active && area.keepsStock)
 }
 
+/**
+ * Where a count lands (owner, 2026-11-10: "if the branch only has one area the count must be there"): the area chosen
+ * at a branch with areas, named; at a branch with one, that one, unnamed - it's just the shop. Null when there's no
+ * one place yet (All branches, or a branch with areas and none chosen).
+ */
+export function countPlace(
+  branch: Branch | null | undefined,
+  chosen: { areaId?: string; areaName?: string },
+): { areaId: string; areaName?: string } | null {
+  if (chosen.areaId && chosen.areaName) return { areaId: chosen.areaId, areaName: chosen.areaName }
+  if (!branch || hasAreas(branch)) return null
+  const only = stockAreas(branch)[0] ?? branch.areas?.[0]
+  return only ? { areaId: only.id } : null
+}
+
 /** Where deliveries arrive: the sheet's choice when it has nothing better to go on. */
 export function deliveryArea(branch: Branch | null | undefined): Area | undefined {
   return branch?.areas?.find((area) => area.delivery)

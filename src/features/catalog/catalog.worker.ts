@@ -130,11 +130,15 @@ function query(q: CatalogQuery): CatalogQueryResult {
     if (q.status === 'inactive' && row.active) continue
     if (q.categoryId && row.categoryId !== q.categoryId) continue
     if (q.countedInArea) {
-      const at = stored.areaStock?.find((figure) => figure.areaId === q.countedInArea!.areaId)?.lastCountedAt
+      // The area's last count: from the marks (every area, a branch's only one too), else its figure (an older API).
+      const at =
+        stored.counts?.find((mark) => mark.areaId === q.countedInArea!.areaId)?.at ??
+        stored.areaStock?.find((figure) => figure.areaId === q.countedInArea!.areaId)?.lastCountedAt
       const counted = at != null && Date.parse(at) >= q.countedInArea.since
       if (counted !== q.countedInArea.counted) continue
     }
     if (term && !row._name.includes(term) && !row._sku.includes(term) && !row._barcode.includes(term)) continue
+    if (q.onlyHeld && row.quantityOnHand <= 0) continue
     // Not the chosen areas' product: counted for "N other products", listed only when searched for or shown,
     // and never in the stock chips - it isn't out there, it just isn't theirs.
     if (row._elsewhere) {

@@ -371,5 +371,6 @@ export function toProduct(row: CatalogRow): Product {
     measures: row.measures,
     usedInUnit: row.usedInUnit ?? null,
     countIn: row.countIn ?? undefined,
+    counts: row.counts ?? undefined,
   }
 }

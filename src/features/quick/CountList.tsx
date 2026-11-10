@@ -34,23 +34,34 @@ export interface CountedHere {
 }
 
 /**
- * The closing count of one area (STOCK_SHEETS_AND_AREA_COUNT_PLAN.md Part 5): the products appear before anything is
+ * The closing count of one place (STOCK_SHEETS_AND_AREA_COUNT_PLAN.md Part 5): the products appear before anything is
  * typed - what the app says the Kitchen has - so the eggs that came in and were used up are on the list too. Each row
  * is counted where it is (owner, 2026-11-09): tap its box, the phone's number keypad opens, type, Next - recorded, and
  * on to the next row. Below, what has been counted here since midnight, by anyone.
+ *
+ * The place is an area of a branch with areas, or a branch's only area, unnamed (owner, 2026-11-10: "if the branch
+ * only has one area the count must be there"). Cards in a narrow space (a phone, quick mode); a table where there's
+ * room (the Count stock page on a laptop) - the same rows either way.
  */
 export function CountList({
   areaId,
   areaName,
   countedHere,
   onCounted,
+  search = '',
+  categoryId = '',
 }: {
   areaId: string
-  areaName: string
+  /** The area's name at a branch with areas; absent for a branch's only area, which isn't named. */
+  areaName?: string
   /** Counted in this session, or waiting on this phone, before the catalogue hears of it. */
   countedHere: CountedHere[]
   /** A row counted in place: what it was recorded as, for This session and "Counted today". */
   onCounted: (counted: RowCounted) => void
+  /** The Count stock page's search: what's at 0 is found too, since it's asked for by name. */
+  search?: string
+  /** The Count stock page's category: one shelf at a time. */
+  categoryId?: string
 }) {
   const { options } = useUnitOfMeasureOptions()
   const since = useMemo(() => {
@@ -58,10 +69,16 @@ export function CountList({
     midnight.setHours(0, 0, 0, 0)
     return midnight.getTime()
   }, [])
-  const base = { search: '', status: 'active' as const, categoryId: '', sort: { field: 'name' as const, direction: 'asc' as const } }
-  const scope = useMemo(() => ({ areaIds: [areaId] }), [areaId])
-  // What the area has now and hasn't been counted today; nothing at 0 - counting those can only find more.
-  const toCount = useCatalogList({ ...base, stockStatus: 'OK', countedInArea: { areaId, since, counted: false } }, true, scope)
+  const base = { search, status: 'active' as const, categoryId, sort: { field: 'name' as const, direction: 'asc' as const } }
+  // A named area's own figures; a branch's only area holds the branch's, so the branch's are read.
+  const scope = useMemo(() => (areaName ? { areaIds: [areaId] } : undefined), [areaId, areaName])
+  // What the place has now - low included - and hasn't been counted today; nothing at 0 - counting those can only find
+  // more - unless it's searched for.
+  const toCount = useCatalogList(
+    { ...base, stockStatus: 'all', onlyHeld: !search.trim(), countedInArea: { areaId, since, counted: false } },
+    true,
+    scope,
+  )
   const counted = useCatalogList({ ...base, stockStatus: 'all', countedInArea: { areaId, since, counted: true } }, true, scope)
   const { loadRange: loadToCount } = toCount
   const { loadRange: loadCounted } = counted
@@ -71,7 +88,8 @@ export function CountList({
   // Counted on this phone, or still waiting to send, but not yet in the catalogue.
   const { ops } = useOutboxState()
   const waiting: CountedHere[] = ops
-    .filter((op) => op.kind === 'COUNT' && op.payload.areaId === areaId)
+    // A branch's only area: a count sent without naming it is its too.
+    .filter((op) => op.kind === 'COUNT' && (op.payload.areaId === areaId || (!areaName && !op.payload.areaId)))
     .map((op) => ({
       productId: op.productId,
       productName: op.productName,
@@ -104,18 +122,18 @@ export function CountList({
     const row = counted.rowAt(i)
     if (row) seen.current.set(row.id, row)
     if (!row || localIds.has(row.id)) continue
-    const figure = figureInArea(row, areaId) ?? 0
-    const inArea = row.areaStock?.find((entry) => entry.areaId === areaId)
+    const figure = figureInArea(row, areaName ? areaId : undefined) ?? row.quantityOnHand
+    const mark = countMark(row, areaId)
     const unit = resolveUnitSymbol(row.unitOfMeasure, options)
-    // As it was typed - "1 bag + 2 kg" - when the count sent its lines; else what the Kitchen has now.
-    const typed = countedAsText(inArea?.lastCountedAs, productsOwnUnits(unitOptionsForProduct(row, options)), unit)
+    // As it was typed - "1 bag + 2 kg" - when the count sent its lines; else what the place has now.
+    const typed = countedAsText(mark?.countedAs, productsOwnUnits(unitOptionsForProduct(row, options)), unit)
     countedRows.push({
       key: row.id,
       productId: row.id,
       name: row.name,
       text: typed ?? `${formatNumber(figure)} ${stockUnitWord(unit, figure)}`,
-      at: inArea?.lastCountedAt ? Date.parse(inArea.lastCountedAt) : null,
-      countedAs: inArea?.lastCountedAs,
+      at: mark?.at ? Date.parse(mark.at) : null,
+      countedAs: mark?.countedAs,
     })
   }
   // The counted row being counted again, in place.
@@ -125,15 +143,28 @@ export function CountList({
   if (!toCount.ready && !counted.ready) return null
 
   return (
-    <div className="flex flex-col gap-4" data-count-list>
+    <div className="@container flex flex-col gap-4" data-count-list>
       <section aria-labelledby="to-count-heading" className="flex flex-col gap-2">
         <h2 id="to-count-heading" className="px-1 text-sm font-semibold text-neutral-700">
-          To count in the {areaName} · {formatNumber(toCountTotal)}
+          {areaName ? `To count in the ${areaName}` : 'To count'} · {formatNumber(toCountTotal)}
         </h2>
         {rows.length === 0 ? (
-          <p className="px-1 text-base text-neutral-600">Everything the {areaName} has is counted today.</p>
+          <p className="px-1 text-base text-neutral-600">
+            {search.trim()
+              ? 'Nothing to count matches that.'
+              : areaName
+                ? `Everything the ${areaName} has is counted today.`
+                : 'Everything here is counted today.'}
+          </p>
         ) : (
-          <ul className="flex flex-col gap-2">
+          <ul className="flex flex-col gap-2 @3xl:gap-0 @3xl:divide-y @3xl:divide-neutral-100 @3xl:overflow-hidden @3xl:rounded-lg @3xl:border @3xl:border-neutral-200 @3xl:bg-white">
+            {/* Column names, on a wide screen only, where the rows line up as a table. */}
+            <li aria-hidden="true" className="hidden @3xl:grid @3xl:grid-cols-[minmax(0,1.3fr)_8rem_minmax(0,1.6fr)_minmax(0,1.1fr)] @3xl:gap-4 @3xl:bg-neutral-50 @3xl:px-4 @3xl:py-2 @3xl:text-xs @3xl:font-medium @3xl:text-neutral-500">
+              <span>Product</span>
+              <span>App says</span>
+              <span>Counted</span>
+              <span />
+            </li>
             {rows.map((product, index) => (
               <CountRow
                 key={product.id}
@@ -150,7 +181,7 @@ export function CountList({
             ))}
           </ul>
         )}
-        {toCount.total > PAGE && <p className="px-1 text-sm text-neutral-600">Search for the rest.</p>}
+        {toCount.total > PAGE && <p className="px-1 text-sm text-neutral-600">Search, or pick a category, for the rest.</p>}
       </section>
 
       {countedRows.length > 0 && (
@@ -170,6 +201,7 @@ export function CountList({
                     areaId={areaId}
                     areaName={areaName}
                     initial={row.countedAs}
+                    card
                     onCancel={() => setAgain(null)}
                     onCounted={(entry) => {
                       setAgain(null)
@@ -211,6 +243,14 @@ export function CountList({
   )
 }
 
+/** The place's last count of the product: when, and as typed. Read from the catalogue's marks, else the area's figure. */
+function countMark(product: Product, areaId: string): { at?: string; countedAs?: CountedLine[] } | undefined {
+  const mark = product.counts?.find((entry) => entry.areaId === areaId)
+  if (mark) return mark
+  const figure = product.areaStock?.find((entry) => entry.areaId === areaId)
+  return figure?.lastCountedAt ? { at: figure.lastCountedAt, countedAs: figure.lastCountedAs } : undefined
+}
+
 /** What a row counted in place was recorded as. */
 export interface RowCounted {
   productId: string
@@ -240,10 +280,14 @@ function CountRow({
   initial,
   onCancel,
   onCounted,
+  card = false,
 }: {
   product: Product
   areaId: string
-  areaName: string
+  /** Absent for a branch's only area: not named, and its figure is the branch's. */
+  areaName?: string
+  /** A card on its own (counting again), not a line of the table on a wide screen. */
+  card?: boolean
   /** Counting again: the last count's lines, filled in. */
   initial?: CountedLine[]
   /** Counting again: back to the counted line, nothing recorded. */
@@ -261,11 +305,12 @@ function CountRow({
   const symbol = resolveUnitSymbol(product.unitOfMeasure, options)
   const wholeOnly = isCountedInWholeUnits(product.unitOfMeasure, options)
   const area = (useOptionalWorkingBranch()?.branches ?? []).flatMap((b) => b.areas ?? []).find((a) => a.id === areaId)
-  // Used only where stock is used bit by bit; a Store's shortfall is missing, with nothing to switch.
-  const usedHere = area?.shortIsUsed === true
+  // Used only where stock is used bit by bit, at a branch with areas; a Store's shortfall is missing, with nothing to
+  // switch - and so is a branch's only area's, as the server records it.
+  const usedHere = !!areaName && area?.shortIsUsed === true
   const shortAs = usedHere ? (shortChosen ?? (area ? areaShortAs(area) : 'MISSING')) : 'MISSING'
-  const pending = usePendingStock(product.id, areaId)
-  const appSays = roundQuantity((figureInArea(product, areaId) ?? product.quantityOnHand) + pending.delta)
+  const pending = usePendingStock(product.id, areaName ? areaId : undefined)
+  const appSays = roundQuantity((figureInArea(product, areaName ? areaId : undefined) ?? product.quantityOnHand) + pending.delta)
 
   // What the app says, faintly in the boxes: as many of the biggest unit as fit, then the next, the rest in the last.
   const hints: string[] = (() => {
@@ -325,11 +370,19 @@ function CountRow({
   const preview = typedAny && count.total != null ? roundQuantity(count.total - appSays) : null
 
   return (
-    <li className="flex flex-col gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-3" data-count-row={product.name}>
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="min-w-0 flex-1 truncate text-base font-semibold text-neutral-900">{product.name}</span>
-        <span className="shrink-0 text-sm text-neutral-500 tabular-nums" data-count-app-says>
-          App: {formatNumber(appSays)} {stockUnitWord(symbol, appSays)}
+    // A card in a narrow space; a line of the table where there's room (the Count stock page on a laptop): product,
+    // what the app says, the boxes, and what it comes to with Save.
+    <li
+      className={`flex flex-col gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-3 @3xl:grid @3xl:grid-cols-[minmax(0,1.3fr)_8rem_minmax(0,1.6fr)_minmax(0,1.1fr)] @3xl:items-start @3xl:gap-4 ${
+        card ? '' : '@3xl:rounded-none @3xl:border-0'
+      }`}
+      data-count-row={product.name}
+    >
+      <div className="flex items-baseline justify-between gap-2 @3xl:contents">
+        <span className="min-w-0 flex-1 truncate text-base font-semibold text-neutral-900 @3xl:pt-2.5 @3xl:text-sm">{product.name}</span>
+        <span className="shrink-0 text-sm text-neutral-500 tabular-nums @3xl:pt-2.5 @3xl:text-neutral-700" data-count-app-says>
+          <span className="@3xl:hidden">App: </span>
+          {formatNumber(appSays)} {stockUnitWord(symbol, appSays)}
         </span>
       </div>
       <CountUnitLines
@@ -354,7 +407,7 @@ function CountRow({
         })}
       />
       {(problem || typedAny || onCancel) && (
-        <div className="flex items-center justify-between gap-2 text-sm">
+        <div className="flex items-center justify-between gap-2 text-sm @3xl:flex-col @3xl:items-end @3xl:pt-1.5 @3xl:text-right">
           {problem ? (
             <p role="alert" className="min-w-0 flex-1 text-danger-700">
               {problem}

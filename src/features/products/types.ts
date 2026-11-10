@@ -132,6 +132,11 @@ export interface Product {
   usedInUnit?: string | null
   /** The units a count of it opens in (V84), as unit keys. Absent or empty: its pack and its usual unit. */
   countIn?: string[]
+  /**
+   * When each area of the branches the phone carries last counted it - a branch's only area too - and how it was
+   * typed (2026-11-10): the count list's "Counted today". The phone's catalogue only; absent when never counted.
+   */
+  counts?: { areaId: string; at: string; countedAs?: { unit: string; quantity: number }[] }[]
   warnings?: string[] | null
   /**
    * True when `packagingUnit`/`packagingSize` above are the DEFAULT among more than one distinct

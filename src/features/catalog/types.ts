@@ -45,6 +45,8 @@ export interface CatalogRow {
   usedInUnit?: string | null
   /** The units a count of it opens in (V84). Absent: the default. */
   countIn?: string[] | null
+  /** When each area last counted it, a branch's only area too, and as typed (2026-11-10). */
+  counts?: { areaId: string; at: string; countedAs?: { unit: string; quantity: number }[] }[] | null
 }
 
 export interface SnapshotPage {
@@ -98,6 +100,8 @@ export interface CatalogQuery {
    * `since` (`counted: true`, "Counted today"), or only those it hasn't (`false`, "To count").
    */
   countedInArea?: { areaId: string; since: number; counted: boolean }
+  /** Only what's there - low or not - nothing at 0: the count list (2026-11-10). */
+  onlyHeld?: boolean
 }
 
 export interface CatalogQueryResult {

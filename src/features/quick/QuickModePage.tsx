@@ -1,7 +1,7 @@
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { useSheetArea } from '@/features/branches/useSheetBranch'
 import { CountShortfall } from '@/features/branches/CountShortfall'
-import { areaShortAs, placeFigure, type ShortAs } from '@/features/branches/areas'
+import { areaShortAs, countPlace, placeFigure, type ShortAs } from '@/features/branches/areas'
 import { QuickAreaTitle } from '@/features/quick/QuickAreaTitle'
 import { MoveEditor, type Moved } from '@/features/moves/MoveEditor'
 import { movesApi } from '@/features/moves/movesApi'
@@ -133,6 +133,8 @@ export function QuickModePage() {
   const area = useSheetArea(branch && !branch.isAll ? branch.working : null)
   // Every figure here is this place's: the area's, else the branch's (sheets plan Part 4).
   const place: Place = { branchId: branch && !branch.isAll ? branch.working?.id : undefined, areaId: area.areaId, areaName: area.areaName }
+  // Where a count from the list lands: the area chosen, or a branch's only area (owner, 2026-11-10).
+  const counting = countPlace(branch && !branch.isAll ? branch.working : null, area)
   const [params, setParams] = useSearchParams()
   // The buttons along the top (owner, 2026-11-01): the person's own choice of up to four, kept on their account,
   // else the app's for where they work - never one their role doesn't give them. Count they may do but didn't
@@ -351,10 +353,10 @@ export function QuickModePage() {
             inputRef={searchRef}
             place={place}
             onPick={setProduct}
-            // The closing count, from a list (sheets plan Part 5): only at a branch with areas, so a shop with
-            // 3,000 products is never handed a 3,000-line list.
+            // The closing count, from a list (sheets plan Part 5): every branch's, a branch with one area too (owner,
+            // 2026-11-10). Sixty rows at a time; search finds the rest.
             countList={
-              mode === 'count' && place.areaId && place.areaName
+              mode === 'count' && counting
                 ? {
                     // Counted on its row (owner, 2026-11-09): into This session, no stamp screen in between.
                     onCounted: (row: RowCounted) => {
@@ -364,8 +366,8 @@ export function QuickModePage() {
                         ...current,
                       ])
                     },
-                    areaId: place.areaId,
-                    areaName: place.areaName,
+                    areaId: counting.areaId,
+                    areaName: counting.areaName,
                     countedHere: session
                       .filter((entry) => entry.mode === 'count' && !entry.undone && entry.areaName === place.areaName)
                       .map((entry) => ({
@@ -408,7 +410,7 @@ function FindStep({
   onPick: (product: Product) => void
   countList: {
     areaId: string
-    areaName: string
+    areaName?: string
     countedHere: CountedHere[]
     onCounted: (row: RowCounted) => void
   } | null
