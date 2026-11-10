@@ -157,9 +157,9 @@ export function CountList({
                 : 'Everything here is counted today.'}
           </p>
         ) : (
-          <ul className="flex flex-col gap-2 @3xl:gap-0 @3xl:divide-y @3xl:divide-neutral-100 @3xl:overflow-hidden @3xl:rounded-lg @3xl:border @3xl:border-neutral-200 @3xl:bg-white">
+          <ul className="flex flex-col gap-2 @3xl:gap-0 @3xl:overflow-hidden @3xl:rounded-lg @3xl:border @3xl:border-neutral-200 @3xl:bg-white">
             {/* Column names, on a wide screen only, where the rows line up as a table. */}
-            <li aria-hidden="true" className="hidden @3xl:grid @3xl:grid-cols-[minmax(0,1.3fr)_8rem_minmax(0,1.6fr)_minmax(0,1.1fr)] @3xl:gap-4 @3xl:bg-neutral-50 @3xl:px-4 @3xl:py-2 @3xl:text-xs @3xl:font-medium @3xl:text-neutral-500">
+            <li aria-hidden="true" className="hidden @3xl:grid @3xl:grid-cols-[minmax(0,1.3fr)_8rem_minmax(0,1.6fr)_minmax(0,1.1fr)] @3xl:gap-4 @3xl:border-b @3xl:border-neutral-200 @3xl:bg-neutral-50 @3xl:px-4 @3xl:py-2 @3xl:text-xs @3xl:font-medium @3xl:text-neutral-500">
               <span>Product</span>
               <span>App says</span>
               <span>Counted</span>
@@ -374,7 +374,9 @@ function CountRow({
     // what the app says, the boxes, and what it comes to with Save.
     <li
       className={`flex flex-col gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-3 @3xl:grid @3xl:grid-cols-[minmax(0,1.3fr)_8rem_minmax(0,1.6fr)_minmax(0,1.1fr)] @3xl:items-start @3xl:gap-4 ${
-        card ? '' : '@3xl:rounded-none @3xl:border-0'
+        // A line of the table: its own rule along the bottom and every other one tinted (owner, 2026-11-10: "they
+        // all look like they are just packed together").
+        card ? '' : '@3xl:rounded-none @3xl:border-x-0 @3xl:border-t-0 @3xl:border-b @3xl:border-neutral-200 @3xl:py-4 @3xl:last:border-b-0 @3xl:even:bg-neutral-50/70'
       }`}
       data-count-row={product.name}
     >

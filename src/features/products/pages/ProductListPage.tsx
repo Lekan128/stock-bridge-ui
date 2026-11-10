@@ -255,7 +255,8 @@ export function ProductListPage() {
   const { data, loading, error, refetch } = server
   const showingSaved = onDevice ? (!online || catalog.behind) && catalog.syncedAt != null : server.showingSaved
   const updatedAt = onDevice ? catalog.syncedAt : server.updatedAt
-  const retryRefresh = onDevice ? () => void syncCatalog() : refetch
+  // A promise, so "Trying…" lasts as long as the attempt does.
+  const retryRefresh = onDevice ? () => syncCatalog() : refetch
 
   // Quick stock in / out from a row or card (C1, U2): the same sheets and Undo as the product page.
   // The device catalogue and caches update through the outbox; the server's paged list is refetched.

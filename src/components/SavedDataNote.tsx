@@ -1,5 +1,7 @@
 import { CloudOff } from 'lucide-react'
+import { Spinner } from '@/components/Spinner'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
+import { useRetry } from '@/hooks/useRetry'
 
 export interface SavedDataNoteProps {
   /** Whether what's on screen is a saved copy the latest refresh couldn't replace. */
@@ -8,8 +10,8 @@ export interface SavedDataNoteProps {
   updatedAt: number | null
   /** What the saved copy is of, for the sentence: "stock levels", "this product". */
   subject?: string
-  /** Asks the server again. The screen also retries on its own every 30 seconds. */
-  onRetry?: () => void
+  /** Asks the server again; a promise lets "Trying…" last as long as the attempt. It also retries every 30 seconds. */
+  onRetry?: () => unknown
 }
 
 /** "10:42" today, "3 Oct, 10:42" before that — the moment the figures on screen were true. */
@@ -29,7 +31,10 @@ function formatSavedAt(updatedAt: number): string {
  */
 export function SavedDataNote({ showing, updatedAt, subject = 'what was saved', onRetry }: SavedDataNoteProps) {
   const online = useOnlineStatus()
+  const { trying, triedAt, retry } = useRetry(onRetry)
   if (!showing || updatedAt == null) return null
+  // Tried and still here: said, with when, so a tap that changed nothing still visibly did something.
+  const triedText = triedAt != null ? ` · tried ${formatSavedAt(triedAt)}` : ''
 
   return (
     <p
@@ -38,18 +43,26 @@ export function SavedDataNote({ showing, updatedAt, subject = 'what was saved', 
     >
       <CloudOff className="h-4 w-4 shrink-0" aria-hidden="true" />
       <span className="flex-1">
-        {online ? "Couldn't reach the server" : 'Offline'} · showing {subject} as of{' '}
-        <span className="font-medium tabular-nums">{formatSavedAt(updatedAt)}</span>
+        {online ? (triedAt != null ? "Still can't reach the server" : "Couldn't reach the server") : 'Offline'} · showing{' '}
+        {subject} as of <span className="font-medium tabular-nums">{formatSavedAt(updatedAt)}</span>
+        {triedText}
       </span>
-      {onRetry && (
-        <button
-          type="button"
-          onClick={onRetry}
-          className="shrink-0 rounded-sm px-1.5 py-0.5 font-medium text-warning-900 underline underline-offset-2 hover:bg-warning-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning-500"
-        >
-          Try again
-        </button>
-      )}
+      {onRetry &&
+        (trying ? (
+          // In place of the button while it tries - at once, and for at least a moment, however fast the answer.
+          <span className="inline-flex shrink-0 items-center gap-1.5 px-1.5 py-0.5 font-medium text-warning-900" data-retrying>
+            <Spinner size={14} />
+            Trying…
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void retry()}
+            className="shrink-0 rounded-sm px-1.5 py-0.5 font-medium text-warning-900 underline underline-offset-2 hover:bg-warning-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning-500"
+          >
+            Try again
+          </button>
+        ))}
     </p>
   )
 }
