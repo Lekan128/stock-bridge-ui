@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { useNotHere } from '@/features/branches/workArea'
-import { ArrowDown, ArrowUp, ArrowUpDown, Minus, Plus } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, ClipboardCheck, Minus, Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { expectedCopy } from '@/features/expected/copy'
@@ -79,7 +79,9 @@ export interface ProductTableProps {
 export interface ProductQuickActions {
   canStockIn: boolean
   canStockOut: boolean
-  onAction: (kind: 'in' | 'out', product: Product) => void
+  /** Count it from the row (owner, 2026-11-10): the same count panel as the product page's. */
+  canCount?: boolean
+  onAction: (kind: 'in' | 'out' | 'count', product: Product) => void
 }
 
 // "On hand (usable)" rather than "Quantity on hand": once a second quantity exists on the row,
@@ -101,7 +103,7 @@ const UNIT_PRICE_COLUMN: { field: ProductSortField; label: string; align?: 'righ
 }
 
 export function ProductTable({ products, sort, onSortChange, incomingFor, selection, virtual, quickActions, byBranch }: ProductTableProps) {
-  const hasQuickActions = quickActions != null && (quickActions.canStockIn || quickActions.canStockOut)
+  const hasQuickActions = quickActions != null && (quickActions.canStockIn || quickActions.canStockOut || quickActions.canCount === true)
   const { isVendor } = useAuth()
   const notHere = useNotHere()
   // The price column follows the selling policy (a vendor, ProcurePal, or a company that sells
@@ -198,8 +200,8 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
             </th>,
           ])}
           {hasQuickActions && (
-            <th scope="col" className="w-24 border-b border-neutral-200 bg-neutral-50 px-2 py-2.5">
-              <span className="sr-only">Quick stock in and out</span>
+            <th scope="col" className="w-32 border-b border-neutral-200 bg-neutral-50 px-2 py-2.5">
+              <span className="sr-only">Quick stock in, out and count</span>
             </th>
           )}
         </tr>
@@ -359,6 +361,11 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
                     {quickActions.canStockOut && (
                       <QuickButton label={`Stock out ${product.name}`} onClick={() => quickActions.onAction('out', product)}>
                         <Minus className="h-4 w-4" aria-hidden="true" />
+                      </QuickButton>
+                    )}
+                    {quickActions.canCount && (
+                      <QuickButton label={`Count ${product.name}`} onClick={() => quickActions.onAction('count', product)}>
+                        <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
                       </QuickButton>
                     )}
                   </div>

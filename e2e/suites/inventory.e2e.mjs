@@ -169,6 +169,21 @@ await check('quick + on a row opens Stock in for that product, without leaving t
   assert((await onHand(rice.id)) === 1000, 'server not restored')
 })
 
+await check('Count on a row opens the count panel for that product, and records it without leaving the list', async () => {
+  await row('Rice (c1)').hover()
+  await row('Rice (c1)').getByRole('button', { name: 'Count Rice (c1)' }).click()
+  const dialog = page.getByRole('dialog', { name: /^Count · Rice \(c1\)/ })
+  await dialog.waitFor()
+  await page.screenshot({ path: SHOTS + '2b-row-count.png' })
+  await dialog.getByLabel(/: kg here$/).fill('998')
+  await dialog.getByText('vs what the app says').waitFor()
+  await dialog.getByRole('button', { name: 'Record count' }).click()
+  assert(page.url().endsWith('/app/products'), `left the list: ${page.url()}`)
+  for (let i = 0; i < 40 && (await onHand(rice.id)) !== 998; i++) await page.waitForTimeout(250)
+  assert((await onHand(rice.id)) === 998, `the count made it ${await onHand(rice.id)} kg`)
+  await page.keyboard.press('Escape')
+})
+
 await check('keys: / searches, j and k move between rows, i and o open stock in and out', async () => {
   await page.locator('body').click({ position: { x: 5, y: 5 } })
   await page.keyboard.press('/')
@@ -187,6 +202,9 @@ await check('keys: / searches, j and k move between rows, i and o open stock in 
   await page.keyboard.press('Escape')
   await page.keyboard.press('o')
   await page.getByRole('dialog', { name: 'Stock out' }).waitFor()
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('c')
+  await page.getByRole('dialog', { name: /^Count · / }).waitFor()
   await page.keyboard.press('Escape')
   await page.getByText('Keys:').waitFor()
 })

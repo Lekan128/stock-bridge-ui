@@ -55,6 +55,8 @@ export function ProductCard({ product, incoming = 0, quickActions, selection }: 
   const press = useRef<{ timer: number; x: number; y: number } | null>(null)
   const longPressed = useRef(false)
   const selecting = selection?.active ?? false
+  // + and − only: a third button would make every card taller on a long list. A phone counts in quick mode's Count,
+  // one tap away (owner, 2026-11-10).
   const showQuick = !selecting && quickActions != null && (quickActions.canStockIn || quickActions.canStockOut)
 
   function cancelPress() {
