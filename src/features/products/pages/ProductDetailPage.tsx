@@ -479,7 +479,16 @@ export function ProductDetailPage() {
                   )}
                   {product.usedInUnit && (
                     <span className="block text-xs text-neutral-500">
-                      Stock out and counts open in {product.usedInUnit.includes(':') ? packLabel : product.usedInUnit}
+                      Stock out opens in {product.usedInUnit.includes(':') ? packLabel : product.usedInUnit}
+                    </span>
+                  )}
+                  {/* The units a count opens in (V84), when chosen; else the pack and the usual unit, said nowhere. */}
+                  {(product.countIn ?? []).length > 0 && (
+                    <span className="block text-xs text-neutral-500" data-product-count-in>
+                      Counted in{' '}
+                      {(product.countIn ?? [])
+                        .map((key) => (key.includes(':') ? packLabel : key.toLowerCase() === (product.unitOfMeasure ?? '').toLowerCase() ? stockUnitText : key))
+                        .join(' + ')}
                     </span>
                   )}
                   {canManageProducts && (

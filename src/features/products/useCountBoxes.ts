@@ -1,13 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { UnitOption } from '@/features/products/types'
-import { countUnits, roundQuantity, toBaseQuantity } from '@/features/products/unitSet'
-
-/** One box of a count: the unit it's in (null: the one it started with) and what's typed in it. */
-interface Box {
-  key: number
-  label: string | null
-  text: string
-}
+import { biggestFirst, countInOptions, roundQuantity, toBaseQuantity, unitKey } from '@/features/products/unitSet'
 
 /** A typed amount, or null while it isn't one yet. Blank is 0: a box left empty counts nothing. */
 function amountOf(text: string): number | null {
@@ -17,79 +10,83 @@ function amountOf(text: string): number | null {
 }
 
 /**
- * A count in as many of the product's units as the shelf needs (owner, 2026-11-09; as Restaurant365 and MarginEdge
- * count an item in several units, each in its own box, added up). It starts with what a store is counted in - whole
- * packs and what's left in the usual unit, or one box - and "Another unit" adds a box in the next unit not yet used,
- * until every one is. Each box's unit can change and a box can go. The total is in the stock unit.
+ * A count in as many of the product's units as the shelf needs (owner, 2026-11-10): every unit it has is shown as a
+ * round chip, the ones it's counted in already on - set once on the product, as MarginEdge's "How do you want to count
+ * this product?" - each with its own box. Tapping a chip adds or takes away its box for this count only; the last one
+ * stays. Boxes go biggest unit first ("2 bags + 7 dericas") and add up to one total in the stock unit.
  *
  * One rule for the count panel, quick mode and the count list, so a count reads the same wherever it's made.
  */
-export function useCountBoxes(product: { usedInUnit?: string | null }, offered: UnitOption[]) {
-  const pair = countUnits(product, offered)
-  const starting = pair.big ? [pair.big, pair.small] : [pair.small]
-  const [boxes, setBoxes] = useState<Box[]>(() => starting.map((_, index) => ({ key: index, label: null, text: '' })))
-  const [nextKey, setNextKey] = useState(starting.length)
+export function useCountBoxes(
+  product: { usedInUnit?: string | null; countIn?: string[] | null },
+  offered: UnitOption[],
+) {
+  const starting = countInOptions(product, offered).map(unitKey)
+  const startingKey = starting.join('|')
+  const [on, setOn] = useState<string[]>(starting)
+  const [texts, setTexts] = useState<Record<string, string>>({})
   // The product's units can arrive after the first render (the unit list loads): until anything is touched, start
-  // with the boxes they call for.
+  // with the ones it's counted in.
   const [touched, setTouched] = useState(false)
   useEffect(() => {
-    if (!touched && boxes.length !== starting.length) {
-      setBoxes(starting.map((_, index) => ({ key: index, label: null, text: '' })))
-      setNextKey(starting.length)
-    }
-  }, [touched, boxes.length, starting.length])
+    if (!touched) setOn(startingKey ? startingKey.split('|') : [])
+  }, [touched, startingKey])
 
-  const units: UnitOption[] = []
-  for (const [index, box] of boxes.entries()) {
-    const chosen = box.label != null ? offered.find((option) => option.label === box.label) : undefined
-    const fallback =
-      starting[index] && !units.some((unit) => unit.label === starting[index].label)
-        ? starting[index]
-        : (offered.find((option) => !units.some((unit) => unit.label === option.label)) ?? pair.small)
-    units.push(chosen ?? fallback)
-  }
-  const unused = offered.filter((option) => !units.some((unit) => unit.label === option.label))
-  const amounts = boxes.map((box) => amountOf(box.text))
+  const chips = biggestFirst(offered)
+  const units = chips.filter((option) => on.includes(unitKey(option)))
+  const boxes = units.map((unit) => {
+    const key = unitKey(unit)
+    const text = texts[key] ?? ''
+    return { key, unit, text, amount: amountOf(text) }
+  })
   const anyTyped = boxes.some((box) => box.text.trim() !== '')
-  const valid = amounts.every((amount) => amount != null)
-  const total = valid ? roundQuantity(units.reduce((sum, unit, index) => sum + toBaseQuantity(amounts[index] ?? 0, unit), 0)) : null
+  const valid = boxes.every((box) => box.amount != null)
+  const total = valid ? roundQuantity(boxes.reduce((sum, box) => sum + toBaseQuantity(box.amount ?? 0, box.unit), 0)) : null
 
   return {
-    boxes: boxes.map((box, index) => ({ key: box.key, unit: units[index], text: box.text, amount: amounts[index] })),
+    /** Every unit the product has, biggest first, and whether this count has a box for it. */
+    chips: chips.map((unit) => ({ key: unitKey(unit), unit, on: on.includes(unitKey(unit)) })),
+    boxes,
     /** Something typed in some box. */
     anyTyped,
     /** Every box holds a number (or nothing). */
     valid,
     /** All the boxes together, in the stock unit; null while one isn't a number. */
     total,
-    /** Another box can be added: the product has a unit no box is in yet. */
-    canAdd: unused.length > 0,
     setText(index: number, text: string) {
       setTouched(true)
-      setBoxes((current) => current.map((box, at) => (at === index ? { ...box, text: text.replace(',', '.') } : box)))
+      const key = boxes[index]?.key
+      if (key) setTexts((current) => ({ ...current, [key]: text.replace(',', '.') }))
     },
-    setUnit(index: number, label: string) {
+    /** A chip tapped: its box comes or goes (the last one stays). The index of its box when it came, else null. */
+    toggle(key: string): number | null {
       setTouched(true)
-      setBoxes((current) => current.map((box, at) => (at === index ? { ...box, label } : box)))
+      if (on.includes(key)) {
+        if (on.length > 1) {
+          setOn((current) => current.filter((other) => other !== key))
+          setTexts((current) => ({ ...current, [key]: '' }))
+        }
+        return null
+      }
+      const next = [...on, key]
+      setOn(next)
+      return chips.filter((option) => next.includes(unitKey(option))).findIndex((option) => unitKey(option) === key)
     },
-    /** A box in the next unit not yet used; its index. */
-    add(): number {
-      setTouched(true)
-      const unit = unused[0]
-      setBoxes((current) => [...current, { key: nextKey, label: unit?.label ?? null, text: '' }])
-      setNextKey((key) => key + 1)
-      return boxes.length
-    },
-    remove(index: number) {
-      setTouched(true)
-      setBoxes((current) => (current.length > 1 ? current.filter((_, at) => at !== index) : current))
-    },
-    /** Back to empty boxes, as it started: after a count is recorded. */
+    /** Back to empty boxes in the product's count units: after a count is recorded. */
     clear() {
       setTouched(false)
-      setBoxes(starting.map((_, index) => ({ key: index, label: null, text: '' })))
+      setTexts({})
+      setOn(starting)
     },
   }
 }
 
 export type CountBoxes = ReturnType<typeof useCountBoxes>
+
+/**
+ * A box the phone's keypad might cover: once the keypad is up, it's scrolled to the middle of what's left of the
+ * screen (owner, 2026-11-10: "I hope when the user clicks the keypad is not going to cover the text box").
+ */
+export function keepInView(element: HTMLElement) {
+  window.setTimeout(() => element.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300)
+}

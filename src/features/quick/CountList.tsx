@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useCountBoxes } from '@/features/products/useCountBoxes'
-import { Check, MoreHorizontal, X } from 'lucide-react'
+import { keepInView, useCountBoxes } from '@/features/products/useCountBoxes'
+import { CountUnitChips } from '@/features/products/components/CountUnitChips'
+import { Check } from 'lucide-react'
 import { useCatalogList } from '@/features/catalog/useCatalog'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import type { Product } from '@/features/products/types'
@@ -168,17 +169,12 @@ function boxId(productId: string, box: number): string {
   return `count-row-${productId}-${box}`
 }
 
-/** A typed amount, or null while it isn't one yet ("", "."). */
-function amountOf(text: string): number | null {
-  const trimmed = text.trim()
-  return /^\d+(\.\d{1,3})?$/.test(trimmed) || /^\.\d{1,3}$/.test(trimmed) ? Number(trimmed) : null
-}
-
 /**
- * One product counted on its row (owner, 2026-11-09): its name, then a box for each unit it's counted in - the pack
- * and what's left ("[2] bags + [7] dericas"), or one box - with what the app says shown faintly inside, never filled
- * in for them. Next on the phone's keypad goes to the second box, then records. The "⋯" says what a shortfall is
- * recorded as here and changes it for this count.
+ * One product counted on its row (owner, 2026-11-10): its name and what the app says, every unit it has as a round chip
+ * - the ones it's counted in already on - and a box for each chip that's on, with what the app says shown faintly
+ * inside, never filled in for them. Tap a chip to add or take away its box. Next on the phone's keypad goes to the next
+ * box, then records. A shortfall says what it's recorded as: missing in a store; used in a kitchen, where a tap makes
+ * it missing for this count.
  */
 function CountRow({
   product,
@@ -193,13 +189,10 @@ function CountRow({
 }) {
   const { options } = useUnitOfMeasureOptions()
   const offered = productsOwnUnits(unitOptionsForProduct(product, options))
-  // As many of its units as the shelf needs, each in its own box (owner, 2026-11-09); "Another unit" is in the "⋯".
   const count = useCountBoxes(product, offered)
   const units: UnitOption[] = count.boxes.map((box) => box.unit)
-  const texts = count.boxes.map((box) => box.text)
   const [saving, setSaving] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
-  const [menuOpen, setMenuOpen] = useState(false)
   const [shortChosen, setShortChosen] = useState<ShortAs | null>(null)
   const savingRef = useRef(false)
   const symbol = resolveUnitSymbol(product.unitOfMeasure, options)
@@ -211,12 +204,15 @@ function CountRow({
   const pending = usePendingStock(product.id, areaId)
   const appSays = roundQuantity((figureInArea(product, areaId) ?? product.quantityOnHand) + pending.delta)
 
-  // What the app says, faintly in the boxes: whole packs, then the rest in the second unit.
+  // What the app says, faintly in the boxes: as many of the biggest unit as fit, then the next, the rest in the last.
   const hints: string[] = (() => {
-    if (units.length === 1) return [formatNumber(roundQuantity(appSays / units[0].factorToStockUnit))]
-    const packs = Math.floor(appSays / units[0].factorToStockUnit + 1e-9)
-    const rest = roundQuantity((appSays - packs * units[0].factorToStockUnit) / units[1].factorToStockUnit)
-    return [formatNumber(packs), formatNumber(rest), ...units.slice(2).map(() => '')]
+    let left = appSays
+    return units.map((unit, index) => {
+      if (index === units.length - 1) return formatNumber(roundQuantity(left / unit.factorToStockUnit))
+      const whole = Math.floor(left / unit.factorToStockUnit + 1e-9)
+      left = roundQuantity(left - whole * unit.factorToStockUnit)
+      return formatNumber(whole)
+    })
   })()
 
   const noun = (unit: UnitOption, amount: number) =>
@@ -260,123 +256,104 @@ function CountRow({
     }
   }
 
-  // The difference, live, before it's recorded: "30 short · used in the Kitchen".
+  // The difference, live, before it's recorded: "30 kg short · used".
   const typedAny = count.anyTyped
   const preview = typedAny && count.total != null ? roundQuantity(count.total - appSays) : null
 
   return (
-    <li className="rounded-lg border border-neutral-200 bg-white px-4 py-2.5" data-count-row={product.name}>
-      <div className="flex items-start gap-2">
-        <span className="min-w-0 flex-1 truncate pt-2.5 text-base font-semibold text-neutral-900">{product.name}</span>
-        <div className="flex shrink-0 flex-col items-end gap-1.5">
-          {units.map((unit, index) => (
-            <div key={`${unit.label}-${index}`} className="flex items-center gap-1.5">
-              {index > 0 && (
-                <span aria-hidden="true" className="text-sm text-neutral-500">
-                  +
-                </span>
-              )}
-              <label htmlFor={boxId(product.id, index)} className="sr-only">
-                {`${product.name}: ${noun(unit, 2)} here`}
-              </label>
-              <input
-                id={boxId(product.id, index)}
-                inputMode="decimal"
-                enterKeyHint={index < units.length - 1 ? 'next' : 'done'}
-                autoComplete="off"
-                disabled={saving}
-                value={texts[index]}
-                placeholder={hints[index]}
-                onChange={(event) => {
-                  setProblem(null)
-                  count.setText(index, event.target.value)
-                }}
-                onKeyDown={(event) => {
-                  if (event.key !== 'Enter') return
-                  event.preventDefault()
-                  if (index < units.length - 1) document.getElementById(boxId(product.id, index + 1))?.focus()
-                  else void record()
-                }}
-                className="h-11 w-20 rounded-md border-2 border-neutral-200 px-2 text-right text-lg font-semibold tabular-nums placeholder:font-normal placeholder:text-neutral-400 focus:border-primary-600 focus:outline-none"
-              />
-              <span className="w-16 text-sm text-neutral-600">{noun(unit, amountOf(texts[index]) ?? 2)}</span>
-              {menuOpen && units.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => count.remove(index)}
-                  aria-label={`Remove the ${noun(unit, 2)} box`}
-                  className="-ml-1 inline-flex h-9 w-7 items-center justify-center text-neutral-500"
-                >
-                  <X className="h-4 w-4" aria-hidden="true" />
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-        <button
-          type="button"
-          aria-expanded={menuOpen}
-          aria-label={`More for ${product.name}`}
-          onClick={() => setMenuOpen((open) => !open)}
-          className="-mr-2 inline-flex h-11 w-9 shrink-0 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100"
-        >
-          <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-        </button>
+    <li className="flex flex-col gap-2 rounded-lg border border-neutral-200 bg-white px-4 py-3" data-count-row={product.name}>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="min-w-0 flex-1 truncate text-base font-semibold text-neutral-900">{product.name}</span>
+        <span className="shrink-0 text-sm text-neutral-500 tabular-nums" data-count-app-says>
+          App: {formatNumber(appSays)} {stockUnitWord(symbol, appSays)}
+        </span>
       </div>
-      {(problem || menuOpen || typedAny) && (
-        <div className="mt-1 flex items-center justify-between gap-2 text-sm">
+      <CountUnitChips
+        count={count}
+        productName={product.name}
+        onAdded={(index) => window.requestAnimationFrame(() => document.getElementById(boxId(product.id, index))?.focus())}
+      />
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+        {count.boxes.map((box, index) => (
+          <div key={box.key} className="flex items-center gap-1.5">
+            {index > 0 && (
+              <span aria-hidden="true" className="text-sm text-neutral-500">
+                +
+              </span>
+            )}
+            <label htmlFor={boxId(product.id, index)} className="sr-only">
+              {`${product.name}: ${noun(box.unit, 2)} here`}
+            </label>
+            <input
+              id={boxId(product.id, index)}
+              inputMode="decimal"
+              enterKeyHint={index < units.length - 1 ? 'next' : 'done'}
+              autoComplete="off"
+              disabled={saving}
+              value={box.text}
+              placeholder={hints[index]}
+              onFocus={(event) => keepInView(event.currentTarget)}
+              onChange={(event) => {
+                setProblem(null)
+                count.setText(index, event.target.value)
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter') return
+                event.preventDefault()
+                if (index < units.length - 1) document.getElementById(boxId(product.id, index + 1))?.focus()
+                else void record()
+              }}
+              className="h-11 w-20 rounded-md border-2 border-neutral-200 px-2 text-right text-lg font-semibold tabular-nums placeholder:font-normal placeholder:text-neutral-400 focus:border-primary-600 focus:outline-none"
+            />
+            <span className="text-sm text-neutral-600">{noun(box.unit, box.amount ?? 2)}</span>
+          </div>
+        ))}
+      </div>
+      {(problem || typedAny) && (
+        <div className="flex items-center justify-between gap-2 text-sm">
           {problem ? (
             <p role="alert" className="min-w-0 flex-1 text-danger-700">
               {problem}
             </p>
           ) : preview != null ? (
             <p className="min-w-0 flex-1 text-neutral-700" data-count-preview>
-              {preview === 0
-                ? 'Matches what the app says'
-                : preview > 0
-                  ? `${formatNumber(preview)} ${stockUnitWord(symbol, preview)} more than the app says`
-                  : `${formatNumber(-preview)} ${stockUnitWord(symbol, -preview)} short · ${shortAs === 'USED' ? `used in the ${areaName}` : `missing from the ${areaName}`}`}
+              {preview === 0 ? (
+                'Matches'
+              ) : preview > 0 ? (
+                `${formatNumber(preview)} ${stockUnitWord(symbol, preview)} more`
+              ) : (
+                <>
+                  {formatNumber(-preview)} {stockUnitWord(symbol, -preview)} short ·{' '}
+                  {usedHere ? (
+                    // A kitchen's shortfall is used; a tap makes it missing for this count, and back.
+                    <button
+                      type="button"
+                      onClick={() => setShortChosen(shortAs === 'USED' ? 'MISSING' : 'USED')}
+                      aria-label={`${shortAs === 'USED' ? 'Used' : 'Missing'} from the ${areaName}. Tap to make it ${shortAs === 'USED' ? 'missing' : 'used'}`}
+                      className="font-semibold text-primary-700 underline decoration-dotted underline-offset-2"
+                    >
+                      {shortAs === 'USED' ? 'used' : 'missing'}
+                    </button>
+                  ) : (
+                    'missing'
+                  )}
+                </>
+              )}
             </p>
           ) : (
             <span />
           )}
-          <div className="flex shrink-0 flex-wrap items-center justify-end">
-            {menuOpen && (
-              <>
-                {count.canAdd && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const index = count.add()
-                      window.requestAnimationFrame(() => document.getElementById(boxId(product.id, index))?.focus())
-                    }}
-                    className="min-h-10 px-2 font-medium text-primary-700"
-                  >
-                    Another unit
-                  </button>
-                )}
-                {usedHere && (
-                  <button
-                    type="button"
-                    onClick={() => setShortChosen(shortAs === 'USED' ? 'MISSING' : 'USED')}
-                    className="min-h-10 px-2 font-medium text-primary-700"
-                  >
-                    {shortAs === 'USED' ? 'Record short as missing' : 'Record short as used'}
-                  </button>
-                )}
-              </>
-            )}
-            {typedAny && (
-              <button
-                type="button"
-                onClick={() => void record()}
-                disabled={saving}
-                className="min-h-10 rounded-md px-2 font-semibold text-primary-700 hover:bg-primary-50"
-              >
-                {saving ? 'Recording…' : 'Record'}
-              </button>
-            )}
-          </div>
+          {typedAny && (
+            <button
+              type="button"
+              onClick={() => void record()}
+              disabled={saving}
+              className="inline-flex min-h-10 shrink-0 items-center gap-1 rounded-md bg-primary-600 px-3 font-semibold text-white hover:bg-primary-700"
+            >
+              <Check className="h-4 w-4" aria-hidden="true" />
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          )}
         </div>
       )}
     </li>

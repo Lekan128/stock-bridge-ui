@@ -50,6 +50,7 @@ import {
 import { OUT_REASONS, outReasonLabel } from '@/features/stock/outReasons'
 import { useProductFinder } from '@/features/catalog/useProductFinder'
 import { useCountBoxes } from '@/features/products/useCountBoxes'
+import { CountUnitChips } from '@/features/products/components/CountUnitChips'
 import { useCatalogState } from '@/features/catalog/useCatalog'
 import { CountList, type CountedHere, type RowCounted } from '@/features/quick/CountList'
 import { formatMoney } from '@/features/selling/money'
@@ -542,11 +543,11 @@ function AmountStep({
   const stockText = stockUnitLabel(unitOptions)
   const symbol = resolveUnitSymbol(product.unitOfMeasure, options)
   const [typed, setTyped] = useState('')
-  // A count is made in as many of the product's units as the shelf needs (UNITS_PLAN.md Part 4, owner 2026-11-09):
-  // whole bags, then what's left - "2 bags + 7 dericas" - each in its own box. The keypad types into the chosen box;
-  // the unit buttons set its unit.
+  // A count is made in as many of the product's units as the shelf needs (owner, 2026-11-10): every unit a round
+  // chip, the ones it's counted in already on, a box for each - "2 bags + 7 dericas". The keypad types into the
+  // chosen box.
   const counting = mode === 'count'
-  const count = useCountBoxes(product, [...offered, ...others])
+  const count = useCountBoxes(product, offered)
   const [active, setActive] = useState(0)
   const activeBox = count.boxes[Math.min(active, count.boxes.length - 1)]
   const [error, setError] = useState<string | null>(null)
@@ -703,15 +704,16 @@ function AmountStep({
         </label>
       )}
 
-      {(offered.length > 1 || others.length > 0 || mode === 'in') && (
+      {counting && <CountUnitChips count={count} productName={product.name} size="lg" onAdded={setActive} />}
+
+      {!counting && (offered.length > 1 || others.length > 0 || mode === 'in') && (
         <UnitRow
-          units={[...offered, ...others.filter((o) => o.label === (counting ? activeBox.unit : option).label)]}
-          chosen={counting ? activeBox.unit : option}
-          label={counting && count.boxes.length > 1 ? `Unit of box ${count.boxes.indexOf(activeBox) + 1}` : 'Counted in'}
+          units={[...offered, ...others.filter((o) => o.label === option.label)]}
+          chosen={option}
+          label="Counted in"
           onChoose={(o) => {
             setOtherOpen(false)
-            if (counting) count.setUnit(count.boxes.indexOf(activeBox), o.label)
-            else setUnitLabel(o.label)
+            setUnitLabel(o.label)
           }}
           others={others}
           otherOpen={otherOpen}
@@ -739,7 +741,7 @@ function AmountStep({
           // A box per unit, the chosen one outlined; the keypad types into it (UNITS_PLAN.md Part 4).
           <div className="mt-1 grid grid-cols-2 gap-2" role="group" aria-label="Count in several units" data-quick-amount>
             {count.boxes.map((box, index) => (
-              <div key={box.key} className="relative">
+              <div key={box.key}>
                 <button
                   type="button"
                   aria-pressed={box === activeBox}
@@ -752,19 +754,6 @@ function AmountStep({
                   <span className="text-4xl leading-tight font-semibold">{box.text || '0'}</span>
                   <span className="text-base text-neutral-600">{noun(box.unit, box.amount || 2)}</span>
                 </button>
-                {box === activeBox && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      count.remove(index)
-                      setActive(0)
-                    }}
-                    aria-label={`Remove the ${noun(box.unit, 2)} box`}
-                    className="absolute top-1 right-1 inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-500 hover:bg-white"
-                  >
-                    <X className="h-4 w-4" aria-hidden="true" />
-                  </button>
-                )}
               </div>
             ))}
           </div>
@@ -775,15 +764,6 @@ function AmountStep({
               {counting ? noun(activeBox.unit, activeBox.amount || 2) : pluraliseUnitNoun(unitNoun(option), quantity || 2)}
             </span>
           </p>
-        )}
-        {counting && count.canAdd && (
-          <button
-            type="button"
-            onClick={() => setActive(count.add())}
-            className="-mb-2 inline-flex min-h-11 items-center text-base font-medium text-primary-700"
-          >
-            + Another unit
-          </button>
         )}
         {counting
           ? anyTyped && countedInStockUnits && count.total != null && (

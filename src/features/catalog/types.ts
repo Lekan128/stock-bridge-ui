@@ -43,6 +43,8 @@ export interface CatalogRow {
   measures?: { name: string; size: number; hidden?: boolean }[]
   /** Where its stock-outs and counts start (Part 2). */
   usedInUnit?: string | null
+  /** The units a count of it opens in (V84). Absent: the default. */
+  countIn?: string[] | null
 }
 
 export interface SnapshotPage {

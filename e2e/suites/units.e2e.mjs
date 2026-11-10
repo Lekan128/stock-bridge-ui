@@ -110,7 +110,12 @@ await check('the product form: Add a unit → Derica 0.6 kg, Cup 0.2 kg; stock-o
   await units.getByText('Type a number above 0.').waitFor()
   await cup.fill('0.2')
   await units.getByText('g and t work out by themselves.').waitFor({ timeout: 5000 }).catch(() => {})
-  await units.getByLabel('Used and counted in').selectOption({ label: 'Derica' })
+  await units.getByLabel('Stock out opens in').selectOption({ label: 'Derica' })
+  // Counted in: nothing chosen yet, so a count opens in the bag and the derica.
+  const countIn = units.getByRole('group', { name: 'Count in' })
+  for (const [name, on] of [[/^Bag/, 'true'], [/^kg$/, 'false'], [/^Derica$/, 'true'], [/^Cup$/, 'false']]) {
+    assert((await countIn.getByRole('button', { name }).getAttribute('aria-pressed')) === on, `Count in ${name} is not ${on}`)
+  }
   await page.screenshot({ path: SHOTS + '1b-units-filled.png', fullPage: true })
   await page.getByRole('button', { name: 'Save changes' }).click()
   await waitFor(async () => {
@@ -120,7 +125,7 @@ await check('the product form: Add a unit → Derica 0.6 kg, Cup 0.2 kg; stock-o
   // The product page says them, where the rest of how it's counted is.
   await page.goto(`${UI}/app/products/${rice.id}`)
   await page.locator('[data-product-measures]').getByText('Derica = 0.6 kg · Cup = 0.2 kg').waitFor()
-  await page.getByText('Stock out and counts open in Derica').waitFor()
+  await page.getByText('Stock out opens in Derica').waitFor()
 })
 
 // ------------------------------------------------------------------------------------------ 2
@@ -159,20 +164,22 @@ await check('count in two units: 2 bags + 7 dericas = 164.2 kg, in quick mode an
   await page.goto(`${UI}/app/quick?mode=count`)
   await page.locator('#quick-search').fill('Rice')
   await page.getByRole('button', { name: /^Rice/ }).first().click()
+  // Every unit as a chip, the ones Rice is counted in already on, a box for each (owner, 2026-11-10).
+  const chips = page.getByRole('group', { name: 'Count Rice in' })
+  await chips.waitFor()
   const pair = page.getByRole('group', { name: 'Count in several units' })
-  await pair.waitFor()
   const keypad = page.getByRole('group', { name: 'Keypad' })
   await keypad.getByRole('button', { name: '2', exact: true }).click()
   await pair.getByRole('button', { name: /Type dericas$/ }).click()
   await keypad.getByRole('button', { name: '7', exact: true }).click()
   await page.locator('[data-quick-total]').getByText('= 164.2 kg').waitFor()
   await page.screenshot({ path: SHOTS + '4-quick-count-two-units.png' })
-  // A third box when the shelf needs it, and taken away again.
-  await page.getByRole('button', { name: '+ Another unit' }).click()
+  // A cup too, when the shelf needs it: tap its chip, its box comes and the keypad types into it; tap again, it goes.
+  await chips.getByRole('button', { name: 'Cup', exact: true }).click()
   await keypad.getByRole('button', { name: '1', exact: true }).click()
-  await page.locator('[data-quick-total]').getByText('= 165.2 kg').waitFor()
+  await page.locator('[data-quick-total]').getByText('= 164.4 kg').waitFor()
   await page.screenshot({ path: SHOTS + '4a-quick-count-three-units.png' })
-  await pair.getByRole('button', { name: /^Remove the kg box$/ }).click()
+  await chips.getByRole('button', { name: 'Cup', exact: true }).click()
   await page.locator('[data-quick-total]').getByText('= 164.2 kg').waitFor()
   await page.getByRole('button', { name: /^Record count: 164\.2 kg/ }).click()
   await waitFor(async () => Number((await api(`/api/products/${rice.id}`, { token })).json.quantityOnHand) === 164.2, 'the count to make it 164.2 kg')
@@ -184,13 +191,35 @@ await check('count in two units: 2 bags + 7 dericas = 164.2 kg, in quick mode an
   await sheet.getByLabel('bags on the shelf').fill('1')
   await sheet.getByLabel('dericas on the shelf').fill('10')
   await sheet.locator('[data-count-total]').getByText('= 86 kg').waitFor()
-  // Each box's unit can change: 1 bag + 10 cups.
-  await sheet.getByLabel('Unit: dericas').selectOption({ label: 'cups' })
+  // Cups instead of dericas: one tap off, one tap on.
+  const sheetChips = sheet.getByRole('group', { name: 'Count Rice in' })
+  await sheetChips.getByRole('button', { name: 'Derica', exact: true }).click()
+  await sheetChips.getByRole('button', { name: 'Cup', exact: true }).click()
+  await sheet.getByLabel('cups on the shelf').fill('10')
   await sheet.locator('[data-count-total]').getByText('= 82 kg').waitFor()
-  await sheet.getByRole('button', { name: '+ Another unit' }).click()
+  await sheetChips.getByRole('button', { name: 'kg', exact: true }).click()
   assert((await sheet.locator('[data-count-pair] input').count()) === 3, 'no third box on the count sheet')
   await page.screenshot({ path: SHOTS + '4c-count-sheet-cups.png' })
-  await page.screenshot({ path: SHOTS + '4b-count-sheet-two-units.png' })
+  await sheet.getByRole('button', { name: 'Cancel' }).click()
+})
+
+await check('the product says what it is counted in: Bag + Cup, and a count opens in them', async () => {
+  await page.goto(`${UI}/app/products/${rice.id}/edit`)
+  const countIn = page.locator('[data-product-units]').getByRole('group', { name: 'Count in' })
+  await countIn.getByRole('button', { name: 'Derica', exact: true }).click()
+  await countIn.getByRole('button', { name: 'Cup', exact: true }).click()
+  await page.screenshot({ path: SHOTS + '4d-count-in-on-the-form.png', fullPage: true })
+  await page.getByRole('button', { name: 'Save changes' }).click()
+  await waitFor(async () => {
+    const countedIn = (await api(`/api/products/${rice.id}`, { token })).json.countIn ?? []
+    return countedIn.length === 2 && countedIn[0] === 'BAG:80' && countedIn[1] === 'Cup'
+  }, 'Rice to be counted in Bag + Cup')
+  await page.goto(`${UI}/app/products/${rice.id}`)
+  await page.locator('[data-product-count-in]').getByText(/Counted in .*Bag.* \+ Cup/).waitFor()
+  await page.getByRole('button', { name: /^Count/ }).first().click()
+  const sheet = page.getByRole('dialog')
+  await sheet.getByLabel('cups on the shelf').waitFor()
+  assert((await sheet.locator('[data-count-pair] input').count()) === 2, 'the count does not open in bags and cups')
   await sheet.getByRole('button', { name: 'Cancel' }).click()
 })
 

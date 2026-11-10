@@ -130,6 +130,8 @@ export interface Product {
   measures?: ProductMeasure[]
   /** Where a stock-out, count, move or quick mode starts for it (Part 2): a measure, a unit or a pack key. */
   usedInUnit?: string | null
+  /** The units a count of it opens in (V84), as unit keys. Absent or empty: its pack and its usual unit. */
+  countIn?: string[]
   warnings?: string[] | null
   /**
    * True when `packagingUnit`/`packagingSize` above are the DEFAULT among more than one distinct
@@ -269,6 +271,8 @@ export interface ProductFormPayload {
   measures?: ProductMeasure[]
   /** Where stock-outs and counts start (Part 2): a measure, a unit or a pack key; blank is the stock unit. */
   usedInUnit?: string
+  /** The units a count opens in (V84), the whole list; empty goes back to the pack and the usual unit. */
+  countIn?: string[]
   // No `costPrice` here: the product's cost is a server-computed weighted-average rollup from
   // actual purchases (see MULTI_VENDOR_INVENTORY_DESIGN.md §5.3), never a value this form
   // submits. It is still read-only on `Product` above, for the detail page to display.

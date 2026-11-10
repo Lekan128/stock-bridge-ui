@@ -370,5 +370,6 @@ export function toProduct(row: CatalogRow): Product {
     areaStock: row.areaStock,
     measures: row.measures,
     usedInUnit: row.usedInUnit ?? null,
+    countIn: row.countIn ?? undefined,
   }
 }

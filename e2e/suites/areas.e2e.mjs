@@ -576,8 +576,33 @@ await check("the closing count lists what the Kitchen has: the eggs nobody knew 
   assert((await toCount.locator('[data-count-row="Eggs"]').count()) === 0, 'Eggs is still to count')
   await page.screenshot({ path: SHOTS + '13h-counted-today.png' })
   await waitFor(async () => (await areaFigures(ownerToken, eggs.id)).Kitchen === 0, 'the Kitchen to have no eggs')
+
+  // A product in bags and kg (owner, 2026-11-10): its units are chips on the row, a box for each one that's on.
+  const plantain = await createProduct(ownerToken, owner.unique, 'Plantain', { unitOfMeasure: 'KG', packagingUnit: 'BAG', packagingSize: 15 })
+  await api(`/api/products/${plantain.id}/stock/stock-in`, { token: ownerToken, method: 'POST', body: { quantity: 19, areaId: areaIds.Store } })
+  await api('/api/area-moves', {
+    token: ownerToken,
+    method: 'POST',
+    body: { id: randomUUID(), fromAreaId: areaIds.Store, toAreaId: areaIds.Kitchen, lines: [{ productId: plantain.id, quantity: 19 }] },
+  })
+  await page.reload()
+  const plantainRow = toCount.locator('[data-count-row="Plantain"]')
+  const bags = plantainRow.getByLabel('Plantain: bags here')
+  await waitFor(async () => (await bags.getAttribute('placeholder').catch(() => null)) === '1', 'Plantain 1 bag + 4 kg on the list')
+  assert((await plantainRow.getByLabel('Plantain: kg here').getAttribute('placeholder')) === '4', 'the kg box does not say 4')
+  const chips = plantainRow.getByRole('group', { name: 'Count Plantain in' })
+  assert((await chips.getByRole('button', { pressed: true }).count()) === 2, 'the bag and kg chips are not both on')
+  await page.screenshot({ path: SHOTS + '13g3-row-in-bags-and-kg.png' })
+  await bags.fill('1')
+  await plantainRow.getByLabel('Plantain: kg here').fill('2')
+  // Short in the Kitchen: used, said in one line.
+  await plantainRow.locator('[data-count-preview]').getByText(/^2 kg short · used$/).waitFor()
+  await page.screenshot({ path: SHOTS + '13g4-row-short-used.png' })
+  await plantainRow.getByRole('button', { name: 'Save' }).click()
+  await counted.getByText(/17 kg · 2 used/).waitFor()
   await page.setViewportSize({ width: 1280, height: 900 })
   await api(`/api/products/${eggs.id}`, { token: ownerToken, method: 'DELETE' })
+  await api(`/api/products/${plantain.id}`, { token: ownerToken, method: 'DELETE' })
 })
 
 // ------------------------------------------------------------------------------------- 5c (Part 3)
@@ -824,9 +849,8 @@ await check("the Kitchen's closing count records what's short as used there, and
   await page.getByRole('button', { name: 'Count', exact: true }).first().click()
   const sheet = page.getByRole('dialog')
   await sheetArea(sheet, 'Kitchen')
-  await sheet.getByText('Anything short is recorded as used at the Kitchen.').waitFor()
   await sheet.getByRole('group', { name: /How much is on the shelf now/ }).getByRole('textbox').first().fill(String(kitchenBefore - 2))
-  await sheet.getByText('2 pieces short: recorded as used at the Kitchen.').waitFor()
+  await sheet.locator('[data-count-shortfall="USED"]').getByText(/^2 pieces short · used$/).waitFor()
   await page.screenshot({ path: SHOTS + '17-kitchen-count.png' })
   await sheet.getByRole('button', { name: 'Record count' }).click()
   await sheet.waitFor({ state: 'hidden' })
@@ -857,8 +881,8 @@ await check('a count can record its shortfall as missing instead, for that count
   const sheet = page.getByRole('dialog')
   await sheetArea(sheet, 'Kitchen')
   await sheet.getByRole('group', { name: /How much is on the shelf now/ }).getByRole('textbox').first().fill(String(kitchenBefore - 1))
-  await sheet.getByRole('button', { name: 'Change: record it as missing' }).click()
-  await sheet.getByText('1 piece short: recorded as missing from the Kitchen.').waitFor()
+  await sheet.getByRole('button', { name: 'Used from the Kitchen. Tap to make it missing' }).click()
+  await sheet.locator('[data-count-shortfall="MISSING"]').getByText(/^1 piece short · missing$/).waitFor()
   await sheet.getByRole('button', { name: 'Record count' }).click()
   await sheet.waitFor({ state: 'hidden' })
   await waitFor(async () => (await areaFigures(ownerToken, rice.id)).Kitchen === kitchenBefore - 1, 'the Kitchen to hold 1 fewer')

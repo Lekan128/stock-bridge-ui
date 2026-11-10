@@ -1,5 +1,5 @@
 import { useId, useState } from 'react'
-import { Plus, X } from 'lucide-react'
+import { Check, Plus, X } from 'lucide-react'
 import type { ProductMeasure, UnitOption } from '@/features/products/types'
 import { formatNumber } from '@/features/products/unitCopy'
 
@@ -23,11 +23,15 @@ export interface MeasureDraft {
 
 export interface UnitsDraft {
   measures: MeasureDraft[]
-  /** Where stock-outs and counts start: a unit key ("Derica", "BAG:50"), or '' for the stock unit. */
+  /** Where stock-outs start: a unit key ("Derica", "BAG:50"), or '' for the stock unit. */
   usedIn: string
+  /** The units a count opens in (V84), as unit keys; empty is the pack and the usual unit. */
+  countIn: string[]
 }
 
-export function unitsDraftFrom(product: { measures?: ProductMeasure[]; usedInUnit?: string | null } | null | undefined): UnitsDraft {
+export function unitsDraftFrom(
+  product: { measures?: ProductMeasure[]; usedInUnit?: string | null; countIn?: string[] } | null | undefined,
+): UnitsDraft {
   return {
     measures: (product?.measures ?? []).map((measure) => ({
       key: measure.name.toLowerCase(),
@@ -36,11 +40,15 @@ export function unitsDraftFrom(product: { measures?: ProductMeasure[]; usedInUni
       hidden: measure.hidden,
     })),
     usedIn: product?.usedInUnit ?? '',
+    countIn: product?.countIn ?? [],
   }
 }
 
 /** What the request carries: the whole list (hidden ones kept as they are), or a reason it can't be sent yet. */
-export function unitsPayload(draft: UnitsDraft): { measures: ProductMeasure[]; usedInUnit: string } | { problem: string } {
+export function unitsPayload(
+  draft: UnitsDraft,
+  live: { stockUnitCode: string; packOption: UnitOption | null },
+): { measures: ProductMeasure[]; usedInUnit: string; countIn: string[] } | { problem: string } {
   const seen = new Set<string>()
   const measures: ProductMeasure[] = []
   for (const row of draft.measures) {
@@ -51,7 +59,13 @@ export function unitsPayload(draft: UnitsDraft): { measures: ProductMeasure[]; u
     seen.add(name.toLowerCase())
     measures.push({ name, size: Number(row.size), hidden: row.hidden || undefined })
   }
-  return { measures, usedInUnit: draft.usedIn }
+  // The pack resized or the stock unit changed since a count unit was chosen: one that isn't a unit now goes.
+  const packKey = live.packOption ? `${live.packOption.code}:${live.packOption.factorToStockUnit}`.toLowerCase() : null
+  const countIn = draft.countIn.filter((key) => {
+    const lower = key.toLowerCase()
+    return lower === packKey || lower === live.stockUnitCode.toLowerCase() || measures.some((measure) => !measure.hidden && measure.name.toLowerCase() === lower)
+  })
+  return { measures, usedInUnit: draft.usedIn, countIn }
 }
 
 function rowProblem(row: MeasureDraft, all: MeasureDraft[]): string | null {
@@ -112,7 +126,11 @@ export function ProductUnitsField({
     // A start unit that was taken off isn't one any more.
     const stillThere =
       !usedIn || usedIn.includes(':') || rows.some((row) => !row.hidden && row.name.trim().toLowerCase() === usedIn.toLowerCase())
-    onChange({ measures: rows, usedIn: stillThere ? usedIn : '' })
+    // Nor is a count unit: the pack and the stock unit stay, an own unit stays while it's on the list.
+    const countIn = draft.countIn.filter(
+      (key) => key.includes(':') || key === stockUnitCode || rows.some((row) => !row.hidden && row.name.trim().toLowerCase() === key.toLowerCase()),
+    )
+    onChange({ ...draft, measures: rows, usedIn: stillThere ? usedIn : '', countIn })
   }
 
   function add(name: string) {
@@ -129,6 +147,29 @@ export function ProductUnitsField({
         <p className="mt-1 text-xs text-neutral-500">Choose what it's counted in first. Each unit is a number of it.</p>
       </div>
     )
+  }
+
+  // Every unit it has, for "Count in": the pack, the stock unit, its own units - biggest first, as a shelf is counted.
+  const packKey = packOption ? `${packOption.code}:${packOption.factorToStockUnit}` : null
+  const readyMeasures = shown.filter((row) => row.name.trim() && !rowProblem(row, draft.measures))
+  const countChoices: { key: string; label: string; size: number }[] = [
+    ...(packOption && packKey ? [{ key: packKey, label: packOption.label, size: packOption.factorToStockUnit }] : []),
+    { key: stockUnitCode, label: stockWord, size: 1 },
+    ...readyMeasures.map((row) => ({ key: row.name.trim(), label: row.name.trim(), size: Number(row.size) })),
+  ].sort((a, b) => b.size - a.size)
+  const sameKey = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
+  const chosenCount = draft.countIn.filter((key) => countChoices.some((choice) => sameKey(choice.key, key)))
+  // Nothing chosen yet: what a count opens in by itself - the pack and the usual unit (else the stock unit).
+  const usualKey =
+    draft.usedIn && !draft.usedIn.includes(':') && readyMeasures.some((row) => sameKey(row.name.trim(), draft.usedIn))
+      ? draft.usedIn
+      : stockUnitCode
+  const countOn = chosenCount.length > 0 ? chosenCount : [...(packKey ? [packKey] : []), usualKey]
+  function toggleCount(key: string) {
+    const on = countOn.some((other) => sameKey(other, key))
+    if (on && countOn.length === 1) return
+    const next = on ? countOn.filter((other) => !sameKey(other, key)) : [...countOn, key]
+    onChange({ ...draft, countIn: countChoices.filter((choice) => next.some((other) => sameKey(other, choice.key))).map((choice) => choice.key) })
   }
 
   const startChoices: { key: string; label: string }[] = [
@@ -299,7 +340,7 @@ export function ProductUnitsField({
       {startChoices.length > 1 && (
         <div>
           <label htmlFor={startId} className="mb-1.5 block text-sm font-medium text-neutral-700">
-            Used and counted in
+            Stock out opens in
           </label>
           <select
             id={startId}
@@ -314,8 +355,39 @@ export function ProductUnitsField({
             ))}
           </select>
           <p className="mt-1.5 text-xs text-neutral-500">
-            Stock out, counts, moves and quick mode open in this. Stock is still kept in {stockSymbol}, and deliveries
-            open in the pack. Anyone can switch while recording.
+            Stock out, moves and quick mode open in this. Stock is still kept in {stockSymbol}, and deliveries open in
+            the pack. Anyone can switch while recording.
+          </p>
+        </div>
+      )}
+
+      {/* The units a count opens in (owner, 2026-11-10), set once here so nobody picks them on every count. */}
+      {countChoices.length > 1 && (
+        <div>
+          <p id={`${startId}-count`} className="mb-1.5 text-sm font-medium text-neutral-700">
+            Count in
+          </p>
+          <div role="group" aria-labelledby={`${startId}-count`} className="flex flex-wrap gap-1.5" data-count-in>
+            {countChoices.map((choice) => {
+              const on = countOn.some((other) => sameKey(other, choice.key))
+              return (
+                <button
+                  key={choice.key}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => toggleCount(choice.key)}
+                  className={`inline-flex h-9 items-center gap-1 rounded-full border px-3 text-sm font-medium ${
+                    on ? 'border-primary-600 bg-primary-600 text-white' : 'border-neutral-300 bg-white text-neutral-700 hover:border-primary-400'
+                  }`}
+                >
+                  {on && <Check className="h-3.5 w-3.5" aria-hidden="true" />}
+                  {choice.label}
+                </button>
+              )
+            })}
+          </div>
+          <p className="mt-1.5 text-xs text-neutral-500">
+            A count opens with a box for each. Anyone counting can tap another on for that count.
           </p>
         </div>
       )}

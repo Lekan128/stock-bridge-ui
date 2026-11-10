@@ -461,6 +461,29 @@ export function countUnits(
   return { big, small: usual.isPack ? stock : usual }
 }
 
+/**
+ * The units a count of this product opens in (owner, 2026-11-10): the ones set on the product under "Count in", else
+ * its pack and its usual unit. Biggest first, as a shelf is counted: "2 bags + 7 dericas".
+ */
+export function countInOptions(
+  product: { usedInUnit?: string | null; countIn?: string[] | null },
+  offered: UnitOption[],
+): UnitOption[] {
+  const chosen = (product.countIn ?? [])
+    .map((key) => offered.find((option) => unitKey(option).toLowerCase() === key.toLowerCase()))
+    .filter((option): option is UnitOption => option != null)
+  const units = chosen.length > 0 ? chosen : (() => {
+    const pair = countUnits(product, offered)
+    return pair.big ? [pair.big, pair.small] : [pair.small]
+  })()
+  return biggestFirst(units.filter((unit, index) => units.findIndex((other) => unitKey(other) === unitKey(unit)) === index))
+}
+
+/** Units as a shelf is counted, biggest first: bag, kg, derica, cup. */
+export function biggestFirst(units: UnitOption[]): UnitOption[] {
+  return [...units].sort((a, b) => b.factorToStockUnit - a.factorToStockUnit)
+}
+
 export function stockUnitOption(options: UnitOption[]): UnitOption {
   return options.find((option) => option.isStockUnit) ?? options[0] ?? { ...NO_UNIT_OPTION }
 }

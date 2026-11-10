@@ -830,7 +830,7 @@ export function ProductFormPage() {
   async function save(values: ProductFormValues) {
     setFormError(null)
     // The product's own units go with the rest (UNITS_PLAN.md Part 1); one still being typed is said here.
-    const unitFields = unitsPayload(units)
+    const unitFields = unitsPayload(units, { stockUnitCode: watchedStockUnitCode ?? '', packOption: livePackOption })
     if ('problem' in unitFields) {
       setFormError(unitFields.problem)
       return

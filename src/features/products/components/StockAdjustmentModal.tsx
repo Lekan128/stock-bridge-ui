@@ -14,8 +14,8 @@ import type { Product, StockMutationResponse, UnitOption } from '@/features/prod
 import type { AreaFigure } from '@/features/branches/types'
 import { formatQuantity, pluraliseUnitNoun, stockUnitWord, unitNoun } from '@/features/products/unitCopy'
 import { productsOwnUnits, roundQuantity, unitOptionsForProduct } from '@/features/products/unitSet'
-import { useCountBoxes } from '@/features/products/useCountBoxes'
-import { X } from 'lucide-react'
+import { keepInView, useCountBoxes } from '@/features/products/useCountBoxes'
+import { CountUnitChips } from '@/features/products/components/CountUnitChips'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import { CountShortfall } from '@/features/branches/CountShortfall'
 import { areaShortAs, lastCountedPhrase, type ShortAs } from '@/features/branches/areas'
@@ -176,53 +176,43 @@ export function StockAdjustmentModal({
       }
     >
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
-        {/* One box per unit, added as the shelf needs them (owner, 2026-11-09): "[2] bags + [7] dericas + [1] cup". */}
+        {/* Every unit as a chip, a box for each one that's on (owner, 2026-11-10): "[2] bags + [7] dericas". */}
         <fieldset aria-describedby={countError ? 'count-error' : lastCounted ? 'count-hint' : undefined}>
           <legend className="mb-1.5 text-sm font-medium text-neutral-700">How much is on the shelf now?</legend>
-          <div className="flex flex-col items-start gap-2" data-count-pair>
+          <div className="mb-2">
+            <CountUnitChips
+              count={count}
+              productName={productName}
+              onAdded={(index) => window.requestAnimationFrame(() => document.getElementById(`count-box-${index}`)?.focus())}
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-2" data-count-pair>
             {count.boxes.map((box, index) => (
-              <div key={box.key} className="flex items-center gap-2">
-                <span aria-hidden="true" className="w-3 text-sm text-neutral-500">
-                  {index > 0 ? '+' : ''}
-                </span>
-                <CountBox
-                  id={`count-box-${index}`}
-                  unit={box.unit}
-                  amount={box.amount ?? 2}
-                  stockUnit={stockUnit}
-                  options={offered.filter((option) => option.label === box.unit.label || !count.boxes.some((other) => other.unit.label === option.label))}
-                  onUnit={(option) => count.setUnit(index, option.label)}
-                  value={box.text}
-                  onChange={(text) => {
-                    setCountError(null)
-                    count.setText(index, text)
-                  }}
-                  autoFocus={index === 0}
-                />
-                {count.boxes.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => count.remove(index)}
-                    aria-label={`Remove the ${nounOf(box.unit, stockUnit, 2)} box`}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100"
-                  >
-                    <X className="h-4 w-4" aria-hidden="true" />
-                  </button>
+              <div key={box.key} className="flex items-center gap-1.5">
+                {index > 0 && (
+                  <span aria-hidden="true" className="text-sm text-neutral-500">
+                    +
+                  </span>
                 )}
+                <label htmlFor={`count-box-${index}`} className="sr-only">
+                  {nounOf(box.unit, stockUnit, 2)} on the shelf
+                </label>
+                <input
+                  id={`count-box-${index}`}
+                  inputMode="decimal"
+                  autoFocus={index === 0}
+                  autoComplete="off"
+                  value={box.text}
+                  onFocus={(event) => keepInView(event.currentTarget)}
+                  onChange={(event) => {
+                    setCountError(null)
+                    count.setText(index, event.target.value)
+                  }}
+                  className="w-20 rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-900 tabular-nums focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
+                />
+                <span className="text-sm text-neutral-700">{nounOf(box.unit, stockUnit, box.amount ?? 2)}</span>
               </div>
             ))}
-            {count.canAdd && (
-              <button
-                type="button"
-                onClick={() => {
-                  const index = count.add()
-                  window.requestAnimationFrame(() => document.getElementById(`count-box-${index}`)?.focus())
-                }}
-                className="ml-5 inline-flex min-h-9 items-center text-sm font-medium text-primary-700 hover:underline"
-              >
-                + Another unit
-              </button>
-            )}
           </div>
           {inStockUnits && <p className="mt-1.5 text-sm text-neutral-700" data-count-total>= {inStockUnits}</p>}
           {countError ? (
@@ -288,63 +278,4 @@ export function StockAdjustmentModal({
 /** The unit a box counts in, as it reads after a number: "bags", "dericas", "kg". */
 function nounOf(unit: UnitOption, stockUnit: string, amount: number): string {
   return unit.isStockUnit ? stockUnitWord(stockUnit, amount) : pluraliseUnitNoun(unitNoun(unit), amount)
-}
-
-/** One box of a count: the number, then its unit - a choice of the product's own units when it has more than one. */
-function CountBox({
-  id,
-  unit,
-  amount,
-  stockUnit,
-  options,
-  onUnit,
-  value,
-  onChange,
-  autoFocus,
-}: {
-  id: string
-  unit: UnitOption
-  amount: number
-  stockUnit: string
-  options: UnitOption[]
-  onUnit: (option: UnitOption) => void
-  value?: string
-  onChange?: (value: string) => void
-  autoFocus?: boolean
-}) {
-  const plural = nounOf(unit, stockUnit, 2)
-  return (
-    <div className="flex items-center gap-1.5">
-      <label htmlFor={id} className="sr-only">
-        {plural} on the shelf
-      </label>
-      <input
-        id={id}
-        inputMode="decimal"
-        autoFocus={autoFocus}
-        className="w-20 rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-900 tabular-nums focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
-        value={value}
-        onChange={(event) => onChange?.(event.target.value)}
-      />
-      {options.length > 1 ? (
-        <select
-          aria-label={`Unit: ${plural}`}
-          value={unit.label}
-          onChange={(event) => {
-            const picked = options.find((option) => option.label === event.target.value)
-            if (picked) onUnit(picked)
-          }}
-          className="rounded-md border border-neutral-200 bg-white py-2 pr-7 pl-2 text-sm text-neutral-800 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
-        >
-          {options.map((option) => (
-            <option key={option.label} value={option.label}>
-              {nounOf(option, stockUnit, amount)}
-            </option>
-          ))}
-        </select>
-      ) : (
-        <span className="text-sm text-neutral-700">{nounOf(unit, stockUnit, amount)}</span>
-      )}
-    </div>
-  )
 }
