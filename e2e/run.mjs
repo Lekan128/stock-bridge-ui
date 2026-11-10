@@ -40,6 +40,7 @@ const SUITES = [
   'areas',
   'units',
   'product-form',
+  'sidebar',
   'price-requests',
   'surfaces',
   'chaos',
