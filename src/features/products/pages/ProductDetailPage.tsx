@@ -6,7 +6,7 @@ import { useWorkArea } from '@/features/branches/workArea'
 import { OtherBranchesList } from '@/features/branches/OtherBranchesList'
 import { AreaBreakdown } from '@/features/branches/AreaBreakdown'
 import { hasAreas } from '@/features/branches/areas'
-import { ArrowLeft, ArrowLeftRight, MessageSquarePlus, Minus, Pencil, Plus, ShoppingBag, Truck } from 'lucide-react'
+import { Archive, ArchiveRestore, ArrowLeft, ArrowLeftRight, FileText, MessageSquarePlus, Minus, Pencil, Plus, ShoppingBag, Truck } from 'lucide-react'
 import { formatNumber } from '@/features/products/unitCopy'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
@@ -290,9 +290,16 @@ export function ProductDetailPage() {
       </>
     ) : null
 
-  // Edit and the rare, destructive things live in "⋯" (C2, finding U3); Deactivate behind its confirmation.
+  // Edit and the rare, destructive things live in "⋯" (C2, finding U3); Deactivate behind its confirmation. Every item
+  // has its picture (owner, 2026-11-10: one without "just seems off"); Order more has Purchase orders' own.
   const orderItem: OverflowMenuItem[] = canOrder
-    ? [{ label: 'Order more', onSelect: () => navigate(`/app/purchase-orders/new?products=${product.id}`) }]
+    ? [
+        {
+          label: 'Order more',
+          icon: <FileText className="h-4 w-4 text-neutral-500" aria-hidden="true" />,
+          onSelect: () => navigate(`/app/purchase-orders/new?products=${product.id}`),
+        },
+      ]
     : []
   const sendItem: OverflowMenuItem[] = canSend
     ? [
@@ -313,8 +320,18 @@ export function ProductDetailPage() {
           onSelect: () => navigate(`/app/products/${product.id}/edit`),
         },
         product.active
-          ? { label: 'Deactivate', tone: 'danger', onSelect: () => setConfirmDeactivate(true) }
-          : { label: activating ? 'Activating…' : 'Activate', onSelect: () => void handleActivate(), disabled: activating },
+          ? {
+              label: 'Deactivate',
+              tone: 'danger',
+              icon: <Archive className="h-4 w-4" aria-hidden="true" />,
+              onSelect: () => setConfirmDeactivate(true),
+            }
+          : {
+              label: activating ? 'Activating…' : 'Activate',
+              icon: <ArchiveRestore className="h-4 w-4 text-neutral-500" aria-hidden="true" />,
+              onSelect: () => void handleActivate(),
+              disabled: activating,
+            },
       ]
     : sendItem
 

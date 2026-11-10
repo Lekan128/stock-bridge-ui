@@ -177,6 +177,14 @@ await check('review: each section in a line with Change, then Create; the produc
   const vendors = (await api(`/api/products/${created}/vendors`, { token })).json
   assert(vendors.length === 2, `${vendors.length} suppliers`)
   assert(vendors.find((v) => v.companyVendorId === mama.id)?.isPreferred, 'Mama is not the usual supplier')
+  // Its "⋯": every item with its picture.
+  await page.getByRole('button', { name: /^More actions for / }).click()
+  const items = page.getByRole('menuitem')
+  for (let i = 0; i < (await items.count()); i++) {
+    assert((await items.nth(i).locator('svg').count()) === 1, `"${await items.nth(i).innerText()}" has no icon`)
+  }
+  await page.screenshot({ path: SHOTS + '4b-product-menu.png' })
+  await page.keyboard.press('Escape')
 })
 
 // ------------------------------------------------------------------------------------------ 5
