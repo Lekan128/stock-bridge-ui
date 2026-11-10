@@ -2,7 +2,7 @@ import { ProductUnitsField, unitsDraftFrom, unitsPayload, type UnitsDraft } from
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Lock } from 'lucide-react'
+import { ArrowLeft, Banknote, Bell, ClipboardCheck, Lock, Ruler, Tag, Truck } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
@@ -1097,13 +1097,13 @@ export function ProductFormPage() {
     sectionProblem?.step === stepId || Object.keys(errors).some((field) => FIELD_STEP[field] === stepId)
   const steps: FormStep[] = (
     [
-      { id: 'basics', label: 'Basics' },
-      { id: 'units', label: 'Units' },
-      ...(showsSellingPrice ? [{ id: 'price', label: 'Price', optional: !requiresSellingPrice }] : []),
-      ...(canViewVendors ? [{ id: 'suppliers', label: 'Suppliers', optional: true }] : []),
-      { id: 'alert', label: 'Stock alert', optional: true },
-      ...(isEdit ? [] : [{ id: 'review', label: 'Review' }]),
-    ] as { id: StepId; label: string; optional?: boolean }[]
+      { id: 'basics', label: 'Basics', icon: Tag },
+      { id: 'units', label: 'Units', icon: Ruler },
+      ...(showsSellingPrice ? [{ id: 'price', label: 'Price', icon: Banknote, optional: !requiresSellingPrice }] : []),
+      ...(canViewVendors ? [{ id: 'suppliers', label: 'Suppliers', icon: Truck, optional: true }] : []),
+      { id: 'alert', label: 'Stock alert', icon: Bell, optional: true },
+      ...(isEdit ? [] : [{ id: 'review', label: 'Review', icon: ClipboardCheck }]),
+    ] as (Omit<FormStep, 'done' | 'problem' | 'id'> & { id: StepId })[]
   ).map((candidate) => ({
     ...candidate,
     done: !isEdit && passed.has(candidate.id) && !stepProblem(candidate.id),
@@ -1219,11 +1219,18 @@ export function ProductFormPage() {
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
-        <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">{isEdit ? `Edit · ${product?.name ?? 'product'}` : 'Add product'}</h1>
-          {/* What must be filled, said once (owner, 2026-11-10); the fields say "Required" themselves. */}
-          <p className="text-sm text-neutral-600">Only what says Required has to be filled. The rest can wait.</p>
-        </div>
+        {isEdit ? (
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-neutral-500">Edit product</p>
+            <h1 className="truncate text-2xl font-semibold text-neutral-900">{product?.name ?? 'Product'}</h1>
+          </div>
+        ) : (
+          <div>
+            <h1 className="text-2xl font-semibold text-neutral-900">Add product</h1>
+            {/* What must be filled, said once (owner, 2026-11-10); the fields say "Required" themselves. */}
+            <p className="text-sm text-neutral-600">Only what says Required has to be filled. The rest can wait.</p>
+          </div>
+        )}
       </div>
 
       {isVendor && <ReviewImpactNotice mode={isEdit ? 'edit' : 'create'} />}
@@ -1255,7 +1262,7 @@ export function ProductFormPage() {
         />
       )}
 
-      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-10">
+      <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[13rem_minmax(0,48rem)] lg:gap-8">
         <div className="lg:sticky lg:top-6 lg:self-start">
           <FormSteps
             steps={steps}
@@ -1275,7 +1282,11 @@ export function ProductFormPage() {
           }
           void handleSubmit(onSubmit, onInvalid)(event)
         }}
-        noValidate className="flex max-w-2xl min-w-0 flex-col gap-5">
+        noValidate
+        // One white card, as the app's other pages hold their content; its buttons along the bottom edge.
+        className="-mx-4 min-w-0 border-y border-neutral-200 bg-white sm:mx-0 sm:rounded-xl sm:border sm:shadow-sm"
+      >
+        <div className="flex flex-col gap-6 px-4 py-5 sm:px-7 sm:py-6">
         <FormSection
           id="basics"
           current={step}
@@ -1283,10 +1294,12 @@ export function ProductFormPage() {
           description={isVendor ? 'What it is. Changing any of this sends the listing back for review.' : 'What it is, and how you’ll find it.'}
         >
         {/* -------------------------------------------------------------- Product image */}
-        {/* No section header — self-evidently its own thing at the top of the form. */}
-        <div>
-          <p className="mb-1.5 text-sm font-medium text-neutral-700">Product image</p>
+        {/* A small tile beside the name (2026-11-10), as a product looks in a list: its picture, then what it's called. */}
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+        <div className="shrink-0">
+          <p className="mb-1.5 text-sm font-medium text-neutral-700">Photo</p>
           <ImageUploadField
+            compact
             file={imageFile}
             existingImageUrl={product?.imageUrl}
             removed={removeImage}
@@ -1294,6 +1307,7 @@ export function ProductFormPage() {
             onRemove={() => setRemoveImage(true)}
           />
         </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-5">
 
         <TextField label="Name" requiredMark error={errors.name?.message} {...register('name')} />
         {/* Locked whenever the tenant has auto-generation on — see ProductSkuSettingsPage for the
@@ -1338,6 +1352,8 @@ export function ProductFormPage() {
         ) : (
           <TextField label="SKU" requiredMark error={errors.sku?.message} {...register('sku')} />
         )}
+        </div>
+        </div>
 
         <div>
           <label htmlFor="description" className="mb-1.5 block text-sm font-medium text-neutral-700">
@@ -1841,9 +1857,10 @@ export function ProductFormPage() {
         {isMultiBranch && isEdit && (
           <p className="text-right text-sm text-neutral-600">Changes to this product apply at all {branchCount} branches.</p>
         )}
+        </div>
         {/* Adding: Next, step by step, and Create only on Review. Editing: Save from any section, since what's required
             is already filled in (owner, 2026-11-10). Kept at the bottom of a phone's screen. */}
-        <div className="sticky bottom-0 -mx-4 flex items-center justify-end gap-2 border-t border-neutral-200 bg-white px-4 py-3 lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:px-0">
+        <div className="sticky bottom-0 z-10 flex items-center justify-end gap-2 border-t border-neutral-200 bg-neutral-50 px-4 py-3 sm:rounded-b-xl sm:px-7">
           {!isEdit && stepIndex > 0 ? (
             <Button variant="secondary" type="button" onClick={() => goTo(steps[stepIndex - 1].id)}>
               Back
@@ -1941,7 +1958,7 @@ function FormSection({
       className={current === id ? 'flex flex-col gap-5' : 'hidden'}
       data-form-section={id}
     >
-      <div>
+      <div className="border-b border-neutral-100 pb-4">
         <h2 id={`section-${id}-title`} className="text-lg font-semibold text-neutral-900">
           {title}
         </h2>

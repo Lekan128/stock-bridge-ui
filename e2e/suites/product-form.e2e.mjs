@@ -185,6 +185,9 @@ await check('a phone: the steps are a row across the top, and Next stays at the 
   await page.goto(`${UI}/app/products/new`)
   await heading('Basics').waitFor()
   await page.screenshot({ path: SHOTS + '5-phone.png' })
+  await page.getByRole('navigation', { name: 'Steps to add a product' }).getByRole('button', { name: /Suppliers/ }).click()
+  await page.getByRole('button', { name: 'Add a supplier' }).click()
+  await page.screenshot({ path: SHOTS + '5b-phone-suppliers.png' })
   await page.setViewportSize({ width: 1280, height: 900 })
 })
 
@@ -203,6 +206,7 @@ await check('editing: the sections listed plainly, Save from any of them; #suppl
   // A name changed from Basics, saved straight from there.
   await page.goto(`${UI}/app/products/${created}/edit`)
   await heading('Basics').waitFor()
+  await page.screenshot({ path: SHOTS + '7-edit-basics.png' })
   await page.getByLabel('Name', { exact: true }).fill(`Rice (renamed) ${owner.unique}`)
   await page.getByRole('button', { name: 'Save changes' }).click()
   await waitFor(async () => (await api(`/api/products/${created}`, { token })).json.name.startsWith('Rice (renamed)'), 'the new name')

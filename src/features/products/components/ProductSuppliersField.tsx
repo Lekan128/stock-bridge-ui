@@ -5,7 +5,7 @@ import type { ProductVendor } from '@/features/products/vendors/types'
 import type { CompanyVendor } from '@/features/vendors/types'
 import { AddSupplierInPlace } from '@/features/vendors/components/AddSupplierInPlace'
 import { formatMoney } from '@/features/selling/money'
-import { formatNumber, unitNoun } from '@/features/products/unitCopy'
+import { formatNumber, stockUnitWord, unitNoun } from '@/features/products/unitCopy'
 
 /** The pack a supplier sends it in: the product's own, loose (by the stock unit), or another container. */
 export const SAME_PACK = 'product'
@@ -102,6 +102,8 @@ export function ProductSuppliersField({
   packagingOptions: UnitOfMeasureOption[]
 }) {
   const [adding, setAdding] = useState(false)
+  // "piece", "kg": the stock unit as it reads in a sentence.
+  const stockWord = stockSymbol ? stockUnitWord(stockSymbol, 1) : 'unit'
   const taken = new Set([...drafts.map((draft) => draft.companyVendorId), ...(linked ?? []).map((line) => line.companyVendorId)])
 
   function update(key: string, change: Partial<SupplierDraft>) {
@@ -111,7 +113,7 @@ export function ProductSuppliersField({
   return (
     <div className="flex flex-col gap-3" data-product-suppliers>
       {linked && linked.length > 0 && (
-        <ul className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white" aria-label="Suppliers it has">
+        <ul className="flex flex-col divide-y divide-neutral-200 rounded-lg border border-neutral-200 bg-neutral-50" aria-label="Suppliers it has">
           {linked.map((line) => {
             const pack = line.packs.find((candidate) => candidate.isDefault) ?? line.packs[0]
             return (
@@ -138,9 +140,9 @@ export function ProductSuppliersField({
             ? unitNoun(productPack)
             : other
               ? (packagingOptions.find((option) => option.code === draft.pack)?.label ?? draft.pack).toLowerCase()
-              : stockSymbol
+              : stockWord
         return (
-          <div key={draft.key} className="flex flex-col gap-3 rounded-lg border border-neutral-200 bg-white p-4" data-supplier-card={index + 1}>
+          <div key={draft.key} className="flex flex-col gap-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4" data-supplier-card={index + 1}>
             <div className="flex items-end gap-2">
               <div className="min-w-0 flex-1">
                 <label htmlFor={`supplier-${draft.key}`} className="mb-1.5 block text-sm font-medium text-neutral-700">
@@ -181,7 +183,7 @@ export function ProductSuppliersField({
                   className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
                 >
                   {productPack && <option value={SAME_PACK}>{productPack.label}</option>}
-                  <option value={LOOSE}>Loose, by the {stockSymbol || 'unit'}</option>
+                  <option value={LOOSE}>Loose, by the {stockWord}</option>
                   {packagingOptions.map((option) => (
                     <option key={option.code} value={option.code}>
                       {productPack ? `Another pack: ${option.label}` : option.label}
@@ -199,7 +201,7 @@ export function ProductSuppliersField({
                     inputMode="decimal"
                     value={draft.size}
                     onChange={(event) => update(draft.key, { size: event.target.value })}
-                    className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-900 tabular-nums focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
+                    className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 tabular-nums focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
                   />
                 </div>
               )}
@@ -212,7 +214,7 @@ export function ProductSuppliersField({
                   inputMode="decimal"
                   value={draft.price}
                   onChange={(event) => update(draft.key, { price: event.target.value.replace(/,/g, '') })}
-                  className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-900 tabular-nums focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
+                  className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 tabular-nums focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
                 />
                 {draft.pack === SAME_PACK && productPack && Number(draft.price) > 0 && (
                   <p className="mt-1.5 text-xs text-neutral-500">
