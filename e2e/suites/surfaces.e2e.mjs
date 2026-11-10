@@ -200,7 +200,7 @@ for (const size of Object.keys(VIEWPORTS)) {
       await page.getByRole('button', { name: /Bag of 50 kg/ }).first().click()
       await page.getByRole('button', { name: 'Add price break' }).first().click()
     })
-    await page.goto(`${UI}/app/products/new`)
+    await page.goto(`${UI}/app/products/new#units`)
     await sheet(page, size, 'request-unit', 'Request a new unit', () =>
       page.getByRole('button', { name: "Can't find your unit?" }).first().click(),
     )

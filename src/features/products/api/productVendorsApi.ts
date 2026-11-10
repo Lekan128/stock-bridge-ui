@@ -24,6 +24,12 @@ import type {
 export const productVendorsApi = {
   list: (productId: string) => api.get<ProductVendor[]>(`/api/products/${productId}/vendors`).then((r) => r.data),
 
+  /** A supplier linked with nothing received (2026-11-10): the product form's "+ Add another supplier". */
+  link: (
+    productId: string,
+    payload: { companyVendorId: string; cost?: number; packagingUnit?: string; packagingSize?: number },
+  ) => api.post<ProductVendor>(`/api/products/${productId}/vendors`, payload).then((r) => r.data),
+
   /**
    * Partial patch — used for both editing the default pack's fields and the preferred-vendor swap
    * (`{ isPreferred: true }` alone triggers the atomic server-side swap; there is no way to send

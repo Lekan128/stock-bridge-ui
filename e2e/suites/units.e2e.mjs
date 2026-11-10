@@ -94,7 +94,7 @@ const page = await context.newPage()
 
 // ------------------------------------------------------------------------------------------ 1
 await check('the product form: Add a unit → Derica 0.6 kg, Cup 0.2 kg; stock-outs start in Derica', async () => {
-  await page.goto(`${UI}/app/products/${rice.id}/edit`)
+  await page.goto(`${UI}/app/products/${rice.id}/edit#units`)
   const units = page.locator('[data-product-units]')
   await units.getByRole('heading', { name: 'Also used in' }).waitFor()
   await page.screenshot({ path: SHOTS + '1-units-empty.png', fullPage: true })
@@ -204,7 +204,7 @@ await check('count in two units: 2 bags + 7 dericas = 164.2 kg, in quick mode an
 })
 
 await check('the product says what it is counted in: Bag + Cup, and a count opens in them', async () => {
-  await page.goto(`${UI}/app/products/${rice.id}/edit`)
+  await page.goto(`${UI}/app/products/${rice.id}/edit#units`)
   const countIn = page.locator('[data-product-units]').getByRole('group', { name: 'Count in' })
   await countIn.getByRole('button', { name: 'Derica', exact: true }).click()
   await countIn.getByRole('button', { name: 'Cup', exact: true }).click()
@@ -225,12 +225,12 @@ await check('the product says what it is counted in: Bag + Cup, and a count open
 
 // ------------------------------------------------------------------------------------------ 5
 await check('taking off a used unit hides it; the history still reads 5 dericas', async () => {
-  await page.goto(`${UI}/app/products/${rice.id}/edit`)
+  await page.goto(`${UI}/app/products/${rice.id}/edit#units`)
   const units = page.locator('[data-product-units]')
   await units.getByRole('button', { name: 'Take Derica off' }).click()
   await page.getByRole('button', { name: 'Save changes' }).click()
   await waitFor(async () => (await api(`/api/products/${rice.id}`, { token })).json.measures?.some((m) => m.name === 'Derica' && m.hidden), 'Derica to be hidden')
-  await page.goto(`${UI}/app/products/${rice.id}/edit`)
+  await page.goto(`${UI}/app/products/${rice.id}/edit#units`)
   await page.locator('[data-hidden-measures]').getByText(/Derica \(0\.6 kg\)/).waitFor()
   await page.screenshot({ path: SHOTS + '5-hidden-unit.png', fullPage: true })
   await page.goto(`${UI}/app/products/${rice.id}`)

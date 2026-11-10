@@ -286,6 +286,10 @@ export interface ProductFormPayload {
    * `ProductVendor` rows, and this is only how the FIRST one gets created.
    */
   initialVendor?: InitialVendorPayload
+  /** Create only (2026-11-10): its suppliers, several at once, each with its pack and price per stock unit. */
+  suppliers?: { companyVendorId: string; cost?: number; packagingUnit?: string; packagingSize?: number }[]
+  /** Create only: what's on the shelf as it's added, in stock units, and who it was bought from if anyone. */
+  openingStock?: { quantity: number; companyVendorId?: string; branchId?: string }
   /**
    * A company category id. On create, omitted means uncategorised. On update, omitted means
    * "leave it as it is" — removing a category takes {@link ProductUpdatePayload.clearCategory}.

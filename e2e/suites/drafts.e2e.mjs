@@ -188,6 +188,8 @@ await check('new product: offline the button reads "Create when online" and is d
   await goOffline()
   await page.reload()
   await page.getByText(/Picked up your draft from/).waitFor()
+  // Created from Review, the last step (2026-11-10).
+  await page.getByRole('navigation', { name: 'Steps to add a product' }).getByRole('button', { name: /Review/ }).click()
   const button = page.getByRole('button', { name: 'Create when online' })
   await button.waitFor()
   assert(await button.isDisabled(), 'create enabled offline')
@@ -212,6 +214,7 @@ await check('new product: a different name arriving from search offers the draft
 })
 
 await check('new product: creating it clears the draft', async () => {
+  await page.getByRole('navigation', { name: 'Steps to add a product' }).getByRole('button', { name: /Review/ }).click()
   await page.getByRole('button', { name: 'Create product' }).click()
   await page.waitForURL(/\/app\/products\/[0-9a-f-]{36}$/, { timeout: 20000 })
   assert((await productsNamed(productName)).length === 1, 'product not created once')

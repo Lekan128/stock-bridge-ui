@@ -210,7 +210,7 @@ await check('the product page at a branch: "Only at Oshodi so far", and when it 
 // ------------------------------------------------------------------------------------------ 6
 await check("a low-stock level for each branch, from the product's settings", async () => {
   const { context, page } = await ownerPage(headOffice.id)
-  await page.goto(`${UI}/app/products/${rice.id}/edit`)
+  await page.goto(`${UI}/app/products/${rice.id}/edit#alert`)
   await page.getByRole('button', { name: 'Different for each branch' }).click()
   await page.getByLabel('Low-stock level at Oshodi').fill('12')
   await page.getByRole('button', { name: 'Save branch levels' }).click()
@@ -318,7 +318,7 @@ await check('the stock-in receipt names the branch it was recorded at', async ()
 await check('a price saved at a multi-branch company says it applies at every branch', async () => {
   await api('/api/company/selling', { token, method: 'PUT', body: { sellsStock: true } })
   const { context, page } = await ownerPage(headOffice.id)
-  await page.goto(`${UI}/app/products/${beans.id}/edit`)
+  await page.goto(`${UI}/app/products/${beans.id}/edit#price`)
   await page.getByLabel(/Selling price/).first().fill('5000')
   await page.getByRole('button', { name: 'Save changes' }).click()
   await page.getByText(/^Saved\. ₦5,000 .+ at all 2 branches\.$/).waitFor()
