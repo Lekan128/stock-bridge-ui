@@ -14,7 +14,9 @@ import Dexie, { type Table } from 'dexie'
  */
 
 /** Bump to discard every device's saved cache, e.g. after a response shape changes. */
-export const CACHE_BUSTER = 'a2-v1'
+// a2-v2: the two-tab fix (createApiClient). A copy saved before it may hold another company's
+// answers, written by a tab that had silently picked up another tab's session.
+export const CACHE_BUSTER = 'a2-v2'
 
 const DB_PREFIX = 'procurepaddy-cache'
 

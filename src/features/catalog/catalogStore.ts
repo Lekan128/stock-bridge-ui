@@ -103,10 +103,32 @@ export function queryCatalog(query: CatalogQuery): Promise<CatalogQueryResult> {
 let databaseName: string | null = null
 let stopTriggers: (() => void) | null = null
 
+const PURGED_KEY = 'pp.catalogPurged.v1'
+
+/**
+ * Once per device, deletes every catalogue copy made before the two-tab fix (`createApiClient`):
+ * a tab that silently picked up another tab's session synced THAT company's products into its own
+ * copy, so any copy from before may hold another company's products. Each one is rebuilt from the
+ * server on next start.
+ */
+async function purgeCopiesFromBeforeTabFix(): Promise<void> {
+  try {
+    if (localStorage.getItem(PURGED_KEY) === '1') return
+    const names = (await indexedDB.databases()).map((database) => database.name)
+    for (const name of names) {
+      if (name?.startsWith('procurepaddy-catalog:')) await Dexie.delete(name)
+    }
+    localStorage.setItem(PURGED_KEY, '1')
+  } catch {
+    // No databases() (older Safari) or storage blocked: tried again on the next start.
+  }
+}
+
 export async function startCatalog(name: string): Promise<void> {
   if (databaseName === name) return
   // Someone else was signed in on this device: their copy is deleted, not just closed.
   await stopCatalog({ deleteData: databaseName != null })
+  await purgeCopiesFromBeforeTabFix()
   databaseName = name
   setState({ ...INITIAL, phase: 'starting' })
   startWorker()
