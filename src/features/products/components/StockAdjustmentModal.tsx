@@ -6,7 +6,6 @@ import { useForm } from 'react-hook-form'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
 import { Sheet } from '@/components/Sheet'
-import { TextField } from '@/components/TextField'
 import { StockFigure } from '@/features/products/components/StockFigure'
 import { StockReceipt } from '@/features/products/components/StockReceipt'
 import { submitStockWrite } from '@/features/outbox/outboxStore'
@@ -14,9 +13,10 @@ import { stockCountSchema, type StockCountFormValues } from '@/features/products
 import type { Product, StockMutationResponse, UnitOption } from '@/features/products/types'
 import type { AreaFigure } from '@/features/branches/types'
 import { formatQuantity, pluraliseUnitNoun, stockUnitWord, unitNoun } from '@/features/products/unitCopy'
-import { countUnits, productsOwnUnits, roundQuantity, toBaseQuantity, unitOptionsForProduct } from '@/features/products/unitSet'
+import { productsOwnUnits, roundQuantity, unitOptionsForProduct } from '@/features/products/unitSet'
+import { useCountBoxes } from '@/features/products/useCountBoxes'
+import { X } from 'lucide-react'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
-import type { UseFormRegisterReturn } from 'react-hook-form'
 import { CountShortfall } from '@/features/branches/CountShortfall'
 import { areaShortAs, lastCountedPhrase, type ShortAs } from '@/features/branches/areas'
 import { isAppError } from '@/types/api'
@@ -80,59 +80,32 @@ export function StockAdjustmentModal({
   const {
     register,
     handleSubmit,
-    watch,
-    setError,
     formState: { errors, isSubmitting },
   } = useForm<StockCountFormValues>({
     resolver: zodResolver(stockCountSchema),
     defaultValues: { countedQuantity: '', note: '' },
   })
 
-  // Counted the way a store is (UNITS_PLAN.md Part 4): whole packs, and what's left in the usual unit - "2 bags +
-  // 7 dericas". Each box's unit can be changed ("1 bag + 1 cup", owner 2026-11-09). Without a pack, one box in the
-  // usual unit (else the stock unit), and "Another unit" adds the second.
+  // Counted the way a store is (UNITS_PLAN.md Part 4): whole packs and what's left - "2 bags + 7 dericas" - in as
+  // many of the product's units as the shelf needs, each in its own box (owner, 2026-11-09).
   const { options: unitsOfMeasure } = useUnitOfMeasureOptions()
   const offered = product ? productsOwnUnits(unitOptionsForProduct(product, unitsOfMeasure)) : []
-  const pair = product && offered.length > 0 ? countUnits(product, offered) : null
-  const [twoOn, setTwoOn] = useState(false)
-  const [bigLabel, setBigLabel] = useState<string | null>(null)
-  const [smallLabel, setSmallLabel] = useState<string | null>(null)
-  const small = offered.find((option) => option.label === smallLabel) ?? pair?.small ?? null
-  const big =
-    pair?.big != null || twoOn
-      ? (offered.find((option) => option.label === bigLabel) ??
-        pair?.big ??
-        offered.find((option) => option.label !== small?.label) ??
-        null)
-      : null
-  const [bigText, setBigText] = useState('')
-  const typed = watch('countedQuantity').trim()
-  const parse = (text: string) => (/^\d+(\.\d{1,3})?$/.test(text) ? Number(text) : null)
-  const bigTyped = big != null && bigText.trim() !== ''
-  const bigNumber = bigTyped ? parse(bigText.trim()) : 0
-  const smallNumber = typed === '' ? 0 : parse(typed)
-  const counted =
-    (typed !== '' || bigTyped) && bigNumber != null && smallNumber != null
-      ? roundQuantity((big ? toBaseQuantity(bigNumber, big) : 0) + (small ? toBaseQuantity(smallNumber, small) : smallNumber))
-      : null
+  const count = useCountBoxes(product ?? {}, offered)
+  const [countError, setCountError] = useState<string | null>(null)
+  const counted = count.anyTyped ? count.total : null
   const difference = counted == null ? null : roundQuantity(counted - currentQuantity)
-  // "= 164.2 kg" under boxes that aren't the stock unit.
-  const inStockUnits = counted != null && (big != null || (small != null && !small.isStockUnit)) ? formatQuantity(counted, stockUnit) : null
+  // "= 164.2 kg" under boxes that aren't all the stock unit.
+  const inStockUnits =
+    counted != null && (count.boxes.length > 1 || !count.boxes[0].unit.isStockUnit) ? formatQuantity(counted, stockUnit) : null
 
   async function onSubmit(values: StockCountFormValues) {
     setFormError(null)
-    if (values.countedQuantity === '' && !bigTyped) {
-      setError('countedQuantity', { message: 'Enter how much is on the shelf.' })
-      return
-    }
-    if (counted == null) {
-      setError('countedQuantity', { message: 'Enter a number, 0 or greater, to 3 decimal places.' })
-      return
-    }
+    setCountError(null)
+    if (!count.anyTyped) return setCountError('Enter how much is on the shelf.')
+    if (counted == null) return setCountError('Enter a number, 0 or greater, to 3 decimal places.')
     const countedQuantity = counted
     if (countedInWholeUnits && !Number.isInteger(countedQuantity)) {
-      setError('countedQuantity', { message: `That isn't a whole number of ${stockUnitWord(stockUnit, 2)}.` })
-      return
+      return setCountError(`That isn't a whole number of ${stockUnitWord(stockUnit, 2)}.`)
     }
     try {
       const outcome = await submitStockWrite({
@@ -203,97 +176,67 @@ export function StockAdjustmentModal({
       }
     >
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
-        {big && small ? (
-          // Two boxes, one sentence: "[2] bags + [7] dericas" (UNITS_PLAN.md Part 4), each unit changeable.
-          <fieldset aria-describedby={errors.countedQuantity?.message ? 'count-error' : lastCounted ? 'count-hint' : undefined}>
-            <legend className="mb-1.5 text-sm font-medium text-neutral-700">How much is on the shelf now?</legend>
-            <div className="flex flex-col items-start gap-2 pl-5" data-count-pair>
-              <CountBox
-                id="count-big"
-                unit={big}
-                amount={bigNumber ?? 2}
-                stockUnit={stockUnit}
-                options={offered}
-                onUnit={(option) => setBigLabel(option.label)}
-                value={bigText}
-                onChange={setBigText}
-                autoFocus
-              />
-              <div className="-ml-5 flex items-center gap-2">
+        {/* One box per unit, added as the shelf needs them (owner, 2026-11-09): "[2] bags + [7] dericas + [1] cup". */}
+        <fieldset aria-describedby={countError ? 'count-error' : lastCounted ? 'count-hint' : undefined}>
+          <legend className="mb-1.5 text-sm font-medium text-neutral-700">How much is on the shelf now?</legend>
+          <div className="flex flex-col items-start gap-2" data-count-pair>
+            {count.boxes.map((box, index) => (
+              <div key={box.key} className="flex items-center gap-2">
                 <span aria-hidden="true" className="w-3 text-sm text-neutral-500">
-                  +
+                  {index > 0 ? '+' : ''}
                 </span>
                 <CountBox
-                  id="count-small"
-                  unit={small}
-                  amount={smallNumber ?? 2}
+                  id={`count-box-${index}`}
+                  unit={box.unit}
+                  amount={box.amount ?? 2}
                   stockUnit={stockUnit}
-                  options={offered}
-                  onUnit={(option) => setSmallLabel(option.label)}
-                  registered={register('countedQuantity')}
+                  options={offered.filter((option) => option.label === box.unit.label || !count.boxes.some((other) => other.unit.label === option.label))}
+                  onUnit={(option) => count.setUnit(index, option.label)}
+                  value={box.text}
+                  onChange={(text) => {
+                    setCountError(null)
+                    count.setText(index, text)
+                  }}
+                  autoFocus={index === 0}
                 />
+                {count.boxes.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => count.remove(index)}
+                    aria-label={`Remove the ${nounOf(box.unit, stockUnit, 2)} box`}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100"
+                  >
+                    <X className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                )}
               </div>
-            </div>
-            {inStockUnits && <p className="mt-1.5 text-sm text-neutral-700" data-count-total>= {inStockUnits}</p>}
-            {errors.countedQuantity?.message ? (
-              <p id="count-error" role="alert" className="mt-1.5 text-xs text-danger-600">
-                {errors.countedQuantity.message}
-              </p>
-            ) : (
-              lastCounted && (
-                <p id="count-hint" className="mt-1.5 text-xs text-neutral-500">
-                  {lastCounted}.
-                </p>
-              )
-            )}
-          </fieldset>
-        ) : small && offered.length > 1 ? (
-          // One box, its unit changeable, and a second when the shelf needs two ("Another unit").
-          <fieldset aria-describedby={errors.countedQuantity?.message ? 'count-error' : lastCounted ? 'count-hint' : undefined}>
-            <legend className="mb-1.5 text-sm font-medium text-neutral-700">How much is on the shelf now?</legend>
-            <div className="flex flex-wrap items-center gap-2" data-count-pair>
-              <CountBox
-                id="count-small"
-                unit={small}
-                amount={smallNumber ?? 2}
-                stockUnit={stockUnit}
-                options={offered}
-                onUnit={(option) => setSmallLabel(option.label)}
-                registered={register('countedQuantity')}
-                autoFocus
-              />
+            ))}
+            {count.canAdd && (
               <button
                 type="button"
-                onClick={() => setTwoOn(true)}
-                className="inline-flex min-h-10 items-center gap-1 rounded-md px-2 text-sm font-medium text-primary-700 hover:bg-primary-50"
+                onClick={() => {
+                  const index = count.add()
+                  window.requestAnimationFrame(() => document.getElementById(`count-box-${index}`)?.focus())
+                }}
+                className="ml-5 inline-flex min-h-9 items-center text-sm font-medium text-primary-700 hover:underline"
               >
                 + Another unit
               </button>
-            </div>
-            {inStockUnits && <p className="mt-1.5 text-sm text-neutral-700" data-count-total>= {inStockUnits}</p>}
-            {errors.countedQuantity?.message ? (
-              <p id="count-error" role="alert" className="mt-1.5 text-xs text-danger-600">
-                {errors.countedQuantity.message}
-              </p>
-            ) : (
-              lastCounted && (
-                <p id="count-hint" className="mt-1.5 text-xs text-neutral-500">
-                  {lastCounted}.
-                </p>
-              )
             )}
-          </fieldset>
-        ) : (
-          <TextField
-            label={`How much is on the shelf now? (${stockUnit})`}
-            inputMode={countedInWholeUnits ? 'numeric' : 'decimal'}
-            autoFocus
-            error={errors.countedQuantity?.message}
-            // When it was last counted there (Part 3.5), so nobody counts what's just been counted.
-            hint={lastCounted ? `${lastCounted}.` : undefined}
-            {...register('countedQuantity')}
-          />
-        )}
+          </div>
+          {inStockUnits && <p className="mt-1.5 text-sm text-neutral-700" data-count-total>= {inStockUnits}</p>}
+          {countError ? (
+            <p id="count-error" role="alert" className="mt-1.5 text-xs text-danger-600">
+              {countError}
+            </p>
+          ) : (
+            lastCounted && (
+              <p id="count-hint" className="mt-1.5 text-xs text-neutral-500">
+                {lastCounted}.
+              </p>
+            )
+          )}
+        </fieldset>
         {/* The difference, before anything is recorded (C3, D1): set as a figure, because it is
             the thing a count is for. */}
         {difference != null && (
@@ -357,7 +300,6 @@ function CountBox({
   onUnit,
   value,
   onChange,
-  registered,
   autoFocus,
 }: {
   id: string
@@ -368,7 +310,6 @@ function CountBox({
   onUnit: (option: UnitOption) => void
   value?: string
   onChange?: (value: string) => void
-  registered?: UseFormRegisterReturn
   autoFocus?: boolean
 }) {
   const plural = nounOf(unit, stockUnit, 2)
@@ -382,7 +323,8 @@ function CountBox({
         inputMode="decimal"
         autoFocus={autoFocus}
         className="w-20 rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-900 tabular-nums focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
-        {...(registered ?? { value, onChange: (event: React.ChangeEvent<HTMLInputElement>) => onChange?.(event.target.value) })}
+        value={value}
+        onChange={(event) => onChange?.(event.target.value)}
       />
       {options.length > 1 ? (
         <select

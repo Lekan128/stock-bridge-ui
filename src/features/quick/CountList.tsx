@@ -1,17 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, MoreHorizontal } from 'lucide-react'
+import { useCountBoxes } from '@/features/products/useCountBoxes'
+import { Check, MoreHorizontal, X } from 'lucide-react'
 import { useCatalogList } from '@/features/catalog/useCatalog'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import type { Product } from '@/features/products/types'
 import type { UnitOption } from '@/features/products/types'
 import { formatNumber, pluraliseUnitNoun, stockUnitWord, unitNoun } from '@/features/products/unitCopy'
 import {
-  countUnits,
   isCountedInWholeUnits,
   productsOwnUnits,
   resolveUnitSymbol,
   roundQuantity,
-  toBaseQuantity,
   unitOptionsForProduct,
 } from '@/features/products/unitSet'
 import { useOutboxState, usePendingStock } from '@/features/outbox/useOutbox'
@@ -194,10 +193,10 @@ function CountRow({
 }) {
   const { options } = useUnitOfMeasureOptions()
   const offered = productsOwnUnits(unitOptionsForProduct(product, options))
-  const pair = countUnits(product, offered)
-  const [extra, setExtra] = useState(false)
-  const units: UnitOption[] = pair.big ? [pair.big, pair.small] : extra ? [pair.small, offered.find((o) => o.label !== pair.small.label) ?? pair.small] : [pair.small]
-  const [texts, setTexts] = useState<string[]>(['', ''])
+  // As many of its units as the shelf needs, each in its own box (owner, 2026-11-09); "Another unit" is in the "⋯".
+  const count = useCountBoxes(product, offered)
+  const units: UnitOption[] = count.boxes.map((box) => box.unit)
+  const texts = count.boxes.map((box) => box.text)
   const [saving, setSaving] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -217,7 +216,7 @@ function CountRow({
     if (units.length === 1) return [formatNumber(roundQuantity(appSays / units[0].factorToStockUnit))]
     const packs = Math.floor(appSays / units[0].factorToStockUnit + 1e-9)
     const rest = roundQuantity((appSays - packs * units[0].factorToStockUnit) / units[1].factorToStockUnit)
-    return [formatNumber(packs), formatNumber(rest)]
+    return [formatNumber(packs), formatNumber(rest), ...units.slice(2).map(() => '')]
   })()
 
   const noun = (unit: UnitOption, amount: number) =>
@@ -225,10 +224,9 @@ function CountRow({
 
   async function record() {
     if (savingRef.current) return
-    const amounts = units.map((_, index) => (texts[index].trim() === '' ? 0 : amountOf(texts[index])))
-    if (texts.slice(0, units.length).every((text) => text.trim() === '')) return setProblem('Type how many are here.')
-    if (amounts.some((amount) => amount == null)) return setProblem('A number, to 3 decimal places.')
-    const base = roundQuantity(units.reduce((sum, unit, index) => sum + toBaseQuantity(amounts[index] ?? 0, unit), 0))
+    if (!count.anyTyped) return setProblem('Type how many are here.')
+    if (count.total == null) return setProblem('A number, to 3 decimal places.')
+    const base = count.total
     if (wholeOnly && !Number.isInteger(base)) return setProblem(`That isn't a whole number of ${stockUnitWord(symbol, 2)}.`)
     const difference = roundQuantity(base - appSays)
     const counted = `${formatNumber(base)} ${stockUnitWord(symbol, base)}`
@@ -263,11 +261,8 @@ function CountRow({
   }
 
   // The difference, live, before it's recorded: "30 short · used in the Kitchen".
-  const typedAny = texts.slice(0, units.length).some((text) => text.trim() !== '')
-  const typedAmounts = units.map((_, index) => (texts[index].trim() === '' ? 0 : amountOf(texts[index])))
-  const preview = typedAny && typedAmounts.every((amount) => amount != null)
-    ? roundQuantity(units.reduce((sum, unit, index) => sum + toBaseQuantity(typedAmounts[index] ?? 0, unit), 0) - appSays)
-    : null
+  const typedAny = count.anyTyped
+  const preview = typedAny && count.total != null ? roundQuantity(count.total - appSays) : null
 
   return (
     <li className="rounded-lg border border-neutral-200 bg-white px-4 py-2.5" data-count-row={product.name}>
@@ -294,9 +289,7 @@ function CountRow({
                 placeholder={hints[index]}
                 onChange={(event) => {
                   setProblem(null)
-                  const next = [...texts]
-                  next[index] = event.target.value.replace(',', '.')
-                  setTexts(next)
+                  count.setText(index, event.target.value)
                 }}
                 onKeyDown={(event) => {
                   if (event.key !== 'Enter') return
@@ -307,6 +300,16 @@ function CountRow({
                 className="h-11 w-20 rounded-md border-2 border-neutral-200 px-2 text-right text-lg font-semibold tabular-nums placeholder:font-normal placeholder:text-neutral-400 focus:border-primary-600 focus:outline-none"
               />
               <span className="w-16 text-sm text-neutral-600">{noun(unit, amountOf(texts[index]) ?? 2)}</span>
+              {menuOpen && units.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => count.remove(index)}
+                  aria-label={`Remove the ${noun(unit, 2)} box`}
+                  className="-ml-1 inline-flex h-9 w-7 items-center justify-center text-neutral-500"
+                >
+                  <X className="h-4 w-4" aria-hidden="true" />
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -340,9 +343,16 @@ function CountRow({
           <div className="flex shrink-0 flex-wrap items-center justify-end">
             {menuOpen && (
               <>
-                {!pair.big && !extra && offered.length > 1 && (
-                  <button type="button" onClick={() => setExtra(true)} className="min-h-10 px-2 font-medium text-primary-700">
-                    Count in two units
+                {count.canAdd && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const index = count.add()
+                      window.requestAnimationFrame(() => document.getElementById(boxId(product.id, index))?.focus())
+                    }}
+                    className="min-h-10 px-2 font-medium text-primary-700"
+                  >
+                    Another unit
                   </button>
                 )}
                 {usedHere && (

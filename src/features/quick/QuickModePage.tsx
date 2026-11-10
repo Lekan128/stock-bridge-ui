@@ -8,7 +8,7 @@ import { movesApi } from '@/features/moves/movesApi'
 import { requestsApi } from '@/features/requests/requestsApi'
 import { WaitingMovesLine } from '@/features/moves/WaitingMovesLine'
 import { usePendingStock } from '@/features/outbox/useOutbox'
-import { Fragment, useEffect, useRef, useState, type RefObject } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import { Delete, Search, X } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -32,9 +32,10 @@ import {
   unitNoun,
 } from '@/features/products/unitCopy'
 import {
+  buildPackOption,
+  buildUnitOptions,
   convertsCleanly,
   convertsToWholeCount,
-  countUnits,
   defaultUnitOption,
   isCountedInWholeUnits,
   productsOwnUnits,
@@ -42,12 +43,13 @@ import {
   roundQuantity,
   stockUnitLabel,
   stockUnitOption,
+  supplierPacks,
   toBaseQuantity,
-  unitOptionsForProduct,
   usedInOption,
 } from '@/features/products/unitSet'
 import { OUT_REASONS, outReasonLabel } from '@/features/stock/outReasons'
 import { useProductFinder } from '@/features/catalog/useProductFinder'
+import { useCountBoxes } from '@/features/products/useCountBoxes'
 import { useCatalogState } from '@/features/catalog/useCatalog'
 import { CountList, type CountedHere, type RowCounted } from '@/features/quick/CountList'
 import { formatMoney } from '@/features/selling/money'
@@ -503,45 +505,9 @@ function AmountStep({
   onBack: () => void
   onRecorded: (entry: SessionEntry, kind: StampKind) => void
 }) {
-  const { options } = useUnitOfMeasureOptions()
+  const { options, packagingOptions } = useUnitOfMeasureOptions()
   const online = useOnlineStatus()
   const areaId = place.areaId
-  const unitOptions = unitOptionsForProduct(product, options)
-  const offered = productsOwnUnits(unitOptions)
-  // §9.3, as in the sheets: a delivery in the pack, an issue and a count in the stock unit.
-  const [unitLabel, setUnitLabel] = useState<string>(
-    // A stock-out or count starts in the product's usual unit, the cook's Derica (UNITS_PLAN.md Part 2).
-    () => (mode === 'in' ? defaultUnitOption(unitOptions) : usedInOption(product, offered, stockUnitOption(unitOptions))).label,
-  )
-  const option: UnitOption = offered.find((o) => o.label === unitLabel) ?? stockUnitOption(unitOptions)
-  const usualOption = usedInOption(product, offered, stockUnitOption(unitOptions))
-  const usual = usualOption.isStockUnit ? null : usualOption
-  const stockText = stockUnitLabel(unitOptions)
-  const symbol = resolveUnitSymbol(product.unitOfMeasure, options)
-  const [typed, setTyped] = useState('')
-  // A count of a product with a pack is made in two units (UNITS_PLAN.md Part 4): whole bags, then what's left
-  // in its usual unit - "2 bags + 7 dericas". The keypad types into whichever box is chosen.
-  // Each box's unit is changed with the unit buttons below it ("1 bag + 1 cup", owner 2026-11-09), and a product
-  // with no pack gets a second box from "+ Another unit".
-  const pair = mode === 'count' ? countUnits(product, offered) : null
-  const [twoOn, setTwoOn] = useState(false)
-  const [bigLabel, setBigLabel] = useState<string | null>(null)
-  const [smallLabel, setSmallLabel] = useState<string | null>(null)
-  const smallUnit = pair ? (offered.find((o) => o.label === smallLabel) ?? pair.small) : null
-  const bigUnit =
-    pair && smallUnit && (pair.big != null || twoOn)
-      ? (offered.find((o) => o.label === bigLabel) ?? pair.big ?? offered.find((o) => o.label !== smallUnit.label) ?? null)
-      : null
-  const twoUnits = bigUnit && smallUnit ? { big: bigUnit, small: smallUnit } : null
-  const [typedSmall, setTypedSmall] = useState('')
-  const [box, setBox] = useState<'big' | 'small'>('big')
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-  // A count at a branch with areas (Part 3.5): what a shortfall becomes - the area's answer, or this count's.
-  const branches = useOptionalWorkingBranch()?.branches ?? []
-  const countedArea = mode === 'count' && areaId ? branches.flatMap((b) => b.areas ?? []).find((a) => a.id === areaId) : undefined
-  const [shortChosen, setShortChosen] = useState<ShortAs | null>(null)
-
   // The preferred supplier to start; "No supplier" is a choice too (sheets plan Part 3). '' is none, null untouched.
   const vendors = useProductVendors(mode === 'in' ? product.id : undefined)
   const supplierList = vendors.data
@@ -551,13 +517,55 @@ function AmountStep({
       ? undefined
       : (supplierList.find((v) => v.companyVendorId === vendorId) ?? supplierList.find((v) => v.isPreferred) ?? supplierList[0])
 
+  // Every unit it can be entered in here (owner, 2026-11-09). The row shows the everyday ones - the stock unit, the
+  // packs and the product's own units; a delivery's follow its supplier (her 25 kg bag). "Other unit…" has the rest
+  // (g, t) and, for a delivery, a pack nobody has set up yet, for this delivery only - as the stock-in panel does.
+  const [extraPack, setExtraPack] = useState<{ packagingUnit: string; packagingSize: number } | null>(null)
+  const unitOptions = buildUnitOptions({
+    product,
+    unitsOfMeasure: options,
+    supplier: mode === 'in' ? supplierPacks(chosenVendor) : null,
+    extraPack: mode === 'in' ? extraPack : null,
+    serverOptions: mode === 'in' && chosenVendor ? (chosenVendor.unitOptions ?? null) : (product.unitOptions ?? null),
+  })
+  const offered = productsOwnUnits(unitOptions)
+  const others = unitOptions.filter((o) => !offered.some((own) => own.label === o.label))
+  // §9.3, as in the sheets: a delivery in the pack, an issue and a count in the stock unit.
+  const [unitLabel, setUnitLabel] = useState<string>(
+    // A stock-out or count starts in the product's usual unit, the cook's Derica (UNITS_PLAN.md Part 2).
+    () => (mode === 'in' ? defaultUnitOption(unitOptions) : usedInOption(product, offered, stockUnitOption(unitOptions))).label,
+  )
+  const option: UnitOption = unitOptions.find((o) => o.label === unitLabel) ?? stockUnitOption(unitOptions)
+  const [otherOpen, setOtherOpen] = useState(false)
+  const usualOption = usedInOption(product, offered, stockUnitOption(unitOptions))
+  const usual = usualOption.isStockUnit ? null : usualOption
+  const stockText = stockUnitLabel(unitOptions)
+  const symbol = resolveUnitSymbol(product.unitOfMeasure, options)
+  const [typed, setTyped] = useState('')
+  // A count is made in as many of the product's units as the shelf needs (UNITS_PLAN.md Part 4, owner 2026-11-09):
+  // whole bags, then what's left - "2 bags + 7 dericas" - each in its own box. The keypad types into the chosen box;
+  // the unit buttons set its unit.
+  const counting = mode === 'count'
+  const count = useCountBoxes(product, [...offered, ...others])
+  const [active, setActive] = useState(0)
+  const activeBox = count.boxes[Math.min(active, count.boxes.length - 1)]
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  // A count at a branch with areas (Part 3.5): what a shortfall becomes - the area's answer, or this count's.
+  const branches = useOptionalWorkingBranch()?.branches ?? []
+  const countedArea = mode === 'count' && areaId ? branches.flatMap((b) => b.areas ?? []).find((a) => a.id === areaId) : undefined
+  const [shortChosen, setShortChosen] = useState<ShortAs | null>(null)
+
+  const noun = (unit: UnitOption, amount: number) =>
+    unit.isStockUnit ? stockUnitWord(symbol, amount) : pluraliseUnitNoun(unitNoun(unit), amount)
   const quantity = typed === '' || typed === '.' ? 0 : Number(typed)
-  const smallQuantity = typedSmall === '' || typedSmall === '.' ? 0 : Number(typedSmall)
-  const base = twoUnits
-    ? roundQuantity(toBaseQuantity(quantity, twoUnits.big!) + toBaseQuantity(smallQuantity, twoUnits.small))
-    : toBaseQuantity(quantity, option)
-  const amountText = twoUnits
-    ? `${formatQuantityInUnit(quantity, twoUnits.big!)} + ${formatQuantityInUnit(smallQuantity, twoUnits.small)} (${formatNumber(base)} ${stockUnitWord(symbol, base)})`
+  const base = counting ? (count.total ?? 0) : toBaseQuantity(quantity, option)
+  const countedInStockUnits = count.boxes.length > 1 || !count.boxes[0].unit.isStockUnit
+  const amountText = counting
+    ? `${count.boxes
+        .filter((box) => box.text.trim() !== '')
+        .map((box) => formatQuantityInUnit(box.amount ?? 0, box.unit))
+        .join(' + ')}${countedInStockUnits ? ` (${formatNumber(base)} ${stockUnitWord(symbol, base)})` : ''}`
     : formatEnteredAndBase(quantity, option, base, stockText)
   // The reason rides on the summary, so the stamp, the session list and the outbox all repeat it.
   const summary = reason ? `${amountText} · ${outReasonLabel(reason)}` : amountText
@@ -567,20 +575,21 @@ function AmountStep({
   // after that sale, or the difference it shows is off by exactly that sale.
   const pending = usePendingStock(product.id, areaId)
   const appSays = roundQuantity(placeFigure(product, place).quantity + pending.delta)
-  const anyTyped = typed !== '' || (twoUnits != null && typedSmall !== '')
-  const difference = mode === 'count' && anyTyped ? roundQuantity(base - appSays) : null
+  const anyTyped = counting ? count.anyTyped : typed !== ''
+  const difference = counting && anyTyped && count.total != null ? roundQuantity(base - appSays) : null
 
   function problem(): string | null {
     if (!anyTyped) return 'Type how many.'
-    if (twoUnits) {
-      const pieces: [number, UnitOption][] = [[quantity, twoUnits.big!], [smallQuantity, twoUnits.small]]
-      for (const [amount, unit] of pieces) {
-        if (amount > 0 && !convertsCleanly(amount, unit)) return roundsToZeroMessage(amount, unit, stockText)
+    if (counting) {
+      if (count.total == null) return 'A number, to 3 decimal places.'
+      for (const box of count.boxes) {
+        const amount = box.amount ?? 0
+        if (amount > 0 && !convertsCleanly(amount, box.unit)) return roundsToZeroMessage(amount, box.unit, stockText)
       }
       if (wholeOnly && !Number.isInteger(base)) return `That doesn't come to a whole number of ${stockUnitWord(symbol, 2)}.`
       return null
     }
-    if (mode !== 'count' && quantity <= 0) return 'Type a number above 0.'
+    if (quantity <= 0) return 'Type a number above 0.'
     // More than is here: said now, so an offline stock out isn't refused later in the sync centre.
     if (mode === 'out' && base > appSays) {
       const has = `${formatNumber(Math.max(appSays, 0))} ${stockUnitWord(symbol, Math.max(appSays, 0))}`
@@ -595,11 +604,12 @@ function AmountStep({
 
   function press(key: string) {
     setError(null)
-    const [current, set] = twoUnits && box === 'small' ? [typedSmall, setTypedSmall] : [typed, setTyped]
-    if (key === 'back') return set((t) => t.slice(0, -1))
+    const current = counting ? activeBox.text : typed
+    const set = (next: string) => (counting ? count.setText(count.boxes.indexOf(activeBox), next) : setTyped(next))
+    if (key === 'back') return set(current.slice(0, -1))
     if (key === '.' && current.includes('.')) return
     if (current.replace('.', '').length >= 7) return
-    set((t) => (t === '0' && key !== '.' ? key : t + key))
+    set(current === '0' && key !== '.' ? key : current + key)
   }
 
   async function record() {
@@ -614,7 +624,7 @@ function AmountStep({
               kind: 'COUNT',
               productId: product.id,
               productName: product.name,
-              summary: twoUnits ? amountText : `${formatNumber(base)} ${stockUnitWord(symbol, base)}`,
+              summary: amountText,
               payload: { countedQuantity: base, areaId, shortAs: shortChosen ?? undefined },
             })
           : mode === 'in'
@@ -693,98 +703,94 @@ function AmountStep({
         </label>
       )}
 
-      {offered.length > 1 && (
-        // Four or more (a product with its own units, Part 1) sit two to a row, so none is squeezed on a phone. In a
-        // count in two units, they set the unit of the box being typed in.
-        <div
-          role="group"
-          aria-label={twoUnits ? `Counted in, for the ${box === 'big' ? 'first' : 'second'} box` : 'Counted in'}
-          className={offered.length > 3 ? 'grid grid-cols-2 gap-2' : 'flex gap-2'}
-        >
-          {offered.map((o) => {
-            const chosen = twoUnits ? (box === 'big' ? twoUnits.big : twoUnits.small) : option
-            return (
-              <button
-                key={o.label}
-                type="button"
-                aria-pressed={o.label === chosen.label}
-                onClick={() => {
-                  if (!twoUnits) return setUnitLabel(o.label)
-                  if (box === 'big') setBigLabel(o.label)
-                  else setSmallLabel(o.label)
-                }}
-                className={`h-11 flex-1 rounded-md border-2 px-2 text-base font-medium ${
-                  o.label === chosen.label ? 'border-primary-600 bg-primary-50 text-primary-800' : 'border-neutral-200 text-neutral-700'
-                }`}
-              >
-                {o.label}
-              </button>
-            )
-          })}
-        </div>
+      {(offered.length > 1 || others.length > 0 || mode === 'in') && (
+        <UnitRow
+          units={[...offered, ...others.filter((o) => o.label === (counting ? activeBox.unit : option).label)]}
+          chosen={counting ? activeBox.unit : option}
+          label={counting && count.boxes.length > 1 ? `Unit of box ${count.boxes.indexOf(activeBox) + 1}` : 'Counted in'}
+          onChoose={(o) => {
+            setOtherOpen(false)
+            if (counting) count.setUnit(count.boxes.indexOf(activeBox), o.label)
+            else setUnitLabel(o.label)
+          }}
+          others={others}
+          otherOpen={otherOpen}
+          onOtherOpen={setOtherOpen}
+          // A pack nobody has set up yet: for a delivery only, and only this one.
+          onNewPack={
+            mode === 'in' && product.unitOfMeasure
+              ? (pack) => {
+                  setExtraPack(pack)
+                  setOtherOpen(false)
+                  const built = buildPackOption(pack, stockText, options)
+                  if (built) setUnitLabel(built.label)
+                }
+              : undefined
+          }
+          packagingOptions={packagingOptions}
+          stockText={stockText}
+        />
       )}
 
       {/* The figure being typed, big enough to read at arm's length. */}
       <div className="rounded-lg border-2 border-neutral-200 px-4 py-3" aria-live="polite">
         <p className="text-sm text-neutral-500">{mode === 'count' ? 'On the shelf now' : mode === 'in' ? 'How many arrived' : 'How many went out'}</p>
-        {twoUnits ? (
-          // Two boxes, the chosen one outlined; the keypad types into it (UNITS_PLAN.md Part 4).
-          <div className="mt-1 grid grid-cols-[1fr_auto_1fr] items-center gap-2" role="group" aria-label="Count in two units" data-quick-amount>
-            {(['big', 'small'] as const).map((which, index) => {
-              const unit = which === 'big' ? twoUnits.big! : twoUnits.small
-              const text = which === 'big' ? typed : typedSmall
-              const amount = which === 'big' ? quantity : smallQuantity
-              const noun = unit.isStockUnit ? stockUnitWord(symbol, amount || 2) : pluraliseUnitNoun(unitNoun(unit), amount || 2)
-              return (
-                <Fragment key={which}>
-                  {index === 1 && (
-                    <span aria-hidden="true" className="text-2xl text-neutral-400">
-                      +
-                    </span>
-                  )}
+        {counting && count.boxes.length > 1 ? (
+          // A box per unit, the chosen one outlined; the keypad types into it (UNITS_PLAN.md Part 4).
+          <div className="mt-1 grid grid-cols-2 gap-2" role="group" aria-label="Count in several units" data-quick-amount>
+            {count.boxes.map((box, index) => (
+              <div key={box.key} className="relative">
+                <button
+                  type="button"
+                  aria-pressed={box === activeBox}
+                  aria-label={`${box.text || '0'} ${noun(box.unit, box.amount || 2)}. Type ${noun(box.unit, 2)}`}
+                  onClick={() => setActive(index)}
+                  className={`flex min-h-16 w-full flex-col items-start rounded-md border-2 px-3 py-1.5 text-left tabular-nums ${
+                    box === activeBox ? 'border-primary-600 bg-primary-50' : 'border-neutral-200'
+                  }`}
+                >
+                  <span className="text-4xl leading-tight font-semibold">{box.text || '0'}</span>
+                  <span className="text-base text-neutral-600">{noun(box.unit, box.amount || 2)}</span>
+                </button>
+                {box === activeBox && (
                   <button
                     type="button"
-                    aria-pressed={box === which}
-                    aria-label={`${text || '0'} ${noun}. Type ${pluraliseUnitNoun(unit.isStockUnit ? stockUnitWord(symbol, 1) : unitNoun(unit), 2)}`}
-                    onClick={() => setBox(which)}
-                    className={`flex min-h-16 flex-col items-start rounded-md border-2 px-3 py-1.5 text-left tabular-nums ${
-                      box === which ? 'border-primary-600 bg-primary-50' : 'border-neutral-200'
-                    }`}
+                    onClick={() => {
+                      count.remove(index)
+                      setActive(0)
+                    }}
+                    aria-label={`Remove the ${noun(box.unit, 2)} box`}
+                    className="absolute top-1 right-1 inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-500 hover:bg-white"
                   >
-                    <span className="text-4xl leading-tight font-semibold">{text || '0'}</span>
-                    <span className="text-base text-neutral-600">{noun}</span>
+                    <X className="h-4 w-4" aria-hidden="true" />
                   </button>
-                </Fragment>
-              )
-            })}
+                )}
+              </div>
+            ))}
           </div>
         ) : (
-          <div className="mt-1 flex items-baseline justify-between gap-2">
-            <p className="flex items-baseline gap-2 tabular-nums" data-quick-amount>
-              <span className="text-5xl font-semibold">{typed || '0'}</span>
-              <span className="text-xl text-neutral-500">{pluraliseUnitNoun(unitNoun(option), quantity || 2)}</span>
-            </p>
-            {mode === 'count' && offered.length > 1 && (
-              <button
-                type="button"
-                onClick={() => {
-                  // What's typed stays with the unit it was typed in, now the second box.
-                  setSmallLabel(option.label)
-                  setTypedSmall(typed)
-                  setTyped('')
-                  setBigLabel(offered.find((o) => o.label !== option.label)?.label ?? null)
-                  setTwoOn(true)
-                  setBox('big')
-                }}
-                className="inline-flex min-h-11 shrink-0 items-center px-1 text-base font-medium text-primary-700"
-              >
-                + Another unit
-              </button>
-            )}
-          </div>
+          <p className="mt-1 flex items-baseline gap-2 tabular-nums" data-quick-amount>
+            <span className="text-5xl font-semibold">{(counting ? activeBox.text : typed) || '0'}</span>
+            <span className="text-xl text-neutral-500">
+              {counting ? noun(activeBox.unit, activeBox.amount || 2) : pluraliseUnitNoun(unitNoun(option), quantity || 2)}
+            </span>
+          </p>
         )}
-        {twoUnits
-          ? anyTyped && <p className="mt-1 text-base text-neutral-600" data-quick-total>= {formatNumber(base)} {stockUnitWord(symbol, base)}</p>
+        {counting && count.canAdd && (
+          <button
+            type="button"
+            onClick={() => setActive(count.add())}
+            className="-mb-2 inline-flex min-h-11 items-center text-base font-medium text-primary-700"
+          >
+            + Another unit
+          </button>
+        )}
+        {counting
+          ? anyTyped && countedInStockUnits && count.total != null && (
+              <p className="mt-1 text-base text-neutral-600" data-quick-total>
+                = {formatNumber(base)} {stockUnitWord(symbol, base)}
+              </p>
+            )
           : quantity > 0 && !option.isStockUnit && <p className="mt-1 text-base text-neutral-600">{amountText}</p>}
         {difference != null && (
           <div className="mt-2 flex items-baseline gap-2">
@@ -843,9 +849,140 @@ function AmountStep({
         disabled={saving}
         className="h-16 rounded-lg bg-action text-lg font-semibold text-white hover:bg-action-hover disabled:opacity-60"
       >
-        {saving ? 'Recording…' : anyTyped ? `${ACTION[mode]} ${twoUnits ? `${formatNumber(base)} ${stockUnitWord(symbol, base)}` : summary}` : 'Record'}
+        {saving ? 'Recording…' : anyTyped ? `${ACTION[mode]} ${counting ? `${formatNumber(base)} ${stockUnitWord(symbol, base)}` : summary}` : 'Record'}
       </button>
       {!online && <p className="text-center text-sm text-neutral-600">Offline: it's saved on this phone and sent when you're back.</p>}
+    </div>
+  )
+}
+
+// --------------------------------------------------------------------------------------- units
+
+/**
+ * Quick mode's units (owner, 2026-11-09: "simple stupid"): the everyday ones as big buttons - the stock unit, the
+ * packs (a delivery's supplier's too) and the product's own units - and one more button, "Other unit…", which opens
+ * in place with the rest: the standard units (g, t) and, for a delivery, a pack nobody has set up yet. A unit picked
+ * there joins the row while it's in use.
+ */
+function UnitRow({
+  units,
+  chosen,
+  label,
+  onChoose,
+  others,
+  otherOpen,
+  onOtherOpen,
+  onNewPack,
+  packagingOptions,
+  stockText,
+}: {
+  units: UnitOption[]
+  chosen: UnitOption
+  label: string
+  onChoose: (unit: UnitOption) => void
+  others: UnitOption[]
+  otherOpen: boolean
+  onOtherOpen: (open: boolean) => void
+  onNewPack?: (pack: { packagingUnit: string; packagingSize: number }) => void
+  packagingOptions: { code: string; label: string }[]
+  stockText: string
+}) {
+  const [packCode, setPackCode] = useState('')
+  const [packSize, setPackSize] = useState('')
+  const size = Number(packSize)
+  const packReady = packCode !== '' && packSize.trim() !== '' && Number.isFinite(size) && size > 0
+  const hasMore = others.length > 0 || onNewPack != null
+  const buttons = units.length + (hasMore ? 1 : 0)
+  return (
+    <div className="flex flex-col gap-2">
+      {/* Four or more sit two to a row, so none is squeezed on a phone. */}
+      <div role="group" aria-label={label} className={buttons > 3 ? 'grid grid-cols-2 gap-2' : 'flex gap-2'}>
+        {units.map((o) => (
+          <button
+            key={o.label}
+            type="button"
+            aria-pressed={o.label === chosen.label}
+            onClick={() => onChoose(o)}
+            className={`h-11 flex-1 rounded-md border-2 px-2 text-base font-medium ${
+              o.label === chosen.label ? 'border-primary-600 bg-primary-50 text-primary-800' : 'border-neutral-200 text-neutral-700'
+            }`}
+          >
+            {o.label}
+          </button>
+        ))}
+        {hasMore && (
+          <button
+            type="button"
+            aria-expanded={otherOpen}
+            onClick={() => onOtherOpen(!otherOpen)}
+            className="h-11 flex-1 rounded-md border-2 border-dashed border-neutral-300 px-2 text-base font-medium text-primary-700"
+          >
+            Other unit…
+          </button>
+        )}
+      </div>
+      {otherOpen && (
+        <div className="flex flex-col gap-3 rounded-lg border border-neutral-200 bg-neutral-50 p-3" role="group" aria-label="Other units">
+          {others.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {others.map((o) => (
+                <button
+                  key={o.label}
+                  type="button"
+                  onClick={() => onChoose(o)}
+                  className="h-11 min-w-16 rounded-md border-2 border-neutral-200 bg-white px-3 text-base font-medium text-neutral-800"
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {onNewPack && (
+            <div className="flex flex-col gap-2">
+              <p className="text-sm text-neutral-700">A pack not listed, for this delivery</p>
+              <div className="flex items-center gap-2">
+                <label className="sr-only" htmlFor="quick-new-pack">
+                  Pack
+                </label>
+                <select
+                  id="quick-new-pack"
+                  value={packCode}
+                  onChange={(event) => setPackCode(event.target.value)}
+                  className="h-11 min-w-0 flex-1 rounded-md border border-neutral-300 bg-white px-2 text-base"
+                >
+                  <option value="">Bag, carton…</option>
+                  {packagingOptions.map((p) => (
+                    <option key={p.code} value={p.code}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-base text-neutral-600">of</span>
+                <label className="sr-only" htmlFor="quick-new-pack-size">
+                  How much one holds, in {stockText}
+                </label>
+                <input
+                  id="quick-new-pack-size"
+                  inputMode="decimal"
+                  value={packSize}
+                  onChange={(event) => setPackSize(event.target.value.replace(',', '.'))}
+                  placeholder="25"
+                  className="h-11 w-20 rounded-md border border-neutral-300 bg-white px-2 text-right text-base tabular-nums"
+                />
+                <span className="text-base text-neutral-600">{stockText}</span>
+              </div>
+              <button
+                type="button"
+                disabled={!packReady}
+                onClick={() => onNewPack({ packagingUnit: packCode, packagingSize: size })}
+                className="h-11 self-start rounded-md bg-primary-600 px-4 text-base font-semibold text-white disabled:opacity-50"
+              >
+                Use this pack
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

@@ -168,7 +168,7 @@ await check('offline: a scanned barcode finds the product on the phone; the issu
 
 /** A count in two units (bags + kg): the keypad types into the kg box. */
 async function kgBox() {
-  await page.getByRole('group', { name: 'Count in two units' }).getByRole('button', { name: /Type kg$/ }).click()
+  await page.getByRole('group', { name: 'Count in several units' }).getByRole('button', { name: /Type kg$/ }).click()
 }
 
 await check('count: says what it does, then the shelf figure and its difference from the app, then recorded', async () => {
