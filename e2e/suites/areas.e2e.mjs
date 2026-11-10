@@ -605,6 +605,9 @@ await check("the closing count lists what the Kitchen has: the eggs nobody knew 
   const pepperRow = toCount.locator('[data-count-row="Pepper"]')
   await pepperRow.getByText('App: 1 unit', { exact: true }).waitFor()
   assert((await pepperRow.locator('input').count()) === 1, 'Pepper has no box to count in')
+  // ...and it takes what's typed (owner's "Rice plate").
+  await pepperRow.getByLabel('Pepper: units here').fill('1')
+  await pepperRow.locator('[data-count-preview]').getByText('Matches').waitFor()
   await page.screenshot({ path: SHOTS + '13g3-row-in-bags-and-kg.png' })
   await bags.fill('1')
   await plantainRow.getByLabel('Plantain: kg here').fill('2')

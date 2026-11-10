@@ -58,7 +58,8 @@ export function useCountBoxes(
     setText(index: number, text: string) {
       setTouched(true)
       const key = boxes[index]?.key
-      if (key) setTexts((current) => ({ ...current, [key]: text.replace(',', '.') }))
+      // A product with no unit set has the empty key: still a box.
+      if (key != null) setTexts((current) => ({ ...current, [key]: text.replace(',', '.') }))
     },
     /** A chip tapped: its box comes or goes (the last one stays). The index of its box when it came, else null. */
     toggle(key: string): number | null {
