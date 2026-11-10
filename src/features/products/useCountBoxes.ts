@@ -35,7 +35,7 @@ export function useCountBoxes(
   const fromAgain = again.length > 0 && again.every((line) => line.key != null)
   const starting = fromAgain ? again.map((line) => line.key as string) : startingUnits.map(unitKey)
   const startingTexts = fromAgain ? Object.fromEntries(again.map((line) => [line.key as string, line.text])) : {}
-  const startingKey = `${starting.join('|')}#${JSON.stringify(startingTexts)}`
+  const startingKey = JSON.stringify({ on: starting, texts: startingTexts })
   const [on, setOn] = useState<string[]>(starting)
   const [texts, setTexts] = useState<Record<string, string>>(startingTexts)
   // The product's units can arrive after the first render (the unit list loads): until anything is touched, start
@@ -43,9 +43,9 @@ export function useCountBoxes(
   const [touched, setTouched] = useState(false)
   useEffect(() => {
     if (touched) return
-    const [keys, typed] = startingKey.split('#')
-    setOn(keys.split('|'))
-    setTexts(JSON.parse(typed) as Record<string, string>)
+    const { on: keys, texts: typed } = JSON.parse(startingKey) as { on: string[]; texts: Record<string, string> }
+    setOn(keys)
+    setTexts(typed)
   }, [touched, startingKey])
 
   const units = chips.filter((option) => on.includes(unitKey(option)))

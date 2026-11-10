@@ -150,11 +150,13 @@ await check('product page: Deactivate lives in "⋯", keyboard-operable, behind 
   const more = page.getByRole('button', { name: `More actions for ${rice.name}` })
   await more.focus()
   await page.keyboard.press('ArrowDown')
-  // Since C2 the menu opens on "Edit product"; Deactivate is next.
-  await page.getByRole('menuitem', { name: 'Edit product' }).waitFor()
-  assert(await page.getByRole('menuitem', { name: 'Edit product' }).evaluate((el) => el === document.activeElement), 'focus not on the first item')
-  await page.keyboard.press('ArrowDown')
+  // The menu opens on its first item (Order more, since the purchase order redesign); ArrowDown walks to Deactivate,
+  // the last.
+  const items = page.getByRole('menuitem')
+  await items.first().waitFor()
+  assert(await items.first().evaluate((el) => el === document.activeElement), 'focus not on the first item')
   const item = page.getByRole('menuitem', { name: 'Deactivate' })
+  for (let i = 0; i < 6 && !(await item.evaluate((el) => el === document.activeElement)); i++) await page.keyboard.press('ArrowDown')
   assert(await item.evaluate((el) => el === document.activeElement), 'ArrowDown did not reach Deactivate')
   assert((await item.getAttribute('class')).includes('text-danger-700'), 'not set as danger text')
   await page.keyboard.press('Escape')

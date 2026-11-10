@@ -90,12 +90,36 @@ await page.goto(`${UI}/app/products`)
 await page.getByRole('heading', { name: 'Inventory', level: 1 }).waitFor()
 await page.waitForFunction(() => navigator.serviceWorker.controller?.state === 'activated', null, { timeout: 15000 })
 
-const quantityBox = () => page.getByLabel(/Yam flour \(draft\).*how many arrived/)
-const invoiceBox = () => page.getByLabel('Invoice or waybill number')
+// Record a delivery asks who it's from first, then what arrived (purchase order redesign, 2026-11-06).
+const supplier = (await api('/api/company-vendors', { token, method: 'POST', body: { name: 'Draft Foods', contactPhone: '08031112222' } })).json
+const quantityBox = () => page.getByLabel(/How many Yam flour \(draft\) arrived/)
+const waybillBox = () => page.getByRole('textbox', { name: 'Waybill no.' })
 async function openDelivery() {
   await page.goto(`${UI}/app/products/receive`)
   await page.getByRole('heading', { name: 'Record a delivery', level: 1 }).waitFor()
+}
+/** Who it's from, then the yam flour added: the form a draft is made of. */
+async function startDelivery() {
+  await openDelivery()
+  await page.getByRole('button', { name: new RegExp(`^${supplier.name}`) }).click()
+  // Settled: no open order to this supplier, so the search for what arrived is open.
+  await page.getByText(`No order to ${supplier.name} is waiting for goods.`).waitFor()
+  // The page redraws once the supplier is chosen: type once it has, and again if the first went nowhere.
+  const search = page.getByLabel('Search or scan a product')
+  const add = page.getByRole('button', { name: /^Add Yam flour \(draft\)/ }).first()
+  for (let i = 0; i < 3 && !(await add.isVisible().catch(() => false)); i++) {
+    await search.fill('Yam')
+    await add.waitFor({ timeout: 4000 }).catch(() => {})
+  }
+  await add.click()
   await quantityBox().waitFor()
+}
+async function typeWaybill(text) {
+  if (!(await waybillBox().isVisible().catch(() => false))) {
+    // The button on the Waybill no. line itself: the label, its value, then Add.
+    await page.getByText('Waybill no.', { exact: true }).locator('xpath=../..').getByRole('button').click()
+  }
+  await waybillBox().fill(text)
 }
 
 // ------------------------------------------------------------------------------------ delivery
@@ -103,14 +127,15 @@ async function openDelivery() {
 await check('delivery: typing is saved on the phone and picked up again after a reload', async () => {
   await openDelivery()
   assert((await page.getByText(/Draft saved on this phone|Picked up your draft/).count()) === 0, 'a note before anything was typed')
+  await startDelivery()
   await quantityBox().fill('7')
-  await invoiceBox().fill('INV-A5')
+  await typeWaybill('INV-A5')
   await page.getByText(/Draft saved on this phone at/).waitFor()
   await page.reload()
   await page.getByText(/Picked up your draft from/).waitFor()
   await quantityBox().waitFor()
   assert((await quantityBox().inputValue()) === '7', `quantity is ${await quantityBox().inputValue()}`)
-  assert((await invoiceBox().inputValue()) === 'INV-A5', 'invoice not restored')
+  await page.getByText('INV-A5').first().waitFor()
 })
 
 await check('delivery: offline, the draft is still there and the button waits for a connection', async () => {
@@ -119,40 +144,38 @@ await check('delivery: offline, the draft is still there and the button waits fo
   await page.getByText(/Picked up your draft from/).waitFor()
   await quantityBox().waitFor()
   assert((await quantityBox().inputValue()) === '7', 'quantity lost offline')
-  const button = page.getByRole('button', { name: 'Submit when online' })
+  const button = page.getByRole('button', { name: 'Record it when online' })
   await button.waitFor()
   assert(await button.isDisabled(), 'submit enabled offline')
-  await page.getByText(/You're offline\. This delivery is saved on this phone/).waitFor()
+  await page.getByText(/You're offline\. This delivery is kept on this phone/).waitFor()
   await page.screenshot({ path: SHOTS + 'delivery-offline.png' })
 })
 
 await check('delivery: back online it submits, and the draft is gone afterwards', async () => {
   await goOnline()
-  const button = page.getByRole('button', { name: /^Add 1 item/ })
+  const button = page.getByRole('button', { name: /^Record delivery · 1 item/ })
   await button.waitFor()
   await button.click()
-  const dialog = page.getByRole('dialog')
-  await dialog.waitFor()
-  await dialog.getByRole('button').last().click()
-  await page.waitForURL(/\/app\/products\/import\/.+\/result/, { timeout: 20000 })
+  await page.getByText(/^Recorded\./).first().waitFor({ timeout: 20000 })
   assert(Number(await onHand(yam.id)) === 7, `on hand ${await onHand(yam.id)}`)
   await openDelivery()
   await sleep(600)
   assert((await page.getByText(/Draft saved on this phone|Picked up your draft/).count()) === 0, 'draft note still shown')
-  assert((await quantityBox().inputValue()) === '', 'quantity still filled')
+  assert((await quantityBox().count()) === 0, 'the line is still there')
 })
 
 await check('delivery: "Discard draft" empties the form, and nothing comes back after a reload', async () => {
+  await startDelivery()
   await quantityBox().fill('3')
   await page.getByText(/Draft saved on this phone at/).waitFor()
   await page.getByRole('button', { name: 'Discard draft' }).click()
-  assert((await quantityBox().inputValue()) === '', 'quantity kept after discard')
+  await quantityBox().waitFor({ state: 'detached' })
   await sleep(300) // the delete is a moment's IndexedDB write; a person can't reload faster
   await page.reload()
-  await quantityBox().waitFor()
+  await page.getByRole('heading', { name: 'Record a delivery', level: 1 }).waitFor()
   await sleep(600)
   assert((await page.getByText(/Picked up your draft/).count()) === 0, 'discarded draft came back')
-  assert((await quantityBox().inputValue()) === '', 'quantity came back')
+  assert((await quantityBox().count()) === 0, 'the line came back')
 })
 
 // ------------------------------------------------------------------------------------ product
@@ -238,7 +261,7 @@ await check('new product: Cancel throws the draft away', async () => {
 // ------------------------------------------------------------------------------------ logout
 
 await check('logout: unfinished forms are named, and deleted from the phone when confirmed', async () => {
-  await openDelivery()
+  await startDelivery()
   await quantityBox().fill('2')
   await page.getByText(/Draft saved on this phone at/).waitFor()
   await page.getByRole('button', { name: 'Account menu' }).click()

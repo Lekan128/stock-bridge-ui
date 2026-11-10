@@ -1068,25 +1068,25 @@ export function ProductFormPage() {
 
   /** Next: this step's own fields checked, then on. Required ones stop it; optional ones left empty don't. */
   async function next() {
-    const ok = await trigger(fieldsOf(step))
+    const ok = await trigger(fieldsOf(shownStep))
     if (!ok) return
-    if (step === 'units' && !isEdit && !getValues('unitOfMeasure')) {
+    if (shownStep === 'units' && !isEdit && !getValues('unitOfMeasure')) {
       setError('unitOfMeasure', { message: 'Choose what it’s counted in.' })
       return
     }
-    if (step === 'units') {
+    if (shownStep === 'units') {
       const unitFields = unitsPayload(units, { stockUnitCode: watchedStockUnitCode ?? '', packOption: livePackOption })
       if ('problem' in unitFields) return setSectionProblem({ step: 'units', message: unitFields.problem })
     }
-    if (step === 'price' && requiresSellingPrice && getValues('unitPrice').trim() === '') {
+    if (shownStep === 'price' && requiresSellingPrice && getValues('unitPrice').trim() === '') {
       setError('unitPrice', { message: UNIT_PRICE_REQUIRED_MESSAGE })
       return
     }
-    if (step === 'suppliers') {
+    if (shownStep === 'suppliers') {
       const links = supplierLinks(supplierDrafts, livePackOption)
       if ('problem' in links) return setSectionProblem({ step: 'suppliers', message: links.problem })
     }
-    setPassed((current) => new Set(current).add(step))
+    setPassed((current) => new Set(current).add(shownStep))
     const following = steps[stepIndex + 1]
     if (following) goTo(following.id)
   }
@@ -1109,7 +1109,10 @@ export function ProductFormPage() {
     done: !isEdit && passed.has(candidate.id) && !stepProblem(candidate.id),
     problem: stepProblem(candidate.id),
   }))
-  const stepIndex = Math.max(0, steps.findIndex((candidate) => candidate.id === step))
+  // The section shown: the one asked for, or Basics while it isn't one this person has (/edit#price where nothing is
+  // sold, or before the selling settings have loaded) - never an empty card.
+  const shownStep: StepId = steps.some((candidate) => candidate.id === step) ? step : 'basics'
+  const stepIndex = Math.max(0, steps.findIndex((candidate) => candidate.id === shownStep))
 
   // Review: each section in a line, "None" for one left empty.
   const reviewValues = watch()
@@ -1266,7 +1269,7 @@ export function ProductFormPage() {
         <div className="lg:sticky lg:top-6 lg:self-start">
           <FormSteps
             steps={steps}
-            current={step}
+            current={shownStep}
             onSelect={goTo}
             numbered={!isEdit}
             label={isEdit ? 'Sections of this product' : 'Steps to add a product'}
@@ -1275,7 +1278,7 @@ export function ProductFormPage() {
       <form
         onSubmit={(event) => {
           // Adding creates only from Review; anywhere else, Enter is Next.
-          if (!isEdit && step !== 'review') {
+          if (!isEdit && shownStep !== 'review') {
             event.preventDefault()
             void next()
             return
@@ -1289,7 +1292,7 @@ export function ProductFormPage() {
         <div className="flex flex-col gap-6 px-4 py-5 sm:px-7 sm:py-6">
         <FormSection
           id="basics"
-          current={step}
+          current={shownStep}
           title="Basics"
           description={isVendor ? 'What it is. Changing any of this sends the listing back for review.' : 'What it is, and how you’ll find it.'}
         >
@@ -1449,7 +1452,7 @@ export function ProductFormPage() {
             the way this one just did. */}
         <FormSection
           id="units"
-          current={step}
+          current={shownStep}
           title="Units"
           description="What you count it in, and the packs and measures it comes in. Read it as one sentence: “Bag contains 50 kg.”"
         >
@@ -1664,7 +1667,7 @@ export function ProductFormPage() {
         {showsSellingPrice && (
         <FormSection
           id="price"
-          current={step}
+          current={shownStep}
           title="Price"
           description={
             requiresSellingPrice
@@ -1750,7 +1753,7 @@ export function ProductFormPage() {
         {canViewVendors && (
           <FormSection
             id="suppliers"
-            current={step}
+            current={shownStep}
             title="Suppliers"
             description="Who you buy it from, with the pack they send and what they charge. Add as many as you have."
           >
@@ -1813,7 +1816,7 @@ export function ProductFormPage() {
             the question. `inputMode` moves from numeric to decimal for the same reason §9.1 accepts
             decimals: half a bag is a real shelf, and a numeric keypad with no decimal point on a
             phone would make it untypeable. */}
-        <FormSection id="alert" current={step} title="Stock alert" description="We’ll tell you when it runs low.">
+        <FormSection id="alert" current={shownStep} title="Stock alert" description="We’ll tell you when it runs low.">
         <div>
           <TextField
             label={fieldLabelInUnit(UNIT_COPY.LOW_STOCK_ALERT_AT, quantityOption)}
@@ -1830,7 +1833,7 @@ export function ProductFormPage() {
 
         {/* -------------------------------------------------------------- Review (adding only) */}
         {!isEdit && (
-          <FormSection id="review" current={step} title="Review" description="Check it, then create it. Change anything from here.">
+          <FormSection id="review" current={shownStep} title="Review" description="Check it, then create it. Change anything from here.">
             <dl className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white" data-review>
               {reviewLines.map((line) => (
                 <div key={line.step} className="flex items-start gap-3 px-4 py-3" data-review-line={line.step}>
@@ -1882,7 +1885,7 @@ export function ProductFormPage() {
               Cancel
             </Button>
           )}
-          {!isEdit && step !== 'review' ? (
+          {!isEdit && shownStep !== 'review' ? (
             // Keyed apart from Create: one button changing into the other mid-click would submit the form.
             <Button key="next" type="button" variant="action" onClick={() => void next()}>
               Next: {steps[stepIndex + 1]?.label}
