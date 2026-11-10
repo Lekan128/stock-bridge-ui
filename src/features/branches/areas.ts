@@ -19,6 +19,21 @@ export function stockAreas(branch: Branch | null | undefined): Area[] {
   return (branch?.areas ?? []).filter((area) => area.active && area.keepsStock)
 }
 
+/**
+ * Where a count lands (owner, 2026-11-10: "if the branch only has one area the count must be there"): the area chosen
+ * at a branch with areas, named; at a branch with one, that one, unnamed - it's just the shop. Null when there's no
+ * one place yet (All branches, or a branch with areas and none chosen).
+ */
+export function countPlace(
+  branch: Branch | null | undefined,
+  chosen: { areaId?: string; areaName?: string },
+): { areaId: string; areaName?: string } | null {
+  if (chosen.areaId && chosen.areaName) return { areaId: chosen.areaId, areaName: chosen.areaName }
+  if (!branch || hasAreas(branch)) return null
+  const only = stockAreas(branch)[0] ?? branch.areas?.[0]
+  return only ? { areaId: only.id } : null
+}
+
 /** Where deliveries arrive: the sheet's choice when it has nothing better to go on. */
 export function deliveryArea(branch: Branch | null | undefined): Area | undefined {
   return branch?.areas?.find((area) => area.delivery)
@@ -55,6 +70,25 @@ export function areaWaiting(product: Product, branch: Branch | null | undefined)
 export function figureInArea(product: Product, areaId: string | undefined): number | undefined {
   if (!areaId || product.areaStock == null) return undefined
   return product.areaStock.find((figure) => figure.areaId === areaId)?.quantityOnHand ?? 0
+}
+
+/**
+ * What one place holds of the product (STOCK_SHEETS_AND_AREA_COUNT_PLAN.md Part 4): the area's figure, else
+ * the branch's, else the product's own - so quick mode's search says the Kitchen's 12, not the branch's 42.
+ * `carried` is false where the area has never had it ("Not in Kitchen"): the row stays, as it may be
+ * arriving there for the first time.
+ */
+export function placeFigure(
+  product: Product,
+  place: { branchId?: string | null; areaId?: string | null },
+): { quantity: number; carried: boolean } {
+  if (place.areaId && product.areaStock != null) {
+    const figure = product.areaStock.find((entry) => entry.areaId === place.areaId)
+    if (!figure) return { quantity: 0, carried: false }
+    return { quantity: figure.quantityOnHand, carried: figure.carried !== false || figure.quantityOnHand !== 0 }
+  }
+  const atBranch = place.branchId ? product.branchStock?.find((entry) => entry.branchId === place.branchId) : undefined
+  return { quantity: atBranch ? atBranch.quantityOnHand : product.quantityOnHand, carried: true }
 }
 
 /**

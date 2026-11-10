@@ -130,6 +130,8 @@ export function ProductListPage() {
   const canStockInSheet = canImport && recordsHere
   const canStockIn = recordsHere && permissions.includes(PERMISSIONS.STOCK_IN)
   const canStockOut = recordsHere && permissions.includes(PERMISSIONS.STOCK_OUT)
+  // Count stock (the "⋯" page) corrects figures, as the product page's Count does: whoever manages the stock here.
+  const canCount = recordsHere && permissions.includes(PERMISSIONS.MANAGE_INVENTORY)
   // Select rows → Send (MULTI_BRANCH_UX_PLAN.md §5.4): from the branch this phone is at.
   const branch = useOptionalWorkingBranch()
   const canSendSelected =
@@ -253,7 +255,8 @@ export function ProductListPage() {
   const { data, loading, error, refetch } = server
   const showingSaved = onDevice ? (!online || catalog.behind) && catalog.syncedAt != null : server.showingSaved
   const updatedAt = onDevice ? catalog.syncedAt : server.updatedAt
-  const retryRefresh = onDevice ? () => void syncCatalog() : refetch
+  // A promise, so "Trying…" lasts as long as the attempt does.
+  const retryRefresh = onDevice ? () => syncCatalog() : refetch
 
   // Quick stock in / out from a row or card (C1, U2): the same sheets and Undo as the product page.
   // The device catalogue and caches update through the outbox; the server's paged list is refetched.
@@ -511,6 +514,8 @@ export function ProductListPage() {
         : { label: 'Move stock', onSelect: () => moveSheet.open([], 'move') }
       : undefined,
     onGiveBack: givesHere ? () => setGivenOpen(true) : undefined,
+    // A list to count down, not a button on every row (owner, 2026-11-10).
+    onCountStock: canCount ? () => navigate('/app/products/count') : undefined,
     onRecordSale: recordsSales && canStockOut ? () => navigate('/app/sell') : undefined,
     onExport: () => void handleExport(),
     onSkuSettings: () => navigate('/app/products/sku-settings'),
@@ -705,7 +710,8 @@ export function ProductListPage() {
           <>
             {' '}· <Kbd>o</Kbd> stock out
           </>
-        )}{' '}
+        )}
+{' '}
         · <Kbd>Enter</Kbd> open
       </p>
 

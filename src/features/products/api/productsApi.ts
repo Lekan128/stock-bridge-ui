@@ -41,7 +41,11 @@ export const productsApi = {
         '/api/products',
         buildProductFormData(
           // The opening stock lands at the phone's branch (V52).
-          payload.initialVendor ? { ...payload, initialVendor: { ...payload.initialVendor, branchId: recordingBranchId() } } : payload,
+          {
+            ...payload,
+            ...(payload.initialVendor ? { initialVendor: { ...payload.initialVendor, branchId: recordingBranchId() } } : {}),
+            ...(payload.openingStock ? { openingStock: { ...payload.openingStock, branchId: recordingBranchId() } } : {}),
+          },
           image,
         ),
         {

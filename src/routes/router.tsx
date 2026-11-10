@@ -136,6 +136,12 @@ const RecordDeliveryPage = lazy(() =>
     default: m.RecordDeliveryPage,
   })),
 )
+// Count stock: the closing count on a laptop, from Inventory's "⋯" (2026-11-10).
+const CountStockPage = lazy(() =>
+  import('@/features/products/pages/CountStockPage').then((m) => ({
+    default: m.CountStockPage,
+  })),
+)
 // Record a sale: a basket of one item or twenty (SELLING_PRICE_PLAN.md §6.1).
 const RecordSalePage = lazy(() =>
   import('@/features/selling/sale/RecordSalePage').then((m) => ({
@@ -741,6 +747,17 @@ export function AppRoutes() {
             element={
               <RequirePermission anyOf={[PERMISSIONS.STOCK_IN, PERMISSIONS.STOCK_OUT, PERMISSIONS.SEND_STOCK, PERMISSIONS.MANAGE_INVENTORY]}>
                 <TransferDetailPage />
+              </RequirePermission>
+            }
+          />
+          {/* Count stock: whoever manages the stock, at the branch they record at (static, above products/:id). */}
+          <Route
+            path="products/count"
+            element={
+              <RequirePermission permission={PERMISSIONS.MANAGE_INVENTORY}>
+                <RecordingBranchGate question="Which branch are you counting?">
+                  <CountStockPage />
+                </RecordingBranchGate>
               </RequirePermission>
             }
           />

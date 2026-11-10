@@ -41,7 +41,7 @@ const NO_INCOMING = { units: 0, productCount: 0 }
  * the filters change or the copy itself changes (a sync, or a write from this phone), keeping
  * whichever windows the user has scrolled through.
  */
-export function useCatalogList(asked: CatalogFilters, enabled: boolean): CatalogList {
+export function useCatalogList(asked: CatalogFilters, enabled: boolean, scope?: { areaIds: string[] }): CatalogList {
   // Rows read as the phone's branch holds them, or as "All branches" (MULTI_BRANCH_UX_PLAN.md §4.3).
   const branch = useOptionalWorkingBranch()
   // …and as the areas chosen in the top bar hold them (Part 3.6).
@@ -50,7 +50,12 @@ export function useCatalogList(asked: CatalogFilters, enabled: boolean): Catalog
     branch?.isMultiBranch && (branch.working || branch.isAll)
       ? { ...asked, branchId: branch.isAll ? undefined : branch.working?.id, allBranches: branch.isAll }
       : asked
-  const filters: CatalogFilters = work.viewAreaIds ? { ...atBranch, areaIds: work.viewAreaIds } : atBranch
+  // A screen that records in one area reads that area's figures, whatever the top bar shows (sheets plan Part 5).
+  const filters: CatalogFilters = scope
+    ? { ...atBranch, areaIds: scope.areaIds }
+    : work.viewAreaIds
+      ? { ...atBranch, areaIds: work.viewAreaIds }
+      : atBranch
   const { version } = useCatalogState()
   const key = JSON.stringify(filters)
   const [summary, setSummary] = useState<Omit<CatalogQueryResult, 'rows'> | null>(null)

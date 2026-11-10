@@ -7,7 +7,7 @@ import type { Area } from '@/features/branches/types'
  * change the same thing the same way. A dropdown under whatever opened it, on a phone too (owner, 2026-10-31:
  * tapped at the top, it opens at the top), placed by `className`.
  */
-export function AreaMenu({
+export function AreaMenu<T extends Pick<Area, 'id' | 'name'> = Area>({
   areas,
   currentId,
   usesOnly = [],
@@ -17,7 +17,8 @@ export function AreaMenu({
   all,
   onGiveBack,
 }: {
-  areas: Area[]
+  /** The places to choose from - areas, or branches on a stock sheet's line (same menu, same look). */
+  areas: T[]
   currentId: string | undefined
   /** What the choice does: "Record in" (quick mode), "Showing and recording" (the top bar). */
   caption?: string
@@ -25,7 +26,7 @@ export function AreaMenu({
   all?: { label: string; current: boolean; onPick: () => void }
   /** Areas they work in that use what they're given: said, so they don't look forgotten. */
   usesOnly?: Area[]
-  onPick: (area: Area) => void
+  onPick: (area: T) => void
   /** Where the dropdown sits, under whatever opened it. */
   className: string
   /** "Give back or report" under the areas that use stock up (Part 6): what there is to do for them. */

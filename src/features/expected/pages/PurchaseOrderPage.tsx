@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { Check, ChevronLeft } from 'lucide-react'
+import { Check, ChevronLeft, Copy, FileDown, Pencil, Send, XCircle } from 'lucide-react'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
 import { api } from '@/api/client'
@@ -207,17 +207,19 @@ export function PurchaseOrderPage() {
   ].filter(Boolean)
 
   // ---------------------------------------------------------------- ⋯ ---------------------------
+  // Every item with its picture, as the app's other "⋯" menus (2026-11-10).
+  const menuIcon = 'h-4 w-4 text-neutral-500'
   const menu: OverflowMenuItem[] = []
-  if (share) menu.push({ label: text.menuPdf, onSelect: () => window.open(pdfHref(share.token), '_blank', 'noopener') })
+  if (share) menu.push({ label: text.menuPdf, icon: <FileDown className={menuIcon} aria-hidden="true" />, onSelect: () => window.open(pdfHref(share.token), '_blank', 'noopener') })
   if (canCreate && isPo && order.status === 'OPEN') {
-    menu.push({ label: text.menuChange, onSelect: () => navigate(`${LIST_PATH}/${order.id}/change`) })
+    menu.push({ label: text.menuChange, icon: <Pencil className={menuIcon} aria-hidden="true" />, onSelect: () => navigate(`${LIST_PATH}/${order.id}/change`) })
   }
-  if (canCreate && order.vendorId) menu.push({ label: text.menuAgain, onSelect: () => navigate(`${LIST_PATH}/new?again=${order.id}`) })
+  if (canCreate && order.vendorId) menu.push({ label: text.menuAgain, icon: <Copy className={menuIcon} aria-hidden="true" />, onSelect: () => navigate(`${LIST_PATH}/new?again=${order.id}`) })
   if (canSend && isPo && order.status === 'OPEN' && !order.waitingToBeSent && !held) {
-    menu.push({ label: text.menuSendAgain, onSelect: () => setShowWays(true) })
+    menu.push({ label: text.menuSendAgain, icon: <Send className={menuIcon} aria-hidden="true" />, onSelect: () => setShowWays(true) })
   }
   if (order.status === 'OPEN' && (isPo ? canSend || (held && isAsker) : canManage)) {
-    menu.push({ label: text.menuCallOff, tone: 'danger', onSelect: () => setCancelOpen(true) })
+    menu.push({ label: text.menuCallOff, tone: 'danger', icon: <XCircle className="h-4 w-4" aria-hidden="true" />, onSelect: () => setCancelOpen(true) })
   }
 
   // ---------------------------------------------------------------- the ways to send it ----------

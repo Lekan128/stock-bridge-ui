@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { Logo } from '@/components/Logo'
@@ -20,7 +21,32 @@ const itemClassName = (isActive: boolean) =>
     isActive ? 'bg-primary-100 text-primary-900' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'
   }`
 
+/** How long the pointer rests on the collapsed strip before it opens: Baymard's 300-500 ms, at the calm end. */
+const PEEK_OPEN_MS = 500
+/** How long after the pointer leaves before it closes, so a slip off the edge doesn't snap it shut (NN/g). */
+const PEEK_CLOSE_MS = 300
+
 export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onCloseMobile }: SidebarProps) {
+  // Collapsed, it opens over the page while the pointer rests on it, and closes when it leaves (owner, 2026-11-10).
+  // A peek never changes the choice: » still keeps it open. A mouse only - a touch screen has no hover.
+  const [peek, setPeek] = useState(false)
+  const timer = useRef<number | null>(null)
+  const asideRef = useRef<HTMLElement>(null)
+  const clearTimer = () => {
+    if (timer.current != null) window.clearTimeout(timer.current)
+    timer.current = null
+  }
+  const later = (ms: number, open: boolean) => {
+    clearTimer()
+    timer.current = window.setTimeout(() => setPeek(open), ms)
+  }
+  useEffect(() => clearTimer, [])
+  // Pinned open or closed with the button: no peek left over.
+  useEffect(() => {
+    clearTimer()
+    setPeek(false)
+  }, [collapsed])
+  const showLabels = !collapsed || peek
   const { user, client, isPlatformOwner, isVendor, isSeller } = useAuth()
   const permissions = user?.type === 'tenant' ? user.permissions : []
   const { recordsSales } = useSellingPolicy()
@@ -58,7 +84,10 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onCloseMobile
         <Link
           key={item.path}
           to={item.path}
-          onClick={onCloseMobile}
+          onClick={() => {
+            onCloseMobile()
+            setPeek(false)
+          }}
           title={showLabels ? undefined : item.label}
           className={itemClassName(false)}
         >
@@ -78,7 +107,10 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onCloseMobile
         key={item.path}
         to={item.path}
         end={item.exact}
-        onClick={onCloseMobile}
+        onClick={() => {
+          onCloseMobile()
+          setPeek(false)
+        }}
         title={showLabels ? undefined : item.label}
         className={({ isActive }) => itemClassName(isActive)}
       >
@@ -122,26 +154,61 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onCloseMobile
 
   return (
     <>
-      {/* Desktop sidebar */}
-      <aside
-        className={`hidden shrink-0 flex-col border-r border-neutral-200 bg-white transition-[width] duration-200 ease-out md:flex ${
-          collapsed ? 'md:w-20' : 'md:w-64'
-        }`}
+      {/* Desktop sidebar. The outer box keeps the strip's place in the page; the panel inside opens over the page when
+          it peeks, so the page never shifts sideways. */}
+      <div
+        className={`relative hidden shrink-0 transition-[width] duration-200 ease-out md:block ${collapsed ? 'md:w-20' : 'md:w-64'}`}
+        onPointerEnter={(event) => {
+          if (collapsed && event.pointerType === 'mouse') later(peek ? 0 : PEEK_OPEN_MS, true)
+        }}
+        onPointerLeave={(event) => {
+          if (collapsed && event.pointerType === 'mouse') later(PEEK_CLOSE_MS, false)
+        }}
+        // A keyboard opens it too: tabbing into the strip, and Esc or tabbing out closes it.
+        onFocus={(event) => {
+          // Keyboard focus only: a mouse click focuses the icon too, and mustn't flash the panel open.
+          if (collapsed && (event.target as HTMLElement).matches(':focus-visible')) {
+            clearTimer()
+            setPeek(true)
+          }
+        }}
+        onBlur={(event) => {
+          if (collapsed && !asideRef.current?.contains(event.relatedTarget as Node | null)) {
+            clearTimer()
+            setPeek(false)
+          }
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape' && peek) {
+            clearTimer()
+            setPeek(false)
+            ;(document.activeElement as HTMLElement | null)?.blur()
+          }
+        }}
       >
-        <div className="flex items-center justify-between gap-2 px-4 py-4">
-          <Logo variant={collapsed ? 'icon' : 'full'} size={26} />
-          <button
-            type="button"
-            onClick={onToggleCollapse}
-            className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-600"
-            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-          </button>
-        </div>
-        <nav className="flex-1 overflow-y-auto px-3 pb-3">{renderNav(!collapsed)}</nav>
-        {renderFooter(!collapsed)}
-      </aside>
+        <aside
+          ref={asideRef}
+          data-sidebar-peek={peek || undefined}
+          className={`absolute inset-y-0 left-0 flex flex-col border-r border-neutral-200 bg-white transition-[width,box-shadow] duration-200 ease-out ${
+            showLabels ? 'w-64' : 'w-20'
+          } ${peek ? 'z-40 shadow-xl' : ''}`}
+        >
+          <div className="flex items-center justify-between gap-2 px-4 py-4">
+            <Logo variant={showLabels ? 'full' : 'icon'} size={26} />
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-600"
+              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              title={collapsed ? 'Keep the menu open' : undefined}
+            >
+              {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+            </button>
+          </div>
+          <nav className="flex-1 overflow-x-hidden overflow-y-auto px-3 pb-3">{renderNav(showLabels)}</nav>
+          {renderFooter(showLabels)}
+        </aside>
+      </div>
 
       {/* Mobile backdrop */}
       <div

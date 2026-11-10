@@ -53,6 +53,8 @@ export interface AreaFigure {
   quantityOnHand: number
   /** The product page only (Part 3.5): when this area last counted it. */
   lastCountedAt?: string
+  /** How that last count was typed (V85): [{unit: "BAG:15", quantity: 1}, {unit: "KG", quantity: 2}]. */
+  lastCountedAs?: { unit: string; quantity: number }[]
   /** The area has had this product - holds it, or ran out of it (Part 3.6). Absent from an older API. */
   carried?: boolean
   /** Moved here and not confirmed yet (Part 4): in the branch's figure, in no area's. Absent: none. */

@@ -150,6 +150,11 @@ await check('offline: the edit form refuses to fill from a saved copy', async ()
   await page.goto(`${UI}/app/products/${rice.id}/edit`)
   await page.getByText("Couldn't open this product for editing").waitFor({ timeout: 10000 })
   assert((await page.getByLabel(/^Name/).count()) === 0, 'an edit form rendered with no fresh product behind it')
+  // Try again shows it tried, however fast the refusal: "Trying…" for a moment, then when it tried.
+  await page.getByRole('button', { name: 'Try again' }).click()
+  await page.getByText('Trying…').waitFor({ timeout: 2000 })
+  await page.getByText(/^Tried again at /).waitFor({ timeout: 5000 })
+  await page.getByRole('button', { name: 'Try again' }).waitFor()
   await page.screenshot({ path: SHOTS + '5-offline-edit.png' })
 })
 

@@ -3,7 +3,7 @@
 //   1. A one-branch company sees no branch word anywhere but Company settings (rule 1).
 //   2. The second branch: the one-time question, the chip, the sheet's title, the write landing there.
 //   3. A storekeeper at one branch: the name as plain text, no question, writes land at their branch.
-//   4. "All branches": a stock sheet asks "Which branch?" before it can be saved.
+//   4. "All branches": a stock sheet asks for the branch before it can be saved.
 import { chromium } from 'playwright'
 import { API, UI, launchOptions, shotsPrefix } from '../config.mjs'
 import { randomUUID } from 'node:crypto'
@@ -124,7 +124,7 @@ await check('the second branch: the question once, the chip, the sheet title, an
   await page.getByRole('button', { name: /^Branch: Oshodi/ }).waitFor()
 
   await page.getByRole('button', { name: 'Stock in', exact: true }).first().click()
-  await page.getByRole('dialog').getByText('Stock in · Oshodi').waitFor()
+  await page.getByRole('dialog').locator('[data-sheet-place]').getByText('Oshodi').waitFor()
   const sheet = page.getByRole('dialog')
   await sheet.getByLabel(/how many|quantity/i).first().fill('5')
   await sheet.getByRole('button', { name: 'Continue', exact: true }).click()
@@ -166,7 +166,7 @@ await check('a storekeeper at one branch: the name as plain text, no question, w
   await page.locator('header').getByText('Oshodi').waitFor()
 
   await page.getByRole('button', { name: 'Stock in', exact: true }).first().click()
-  await page.getByRole('dialog').getByText('Stock in · Oshodi').waitFor()
+  await page.getByRole('dialog').locator('[data-sheet-place]').getByText('Oshodi').waitFor()
   await context.close()
 })
 
@@ -185,9 +185,10 @@ await check('"All branches": a stock sheet asks which branch before it can be sa
   await page.getByRole('button', { name: /^Branch: All branches/ }).waitFor()
   await page.getByRole('button', { name: 'Stock in', exact: true }).first().click()
   const sheet = page.getByRole('dialog')
-  await sheet.getByText('Which branch?').waitFor()
-  await sheet.getByRole('radio', { name: 'Oshodi' }).click()
-  await sheet.getByText('Stock in · Oshodi').waitFor()
+  // The line under the title asks for the branch, and Continue waits for it (Part 1).
+  await sheet.getByRole('button', { name: 'Choose a branch' }).click()
+  await sheet.getByRole('menuitemradio', { name: 'Oshodi' }).click()
+  await sheet.getByRole('button', { name: 'Recording at Oshodi. Change branch' }).waitFor()
   await context.close()
 })
 

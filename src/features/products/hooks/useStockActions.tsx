@@ -9,7 +9,7 @@ import { StockOutModal } from '@/features/products/components/StockOutModal'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import type { Product, StockMutationResponse } from '@/features/products/types'
 import { formatNumber, stockUnitWord } from '@/features/products/unitCopy'
-import { resolveUnitSymbol } from '@/features/products/unitSet'
+import { isCountedInWholeUnits, resolveUnitSymbol } from '@/features/products/unitSet'
 import { isAppError } from '@/types/api'
 
 export type StockActionKind = 'in' | 'out' | 'count'
@@ -141,6 +141,8 @@ export function useStockActions({
         currentQuantity={active.product.quantityOnHand + pending.delta}
         areaStock={active.product.areaStock}
         stockUnit={resolveUnitSymbol(active.product.unitOfMeasure, options)}
+        countedInWholeUnits={isCountedInWholeUnits(active.product.unitOfMeasure, options)}
+        product={active.product}
         onClose={close}
         onSuccess={(result) => succeeded('count', result)}
         onQueued={queued}

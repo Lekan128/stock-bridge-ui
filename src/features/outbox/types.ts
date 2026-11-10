@@ -21,6 +21,8 @@ export interface StockCountPayload {
   areaId?: string
   /** What a shortfall is, for this count only (Part 3.5); absent: what the area says. */
   shortAs?: 'USED' | 'MISSING'
+  /** A count as it was typed, box by box (V85): "1 bag + 2 kg". The total above is what's recorded. */
+  countedAs?: { unit: string; quantity: number }[]
 }
 
 /**

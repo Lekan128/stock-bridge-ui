@@ -20,7 +20,15 @@ import { productsApi } from '@/features/products/api/productsApi'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import type { Product, UnitOption } from '@/features/products/types'
 import { formatNumber, formatQuantityInUnit, packRemainderPhrase, pluraliseUnitNoun, stockUnitWord, unitNoun } from '@/features/products/unitCopy'
-import { packRemainder, resolveUnitSymbol, stockUnitOption, toBaseQuantity } from '@/features/products/unitSet'
+import {
+  isCountedInWholeUnits,
+  isRecordableQuantity,
+  packRemainder,
+  resolveUnitSymbol,
+  stockUnitOption,
+  toBaseQuantity,
+  usedInOption,
+} from '@/features/products/unitSet'
 import { unitsFor } from '@/features/selling/sale/saleLine'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
@@ -274,7 +282,7 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
           const options = unitsFor(product, catalogue)
           const typed = options.find((o) => o.code === line.enteredUnit && !o.isStockUnit)
           const per = typed ? toBaseQuantity(1, typed) : 1
-          const inPacks = typed != null && per > 0 && left % per === 0
+          const inPacks = typed != null && per > 0 && Math.abs(left / per - Math.round(left / per)) < 1e-9
           addProduct(
             product,
             String(inPacks ? left / per : left),
@@ -322,7 +330,8 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
     setLines((current) => {
       if (current.some((line) => line.product.id === product.id)) return current
       const options = unitsFor(product, catalogue)
-      const option = options.find((o) => o.label === unitLabel) ?? openingOption(options)
+      // The product's usual unit for using it (UNITS_PLAN.md Part 2), else its pack.
+      const option = options.find((o) => o.label === unitLabel) ?? usedInOption(product, options, openingOption(options))
       return [{ key: product.id, product, unitLabel: option.label, quantity }, ...current]
     })
     if (focus) window.requestAnimationFrame(() => document.getElementById(`move-qty-${product.id}`)?.focus())
@@ -359,7 +368,10 @@ export function MoveEditor({ productIds = [], focusSearch = false, onMoved, chil
     const options = unitsFor(line.product, catalogue)
     const option = options.find((o) => o.label === line.unitLabel) ?? stockUnitOption(options)
     const quantity = Number(line.quantity)
-    const valid = line.quantity.trim() !== '' && Number.isInteger(quantity) && quantity > 0
+    // 2.5 kg moves; half a piece doesn't (UNITS_PLAN.md Part 0).
+    const valid =
+      line.quantity.trim() !== '' &&
+      isRecordableQuantity(quantity, option, isCountedInWholeUnits(line.product.unitOfMeasure, catalogue))
     const base = valid ? toBaseQuantity(quantity, option) : 0
     const has = fromAreaId ? figureIn(line.product, fromAreaId) : undefined
     const toHas = to?.keepsStock ? figureIn(line.product, to.id) : undefined

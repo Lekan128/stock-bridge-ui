@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useId, useRef, useState } from 'react'
-import { ArrowLeftRight, Download, MessageSquarePlus, Plus, Search, Settings, ShoppingBag, SlidersHorizontal, Tags, Truck, Undo2, Upload, Zap } from 'lucide-react'
+import { ArrowLeftRight, ClipboardCheck, Download, MessageSquarePlus, Plus, Search, Settings, ShoppingBag, SlidersHorizontal, Tags, Truck, Undo2, Upload, Zap } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { OverflowMenu, type OverflowMenuItem } from '@/components/OverflowMenu'
@@ -48,6 +48,8 @@ export interface InventoryBarProps {
   onOtherMove?: { label: string; onSelect: () => void }
   /** "Give back or report" what arrived (Part 6): for someone who works in an area of this branch. */
   onGiveBack?: () => void
+  /** Count stock (owner, 2026-11-10): the closing count of the area, or of a branch with one, as a list. */
+  onCountStock?: () => void
   /** How the Move button reads for this person (Part 5): "Ask for stock" for a cook, "Move stock" otherwise. */
   moveLabel?: { label: string; short: string }
   /**
@@ -103,6 +105,9 @@ function inventoryMenuItems(props: InventoryBarProps, compact: boolean): Overflo
             onSelect: props.onOtherMove.onSelect,
           },
         ]
+      : []),
+    ...(props.onCountStock
+      ? [{ label: 'Count stock', icon: <ClipboardCheck className={icon} aria-hidden="true" />, onSelect: props.onCountStock }]
       : []),
     ...(props.onGiveBack
       ? [{ label: 'Give back or report', icon: <Undo2 className={icon} aria-hidden="true" />, onSelect: props.onGiveBack }]

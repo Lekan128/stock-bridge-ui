@@ -361,6 +361,7 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
                         <Minus className="h-4 w-4" aria-hidden="true" />
                       </QuickButton>
                     )}
+
                   </div>
                 </td>
               )}

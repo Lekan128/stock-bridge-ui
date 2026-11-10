@@ -26,6 +26,7 @@ import {
 } from '@/features/selling/sale/saleLine'
 import type { RecordedSale, useSaleBasket } from '@/features/selling/sale/useSaleBasket'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
+import { placeFigure } from '@/features/branches/areas'
 import { useSheetArea } from '@/features/branches/useSheetBranch'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 
@@ -74,6 +75,11 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId }: S
   // Where in the branch this sale comes from, at a branch with a choice of areas (V60): the Bar, not the Store.
   const branchHere = useOptionalWorkingBranch()
   const area = useSheetArea(branchHere && !branchHere.isAll ? branchHere.working : null)
+  // Whose figures the search and the lines show: the till's area, else the branch's (sheets plan Part 4).
+  const place = {
+    branchId: branchHere && !branchHere.isAll ? branchHere.working?.id : undefined,
+    areaId: areaId !== undefined ? (areaId ?? undefined) : area.areaId,
+  }
 
   const started = useRef(false)
   useEffect(() => {
@@ -153,7 +159,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId }: S
       {finder.search && (
         <div className="flex flex-col gap-1">
           {finder.results.map((product) => (
-            <FoundProduct key={product.id} product={product} catalogue={basket.catalogue} onPick={addProduct} />
+            <FoundProduct key={product.id} product={product} place={place} catalogue={basket.catalogue} onPick={addProduct} />
           ))}
           {finder.answered && finder.results.length === 0 && (
             <p className="px-1 text-sm text-neutral-600">
@@ -183,6 +189,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId }: S
             <BasketLine
               key={line.key}
               line={line}
+              place={place}
               open={openKey === line.key}
               catalogue={basket.catalogue}
               canMakeUsual={canManageProducts && online && line.product.unitPrice == null}
@@ -257,7 +264,8 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId }: S
 
 // ------------------------------------------------------------------------------- search row
 
-function FoundProduct({ product, catalogue, onPick }: { product: Product; catalogue: ReturnType<typeof useSaleBasket>['catalogue']; onPick: (product: Product) => void }) {
+function FoundProduct({ product, place, catalogue, onPick }: { product: Product; place: Place; catalogue: ReturnType<typeof useSaleBasket>['catalogue']; onPick: (product: Product) => void }) {
+  const here = placeFigure(product, place).quantity
   const options = unitsFor(product, catalogue)
   const opening = options.find((option) => !option.isStockUnit && option.code === product.unitPriceEnteredUnit) ?? options.find((o) => o.isStockUnit)
   const price = opening ? usualPrice(product, opening) : null
@@ -271,7 +279,7 @@ function FoundProduct({ product, catalogue, onPick }: { product: Product; catalo
       <span className="min-w-0">
         <span className="block truncate text-base font-medium text-neutral-900">{product.name}</span>
         <span className="block text-sm text-neutral-500 tabular-nums">
-          {formatNumber(product.quantityOnHand)} {stockUnitWord(unit, product.quantityOnHand)} on record
+          {formatNumber(here)} {stockUnitWord(unit, here)} on record
         </span>
       </span>
       <span className="shrink-0 text-right text-base font-semibold tabular-nums text-neutral-900">
@@ -283,8 +291,15 @@ function FoundProduct({ product, catalogue, onPick }: { product: Product; catalo
 
 // -------------------------------------------------------------------------------- one line
 
+/** Where the sale comes from, and so whose figures it shows. */
+interface Place {
+  branchId?: string
+  areaId?: string
+}
+
 interface BasketLineProps {
   line: SaleLine
+  place: Place
   open: boolean
   catalogue: ReturnType<typeof useSaleBasket>['catalogue']
   canMakeUsual: boolean
@@ -295,15 +310,15 @@ interface BasketLineProps {
   onRemove: () => void
 }
 
-function BasketLine({ line, open, catalogue, canMakeUsual, makeUsual, onMakeUsual, onOpen, onChange, onRemove }: BasketLineProps) {
+function BasketLine({ line, place, open, catalogue, canMakeUsual, makeUsual, onMakeUsual, onOpen, onChange, onRemove }: BasketLineProps) {
   const options = unitsFor(line.product, catalogue)
   const option = optionOf(line, options)
   const each = priceEach(line, option)
   const amount = lineAmount(line, option, options)
   const usual = belowUsual(line, option)
   const noun = option.isStockUnit ? resolveUnitSymbol(line.product.unitOfMeasure, catalogue) : unitNoun(option)
-  const pending = usePendingStock(line.product.id)
-  const onRecord = line.product.quantityOnHand + pending.delta
+  const pending = usePendingStock(line.product.id, place.areaId)
+  const onRecord = placeFigure(line.product, place).quantity + pending.delta
   const base = toBaseQuantity(line.quantity, option)
   const short = base > onRecord
   const [priceMode, setPriceMode] = useState<'each' | 'total'>(line.totalTyped != null ? 'total' : 'each')

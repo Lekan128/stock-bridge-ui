@@ -191,7 +191,7 @@ let milk
 await check('a price typed per carton is kept as typed, echoed per piece, with the profit in naira', async () => {
   // Made through the API with its pack and a delivery at 175 a piece; priced on the form.
   milk = await createProduct(shop, `Peak Milk (sl) ${shop.unique}`, {}, 48)
-  await page.goto(`${UI}/app/products/${milk.id}/edit`)
+  await page.goto(`${UI}/app/products/${milk.id}/edit#price`)
   const priceBox = page.getByLabel(/Selling price/)
   await priceBox.waitFor()
   await pricePerCarton(page)
@@ -211,7 +211,7 @@ await check('a price typed per carton is kept as typed, echoed per piece, with t
 })
 
 await check('the edit form reopens it as typed, and a change shows in the price history', async () => {
-  await page.goto(`${UI}/app/products/${milk.id}/edit`)
+  await page.goto(`${UI}/app/products/${milk.id}/edit#price`)
   const priceBox = page.getByLabel(/Selling price \(₦ per carton/)
   await priceBox.waitFor()
   assert((await priceBox.inputValue()) === '5000', `reopened as ${await priceBox.inputValue()}`)

@@ -1,10 +1,10 @@
-import type { ShortAs } from '@/features/branches/areas'
-import type { Area } from '@/features/branches/types'
+import type { ShortAs } from "@/features/branches/areas";
+import type { Area } from "@/features/branches/types";
 
 /**
- * The line a count sheet shows at a branch with areas (STOCK_AREAS_PART_3_5.md): what anything short will be
- * recorded as, before it's saved - "Anything short is recorded as used at the Kitchen." - and *Change*, for
- * this one count. A count that finds more is never "used", so the line only speaks of a shortfall.
+ * What a count that comes up short is recorded as, in one quiet line, only once it is short (owner, 2026-11-10):
+ * "5 kg short · missing" in a store; "5 kg short · used" where stock is used bit by bit, the word a tap that makes it
+ * missing for this count, and back. A count that finds more is never "used", so nothing shows then.
  */
 export function CountShortfall({
   area,
@@ -12,25 +12,33 @@ export function CountShortfall({
   short,
   onChange,
 }: {
-  area: Area
+  area: Area;
   /** The choice for this count. */
-  shortAs: ShortAs
+  shortAs: ShortAs;
   /** How much short the typed figure is, when it is; null before anything's typed or when it isn't short. */
-  short: string | null
-  onChange: (next: ShortAs) => void
+  short: string | null;
+  onChange: (next: ShortAs) => void;
 }) {
-  const what = shortAs === 'USED' ? `used at the ${area.name}` : `missing from the ${area.name}`
+  if (!short) return null;
+  // Used is only an answer where stock is used bit by bit (owner, 2026-11-09): a Store's shortfall is missing, with
+  // nothing to change.
+  const usedHere = area.shortIsUsed === true;
+  const used = shortAs === "USED" && usedHere;
   return (
-    <p className="flex flex-wrap items-baseline gap-x-2 text-sm text-neutral-700" data-count-shortfall={shortAs}>
-      <span>{short ? `${short} short: recorded as ${what}.` : `Anything short is recorded as ${what}.`}</span>
-      <button
-        type="button"
-        onClick={() => onChange(shortAs === 'USED' ? 'MISSING' : 'USED')}
-        className="-my-3 inline-flex min-h-11 items-center font-medium text-primary-700 hover:underline"
-        aria-label={shortAs === 'USED' ? 'Change: record it as missing' : 'Change: record it as used'}
-      >
-        Change
-      </button>
+    <p className="text-sm text-neutral-700" data-count-shortfall={used ? "USED" : "MISSING"}>
+      {short} short ·{" "}
+      {usedHere ? (
+        <button
+          type="button"
+          onClick={() => onChange(used ? "MISSING" : "USED")}
+          aria-label={`${used ? "Used" : "Missing"} from the ${area.name}. Tap to make it ${used ? "missing" : "used"}`}
+          className="font-semibold text-primary-700 underline decoration-dotted underline-offset-2"
+        >
+          {used ? "used" : "missing"}
+        </button>
+      ) : (
+        "missing"
+      )}
     </p>
-  )
+  );
 }

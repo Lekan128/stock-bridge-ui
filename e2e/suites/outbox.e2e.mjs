@@ -108,7 +108,7 @@ async function stockOut(quantity) {
 async function count(quantity) {
   await page.getByRole('button', { name: 'Count', exact: true }).click()
   const dialog = page.getByRole('dialog')
-  await dialog.getByLabel(/How much is on the shelf now/).fill(String(quantity))
+  await dialog.getByRole('group', { name: /How much is on the shelf now/ }).getByRole('textbox').first().fill(String(quantity))
   await dialog.getByRole('button', { name: 'Record count' }).click()
   return dialog
 }

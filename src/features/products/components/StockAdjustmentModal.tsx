@@ -6,14 +6,17 @@ import { useForm } from 'react-hook-form'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
 import { Sheet } from '@/components/Sheet'
-import { TextField } from '@/components/TextField'
 import { StockFigure } from '@/features/products/components/StockFigure'
 import { StockReceipt } from '@/features/products/components/StockReceipt'
 import { submitStockWrite } from '@/features/outbox/outboxStore'
 import { stockCountSchema, type StockCountFormValues } from '@/features/products/schemas'
-import type { StockMutationResponse } from '@/features/products/types'
+import type { Product, StockMutationResponse } from '@/features/products/types'
 import type { AreaFigure } from '@/features/branches/types'
-import { formatQuantity } from '@/features/products/unitCopy'
+import { formatQuantity, stockUnitWord } from '@/features/products/unitCopy'
+import { productsOwnUnits, roundQuantity, unitOptionsForProduct } from '@/features/products/unitSet'
+import { useCountBoxes } from '@/features/products/useCountBoxes'
+import { CountUnitLines } from '@/features/products/components/CountUnitLines'
+import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import { CountShortfall } from '@/features/branches/CountShortfall'
 import { areaShortAs, lastCountedPhrase, type ShortAs } from '@/features/branches/areas'
 import { isAppError } from '@/types/api'
@@ -26,6 +29,10 @@ export interface StockAdjustmentModalProps {
   areaStock?: AreaFigure[]
   /** The stock unit's short form ("kg"), for every figure on screen. */
   stockUnit: string
+  /** Counted in pieces: a fraction of one is refused. Measured (kg, L): to 3 places (UNITS_PLAN.md Part 0). */
+  countedInWholeUnits?: boolean
+  /** The product, for its units: counted as "2 bags + 7 dericas" when it has a pack (UNITS_PLAN.md Part 4). */
+  product?: Product
   onClose: () => void
   onSuccess: (result: StockMutationResponse) => void
   /** Saved on this phone instead of sent (A4); gets the waiting write's id, for Undo (B2). */
@@ -46,6 +53,8 @@ export function StockAdjustmentModal({
   currentQuantity: branchQuantity,
   areaStock,
   stockUnit,
+  countedInWholeUnits = true,
+  product,
   onClose,
   onSuccess,
   onQueued,
@@ -56,11 +65,6 @@ export function StockAdjustmentModal({
   // The area counted, at a branch with a choice of them (V60): its books are the Kitchen's, not the branch's.
   const areaFigure = sheetBranch.areaId ? areaStock?.find((figure) => figure.areaId === sheetBranch.areaId) : undefined
   const currentQuantity = sheetBranch.areaId ? (areaFigure?.quantityOnHand ?? 0) : branchQuantity
-  const countedAt = sheetBranch.areaId
-    ? sheetBranch.areaName
-    : branchContext?.isMultiBranch
-      ? branchContext.nameOf(sheetBranch.branchId ?? branchContext.working?.id)
-      : undefined
   // What a shortfall becomes (Part 3.5): the area's answer - used in a kitchen, missing in a store - unless
   // changed for this count.
   const area = sheetBranch.areaId
@@ -76,20 +80,33 @@ export function StockAdjustmentModal({
   const {
     register,
     handleSubmit,
-    watch,
     formState: { errors, isSubmitting },
   } = useForm<StockCountFormValues>({
     resolver: zodResolver(stockCountSchema),
     defaultValues: { countedQuantity: '', note: '' },
   })
 
-  const typed = watch('countedQuantity').trim()
-  const counted = /^\d+$/.test(typed) ? Number(typed) : null
-  const difference = counted == null ? null : counted - currentQuantity
+  // Counted the way a store is (UNITS_PLAN.md Part 4): whole packs and what's left - "2 bags + 7 dericas" - in as
+  // many of the product's units as the shelf needs, each in its own box (owner, 2026-11-09).
+  const { options: unitsOfMeasure } = useUnitOfMeasureOptions()
+  const offered = product ? productsOwnUnits(unitOptionsForProduct(product, unitsOfMeasure)) : []
+  const count = useCountBoxes(product ?? {}, offered)
+  const [countError, setCountError] = useState<string | null>(null)
+  const counted = count.anyTyped ? count.total : null
+  const difference = counted == null ? null : roundQuantity(counted - currentQuantity)
+  // "= 164.2 kg" under boxes that aren't all the stock unit.
+  const inStockUnits =
+    counted != null && (count.boxes.length > 1 || !count.boxes[0].unit.isStockUnit) ? formatQuantity(counted, stockUnit) : null
 
   async function onSubmit(values: StockCountFormValues) {
     setFormError(null)
-    const countedQuantity = Number(values.countedQuantity)
+    setCountError(null)
+    if (!count.anyTyped) return setCountError('Enter how much is on the shelf.')
+    if (counted == null) return setCountError('Enter a number, 0 or greater, to 3 decimal places.')
+    const countedQuantity = counted
+    if (countedInWholeUnits && !Number.isInteger(countedQuantity)) {
+      return setCountError(`That isn't a whole number of ${stockUnitWord(stockUnit, 2)}.`)
+    }
     try {
       const outcome = await submitStockWrite({
         kind: 'COUNT',
@@ -102,6 +119,7 @@ export function StockAdjustmentModal({
           branchId: sheetBranch.branchId,
           areaId: sheetBranch.areaId,
           shortAs: shortChosen ?? undefined,
+          countedAs: count.countedAs,
         },
       })
       sheetBranch.remember()
@@ -142,7 +160,10 @@ export function StockAdjustmentModal({
     <Sheet
       open
       onClose={onClose}
-      title={`Count stock${sheetBranch.titleSuffix}`}
+      // What and where before anything is typed (STOCK_SHEETS_AND_AREA_COUNT_PLAN.md Part 1). The line carries
+      // what the app says is there, so the field's hint needn't say it again.
+      title={`Count · ${productName}`}
+      subtitle={sheetBranch.line(formatQuantity(currentQuantity, stockUnit))}
       size="sm"
       footer={
         <>
@@ -156,23 +177,33 @@ export function StockAdjustmentModal({
       }
     >
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
-        {sheetBranch.field}
-        <TextField
-          label={`How much is on the shelf now? (${stockUnit})`}
-          inputMode="numeric"
-          autoFocus
-          error={errors.countedQuantity?.message}
-          hint={
-            // At a branch the figure is that branch's, so say whose (UX §5.2: "Oshodi's books say 40").
-            // …and when it was last counted there (Part 3.5), so nobody counts what's just been counted.
-            `${
-              countedAt
-                ? `${countedAt}'s books say ${formatQuantity(currentQuantity, stockUnit)}.`
-                : `The app says ${formatQuantity(currentQuantity, stockUnit)}.`
-            }${lastCounted ? ` ${lastCounted}.` : ''}`
-          }
-          {...register('countedQuantity')}
-        />
+        {/* A line per unit, its box beside it; the other units wait below (owner, 2026-11-10). */}
+        <fieldset aria-describedby={countError ? 'count-error' : lastCounted ? 'count-hint' : undefined}>
+          <legend className="mb-1.5 text-sm font-medium text-neutral-700">How much is on the shelf now?</legend>
+          <CountUnitLines
+            count={count}
+            productName={productName}
+            stockSymbol={stockUnit}
+            boxId={(index) => `count-box-${index}`}
+            onBox={(index, text) => {
+              setCountError(null)
+              count.setText(index, text)
+            }}
+            boxProps={(index) => ({ autoFocus: index === 0 })}
+          />
+          {inStockUnits && <p className="mt-1.5 text-sm text-neutral-700" data-count-total>= {inStockUnits}</p>}
+          {countError ? (
+            <p id="count-error" role="alert" className="mt-1.5 text-xs text-danger-600">
+              {countError}
+            </p>
+          ) : (
+            lastCounted && (
+              <p id="count-hint" className="mt-1.5 text-xs text-neutral-500">
+                {lastCounted}.
+              </p>
+            )
+          )}
+        </fieldset>
         {/* The difference, before anything is recorded (C3, D1): set as a figure, because it is
             the thing a count is for. */}
         {difference != null && (

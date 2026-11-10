@@ -169,6 +169,36 @@ await check('quick + on a row opens Stock in for that product, without leaving t
   assert((await onHand(rice.id)) === 1000, 'server not restored')
 })
 
+await check('⋯ → Count stock: a shop with one area counts down a list, a table on a laptop; Counted today stays after a reload', async () => {
+  await page.getByRole('button', { name: 'More inventory actions' }).first().click()
+  await page.getByRole('menuitem', { name: 'Count stock' }).click()
+  await page.waitForURL(/\/app\/products\/count$/)
+  await page.getByRole('heading', { name: 'Count stock', level: 1 }).waitFor()
+  const list = page.locator('[data-count-list]')
+  const riceRow = list.locator('[data-count-row="Rice (c1)"]')
+  await riceRow.waitFor()
+  // Low ones too (Beans), but nothing at 0: the mystery item has none.
+  await list.locator('[data-count-row="Beans (c1)"]').waitFor()
+  assert((await list.locator('[data-count-row="Mystery item (c1)"]').count()) === 0, 'a product at 0 is on the list')
+  await page.screenshot({ path: SHOTS + '2b-count-stock.png' })
+  await riceRow.getByLabel('Rice (c1): kg here').fill('998')
+  await riceRow.locator('[data-count-preview]').getByText(/^2 kg short · missing$/).waitFor()
+  await riceRow.getByRole('button', { name: 'Save' }).click()
+  const counted = page.getByRole('region', { name: /^Counted today/ })
+  await counted.getByText('Rice (c1)').waitFor()
+  for (let i = 0; i < 40 && (await onHand(rice.id)) !== 998; i++) await page.waitForTimeout(250)
+  assert((await onHand(rice.id)) === 998, `the count made it ${await onHand(rice.id)} kg`)
+  // The server says so too: after a reload, still counted today, as typed.
+  await page.reload()
+  await page.getByRole('region', { name: /^Counted today/ }).locator('[data-counted-row="Rice (c1)"]').waitFor({ timeout: 20000 })
+  assert((await list.locator('[data-count-row="Rice (c1)"]').count()) === 0, 'Rice is still to count')
+  // Search finds what isn't on the list, at 0 too.
+  await page.getByPlaceholder('Search name or SKU').fill('Mystery')
+  await list.locator('[data-count-row="Mystery item (c1)"]').waitFor()
+  await page.goto(`${UI}/app/products`)
+  await page.getByRole('heading', { name: 'Inventory', level: 1 }).waitFor()
+})
+
 await check('keys: / searches, j and k move between rows, i and o open stock in and out', async () => {
   await page.locator('body').click({ position: { x: 5, y: 5 } })
   await page.keyboard.press('/')

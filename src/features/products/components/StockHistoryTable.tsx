@@ -47,7 +47,7 @@ function signedQuantity(movement: StockMovement): number {
   return movement.quantity
 }
 
-/** What a move's line was typed as, when not in the stock unit: "3 baskets". */
+/** What a move's line, or an entry in one of the product's own units, was typed as: "3 baskets", "5 dericas". */
 function movedAs(movement: StockMovement): string | null {
   if (movement.enteredQuantity == null || !movement.enteredUnit) return null
   return `${formatNumber(movement.enteredQuantity)} ${pluraliseUnitNoun(movement.enteredUnit.toLowerCase(), movement.enteredQuantity)}`
@@ -172,7 +172,8 @@ export function StockHistoryTable({
               <StockFigure
                 quantity={signedQuantity(movement)}
                 unit={stockUnit}
-                pack={enteredPackEcho(movement, stockUnit, unitOfMeasureOptions)}
+                // A pack's echo, else what it was typed as - "5 dericas" for one of the product's own units.
+                pack={enteredPackEcho(movement, stockUnit, unitOfMeasureOptions) ?? movedAs(movement)}
                 signed
                 align="end"
               />
@@ -252,7 +253,11 @@ export function StockHistoryTable({
                   <StockFigure
                     quantity={signedQuantity(movement)}
                     unit={stockUnit}
-                    pack={movement.movementType === 'MOVE' ? movedAs(movement) : enteredPackEcho(movement, stockUnit, unitOfMeasureOptions)}
+                    pack={
+                      movement.movementType === 'MOVE'
+                        ? movedAs(movement)
+                        : (enteredPackEcho(movement, stockUnit, unitOfMeasureOptions) ?? movedAs(movement))
+                    }
                     signed={movement.movementType !== 'MOVE'}
                     align="end"
                   />

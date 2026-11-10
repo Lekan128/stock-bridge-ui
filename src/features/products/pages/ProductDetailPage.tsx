@@ -6,7 +6,8 @@ import { useWorkArea } from '@/features/branches/workArea'
 import { OtherBranchesList } from '@/features/branches/OtherBranchesList'
 import { AreaBreakdown } from '@/features/branches/AreaBreakdown'
 import { hasAreas } from '@/features/branches/areas'
-import { ArrowLeft, ArrowLeftRight, MessageSquarePlus, Minus, Pencil, Plus, ShoppingBag, Truck } from 'lucide-react'
+import { Archive, ArchiveRestore, ArrowLeft, ArrowLeftRight, FileText, MessageSquarePlus, Minus, Pencil, Plus, ShoppingBag, Truck } from 'lucide-react'
+import { formatNumber } from '@/features/products/unitCopy'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { PERMISSIONS } from '@/auth/permissions'
@@ -289,9 +290,16 @@ export function ProductDetailPage() {
       </>
     ) : null
 
-  // Edit and the rare, destructive things live in "⋯" (C2, finding U3); Deactivate behind its confirmation.
+  // Edit and the rare, destructive things live in "⋯" (C2, finding U3); Deactivate behind its confirmation. Every item
+  // has its picture (owner, 2026-11-10: one without "just seems off"); Order more has Purchase orders' own.
   const orderItem: OverflowMenuItem[] = canOrder
-    ? [{ label: 'Order more', onSelect: () => navigate(`/app/purchase-orders/new?products=${product.id}`) }]
+    ? [
+        {
+          label: 'Order more',
+          icon: <FileText className="h-4 w-4 text-neutral-500" aria-hidden="true" />,
+          onSelect: () => navigate(`/app/purchase-orders/new?products=${product.id}`),
+        },
+      ]
     : []
   const sendItem: OverflowMenuItem[] = canSend
     ? [
@@ -312,8 +320,18 @@ export function ProductDetailPage() {
           onSelect: () => navigate(`/app/products/${product.id}/edit`),
         },
         product.active
-          ? { label: 'Deactivate', tone: 'danger', onSelect: () => setConfirmDeactivate(true) }
-          : { label: activating ? 'Activating…' : 'Activate', onSelect: () => void handleActivate(), disabled: activating },
+          ? {
+              label: 'Deactivate',
+              tone: 'danger',
+              icon: <Archive className="h-4 w-4" aria-hidden="true" />,
+              onSelect: () => setConfirmDeactivate(true),
+            }
+          : {
+              label: activating ? 'Activating…' : 'Activate',
+              icon: <ArchiveRestore className="h-4 w-4 text-neutral-500" aria-hidden="true" />,
+              onSelect: () => void handleActivate(),
+              disabled: activating,
+            },
       ]
     : sendItem
 
@@ -458,6 +476,41 @@ export function ProductDetailPage() {
                   {product.hasMultiplePacks && (
                     <Link to={{ search: '?tab=vendors' }} className="ml-2 text-xs font-medium text-primary-600 hover:underline">
                       View packs
+                    </Link>
+                  )}
+                </DetailRow>
+              )}
+              {/* The product's own units (UNITS_PLAN.md Part 1), where the rest of how it's counted is: "Derica = 0.6 kg
+                  · Cup = 0.2 kg", and which one stock-outs and counts open in. Changed on the form, where they're set. */}
+              {product.unitOfMeasure && ((product.measures ?? []).some((measure) => !measure.hidden) || canManageProducts) && (
+                <DetailRow label="Also used in">
+                  {(product.measures ?? []).some((measure) => !measure.hidden) ? (
+                    <span className="font-medium text-neutral-900" data-product-measures>
+                      {(product.measures ?? [])
+                        .filter((measure) => !measure.hidden)
+                        .map((measure) => `${measure.name} = ${formatNumber(measure.size)} ${stockUnitText}`)
+                        .join(' · ')}
+                    </span>
+                  ) : (
+                    <span className="text-neutral-500">—</span>
+                  )}
+                  {product.usedInUnit && (
+                    <span className="block text-xs text-neutral-500">
+                      Stock out opens in {product.usedInUnit.includes(':') ? packLabel : product.usedInUnit}
+                    </span>
+                  )}
+                  {/* The units a count opens in (V84), when chosen; else the pack and the usual unit, said nowhere. */}
+                  {(product.countIn ?? []).length > 0 && (
+                    <span className="block text-xs text-neutral-500" data-product-count-in>
+                      Counted in{' '}
+                      {(product.countIn ?? [])
+                        .map((key) => (key.includes(':') ? packLabel : key.toLowerCase() === (product.unitOfMeasure ?? '').toLowerCase() ? stockUnitText : key))
+                        .join(' + ')}
+                    </span>
+                  )}
+                  {canManageProducts && (
+                    <Link to={`/app/products/${product.id}/edit#units`} className="ml-2 text-xs font-medium text-primary-600 hover:underline">
+                      {(product.measures ?? []).some((measure) => !measure.hidden) ? 'Change' : 'Add a unit'}
                     </Link>
                   )}
                 </DetailRow>
