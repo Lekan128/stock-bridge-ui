@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useCountBoxes } from '@/features/products/useCountBoxes'
+import { countedAsText, useCountBoxes, type CountedLine } from '@/features/products/useCountBoxes'
 import { CountUnitLines } from '@/features/products/components/CountUnitLines'
 import { Check } from 'lucide-react'
 import { useCatalogList } from '@/features/catalog/useCatalog'
@@ -29,6 +29,8 @@ export interface CountedHere {
   productName: string
   summary: string
   at: number
+  /** As it was typed (V85), for Count again. */
+  countedAs?: CountedLine[]
 }
 
 /**
@@ -41,15 +43,12 @@ export function CountList({
   areaId,
   areaName,
   countedHere,
-  onPick,
   onCounted,
 }: {
   areaId: string
   areaName: string
   /** Counted in this session, or waiting on this phone, before the catalogue hears of it. */
   countedHere: CountedHere[]
-  /** A counted-today row tapped: count it again on its own screen. */
-  onPick: (product: Product) => void
   /** A row counted in place: what it was recorded as, for This session and "Counted today". */
   onCounted: (counted: RowCounted) => void
 }) {
@@ -73,26 +72,54 @@ export function CountList({
   const { ops } = useOutboxState()
   const waiting: CountedHere[] = ops
     .filter((op) => op.kind === 'COUNT' && op.payload.areaId === areaId)
-    .map((op) => ({ productId: op.productId, productName: op.productName, summary: op.summary, at: op.createdAt }))
+    .map((op) => ({
+      productId: op.productId,
+      productName: op.productName,
+      summary: op.summary,
+      at: op.createdAt,
+      countedAs: op.kind === 'COUNT' ? op.payload.countedAs : undefined,
+    }))
   const local = [...countedHere, ...waiting].filter((entry) => entry.at >= since)
   const localIds = new Set(local.map((entry) => entry.productId))
 
+  // Every product seen on either list, so one counted on this phone can be counted again in place.
+  const seen = useRef(new Map<string, Product>())
   const rows: Product[] = []
   for (let i = 0; i < Math.min(toCount.total, PAGE); i++) {
     const row = toCount.rowAt(i)
+    if (row) seen.current.set(row.id, row)
     if (row && !localIds.has(row.id)) rows.push(row)
   }
-  const countedRows: { key: string; name: string; text: string; at: number | null; product?: Product }[] = local
+  const countedRows: { key: string; productId: string; name: string; text: string; at: number | null; countedAs?: CountedLine[] }[] = local
     .filter((entry, index, all) => all.findIndex((other) => other.productId === entry.productId) === index)
-    .map((entry) => ({ key: `local-${entry.productId}`, name: entry.productName, text: entry.summary, at: entry.at }))
+    .map((entry) => ({
+      key: `local-${entry.productId}`,
+      productId: entry.productId,
+      name: entry.productName,
+      text: entry.summary,
+      at: entry.at,
+      countedAs: entry.countedAs,
+    }))
   for (let i = 0; i < Math.min(counted.total, PAGE); i++) {
     const row = counted.rowAt(i)
+    if (row) seen.current.set(row.id, row)
     if (!row || localIds.has(row.id)) continue
     const figure = figureInArea(row, areaId) ?? 0
-    const at = row.areaStock?.find((entry) => entry.areaId === areaId)?.lastCountedAt
+    const inArea = row.areaStock?.find((entry) => entry.areaId === areaId)
     const unit = resolveUnitSymbol(row.unitOfMeasure, options)
-    countedRows.push({ key: row.id, name: row.name, text: `${formatNumber(figure)} ${stockUnitWord(unit, figure)}`, at: at ? Date.parse(at) : null, product: row })
+    // As it was typed - "1 bag + 2 kg" - when the count sent its lines; else what the Kitchen has now.
+    const typed = countedAsText(inArea?.lastCountedAs, productsOwnUnits(unitOptionsForProduct(row, options)), unit)
+    countedRows.push({
+      key: row.id,
+      productId: row.id,
+      name: row.name,
+      text: typed ?? `${formatNumber(figure)} ${stockUnitWord(unit, figure)}`,
+      at: inArea?.lastCountedAt ? Date.parse(inArea.lastCountedAt) : null,
+      countedAs: inArea?.lastCountedAs,
+    })
   }
+  // The counted row being counted again, in place.
+  const [again, setAgain] = useState<string | null>(null)
   // The header counts what's still to count: those on the list, less any just counted here.
   const toCountTotal = Math.max(0, toCount.total - (Math.min(toCount.total, PAGE) - rows.length))
   if (!toCount.ready && !counted.ready) return null
@@ -131,24 +158,52 @@ export function CountList({
           <h2 id="counted-today-heading" className="px-1 text-sm font-semibold text-neutral-700">
             Counted today · {formatNumber(countedRows.length)}
           </h2>
-          <ul className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
-            {countedRows.map((row) => (
-              <li key={row.key}>
-                <button
-                  type="button"
-                  disabled={!row.product}
-                  onClick={() => row.product && onPick(row.product)}
-                  className="flex min-h-12 w-full items-center gap-3 px-4 py-2 text-left disabled:cursor-default"
-                >
+          <ul className="flex flex-col gap-2">
+            {countedRows.map((row) => {
+              const product = seen.current.get(row.productId)
+              if (again === row.productId && product) {
+                // Counted again where it is (owner, 2026-11-10): its lines as they were typed, filled in.
+                return (
+                  <CountRow
+                    key={row.key}
+                    product={product}
+                    areaId={areaId}
+                    areaName={areaName}
+                    initial={row.countedAs}
+                    onCancel={() => setAgain(null)}
+                    onCounted={(entry) => {
+                      setAgain(null)
+                      onCounted(entry)
+                    }}
+                  />
+                )
+              }
+              return (
+                <li key={row.key} className="flex min-h-12 items-center gap-3 rounded-lg border border-neutral-200 bg-white py-2 pr-2 pl-4" data-counted-row={row.name}>
                   <Check className="h-4 w-4 shrink-0 text-accent-700" aria-hidden="true" />
-                  <span className="min-w-0 flex-1 truncate text-base text-neutral-900">{row.name}</span>
-                  <span className="shrink-0 text-sm text-neutral-600 tabular-nums">
-                    {row.text}
-                    {row.at != null && ` · ${new Date(row.at).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' })}`}
-                  </span>
-                </button>
-              </li>
-            ))}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-base text-neutral-900">{row.name}</p>
+                    <p className="text-sm text-neutral-600 tabular-nums">
+                      {row.text}
+                      {row.at != null && ` · ${new Date(row.at).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' })}`}
+                    </p>
+                  </div>
+                  {product && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAgain(row.productId)
+                        window.requestAnimationFrame(() => document.getElementById(boxId(row.productId, 0))?.focus())
+                      }}
+                      aria-label={`Count ${row.name} again`}
+                      className="min-h-11 shrink-0 rounded-md px-3 text-sm font-semibold text-primary-700 hover:bg-primary-50"
+                    >
+                      Count again
+                    </button>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         </section>
       )}
@@ -161,6 +216,8 @@ export interface RowCounted {
   productId: string
   productName: string
   summary: string
+  /** As it was typed (V85), for Count again. */
+  countedAs?: CountedLine[]
   movementId?: string
   opId?: string
 }
@@ -180,16 +237,22 @@ function CountRow({
   product,
   areaId,
   areaName,
+  initial,
+  onCancel,
   onCounted,
 }: {
   product: Product
   areaId: string
   areaName: string
+  /** Counting again: the last count's lines, filled in. */
+  initial?: CountedLine[]
+  /** Counting again: back to the counted line, nothing recorded. */
+  onCancel?: () => void
   onCounted: (counted: RowCounted) => void
 }) {
   const { options } = useUnitOfMeasureOptions()
   const offered = productsOwnUnits(unitOptionsForProduct(product, options))
-  const count = useCountBoxes(product, offered)
+  const count = useCountBoxes(product, offered, initial)
   const units: UnitOption[] = count.boxes.map((box) => box.unit)
   const [saving, setSaving] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
@@ -222,7 +285,10 @@ function CountRow({
     const base = count.total
     if (wholeOnly && !Number.isInteger(base)) return setProblem(`That isn't a whole number of ${stockUnitWord(symbol, 2)}.`)
     const difference = roundQuantity(base - appSays)
-    const counted = `${formatNumber(base)} ${stockUnitWord(symbol, base)}`
+    const total = `${formatNumber(base)} ${stockUnitWord(symbol, base)}`
+    // Read back as it was typed - "1 bag + 2 kg" - when that's more than the total says.
+    const typed = countedAsText(count.countedAs, offered, symbol)
+    const counted = typed && (count.boxes.length > 1 || !count.boxes[0].unit.isStockUnit) ? typed : total
     const said =
       difference === 0
         ? 'matches'
@@ -238,12 +304,13 @@ function CountRow({
         productId: product.id,
         productName: product.name,
         summary: counted,
-        payload: { countedQuantity: base, areaId, shortAs: shortChosen ?? undefined },
+        payload: { countedQuantity: base, areaId, shortAs: shortChosen ?? undefined, countedAs: count.countedAs },
       })
       onCounted({
         productId: product.id,
         productName: product.name,
         summary: `${counted} · ${said}`,
+        countedAs: count.countedAs,
         ...(outcome.status === 'sent' ? { movementId: outcome.response.movement?.id } : { opId: outcome.op.id }),
       })
     } catch (err) {
@@ -286,7 +353,7 @@ function CountRow({
           },
         })}
       />
-      {(problem || typedAny) && (
+      {(problem || typedAny || onCancel) && (
         <div className="flex items-center justify-between gap-2 text-sm">
           {problem ? (
             <p role="alert" className="min-w-0 flex-1 text-danger-700">
@@ -319,6 +386,15 @@ function CountRow({
             </p>
           ) : (
             <span />
+          )}
+          {onCancel && (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="inline-flex min-h-10 shrink-0 items-center rounded-md px-3 font-medium text-neutral-700 hover:bg-neutral-100"
+            >
+              Cancel
+            </button>
           )}
           {typedAny && (
             <button

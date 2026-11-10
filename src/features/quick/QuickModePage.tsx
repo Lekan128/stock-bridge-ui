@@ -106,6 +106,8 @@ interface SessionEntry {
   share?: AskShare
   /** When it was recorded: a count today moves the product to "Counted today" (sheets plan Part 5). */
   at?: number
+  /** A count as it was typed (V85), for Count again on the list. */
+  countedAs?: { unit: string; quantity: number }[]
   undone?: boolean
 }
 
@@ -366,7 +368,13 @@ export function QuickModePage() {
                     areaName: place.areaName,
                     countedHere: session
                       .filter((entry) => entry.mode === 'count' && !entry.undone && entry.areaName === place.areaName)
-                      .map((entry) => ({ productId: entry.productId, productName: entry.productName, summary: entry.summary, at: entry.at ?? Date.now() })),
+                      .map((entry) => ({
+                        productId: entry.productId,
+                        productName: entry.productName,
+                        summary: entry.summary,
+                        at: entry.at ?? Date.now(),
+                        countedAs: entry.countedAs,
+                      })),
                   }
                 : null
             }
@@ -453,7 +461,6 @@ function FindStep({
           areaId={countList.areaId}
           areaName={countList.areaName}
           countedHere={countList.countedHere}
-          onPick={onPick}
           onCounted={countList.onCounted}
         />
       )}
@@ -626,7 +633,7 @@ function AmountStep({
               productId: product.id,
               productName: product.name,
               summary: amountText,
-              payload: { countedQuantity: base, areaId, shortAs: shortChosen ?? undefined },
+              payload: { countedQuantity: base, areaId, shortAs: shortChosen ?? undefined, countedAs: count.countedAs },
             })
           : mode === 'in'
             ? await submitStockWrite({
@@ -660,6 +667,7 @@ function AmountStep({
         productName: product.name,
         summary,
         ...(outcome.status === 'sent' ? { movementId: outcome.response.movement?.id } : { opId: outcome.op.id }),
+        ...(counting ? { countedAs: count.countedAs } : {}),
         at: Date.now(),
       }
       onRecorded(entry, outcome.status === 'sent' ? 'synced' : 'recorded')

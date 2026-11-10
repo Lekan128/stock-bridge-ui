@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { UnitOption } from '@/features/products/types'
 import { biggestFirst, countInOptions, roundQuantity, toBaseQuantity, unitKey } from '@/features/products/unitSet'
+import { formatNumber, pluraliseUnitNoun, stockUnitWord, unitNoun } from '@/features/products/unitCopy'
 
 /** A typed amount, or null while it isn't one yet. Blank is 0: a box left empty counts nothing. */
 function amountOf(text: string): number | null {
@@ -20,21 +21,33 @@ function amountOf(text: string): number | null {
 export function useCountBoxes(
   product: { usedInUnit?: string | null; countIn?: string[] | null },
   offered: UnitOption[],
+  /** Counting again (owner, 2026-11-10): the lines as the last count was typed, filled in. */
+  initial?: CountedLine[] | null,
 ) {
   const startingUnits = countInOptions(product, offered)
-  const starting = startingUnits.map(unitKey)
-  const startingKey = starting.join('|')
-  const [on, setOn] = useState<string[]>(starting)
-  const [texts, setTexts] = useState<Record<string, string>>({})
-  // The product's units can arrive after the first render (the unit list loads): until anything is touched, start
-  // with the ones it's counted in.
-  const [touched, setTouched] = useState(false)
-  useEffect(() => {
-    if (!touched) setOn(startingKey.split('|'))
-  }, [touched, startingKey])
-
   // A product with no stock unit set still gets its one box ("units").
   const chips = offered.length > 0 ? biggestFirst(offered) : startingUnits
+  // The last count's lines, each matched to one of the product's units; any it no longer has and it starts afresh.
+  const again = (initial ?? []).map((line) => ({
+    key: chips.map(unitKey).find((key) => key.toLowerCase() === line.unit.toLowerCase()),
+    text: formatPlain(line.quantity),
+  }))
+  const fromAgain = again.length > 0 && again.every((line) => line.key != null)
+  const starting = fromAgain ? again.map((line) => line.key as string) : startingUnits.map(unitKey)
+  const startingTexts = fromAgain ? Object.fromEntries(again.map((line) => [line.key as string, line.text])) : {}
+  const startingKey = `${starting.join('|')}#${JSON.stringify(startingTexts)}`
+  const [on, setOn] = useState<string[]>(starting)
+  const [texts, setTexts] = useState<Record<string, string>>(startingTexts)
+  // The product's units can arrive after the first render (the unit list loads): until anything is touched, start
+  // with the ones it's counted in, or the last count's.
+  const [touched, setTouched] = useState(false)
+  useEffect(() => {
+    if (touched) return
+    const [keys, typed] = startingKey.split('#')
+    setOn(keys.split('|'))
+    setTexts(JSON.parse(typed) as Record<string, string>)
+  }, [touched, startingKey])
+
   const units = chips.filter((option) => on.includes(unitKey(option)))
   const boxes = units.map((unit) => {
     const key = unitKey(unit)
@@ -46,6 +59,8 @@ export function useCountBoxes(
   const total = valid ? roundQuantity(boxes.reduce((sum, box) => sum + toBaseQuantity(box.amount ?? 0, box.unit), 0)) : null
 
   return {
+    /** What was typed, box by box, as the count is sent (V85): read back as "1 bag + 2 kg". */
+    countedAs: boxes.filter((box) => box.text.trim() !== '').map((box) => ({ unit: box.key, quantity: box.amount ?? 0 })),
     /** Every unit the product has, biggest first, and whether this count has a box for it. */
     chips: chips.map((unit) => ({ key: unitKey(unit), unit, on: on.includes(unitKey(unit)) })),
     boxes,
@@ -85,6 +100,30 @@ export function useCountBoxes(
 }
 
 export type CountBoxes = ReturnType<typeof useCountBoxes>
+
+/** One box of a count as it was typed (API V85): 1 in "BAG:15". */
+export interface CountedLine {
+  unit: string
+  quantity: number
+}
+
+/** 1.5 as "1.5", 2 as "2": what goes back in a box. */
+function formatPlain(quantity: number): string {
+  return String(roundQuantity(quantity))
+}
+
+/** "1 bag + 2 kg": a count read back as it was typed; null when a line's unit isn't one of these any more. */
+export function countedAsText(lines: CountedLine[] | null | undefined, offered: UnitOption[], stockSymbol: string): string | null {
+  if (!lines || lines.length === 0) return null
+  const parts: string[] = []
+  for (const line of lines) {
+    const unit = offered.find((option) => unitKey(option).toLowerCase() === line.unit.toLowerCase())
+    if (!unit && line.unit !== '') return null
+    const noun = !unit || unit.isStockUnit ? stockUnitWord(stockSymbol, line.quantity) : pluraliseUnitNoun(unitNoun(unit), line.quantity)
+    parts.push(`${formatNumber(line.quantity)} ${noun}`)
+  }
+  return parts.join(' + ')
+}
 
 /**
  * A box the phone's keypad might cover: once the keypad is up, it's scrolled to the middle of what's left of the

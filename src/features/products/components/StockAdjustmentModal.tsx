@@ -119,6 +119,7 @@ export function StockAdjustmentModal({
           branchId: sheetBranch.branchId,
           areaId: sheetBranch.areaId,
           shortAs: shortChosen ?? undefined,
+          countedAs: count.countedAs,
         },
       })
       sheetBranch.remember()
