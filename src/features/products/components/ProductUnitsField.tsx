@@ -377,7 +377,7 @@ export function ProductUnitsField({
                   aria-pressed={on}
                   onClick={() => toggleCount(choice.key)}
                   className={`inline-flex h-9 items-center gap-1 rounded-full border px-3 text-sm font-medium ${
-                    on ? 'border-primary-600 bg-primary-600 text-white' : 'border-neutral-300 bg-white text-neutral-700 hover:border-primary-400'
+                    on ? 'border-primary-600 bg-primary-50 text-primary-800' : 'border-neutral-300 bg-white text-neutral-700 hover:border-primary-400'
                   }`}
                 >
                   {on && <Check className="h-3.5 w-3.5" aria-hidden="true" />}

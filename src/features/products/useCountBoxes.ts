@@ -21,7 +21,8 @@ export function useCountBoxes(
   product: { usedInUnit?: string | null; countIn?: string[] | null },
   offered: UnitOption[],
 ) {
-  const starting = countInOptions(product, offered).map(unitKey)
+  const startingUnits = countInOptions(product, offered)
+  const starting = startingUnits.map(unitKey)
   const startingKey = starting.join('|')
   const [on, setOn] = useState<string[]>(starting)
   const [texts, setTexts] = useState<Record<string, string>>({})
@@ -29,10 +30,11 @@ export function useCountBoxes(
   // with the ones it's counted in.
   const [touched, setTouched] = useState(false)
   useEffect(() => {
-    if (!touched) setOn(startingKey ? startingKey.split('|') : [])
+    if (!touched) setOn(startingKey.split('|'))
   }, [touched, startingKey])
 
-  const chips = biggestFirst(offered)
+  // A product with no stock unit set still gets its one box ("units").
+  const chips = offered.length > 0 ? biggestFirst(offered) : startingUnits
   const units = chips.filter((option) => on.includes(unitKey(option)))
   const boxes = units.map((unit) => {
     const key = unitKey(unit)

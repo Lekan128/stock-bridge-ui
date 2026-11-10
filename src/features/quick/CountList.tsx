@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { keepInView, useCountBoxes } from '@/features/products/useCountBoxes'
-import { CountUnitChips } from '@/features/products/components/CountUnitChips'
+import { useCountBoxes } from '@/features/products/useCountBoxes'
+import { CountUnitLines } from '@/features/products/components/CountUnitLines'
 import { Check } from 'lucide-react'
 import { useCatalogList } from '@/features/catalog/useCatalog'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import type { Product } from '@/features/products/types'
 import type { UnitOption } from '@/features/products/types'
-import { formatNumber, pluraliseUnitNoun, stockUnitWord, unitNoun } from '@/features/products/unitCopy'
+import { formatNumber, stockUnitWord } from '@/features/products/unitCopy'
 import {
   isCountedInWholeUnits,
   productsOwnUnits,
@@ -215,9 +215,6 @@ function CountRow({
     })
   })()
 
-  const noun = (unit: UnitOption, amount: number) =>
-    unit.isStockUnit ? stockUnitWord(symbol, amount) : pluraliseUnitNoun(unitNoun(unit), amount)
-
   async function record() {
     if (savingRef.current) return
     if (!count.anyTyped) return setProblem('Type how many are here.')
@@ -261,54 +258,34 @@ function CountRow({
   const preview = typedAny && count.total != null ? roundQuantity(count.total - appSays) : null
 
   return (
-    <li className="flex flex-col gap-2 rounded-lg border border-neutral-200 bg-white px-4 py-3" data-count-row={product.name}>
+    <li className="flex flex-col gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-3" data-count-row={product.name}>
       <div className="flex items-baseline justify-between gap-2">
         <span className="min-w-0 flex-1 truncate text-base font-semibold text-neutral-900">{product.name}</span>
         <span className="shrink-0 text-sm text-neutral-500 tabular-nums" data-count-app-says>
           App: {formatNumber(appSays)} {stockUnitWord(symbol, appSays)}
         </span>
       </div>
-      <CountUnitChips
+      <CountUnitLines
         count={count}
         productName={product.name}
-        onAdded={(index) => window.requestAnimationFrame(() => document.getElementById(boxId(product.id, index))?.focus())}
+        stockSymbol={symbol}
+        boxId={(index) => boxId(product.id, index)}
+        onBox={(index, text) => {
+          setProblem(null)
+          count.setText(index, text)
+        }}
+        boxProps={(index) => ({
+          placeholder: hints[index],
+          enterKeyHint: index < units.length - 1 ? 'next' : 'done',
+          disabled: saving,
+          onKeyDown: (event) => {
+            if (event.key !== 'Enter') return
+            event.preventDefault()
+            if (index < units.length - 1) document.getElementById(boxId(product.id, index + 1))?.focus()
+            else void record()
+          },
+        })}
       />
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
-        {count.boxes.map((box, index) => (
-          <div key={box.key} className="flex items-center gap-1.5">
-            {index > 0 && (
-              <span aria-hidden="true" className="text-sm text-neutral-500">
-                +
-              </span>
-            )}
-            <label htmlFor={boxId(product.id, index)} className="sr-only">
-              {`${product.name}: ${noun(box.unit, 2)} here`}
-            </label>
-            <input
-              id={boxId(product.id, index)}
-              inputMode="decimal"
-              enterKeyHint={index < units.length - 1 ? 'next' : 'done'}
-              autoComplete="off"
-              disabled={saving}
-              value={box.text}
-              placeholder={hints[index]}
-              onFocus={(event) => keepInView(event.currentTarget)}
-              onChange={(event) => {
-                setProblem(null)
-                count.setText(index, event.target.value)
-              }}
-              onKeyDown={(event) => {
-                if (event.key !== 'Enter') return
-                event.preventDefault()
-                if (index < units.length - 1) document.getElementById(boxId(product.id, index + 1))?.focus()
-                else void record()
-              }}
-              className="h-11 w-20 rounded-md border-2 border-neutral-200 px-2 text-right text-lg font-semibold tabular-nums placeholder:font-normal placeholder:text-neutral-400 focus:border-primary-600 focus:outline-none"
-            />
-            <span className="text-sm text-neutral-600">{noun(box.unit, box.amount ?? 2)}</span>
-          </div>
-        ))}
-      </div>
       {(problem || typedAny) && (
         <div className="flex items-center justify-between gap-2 text-sm">
           {problem ? (

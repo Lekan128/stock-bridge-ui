@@ -50,7 +50,7 @@ import {
 import { OUT_REASONS, outReasonLabel } from '@/features/stock/outReasons'
 import { useProductFinder } from '@/features/catalog/useProductFinder'
 import { useCountBoxes } from '@/features/products/useCountBoxes'
-import { CountUnitChips } from '@/features/products/components/CountUnitChips'
+import { MoreCountUnits, countUnitName } from '@/features/products/components/CountUnitLines'
 import { useCatalogState } from '@/features/catalog/useCatalog'
 import { CountList, type CountedHere, type RowCounted } from '@/features/quick/CountList'
 import { formatMoney } from '@/features/selling/money'
@@ -704,8 +704,6 @@ function AmountStep({
         </label>
       )}
 
-      {counting && <CountUnitChips count={count} productName={product.name} size="lg" onAdded={setActive} />}
-
       {!counting && (offered.length > 1 || others.length > 0 || mode === 'in') && (
         <UnitRow
           units={[...offered, ...others.filter((o) => o.label === option.label)]}
@@ -741,7 +739,7 @@ function AmountStep({
           // A box per unit, the chosen one outlined; the keypad types into it (UNITS_PLAN.md Part 4).
           <div className="mt-1 grid grid-cols-2 gap-2" role="group" aria-label="Count in several units" data-quick-amount>
             {count.boxes.map((box, index) => (
-              <div key={box.key}>
+              <div key={box.key} className="relative">
                 <button
                   type="button"
                   aria-pressed={box === activeBox}
@@ -754,6 +752,19 @@ function AmountStep({
                   <span className="text-4xl leading-tight font-semibold">{box.text || '0'}</span>
                   <span className="text-base text-neutral-600">{noun(box.unit, box.amount || 2)}</span>
                 </button>
+                {box === activeBox && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      count.toggle(box.key)
+                      setActive(0)
+                    }}
+                    aria-label={`Take ${countUnitName(box.unit, symbol)} off`}
+                    className="absolute top-1 right-1 inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-400 hover:bg-white hover:text-neutral-700"
+                  >
+                    <X className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -764,6 +775,12 @@ function AmountStep({
               {counting ? noun(activeBox.unit, activeBox.amount || 2) : pluraliseUnitNoun(unitNoun(option), quantity || 2)}
             </span>
           </p>
+        )}
+        {/* The product's other units, a tap away (owner, 2026-11-10): "+ Cup" adds its box and types into it. */}
+        {counting && (
+          <div className="mt-2">
+            <MoreCountUnits count={count} productName={product.name} stockSymbol={symbol} size="lg" onAdded={setActive} />
+          </div>
         )}
         {counting
           ? anyTyped && countedInStockUnits && count.total != null && (

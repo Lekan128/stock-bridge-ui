@@ -10,12 +10,12 @@ import { StockFigure } from '@/features/products/components/StockFigure'
 import { StockReceipt } from '@/features/products/components/StockReceipt'
 import { submitStockWrite } from '@/features/outbox/outboxStore'
 import { stockCountSchema, type StockCountFormValues } from '@/features/products/schemas'
-import type { Product, StockMutationResponse, UnitOption } from '@/features/products/types'
+import type { Product, StockMutationResponse } from '@/features/products/types'
 import type { AreaFigure } from '@/features/branches/types'
-import { formatQuantity, pluraliseUnitNoun, stockUnitWord, unitNoun } from '@/features/products/unitCopy'
+import { formatQuantity, stockUnitWord } from '@/features/products/unitCopy'
 import { productsOwnUnits, roundQuantity, unitOptionsForProduct } from '@/features/products/unitSet'
-import { keepInView, useCountBoxes } from '@/features/products/useCountBoxes'
-import { CountUnitChips } from '@/features/products/components/CountUnitChips'
+import { useCountBoxes } from '@/features/products/useCountBoxes'
+import { CountUnitLines } from '@/features/products/components/CountUnitLines'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import { CountShortfall } from '@/features/branches/CountShortfall'
 import { areaShortAs, lastCountedPhrase, type ShortAs } from '@/features/branches/areas'
@@ -176,44 +176,20 @@ export function StockAdjustmentModal({
       }
     >
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
-        {/* Every unit as a chip, a box for each one that's on (owner, 2026-11-10): "[2] bags + [7] dericas". */}
+        {/* A line per unit, its box beside it; the other units wait below (owner, 2026-11-10). */}
         <fieldset aria-describedby={countError ? 'count-error' : lastCounted ? 'count-hint' : undefined}>
           <legend className="mb-1.5 text-sm font-medium text-neutral-700">How much is on the shelf now?</legend>
-          <div className="mb-2">
-            <CountUnitChips
-              count={count}
-              productName={productName}
-              onAdded={(index) => window.requestAnimationFrame(() => document.getElementById(`count-box-${index}`)?.focus())}
-            />
-          </div>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-2" data-count-pair>
-            {count.boxes.map((box, index) => (
-              <div key={box.key} className="flex items-center gap-1.5">
-                {index > 0 && (
-                  <span aria-hidden="true" className="text-sm text-neutral-500">
-                    +
-                  </span>
-                )}
-                <label htmlFor={`count-box-${index}`} className="sr-only">
-                  {nounOf(box.unit, stockUnit, 2)} on the shelf
-                </label>
-                <input
-                  id={`count-box-${index}`}
-                  inputMode="decimal"
-                  autoFocus={index === 0}
-                  autoComplete="off"
-                  value={box.text}
-                  onFocus={(event) => keepInView(event.currentTarget)}
-                  onChange={(event) => {
-                    setCountError(null)
-                    count.setText(index, event.target.value)
-                  }}
-                  className="w-20 rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-900 tabular-nums focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
-                />
-                <span className="text-sm text-neutral-700">{nounOf(box.unit, stockUnit, box.amount ?? 2)}</span>
-              </div>
-            ))}
-          </div>
+          <CountUnitLines
+            count={count}
+            productName={productName}
+            stockSymbol={stockUnit}
+            boxId={(index) => `count-box-${index}`}
+            onBox={(index, text) => {
+              setCountError(null)
+              count.setText(index, text)
+            }}
+            boxProps={(index) => ({ autoFocus: index === 0 })}
+          />
           {inStockUnits && <p className="mt-1.5 text-sm text-neutral-700" data-count-total>= {inStockUnits}</p>}
           {countError ? (
             <p id="count-error" role="alert" className="mt-1.5 text-xs text-danger-600">
@@ -273,9 +249,4 @@ export function StockAdjustmentModal({
       </form>
     </Sheet>
   )
-}
-
-/** The unit a box counts in, as it reads after a number: "bags", "dericas", "kg". */
-function nounOf(unit: UnitOption, stockUnit: string, amount: number): string {
-  return unit.isStockUnit ? stockUnitWord(stockUnit, amount) : pluraliseUnitNoun(unitNoun(unit), amount)
 }

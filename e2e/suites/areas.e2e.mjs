@@ -590,8 +590,21 @@ await check("the closing count lists what the Kitchen has: the eggs nobody knew 
   const bags = plantainRow.getByLabel('Plantain: bags here')
   await waitFor(async () => (await bags.getAttribute('placeholder').catch(() => null)) === '1', 'Plantain 1 bag + 4 kg on the list')
   assert((await plantainRow.getByLabel('Plantain: kg here').getAttribute('placeholder')) === '4', 'the kg box does not say 4')
-  const chips = plantainRow.getByRole('group', { name: 'Count Plantain in' })
-  assert((await chips.getByRole('button', { pressed: true }).count()) === 2, 'the bag and kg chips are not both on')
+  // A line per unit, the name beside its box: "Bag / 15 kg [1]", "kg [4]".
+  await plantainRow.getByText('15 kg', { exact: true }).waitFor()
+  await plantainRow.getByRole('button', { name: 'Take Bag off' }).waitFor()
+  // A product with no unit set still has a box (owner's "Bag of Pepper").
+  const pepper = await createProduct(ownerToken, owner.unique, 'Pepper', {})
+  await api(`/api/products/${pepper.id}/stock/stock-in`, { token: ownerToken, method: 'POST', body: { quantity: 1, areaId: areaIds.Store } })
+  await api('/api/area-moves', {
+    token: ownerToken,
+    method: 'POST',
+    body: { id: randomUUID(), fromAreaId: areaIds.Store, toAreaId: areaIds.Kitchen, lines: [{ productId: pepper.id, quantity: 1 }] },
+  })
+  await page.reload()
+  const pepperRow = toCount.locator('[data-count-row="Pepper"]')
+  await pepperRow.getByText('App: 1 unit', { exact: true }).waitFor()
+  assert((await pepperRow.locator('input').count()) === 1, 'Pepper has no box to count in')
   await page.screenshot({ path: SHOTS + '13g3-row-in-bags-and-kg.png' })
   await bags.fill('1')
   await plantainRow.getByLabel('Plantain: kg here').fill('2')
@@ -603,6 +616,7 @@ await check("the closing count lists what the Kitchen has: the eggs nobody knew 
   await page.setViewportSize({ width: 1280, height: 900 })
   await api(`/api/products/${eggs.id}`, { token: ownerToken, method: 'DELETE' })
   await api(`/api/products/${plantain.id}`, { token: ownerToken, method: 'DELETE' })
+  await api(`/api/products/${pepper.id}`, { token: ownerToken, method: 'DELETE' })
 })
 
 // ------------------------------------------------------------------------------------- 5c (Part 3)

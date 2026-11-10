@@ -224,6 +224,8 @@ export function pluraliseUnitNoun(noun: string, quantity: number): string {
  */
 export function stockUnitWord(symbol: string, quantity: number): string {
   const word = /^[A-Z][a-z]/.test(symbol) ? symbol.charAt(0).toLowerCase() + symbol.slice(1) : symbol
+  // A product with no unit set: "1 unit", not "1 units".
+  if (word === UNIT_COPY.NO_UNIT_LABEL && quantity === 1) return 'unit'
   return pluraliseUnitNoun(word, quantity)
 }
 
