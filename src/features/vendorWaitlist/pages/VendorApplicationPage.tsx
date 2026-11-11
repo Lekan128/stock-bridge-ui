@@ -33,7 +33,7 @@ const SERVER_FIELDS: (keyof VendorApplicationFormValues)[] = [
 ]
 
 /**
- * The public "apply to sell on ProcurePal" form — route `/vendor-application`.
+ * The public "apply to sell on Procurepaddy" form — route `/vendor-application`.
  *
  * <h2>This page must never read as a signup</h2>
  * It is the single most likely source of confusion in the whole vendor feature: a business fills
@@ -135,7 +135,7 @@ export function VendorApplicationPage() {
         footer={
           <span className="text-neutral-500">
             <Link to={marketplacePaths.home} className="font-medium text-primary-600 hover:underline">
-              Back to the ProcurePal marketplace
+              Back to the Procurepaddy marketplace
             </Link>
           </span>
         }
@@ -159,7 +159,7 @@ export function VendorApplicationPage() {
 
   return (
     <AuthCard
-      title="Apply to sell on ProcurePal"
+      title="Apply to sell on Procurepaddy"
       subtitle="Tell us about your business and our team will be in touch."
       footer={
         <span className="text-neutral-500">
