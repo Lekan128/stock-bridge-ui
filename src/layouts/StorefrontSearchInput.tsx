@@ -46,7 +46,7 @@ export function StorefrontSearchInput({ onSubmitted, autoFocus = false, classNam
       className={`relative flex w-full items-center ${className}`}
     >
       <label htmlFor="storefront-search" className="sr-only">
-        Search the ProcurePal catalog
+        Search the marketplace
       </label>
       <Search className="pointer-events-none absolute left-3 h-4 w-4 text-neutral-500" aria-hidden="true" />
       <input

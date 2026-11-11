@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
 /** The "opens soon" page's title and description, the same in the app and the prerendered page. */
-export const MARKETPLACE_SOON_TITLE = 'ProcurePal wholesale marketplace - opening soon'
+export const MARKETPLACE_SOON_TITLE = 'Procurepaddy marketplace - opening soon'
 export const MARKETPLACE_SOON_DESCRIPTION =
   'A wholesale marketplace for Nigerian businesses, opening soon: buy stock at wholesale prices, and every order lands straight in your Procurepaddy inventory.'
 

@@ -76,14 +76,14 @@ export function StorefrontHero({ settings }: StorefrontHeroProps) {
       <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
         <div className="max-w-2xl">
           <p className="text-xs font-semibold uppercase tracking-widest text-primary-200">
-            ProcurePal wholesale marketplace
+            Procurepaddy marketplace
           </p>
           <h1 className="mt-2 text-2xl font-bold leading-tight sm:text-4xl">
             Restock your business — and your stock records — in one go.
           </h1>
           <p className="mt-3 text-sm leading-relaxed text-primary-100 sm:text-base">
             Buy the staples, packaging and equipment your business runs on at wholesale prices. What you order
-            is booked straight into your ProcurePal inventory, so your stock levels stay right without anyone
+            is booked straight into your Procurepaddy inventory, so your stock levels stay right without anyone
             keying them in twice.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">

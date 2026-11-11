@@ -47,7 +47,7 @@ export function MarketplaceSoonBand({ signedIn, link }: { signedIn: boolean; lin
         <div className="relative mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
           <div className="max-w-2xl">
             <p className="text-xs font-semibold uppercase tracking-widest text-primary-200">
-              ProcurePal wholesale marketplace
+              Procurepaddy marketplace
             </p>
             <h1 className="mt-2 text-2xl font-bold leading-tight sm:text-4xl">The marketplace opens soon</h1>
             <p className="mt-3 text-sm leading-relaxed text-primary-100 sm:text-base">

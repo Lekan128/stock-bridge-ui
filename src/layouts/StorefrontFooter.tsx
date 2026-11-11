@@ -23,19 +23,19 @@ export function StorefrontFooter({ comingSoon = false }: { comingSoon?: boolean 
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-4">
           <div className="sm:col-span-2">
-            <Logo brand="procurePal" size={28} />
+            <Logo size={28} />
             {comingSoon ? (
               // Before launch: what it will do, with no fees or payment terms that aren't set yet.
               <p className="mt-3 max-w-md text-sm text-neutral-600">
-                ProcurePal is opening a wholesale marketplace for Nigerian businesses — kitchens,
-                retailers, pharmacies and site teams — where every order lands straight in your own
-                inventory.
+                The Procurepaddy marketplace is opening for Nigerian businesses — kitchens, retailers,
+                pharmacies and site teams — and every order will land straight in your own inventory.
               </p>
             ) : (
               <p className="mt-3 max-w-md text-sm text-neutral-600">
-                ProcurePal supplies Nigerian businesses — kitchens, retailers, pharmacies and site
-                teams — with the stock they run on. Order at wholesale prices, pay on delivery or up
-                front, and watch every delivery land straight in your own inventory.
+                The Procurepaddy marketplace supplies Nigerian businesses — kitchens, retailers,
+                pharmacies and site teams — with the stock they run on, from ProcurePal and other
+                suppliers. Order at wholesale prices, pay on delivery or up front, and watch every
+                delivery land straight in your own inventory.
               </p>
             )}
           </div>
@@ -134,11 +134,8 @@ export function StorefrontFooter({ comingSoon = false }: { comingSoon?: boolean 
 
         <div className="mt-10 flex flex-col gap-2 border-t border-neutral-200 pt-6 text-xs text-neutral-500 sm:flex-row sm:items-center sm:justify-between">
           <p>
-            © {CURRENT_YEAR} ProcurePal.
+            © {CURRENT_YEAR} Procurepaddy.
             {comingSoon ? '' : ' All prices in Nigerian naira (₦). Delivery within Nigeria only.'}
-          </p>
-          <p>
-            Powered by <span className="font-medium text-neutral-600">Procurepaddy</span>
           </p>
         </div>
       </div>

@@ -14,6 +14,8 @@ const SUPPORT_EMAIL = 'support@procurepaddy.com'
  * only for a closed build (renderMarketplace in entry-server.tsx); once it opens, `/marketplace` is
  * the app's catalogue again at the same address.
  *
+ * Procurepaddy is the marketplace's brand; ProcurePal is its main supplier, not its name.
+ *
  * It is the app's "opens soon" page (MarketplaceComingSoonPage in StorefrontLayout comingSoon)
  * redrawn without the app: the same body (MarketplaceSoonBand), and a header and footer that copy
  * the storefront's closed state. The marketplace's support details come from the API in the app;
@@ -40,10 +42,10 @@ export function MarketplacePage() {
         <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-8">
           <a
             href="/marketplace"
-            aria-label="ProcurePal marketplace"
+            aria-label="Procurepaddy marketplace"
             className="shrink-0 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
           >
-            <Logo brand="procurePal" size={28} />
+            <Logo size={28} />
           </a>
           <div className="ml-auto flex items-center gap-1 sm:gap-2">
             <Island name="account">
@@ -67,10 +69,10 @@ export function MarketplacePage() {
         <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-4">
             <div className="sm:col-span-2">
-              <Logo brand="procurePal" size={28} />
+              <Logo size={28} />
               <p className="mt-3 max-w-md text-sm text-neutral-600">
-                ProcurePal is opening a wholesale marketplace for Nigerian businesses — kitchens, retailers,
-                pharmacies and site teams — where every order lands straight in your own inventory.
+                The Procurepaddy marketplace is opening for Nigerian businesses — kitchens, retailers, pharmacies
+                and site teams — and every order will land straight in your own inventory.
               </p>
             </div>
             <div>
@@ -120,13 +122,7 @@ export function MarketplacePage() {
           </div>
 
           <div className="mt-10 flex flex-col gap-2 border-t border-neutral-200 pt-6 text-xs text-neutral-500 sm:flex-row sm:items-center sm:justify-between">
-            <p>© {new Date().getFullYear()} ProcurePal.</p>
-            <p>
-              Powered by{' '}
-              <a href="/" className="font-medium text-neutral-600 hover:underline">
-                Procurepaddy
-              </a>
-            </p>
+            <p>© {new Date().getFullYear()} Procurepaddy.</p>
           </div>
         </div>
       </footer>

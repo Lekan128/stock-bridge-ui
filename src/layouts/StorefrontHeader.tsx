@@ -73,7 +73,7 @@ export function StorefrontHeader({ comingSoon = false }: { comingSoon?: boolean 
             )}
 
             <Link to={marketplacePaths.home} className="shrink-0 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
-              <Logo brand="procurePal" size={28} />
+              <Logo size={28} />
             </Link>
 
             {/* Desktop search: given the whole middle of the bar, the widest element in the header. */}

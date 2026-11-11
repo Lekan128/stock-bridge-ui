@@ -76,7 +76,7 @@ export function LoginPage() {
           </span>
           {/* Login sits outside the storefront chrome, so it needs its own way back. */}
           <Link to={marketplacePaths.home} className="text-xs text-neutral-500 hover:text-neutral-700 hover:underline">
-            {MARKETPLACE_OPEN ? 'Browse the ProcurePal marketplace' : 'The ProcurePal marketplace, opening soon'}
+            {MARKETPLACE_OPEN ? 'Browse the Procurepaddy marketplace' : 'The Procurepaddy marketplace, opening soon'}
           </Link>
         </div>
       }
