@@ -12,6 +12,7 @@ import { TextField } from '@/components/TextField'
 import { isAppError } from '@/types/api'
 import { DEFAULT_AUTHENTICATED_PATH, readRedirectParam, sanitizeRedirect } from '@/utils/redirectTarget'
 import { authStorage } from '@/utils/storage'
+import { MARKETPLACE_OPEN } from '@/features/storefront/marketplaceLaunch'
 import { marketplacePaths } from '@/routes/marketplacePaths'
 
 interface LocationState {
@@ -75,7 +76,7 @@ export function LoginPage() {
           </span>
           {/* Login sits outside the storefront chrome, so it needs its own way back. */}
           <Link to={marketplacePaths.home} className="text-xs text-neutral-500 hover:text-neutral-700 hover:underline">
-            Browse the ProcurePal marketplace
+            {MARKETPLACE_OPEN ? 'Browse the ProcurePal marketplace' : 'The ProcurePal marketplace, opening soon'}
           </Link>
         </div>
       }

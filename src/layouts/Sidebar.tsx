@@ -88,14 +88,21 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onCloseMobile
             onCloseMobile()
             setPeek(false)
           }}
-          title={showLabels ? undefined : item.label}
+          title={showLabels ? undefined : item.soon ? `${item.label} (opening soon)` : item.label}
           className={itemClassName(false)}
         >
           <item.icon className="h-5 w-5 shrink-0" />
           {showLabels && (
             <>
               <span className="truncate">{item.label}</span>
-              <ExternalLink className="ml-auto h-3.5 w-3.5 shrink-0 text-neutral-500" aria-hidden="true" />
+              {item.soon ? (
+                // A word, not a colour: it has to read on its own (DESIGN.md, "say a state once").
+                <span className="ml-auto shrink-0 rounded-sm bg-primary-50 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-primary-700">
+                  Soon
+                </span>
+              ) : (
+                <ExternalLink className="ml-auto h-3.5 w-3.5 shrink-0 text-neutral-500" aria-hidden="true" />
+              )}
             </>
           )}
         </Link>

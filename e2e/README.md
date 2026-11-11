@@ -22,7 +22,7 @@ You need three things running:
    precache and code splitting only exist in a build.
 
    ```sh
-   VITE_API_BASE_URL=http://localhost:8081 npm run build
+   VITE_API_BASE_URL=http://localhost:8081 VITE_MARKETPLACE_OPEN=true npm run build
    npx vite preview --port 4173
    ```
 

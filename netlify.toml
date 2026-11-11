@@ -42,6 +42,9 @@
   # the early-access page until the owners turn this on there, which the build refuses until the
   # founders are in src/marketing/founders.ts.
   VITE_FOUNDING_OFFER = "true"
+  # The marketplace stays testable on staging. Production shows the "opens soon" page until
+  # VITE_MARKETPLACE_OPEN=true is set there (src/features/storefront/marketplaceLaunch.ts).
+  VITE_MARKETPLACE_OPEN = "true"
 
 # Pull request previews point at staging too. A preview is unreviewed code, so
 # the failure mode of getting this wrong (writing to the production database
@@ -50,6 +53,7 @@
 [context.deploy-preview.environment]
   VITE_API_BASE_URL = "https://staging-api.procurepaddy.com"
   SITE_NOINDEX = "true"
+  VITE_MARKETPLACE_OPEN = "true"
 
 # --------------------------------------------------------------------------- Offline app shell
 # The service worker and the files it decides with must never be served stale from an HTTP

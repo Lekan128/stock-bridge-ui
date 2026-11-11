@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { PERMISSIONS, type Permission } from '@/auth/permissions'
 import { marketplacePaths } from '@/routes/marketplacePaths'
+import { MARKETPLACE_OPEN } from '@/features/storefront/marketplaceLaunch'
 
 export interface NavItem {
   path: string
@@ -34,6 +35,12 @@ export interface NavItem {
    * without active styling, since the sidebar isn't on screen once you follow it.
    */
   leavesWorkspace?: boolean
+  /**
+   * Tagged "Soon": the screen behind it is not open yet, but is worth knowing about (the
+   * marketplace before launch, see marketplaceLaunch.ts). The link still works, to a page that
+   * says what is coming.
+   */
+  soon?: boolean
   /**
    * Drops this item for ProcurePal, inside a group ProcurePal otherwise belongs in.
    *
@@ -148,8 +155,12 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       // No permission gate: the storefront is public, so hiding the way to it would only
       // strand a user who is allowed to look at it anyway.
-      { path: marketplacePaths.home, label: 'Marketplace', icon: Store, leavesWorkspace: true },
-      { path: '/app/orders', label: 'Marketplace orders', icon: ReceiptText, requiredPermission: PERMISSIONS.VIEW_ORDERS },
+      // Before launch it stays, tagged Soon, because the marketplace is a reason to sign up; its
+      // orders list is left out, since there can be no orders yet.
+      { path: marketplacePaths.home, label: 'Marketplace', icon: Store, leavesWorkspace: true, soon: !MARKETPLACE_OPEN },
+      ...(MARKETPLACE_OPEN
+        ? [{ path: '/app/orders', label: 'Marketplace orders', icon: ReceiptText, requiredPermission: PERMISSIONS.VIEW_ORDERS }]
+        : []),
       {
         path: '/app/addresses',
         label: 'Delivery Addresses',

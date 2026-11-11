@@ -1,8 +1,35 @@
-import { PackageCheck, Truck, Wallet } from 'lucide-react'
+import { PackageCheck, Truck, Wallet, type LucideIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { ContourLines } from '@/components/brand/ContourLines'
 import type { MarketplaceSettings } from '@/features/storefront/types'
 import { formatNairaWhole } from '@/utils/money'
+
+export interface HeroPoint {
+  icon: LucideIcon
+  title: string
+  body: string
+}
+
+/**
+ * The three promises along the bottom of the navy hero. Shared with the "opens soon" page
+ * (MarketplaceComingSoonPage), so the marketplace is described the same way before and after it
+ * opens.
+ */
+export function HeroPointList({ points }: { points: HeroPoint[] }) {
+  return (
+    <ul className="mt-8 grid gap-4 sm:mt-10 sm:grid-cols-3">
+      {points.map((point) => (
+        <li key={point.title} className="flex gap-3 rounded-lg bg-white/[0.06] p-3.5 ring-1 ring-white/10">
+          <point.icon className="mt-0.5 h-5 w-5 shrink-0 text-accent-300" aria-hidden="true" />
+          <div>
+            <p className="text-sm font-semibold">{point.title}</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-primary-100">{point.body}</p>
+          </div>
+        </li>
+      ))}
+    </ul>
+  )
+}
 
 export interface StorefrontHeroProps {
   settings: MarketplaceSettings
@@ -18,7 +45,7 @@ export interface StorefrontHeroProps {
  * order confirmation page so the promise and the payoff use the same words.
  */
 export function StorefrontHero({ settings }: StorefrontHeroProps) {
-  const points = [
+  const points: HeroPoint[] = [
     {
       icon: PackageCheck,
       title: 'Straight into your inventory',
@@ -75,17 +102,7 @@ export function StorefrontHero({ settings }: StorefrontHeroProps) {
           </div>
         </div>
 
-        <ul className="mt-8 grid gap-4 sm:mt-10 sm:grid-cols-3">
-          {points.map((point) => (
-            <li key={point.title} className="flex gap-3 rounded-lg bg-white/[0.06] p-3.5 ring-1 ring-white/10">
-              <point.icon className="mt-0.5 h-5 w-5 shrink-0 text-accent-300" aria-hidden="true" />
-              <div>
-                <p className="text-sm font-semibold">{point.title}</p>
-                <p className="mt-0.5 text-xs leading-relaxed text-primary-100">{point.body}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <HeroPointList points={points} />
       </div>
     </section>
   )

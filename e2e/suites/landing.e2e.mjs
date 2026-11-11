@@ -16,7 +16,7 @@ import { API, UI, launchOptions, psqlCommand, shotsPrefix } from '../config.mjs'
 
 const UI_DIR = fileURLToPath(new URL('../../', import.meta.url))
 const build = (env = {}) =>
-  execSync('npm run build', { cwd: UI_DIR, env: { ...process.env, VITE_API_BASE_URL: API, ...env }, stdio: 'ignore' })
+  execSync('npm run build', { cwd: UI_DIR, env: { ...process.env, VITE_API_BASE_URL: API, VITE_MARKETPLACE_OPEN: 'true', ...env }, stdio: 'ignore' })
 const psql = (sql) => execSync(psqlCommand, { input: sql }).toString().trim()
 // Every script the page actually loads, including ones it imports on demand, gzipped.
 const landingScriptBytes = async (path = '/') => {
