@@ -316,7 +316,7 @@ export const copy = {
     allGood: (count: number) => `All ${pluralRows(count)} look good.`,
     allGoodBody: "Nothing to fix — we checked every row against your catalog, your suppliers and your units.",
     allGoodSkipped: (count: number) =>
-      `${pluralRows(count)} were blank, so we'll leave them out.`,
+      count === 1 ? "1 row was blank, so we'll leave it out." : `${pluralRows(count)} were blank, so we'll leave them out.`,
     seeRows: (count: number) => (count === 1 ? 'See the row' : `See all ${formatCount(count)} rows`),
     hideRows: 'Hide the rows',
     cleanRowsHint: 'Spot something wrong? Click any cell to change it before you continue.',
