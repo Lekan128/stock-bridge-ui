@@ -57,7 +57,7 @@ export function StorefrontMobileDrawer({ open, onClose }: StorefrontMobileDrawer
       >
         <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
           <Link to={marketplacePaths.home} onClick={onClose}>
-            <Logo brand="procurePal" size={26} />
+            <Logo size={26} />
           </Link>
           <button
             type="button"

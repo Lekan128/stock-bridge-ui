@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Download } from 'lucide-react'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
+import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { Button, buttonClassName } from '@/components/Button'
 import { DateRangeControl } from '@/components/analytics/DateRangeControl'
 import { toApiDateTime, todayRange, type DateRange } from '@/components/analytics/dateRange'
@@ -25,6 +26,7 @@ const TABS: { value: SalesGrouping; label: string }[] = [
   { value: 'day', label: 'By day' },
   { value: 'user', label: 'By person' },
   { value: 'category', label: 'By category' },
+  { value: 'branch', label: 'By branch' },
 ]
 
 /** The three an owner checks for leaks (§6.11), each with how many there are. */
@@ -53,6 +55,10 @@ export function SalesPage() {
   const canSell = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.STOCK_OUT)
   const [range, setRange] = useState<DateRange>(todayRange)
   const [tab, setTab] = useState<SalesGrouping>('sale')
+  // "By branch" only in "All branches" at a multi-branch company (rule 1; at a branch it is one row).
+  const branch = useOptionalWorkingBranch()
+  const byBranch = (branch?.isMultiBranch ?? false) && (branch?.isAll ?? false)
+  const shownTabs = TABS.filter((option) => option.value !== 'branch' || byBranch)
   const [filter, setFilter] = useState<SalesFilter | null>(null)
   const [openSale, setOpenSale] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
@@ -188,7 +194,7 @@ export function SalesPage() {
           onChange={(event) => setTab(event.target.value as SalesGrouping)}
           className="min-h-11 flex-1 rounded-md border border-neutral-300 bg-white px-3 text-base text-neutral-900"
         >
-          {TABS.map((option) => (
+          {shownTabs.map((option) => (
             <option key={option.value} value={option.value}>
               {option.value === 'sale' ? 'Each sale' : option.label}
             </option>
@@ -196,7 +202,7 @@ export function SalesPage() {
         </select>
       </label>
       <div role="tablist" aria-label="Show sales" className="hidden gap-1 self-start rounded-md border border-neutral-200 bg-neutral-50 p-0.5 sm:flex">
-        {TABS.map((option) => (
+        {shownTabs.map((option) => (
           <button
             key={option.value}
             type="button"
@@ -266,7 +272,13 @@ export function SalesPage() {
       {report && report.rows.length > 0 && tab === 'sale' && (
         <ul aria-label="Sales" className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
           {report.rows.map((row) => (
-            <SaleRow key={row.key ?? row.occurredAt} row={row} withDate={!isToday} onOpen={() => row.key && setOpenSale(row.key)} />
+            <SaleRow
+              key={row.key ?? row.occurredAt}
+              row={row}
+              withDate={!isToday}
+              showBranch={byBranch}
+              onOpen={() => row.key && setOpenSale(row.key)}
+            />
           ))}
         </ul>
       )}
@@ -282,7 +294,18 @@ export function SalesPage() {
   )
 }
 
-function SaleRow({ row, withDate, onOpen }: { row: SalesReportRow; withDate: boolean; onOpen: () => void }) {
+function SaleRow({
+  row,
+  withDate,
+  showBranch,
+  onOpen,
+}: {
+  row: SalesReportRow
+  withDate: boolean
+  /** In "All branches": where each sale was made. At a branch it is always that one. */
+  showBranch: boolean
+  onOpen: () => void
+}) {
   const t = row.totals
   const allCancelled = t.lineCount === 0 && t.cancelledLineCount > 0
   const time = row.occurredAt
@@ -305,6 +328,7 @@ function SaleRow({ row, withDate, onOpen }: { row: SalesReportRow; withDate: boo
           <span className="block truncate text-sm text-neutral-600 tabular-nums">
             {time}
             {row.label && ` · ${row.label}`}
+            {row.branch && showBranch && ` · ${row.branch}`}
             {notes.length > 0 && <span className="text-warning-700"> · {notes.join(' · ')}</span>}
           </span>
         </span>
@@ -317,7 +341,8 @@ function SaleRow({ row, withDate, onOpen }: { row: SalesReportRow; withDate: boo
 }
 
 function BreakdownTable({ report, tab }: { report: SalesReport; tab: SalesGrouping }) {
-  const first = tab === 'product' ? 'Product' : tab === 'day' ? 'Day' : tab === 'category' ? 'Category' : 'Person'
+  const first =
+    tab === 'product' ? 'Product' : tab === 'day' ? 'Day' : tab === 'category' ? 'Category' : tab === 'branch' ? 'Branch' : 'Person'
   const labelOf = (row: SalesReportRow) =>
     tab === 'day' && row.label ? dayLabel(row.label) : (row.label ?? (tab === 'category' ? 'No category' : 'Not recorded'))
   const soldOf = (row: SalesReportRow) =>

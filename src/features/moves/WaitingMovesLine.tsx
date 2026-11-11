@@ -1,0 +1,51 @@
+import { useState } from 'react'
+import { MoveSheet } from '@/features/moves/MoveSheet'
+import { itemsWord } from '@/features/moves/moveWords'
+import type { AreaMove } from '@/features/moves/types'
+import { useWaitingMoves } from '@/features/moves/useWaitingMoves'
+import { useMoveSheet } from '@/features/moves/useMoveSheet'
+import { PushOffer } from '@/features/push/PushOffer'
+import { askedFor } from '@/features/requests/requestWords'
+import { useWaitingRequests } from '@/features/requests/useWaitingRequests'
+
+/**
+ * "1 item from the Store to confirm · Confirm" (STOCK_AREAS_PART_4.md) and "The Kitchen asked for 2 items · Move
+ * them" (Part 5): one line each where the work is - under quick mode's title on a phone, at the top of Inventory on
+ * a laptop (owner, 2026-10-31) - and nothing when nothing waits. Each opens its sheet: a bottom sheet on a phone, a
+ * side panel on a laptop; a request opens Move already filled.
+ *
+ * @param bar quick mode's full-width bar under its title; otherwise a box like the page's other notices.
+ */
+export function WaitingMovesLine({ bar = false }: { bar?: boolean }) {
+  const { moves } = useWaitingMoves()
+  const { requests } = useWaitingRequests()
+  const moveSheet = useMoveSheet()
+  const [open, setOpen] = useState<AreaMove | null>(null)
+  const lineClass = `flex min-h-11 w-full items-center justify-between gap-3 text-left text-sm text-primary-900 ${
+    bar ? 'border-b border-primary-100 bg-primary-50 px-4' : 'rounded-lg border border-primary-200 bg-primary-50 px-4 py-2 hover:bg-primary-100'
+  }`
+  return (
+    <>
+      {requests.length > 0 && (
+        <button type="button" onClick={() => moveSheet.openRequest(requests[0])} data-request-line className={lineClass}>
+          <span className="truncate">{requests.length === 1 ? askedFor(requests[0]) : `${requests.length} requests to move`}</span>
+          <span className="shrink-0 font-semibold text-primary-700">Move them</span>
+        </button>
+      )}
+      {/* The moment a notification makes sense: something was just asked of them. */}
+      {requests.length > 0 && <PushOffer bar={bar} />}
+      {moves.length > 0 && (
+        <button type="button" onClick={() => setOpen(moves[0])} data-waiting-line className={lineClass}>
+          <span className="truncate">
+            {moves.length === 1
+              ? `${itemsWord(moves[0].lines.length)} from the ${moves[0].fromAreaName} to confirm`
+              : `${moves.length} moves to confirm`}
+          </span>
+          <span className="shrink-0 font-semibold text-primary-700">Confirm</span>
+        </button>
+      )}
+      {open && <MoveSheet key={open.id} move={open} onClose={() => setOpen(null)} />}
+      {moveSheet.sheet}
+    </>
+  )
+}

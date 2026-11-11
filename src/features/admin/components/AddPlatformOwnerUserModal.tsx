@@ -4,7 +4,7 @@ import { ShieldCheck } from 'lucide-react'
 import { Controller, useForm } from 'react-hook-form'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import { superAdminApiClient } from '@/features/admin/api/superAdminApi'
 import { AdminRoleSelectField } from '@/features/admin/components/AdminRoleSelectField'
@@ -79,17 +79,17 @@ export function AddPlatformOwnerUserModal({ isFirstUser, onClose, onSuccess }: A
   }
 
   return (
-    <Modal
+    <Sheet
       open
       onClose={onClose}
       title={isFirstUser ? "Create ProcurePal's account owner" : 'Add ProcurePal user'}
-      size="lg"
+      size="md"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
+          <Button variant="action" onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
             {isFirstUser ? 'Create account owner' : 'Add user'}
           </Button>
         </>
@@ -110,14 +110,16 @@ export function AddPlatformOwnerUserModal({ isFirstUser, onClose, onSuccess }: A
 
         <TextField
           label="Username"
+          autoComplete="off"
           hint="Can be an email or any username — this is what they'll use to log in, alongside ProcurePal's company ID."
           error={errors.username?.message}
           {...register('username')}
         />
-        <TextField label="Password" type="password" error={errors.password?.message} {...register('password')} />
+        <TextField label="Password" type="password" autoComplete="new-password" error={errors.password?.message} {...register('password')} />
         <TextField
           label="Confirm password"
           type="password"
+          autoComplete="new-password"
           error={errors.confirmPassword?.message}
           {...register('confirmPassword')}
         />
@@ -143,17 +145,17 @@ export function AddPlatformOwnerUserModal({ isFirstUser, onClose, onSuccess }: A
           </p>
           <div className="mt-3 flex flex-col gap-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <TextField label="First name" error={errors.firstName?.message} {...register('firstName')} />
-              <TextField label="Last name" error={errors.lastName?.message} {...register('lastName')} />
+              <TextField label="First name" autoComplete="off" error={errors.firstName?.message} {...register('firstName')} />
+              <TextField label="Last name" autoComplete="off" error={errors.lastName?.message} {...register('lastName')} />
             </div>
-            <TextField label="Email" type="email" error={errors.email?.message} {...register('email')} />
-            <TextField label="Phone" type="tel" error={errors.phone?.message} {...register('phone')} />
-            <TextField label="Job title" error={errors.jobTitle?.message} {...register('jobTitle')} />
+            <TextField label="Email" type="email" autoComplete="off" error={errors.email?.message} {...register('email')} />
+            <TextField label="Phone" autoComplete="off" type="tel" error={errors.phone?.message} {...register('phone')} />
+            <TextField label="Job title" autoComplete="off" error={errors.jobTitle?.message} {...register('jobTitle')} />
           </div>
         </div>
 
         <FormError message={formError} />
       </form>
-    </Modal>
+    </Sheet>
   )
 }

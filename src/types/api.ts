@@ -45,6 +45,8 @@ export interface AppError {
    */
   availableQuantity?: number
   requestedQuantity?: number
+  /** On a waybill's 409: which of its products was short, in the stock unit above. */
+  productId?: string
 }
 
 export function isAppError(error: unknown): error is AppError {

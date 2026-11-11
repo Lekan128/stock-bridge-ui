@@ -1,13 +1,24 @@
+import { ProductUnitsField, unitsDraftFrom, unitsPayload, type UnitsDraft } from '@/features/products/components/ProductUnitsField'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { useEffect, useRef, useState } from 'react'
-import { AlertTriangle, ArrowLeft, Banknote, Clock, Lock, Ruler, Tag, Truck, Zap } from 'lucide-react'
+import { ArrowLeft, Banknote, Bell, ClipboardCheck, Lock, Ruler, Tag, Truck } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
-import { TextField } from '@/components/TextField'
+import { RequiredTag, TextField } from '@/components/TextField'
+import { FormSteps, type FormStep } from '@/features/products/components/FormSteps'
+import {
+  ProductSuppliersField,
+  supplierLinks,
+  type SupplierDraft,
+} from '@/features/products/components/ProductSuppliersField'
+import { useProductVendors } from '@/features/products/hooks/useProductVendors'
+import { productVendorsApi } from '@/features/products/api/productVendorsApi'
+import { queryKeys } from '@/data/queryKeys'
 import { useToast } from '@/components/useToast'
 import { productsApi } from '@/features/products/api/productsApi'
 import { CategoryField } from '@/features/products/categories/CategoryField'
@@ -23,10 +34,11 @@ import { useProduct } from '@/features/products/hooks/useProduct'
 import { useProductSkuSettings } from '@/features/products/hooks/useProductSkuSettings'
 import { useStockHistory } from '@/features/products/hooks/useStockHistory'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
+import { BranchLevels } from '@/features/branches/BranchLevels'
+import { listPriceText } from '@/features/selling/priceText'
 import {
   makeProductFormSchema,
   productFormDefaults,
-  toInitialVendorPayload,
   toProductPayload,
   toProductUpdatePayload,
   toVendorMarketplaceDetailsPayload,
@@ -38,7 +50,6 @@ import {
   UNIT_COPY,
   fieldLabelInUnit,
   formatPackCostEcho,
-  formatStockUnitCostEcho,
   formatQuantityEcho,
   pluraliseUnitNoun,
   roundsToZeroMessage,
@@ -53,12 +64,10 @@ import {
   parsePackContents,
   productsOwnUnits,
   resolveUnitSymbol,
-  toBasePrice,
   toBaseQuantity,
   unitOptionsForProduct,
 } from '@/features/products/unitSet'
 import { vendorCatalogueApi } from '@/features/vendor/api/vendorCatalogueApi'
-import { SupplierField } from '@/features/vendors/components/SupplierField'
 import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
 import { isAppError } from '@/types/api'
 import { useQueryClient } from '@tanstack/react-query'
@@ -208,6 +217,27 @@ const IDENTITY_FIELDS: { field: keyof ProductFormValues & keyof Product; label: 
  * purchase; everywhere else, cost is something to look at (the detail page's Overview tab), not
  * something to edit here.
  */
+/** The form's sections, in order (owner, 2026-11-10). */
+type StepId = 'basics' | 'units' | 'price' | 'suppliers' | 'alert' | 'review'
+const STEP_IDS: StepId[] = ['basics', 'units', 'price', 'suppliers', 'alert', 'review']
+
+/** Which section each field is in: a problem in it marks that step, and Create opens the first one with one. */
+const FIELD_STEP: Record<string, StepId> = {
+  name: 'basics',
+  sku: 'basics',
+  description: 'basics',
+  brand: 'basics',
+  categoryId: 'basics',
+  unitOfMeasure: 'units',
+  packagingUnit: 'units',
+  packagingSize: 'units',
+  unitPrice: 'price',
+  initialVendorId: 'suppliers',
+  initialVendorCost: 'suppliers',
+  initialVendorQuantity: 'suppliers',
+  lowStockThreshold: 'alert',
+}
+
 /** What the new-product form keeps on the phone between visits (A5). */
 interface ProductDraft {
   values: ProductFormValues
@@ -227,9 +257,32 @@ export function ProductFormPage() {
   const location = useLocation() as { state?: { name?: string } }
   const { showToast } = useToast()
   const { user, isVendor } = useAuth()
+  // One product, one price, every branch (MULTI_BRANCH_UX_PLAN.md §5.14): the form says where a change
+  // lands, and the price is read-only for someone who can't change selling prices.
+  // Every open branch in the company, not only those this person sees: a price applies at all of them.
+  const { isMultiBranch, openBranches: branchCount } = useWorkingBranch()
+  const canChangePrices = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.CHANGE_SELLING_PRICES)
+  const priceHint = !canChangePrices
+    ? 'Prices are set by people who can change selling prices.'
+    : isMultiBranch
+      ? `Same price at all ${branchCount} branches.`
+      : undefined
   const { showsSellingPrice, requiresSellingPrice } = useSellingPolicy()
   /** The pack a company's selling price is typed per ("CARTON"), or null for the stock unit (V47). */
   const [priceUnitCode, setPriceUnitCode] = useState<string | null>(null)
+  // The product's own units and where its stock-outs start (UNITS_PLAN.md Parts 1-2), beside the form's fields.
+  const [units, setUnits] = useState<UnitsDraft>(() => unitsDraftFrom(null))
+  // Its suppliers, as cards (2026-11-10): several at once on a new product, more added on an edit.
+  const [supplierDrafts, setSupplierDrafts] = useState<SupplierDraft[]>([])
+  // The section on screen. "Change" on the product page lands on its section: /edit#units.
+  const [step, setStep] = useState<StepId>(() => {
+    const hash = window.location.hash.slice(1) as StepId
+    return STEP_IDS.includes(hash) ? hash : 'basics'
+  })
+  /** Steps gone through with Next, for their ✓. */
+  const [passed, setPassed] = useState<Set<StepId>>(new Set())
+  /** A section's own problem the fields can't carry (a unit being typed, a supplier card): its step and what to fix. */
+  const [sectionProblem, setSectionProblem] = useState<{ step: StepId; message: string } | null>(null)
   // Fresh from the server, never a cached copy: this fills the form, and saving a cached copy
   // could write another phone's newer edits back to old values. Offline it shows the error.
   const { product, loading: loadingProduct, error: productError, refetch: refetchProduct } = useProduct(id, {
@@ -292,6 +345,8 @@ export function ProductFormPage() {
     setValue,
     watch,
     getValues,
+    trigger,
+    clearErrors,
     formState: { errors, isSubmitting },
   } = useForm<ProductFormValues>({
     // A fresh schema on every render, not a memoised one: react-hook-form reads `resolver` at
@@ -302,7 +357,8 @@ export function ProductFormPage() {
     // an edit always starts from the product below instead. `location.state` is read once here
     // because `defaultValues` is only consulted on the form's first render; nothing re-reads it
     // after that, which is fine, since nothing navigates within this page without unmounting it.
-    defaultValues: isEdit ? productFormDefaults() : { ...productFormDefaults(), name: location.state?.name ?? '' },
+    // A new product starts in pieces (owner, 2026-11-10: the stock unit is required, and one tap from kg or litres).
+    defaultValues: isEdit ? productFormDefaults() : { ...productFormDefaults(), unitOfMeasure: 'PIECE', name: location.state?.name ?? '' },
   })
 
   /**
@@ -403,6 +459,7 @@ export function ProductFormPage() {
       categoryId: product.categoryId ?? '',
     })
     setPriceUnitCode(!requiresSellingPrice ? (product.unitPriceEnteredUnit ?? null) : null)
+    setUnits(unitsDraftFrom(product))
   }, [product, reset, unitOfMeasureOptions, baseOptions, requiresSellingPrice])
 
   /**
@@ -412,6 +469,15 @@ export function ProductFormPage() {
    * stated while it is being configured, not recalled later at the point of entry.
    */
   const watchedStockUnitCode = watch('unitOfMeasure')
+  // "Choose what it's counted in" goes as soon as one is chosen.
+  useEffect(() => {
+    if (watchedStockUnitCode) clearErrors('unitOfMeasure')
+  }, [watchedStockUnitCode, clearErrors])
+  // The stock-unit box is drawn before the unit list arrives, so it can't show Piece yet: shown again once it can.
+  useEffect(() => {
+    const current = getValues('unitOfMeasure')
+    if (!isEdit && current && baseOptions.some((option) => option.code === current)) setValue('unitOfMeasure', current)
+  }, [isEdit, baseOptions, getValues, setValue])
   const watchedPackCode = watch('packagingUnit')
   const watchedUnitsPerPack = watch('packagingSize')
 
@@ -497,7 +563,7 @@ export function ProductFormPage() {
     typedSomething.current = false
     setRestoredDraft(false)
     setOfferedDraft(null)
-    reset({ ...productFormDefaults(), name: location.state?.name ?? '' })
+    reset({ ...productFormDefaults(), unitOfMeasure: 'PIECE', name: location.state?.name ?? '' })
     setContainsText('')
     setSkuUnlocked(false)
   }
@@ -562,17 +628,30 @@ export function ProductFormPage() {
         ),
       )
     : null
+  // The live set, for the Units section: the product's own pack to start in, and the standard units (g, t) that
+  // need no setting up.
+  const liveUnitSet = watchedStockUnitCode
+    ? unitOptionsForProduct(
+        { unitOfMeasure: watchedStockUnitCode, packagingUnit: watchedPackCode, packagingSize: unitsPerPackNumber },
+        unitOfMeasureOptions,
+      )
+    : []
+  const livePackOption = liveUnitSet.find((option) => option.isPack) ?? null
+  const standardUnits = liveUnitSet.filter((option) => !option.isStockUnit && !option.isPack && !option.isMeasure).map((option) => option.label)
+  // Standard units of another kind, each needing its conversion on this product: L for oil kept in kg.
+  const stockCategory = unitOfMeasureOptions.find((option) => option.code === watchedStockUnitCode)?.category
+  const otherKinds = ['KG', 'G', 'LITER', 'ML', 'PIECE']
+    .map((code) => unitOfMeasureOptions.find((option) => option.code === code))
+    .filter((option): option is NonNullable<typeof option> => option != null && option.category !== stockCategory)
+    .map((option) => (option.code === 'PIECE' ? 'Piece' : resolveUnitSymbol(option.code, unitOfMeasureOptions)))
   /** True when the quantity fields are counting packs, i.e. when a conversion is happening at all. */
   const countsInPacks = quantityOption != null && !quantityOption.isStockUnit
-  /** The pack's noun ("basket") when this row counts in packs — §9.2's cost is per one of these. */
-  const packNoun = countsInPacks && quantityOption != null ? unitNoun(quantityOption) : null
   /** Whether the opening-stock field is on this render at all — it lives in the create-only,
    *  VIEW_VENDORS-gated "First supplier" block, so an edit has only the alert level to talk about. */
   const showOpeningStock = !isEdit && canViewVendors
 
   const watchedOpeningStock = watch('initialVendorQuantity')
   const watchedLowStock = watch('lowStockThreshold')
-  const watchedInitialCost = watch('initialVendorCost')
   const watchedUnitPrice = watch('unitPrice')
 
   /**
@@ -604,7 +683,11 @@ export function ProductFormPage() {
       ? stockUnitLabel && `${formatMoney(typedPrice / priceOption.factorToStockUnit)} a ${stockUnitLabel}`
       : otherPackOption && `${formatMoney(typedPrice * otherPackOption.factorToStockUnit)} a ${unitNoun(otherPackOption)}`
   /** What one stock unit costs: the product's average on an edit, the first delivery's price on a create. */
-  const costPerStockUnit: number | null = isEdit ? (product?.costPrice ?? null) : (toStockUnitPrice(watchedInitialCost) ?? null)
+  const draftLinks = supplierLinks(supplierDrafts, livePackOption)
+  const pricedLinks = 'links' in draftLinks ? draftLinks.links.filter((link) => link.cost != null) : []
+  const costPerStockUnit: number | null = isEdit
+    ? (product?.costPrice ?? null)
+    : ((pricedLinks.find((link) => link.companyVendorId === watch('initialVendorId')) ?? pricedLinks[0])?.cost ?? null)
   const profitPerPriceUnit =
     priceTyped && costPerStockUnit != null && priceOption != null
       ? typedPrice - costPerStockUnit * (pricePerPack ? priceOption.factorToStockUnit : 1)
@@ -758,30 +841,6 @@ export function ProductFormPage() {
   }
 
   /**
-   * The price half of {@link toStockUnits}, and the reason it has to exist: `§9.2`, as amended,
-   * has the cost on this form typed **per pack** — the label reads "Cost (₦ per bag)" and
-   * {@link formatStockUnitCostEcho} echoes the per-stock-unit figure underneath it — while
-   * `CreateProductRequest.InitialVendor.cost` is per STOCK UNIT, with no `unit` toggle on the
-   * wire to say otherwise (the server passes `unit: null` into `stockIn`, so its own V21
-   * conversion is an identity on this path and cannot rescue an unconverted price).
-   *
-   * Without this, the quantity was converted and the price beside it was not — which is P0-1
-   * exactly, reintroduced on the create-product path: "20 bags at ₦12,000 a bag" on a 10 kg
-   * bag stored ₦12,000 **per kg**, ten times the truth, contradicting the echo the user had
-   * just read and then compounding into every later weighted average.
-   *
-   * Same guard clauses as {@link toStockUnits}, for the same reasons: a blank cost is
-   * `undefined`, never `0`, and no pack means factor 1 means the typed number is already per
-   * stock unit.
-   */
-  function toStockUnitPrice(typed: string): number | undefined {
-    if (!typed) return undefined
-    const value = Number(typed)
-    if (!Number.isFinite(value)) return undefined
-    return quantityOption ? toBasePrice(value, quantityOption) : value
-  }
-
-  /**
    * A company's price goes with the unit it was typed per, and a blank one on an edit takes the
    * price off (the product is no longer sold). A marketplace seller's price is untouched: per
    * stock unit, never cleared - its form has no such choice.
@@ -794,13 +853,27 @@ export function ProductFormPage() {
 
   async function save(values: ProductFormValues) {
     setFormError(null)
+    setSectionProblem(null)
+    // The product's own units go with the rest (UNITS_PLAN.md Part 1); one still being typed is said here.
+    const unitFields = unitsPayload(units, { stockUnitCode: watchedStockUnitCode ?? '', packOption: livePackOption })
+    if ('problem' in unitFields) {
+      setSectionProblem({ step: 'units', message: unitFields.problem })
+      setStep('units')
+      return
+    }
     try {
       const willReview = isVendor && isEdit && changedIdentityLabels(values).length > 0
       // §9.1 — both catalog quantities count packs when the row declares one. The wire is
       // unchanged and still carries stock units, so the conversion happens on this side of the
       // request rather than becoming a new field on it.
       const lowStockThreshold = toStockUnits(values.lowStockThreshold)
-      const initialVendor = toInitialVendorPayload(values)
+      const links = supplierLinks(supplierDrafts, livePackOption)
+      if ('problem' in links) {
+        setSectionProblem({ step: 'suppliers', message: links.problem })
+        setStep('suppliers')
+        return
+      }
+      const openingQuantity = toStockUnits(values.initialVendorQuantity)
       const saved =
         isEdit && id
           ? await productsApi.update(
@@ -808,6 +881,7 @@ export function ProductFormPage() {
               {
                 ...toProductUpdatePayload(values, product?.categoryId),
                 ...companyPriceFields(values),
+                ...unitFields,
                 lowStockThreshold,
                 removeImage: removeImage || undefined,
               },
@@ -823,19 +897,29 @@ export function ProductFormPage() {
               {
                 ...toProductPayload(values),
                 ...companyPriceFields(values),
+                ...(unitFields.measures.length > 0 ? unitFields : {}),
                 lowStockThreshold,
-                initialVendor: initialVendor && {
-                  ...initialVendor,
-                  // Opening stock, in packs, as the stock units the stock-in ledger records.
-                  quantity: toStockUnits(values.initialVendorQuantity) ?? initialVendor.quantity,
-                  // Cost, typed per pack (§9.2 as amended), as the per-stock-unit price the
-                  // ledger records — converted by the SAME factor as the quantity above, in the
-                  // same place, because converting one without the other is the whole of P0-1.
-                  cost: toStockUnitPrice(values.initialVendorCost) ?? initialVendor.cost,
-                },
+                // Its suppliers, several at once, and the stock on the shelf now - one atomic write (2026-11-10).
+                ...(links.links.length > 0 ? { suppliers: links.links } : {}),
+                ...(openingQuantity != null && openingQuantity > 0
+                  ? { openingStock: { quantity: openingQuantity, companyVendorId: values.initialVendorId || undefined } }
+                  : {}),
               },
               imageFile,
             )
+
+      // An edit's new supplier cards, each linked once the product is saved; one that fails is said, the rest stand.
+      let suppliersWarning: string | null = null
+      if (isEdit && links.links.length > 0) {
+        for (const link of links.links) {
+          try {
+            await productVendorsApi.link(saved.id, link)
+          } catch (err) {
+            suppliersWarning = isAppError(err) ? err.message : 'a supplier could not be added.'
+          }
+        }
+        void queryClient.invalidateQueries({ queryKey: queryKeys.products.vendors(saved.id) })
+      }
 
       // Vendors only. ProcurePal's staff set brand on the admin catalogue screen, and an
       // ordinary buying company has no marketplace facets at all — the route would 403 them,
@@ -850,6 +934,8 @@ export function ProductFormPage() {
 
       if (detailsWarning) {
         showToast(`Product saved, ${detailsWarning}`, 'error')
+      } else if (suppliersWarning) {
+        showToast(`Product saved, but ${suppliersWarning}`, 'error')
       } else if (saved.warnings?.length) {
         showToast(`Product saved, but ${saved.warnings.join(' ')}`, 'success')
       } else if (willReview) {
@@ -859,6 +945,10 @@ export function ProductFormPage() {
         showToast('Saved. This listing is back with us for review and will return to the storefront once approved.', 'success')
       } else if (isVendor && !isEdit) {
         showToast('Product created. It goes for a quick review before buyers can see it.', 'success')
+      } else if (isMultiBranch && isEdit && priceChanged(product, saved)) {
+        // One price for the company (MULTI_BRANCH_UX_PLAN.md §5.6): the toast says where it now applies.
+        const price = listPriceText(saved, unitOfMeasureOptions)
+        showToast(price ? `Saved. ${price.replace(' / ', ' a ')} at all ${branchCount} branches.` : 'Product updated.', 'success')
       } else {
         showToast(isEdit ? 'Product updated.' : 'Product created.', 'success')
       }
@@ -908,8 +998,14 @@ export function ProductFormPage() {
    * own `UnitPriceRequiredException`, which is why the message matches it exactly.
    */
   async function onSubmit(values: ProductFormValues) {
+    if (!isEdit && !values.unitOfMeasure) {
+      setError('unitOfMeasure', { message: 'Choose what it’s counted in.' })
+      setStep('units')
+      return
+    }
     if (requiresSellingPrice && values.unitPrice.trim().length === 0) {
       setError('unitPrice', { message: UNIT_PRICE_REQUIRED_MESSAGE })
+      setStep('price')
       return
     }
 
@@ -924,6 +1020,7 @@ export function ProductFormPage() {
         const typed = Number(values[field])
         if (values[field] && Number.isFinite(typed) && !convertsCleanly(typed, quantityOption)) {
           setError(field, { message: roundsToZeroMessage(typed, quantityOption, stockUnitLabel) })
+          setStep(FIELD_STEP[field])
           return
         }
       }
@@ -948,6 +1045,140 @@ export function ProductFormPage() {
     product?.categoryId != null && !categories.some((category) => category.id === product.categoryId)
       ? [...categories, { id: product.categoryId, name: product.categoryName ?? 'Current category', productCount: 0 }]
       : categories
+
+  /** Create opened with something missing: to the first step that has it. */
+  function onInvalid(fieldErrors: Partial<Record<string, unknown>>) {
+    const first = steps.find((candidate) => Object.keys(fieldErrors).some((field) => FIELD_STEP[field] === candidate.id))
+    if (first) setStep(first.id as StepId)
+  }
+
+  // The suppliers it already has, on an edit.
+  const { data: linkedSuppliers } = useProductVendors(isEdit && canViewVendors ? id : undefined)
+
+  /** The fields a step's Next checks. */
+  function fieldsOf(stepId: StepId): (keyof ProductFormValues)[] {
+    return (Object.keys(FIELD_STEP) as (keyof ProductFormValues)[]).filter((field) => FIELD_STEP[field] === stepId)
+  }
+
+  function goTo(stepId: string) {
+    setSectionProblem(null)
+    setStep(stepId as StepId)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  /** Next: this step's own fields checked, then on. Required ones stop it; optional ones left empty don't. */
+  async function next() {
+    const ok = await trigger(fieldsOf(shownStep))
+    if (!ok) return
+    if (shownStep === 'units' && !isEdit && !getValues('unitOfMeasure')) {
+      setError('unitOfMeasure', { message: 'Choose what it’s counted in.' })
+      return
+    }
+    if (shownStep === 'units') {
+      const unitFields = unitsPayload(units, { stockUnitCode: watchedStockUnitCode ?? '', packOption: livePackOption })
+      if ('problem' in unitFields) return setSectionProblem({ step: 'units', message: unitFields.problem })
+    }
+    if (shownStep === 'price' && requiresSellingPrice && getValues('unitPrice').trim() === '') {
+      setError('unitPrice', { message: UNIT_PRICE_REQUIRED_MESSAGE })
+      return
+    }
+    if (shownStep === 'suppliers') {
+      const links = supplierLinks(supplierDrafts, livePackOption)
+      if ('problem' in links) return setSectionProblem({ step: 'suppliers', message: links.problem })
+    }
+    setPassed((current) => new Set(current).add(shownStep))
+    const following = steps[stepIndex + 1]
+    if (following) goTo(following.id)
+  }
+
+  // The steps this person has (owner, 2026-11-10): Price only where products are sold, Suppliers only for someone
+  // who sees them, Review only when adding.
+  const stepProblem = (stepId: StepId) =>
+    sectionProblem?.step === stepId || Object.keys(errors).some((field) => FIELD_STEP[field] === stepId)
+  const steps: FormStep[] = (
+    [
+      { id: 'basics', label: 'Basics', icon: Tag },
+      { id: 'units', label: 'Units', icon: Ruler },
+      ...(showsSellingPrice ? [{ id: 'price', label: 'Price', icon: Banknote, optional: !requiresSellingPrice }] : []),
+      ...(canViewVendors ? [{ id: 'suppliers', label: 'Suppliers', icon: Truck, optional: true }] : []),
+      { id: 'alert', label: 'Stock alert', icon: Bell, optional: true },
+      ...(isEdit ? [] : [{ id: 'review', label: 'Review', icon: ClipboardCheck }]),
+    ] as (Omit<FormStep, 'done' | 'problem' | 'id'> & { id: StepId })[]
+  ).map((candidate) => ({
+    ...candidate,
+    done: !isEdit && passed.has(candidate.id) && !stepProblem(candidate.id),
+    problem: stepProblem(candidate.id),
+  }))
+  // The section shown: the one asked for, or Basics while it isn't one this person has (/edit#price where nothing is
+  // sold, or before the selling settings have loaded) - never an empty card.
+  const shownStep: StepId = steps.some((candidate) => candidate.id === step) ? step : 'basics'
+  const stepIndex = Math.max(0, steps.findIndex((candidate) => candidate.id === shownStep))
+
+  // Review: each section in a line, "None" for one left empty.
+  const reviewValues = watch()
+  const supplierNames = supplierDrafts
+    .map((draft) => vendorOptions.find((vendor) => vendor.id === draft.companyVendorId)?.name)
+    .filter((name): name is string => !!name)
+  const openingTyped = reviewValues.initialVendorQuantity?.trim()
+  const reviewLines: { step: StepId; title: string; text: string; empty?: boolean }[] = [
+    {
+      step: 'basics',
+      title: 'Basics',
+      text: [reviewValues.name?.trim() || 'No name yet', categoryOptions.find((category) => category.id === reviewValues.categoryId)?.name]
+        .filter(Boolean)
+        .join(' · '),
+    },
+    {
+      step: 'units',
+      title: 'Units',
+      text: [
+        stockUnitLabel ? `Counted in ${stockUnitLabel}` : 'No stock unit yet',
+        livePackOption?.label,
+        units.measures.filter((row) => !row.hidden && row.name.trim()).length > 0
+          ? `also ${units.measures.filter((row) => !row.hidden && row.name.trim()).map((row) => row.name.trim()).join(', ')}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(' · '),
+    },
+    ...(showsSellingPrice
+      ? [
+          {
+            step: 'price' as StepId,
+            title: 'Price',
+            text: reviewValues.unitPrice?.trim() ? `${formatMoney(Number(reviewValues.unitPrice))} a ${priceUnitWord ?? 'unit'}` : 'None',
+            empty: !reviewValues.unitPrice?.trim(),
+          },
+        ]
+      : []),
+    ...(canViewVendors
+      ? [
+          {
+            step: 'suppliers' as StepId,
+            title: 'Suppliers',
+            text:
+              [
+                supplierNames.length > 0 ? supplierNames.join(', ') : null,
+                openingTyped
+                  ? `${openingTyped} ${quantityOption ? pluraliseUnitNoun(unitNoun(quantityOption), Number(openingTyped)) : ''} on the shelf`.replace(/\s+/g, ' ')
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' · ') || 'None',
+            empty: supplierNames.length === 0 && !openingTyped,
+          },
+        ]
+      : []),
+    {
+      step: 'alert',
+      title: 'Stock alert',
+      text: reviewValues.lowStockThreshold?.trim()
+        ? `When it falls to ${reviewValues.lowStockThreshold.trim()} ${quantityOption ? pluraliseUnitNoun(unitNoun(quantityOption), Number(reviewValues.lowStockThreshold)) : ''}`.trim()
+        : 'None',
+      empty: !reviewValues.lowStockThreshold?.trim(),
+    },
+  ]
+
 
   if (isEdit && loadingProduct) {
     return <ProductFormSkeleton />
@@ -981,7 +1212,7 @@ export function ProductFormPage() {
   ) : null
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-6">
+    <div className="mx-auto flex max-w-5xl flex-col gap-6">
       <div className="flex items-center gap-3">
         <button
           type="button"
@@ -991,7 +1222,18 @@ export function ProductFormPage() {
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
-        <h1 className="text-2xl font-semibold text-neutral-900">{isEdit ? 'Edit product' : 'Add product'}</h1>
+        {isEdit ? (
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-neutral-500">Edit product</p>
+            <h1 className="truncate text-2xl font-semibold text-neutral-900">{product?.name ?? 'Product'}</h1>
+          </div>
+        ) : (
+          <div>
+            <h1 className="text-2xl font-semibold text-neutral-900">Add product</h1>
+            {/* What must be filled, said once (owner, 2026-11-10); the fields say "Required" themselves. */}
+            <p className="text-sm text-neutral-600">Only what says Required has to be filled. The rest can wait.</p>
+          </div>
+        )}
       </div>
 
       {isVendor && <ReviewImpactNotice mode={isEdit ? 'edit' : 'create'} />}
@@ -1023,12 +1265,44 @@ export function ProductFormPage() {
         />
       )}
 
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-5">
+      <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[13rem_minmax(0,48rem)] lg:gap-8">
+        <div className="lg:sticky lg:top-6 lg:self-start">
+          <FormSteps
+            steps={steps}
+            current={shownStep}
+            onSelect={goTo}
+            numbered={!isEdit}
+            label={isEdit ? 'Sections of this product' : 'Steps to add a product'}
+          />
+        </div>
+      <form
+        onSubmit={(event) => {
+          // Adding creates only from Review; anywhere else, Enter is Next.
+          if (!isEdit && shownStep !== 'review') {
+            event.preventDefault()
+            void next()
+            return
+          }
+          void handleSubmit(onSubmit, onInvalid)(event)
+        }}
+        noValidate
+        // One white card, as the app's other pages hold their content; its buttons along the bottom edge.
+        className="-mx-4 min-w-0 border-y border-neutral-200 bg-white sm:mx-0 sm:rounded-xl sm:border sm:shadow-sm"
+      >
+        <div className="flex flex-col gap-6 px-4 py-5 sm:px-7 sm:py-6">
+        <FormSection
+          id="basics"
+          current={shownStep}
+          title="Basics"
+          description={isVendor ? 'What it is. Changing any of this sends the listing back for review.' : 'What it is, and how you’ll find it.'}
+        >
         {/* -------------------------------------------------------------- Product image */}
-        {/* No section header — self-evidently its own thing at the top of the form. */}
-        <div>
-          <p className="mb-1.5 text-sm font-medium text-neutral-700">Product image</p>
+        {/* A small tile beside the name (2026-11-10), as a product looks in a list: its picture, then what it's called. */}
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+        <div className="shrink-0">
+          <p className="mb-1.5 text-sm font-medium text-neutral-700">Photo</p>
           <ImageUploadField
+            compact
             file={imageFile}
             existingImageUrl={product?.imageUrl}
             removed={removeImage}
@@ -1036,35 +1310,9 @@ export function ProductFormPage() {
             onRemove={() => setRemoveImage(true)}
           />
         </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-5">
 
-        {/* -------------------------------------------------------------- Basic details */}
-        {/* Every tenant gets a section header here — a flat run of Name/SKU/Description with no
-            structure at all is the "confusing" complaint this restructuring exists to fix. Only
-            the COPY differs by audience: a vendor sees the review-consequence framing (Clock,
-            warning-600, "sends the listing back for review"), because renaming or re-describing
-            a live listing really does take it off the storefront pending re-approval. A buying
-            company's private stock is never moderated, so that warning would be describing a
-            queue it never enters — it gets a neutral heading instead. The FIELDS below are
-            identical either way; only the framing around them changes. */}
-        {isVendor ? (
-          <div className="flex items-center gap-2 border-b border-neutral-200 pb-2">
-            <Clock className="h-4 w-4 shrink-0 text-warning-600" aria-hidden="true" />
-            <div>
-              <h2 className="text-sm font-semibold text-neutral-900">What the product is</h2>
-              <p className="text-xs text-neutral-500">Changing anything here sends the listing back for review.</p>
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 border-b border-neutral-200 pb-2">
-            <Tag className="h-4 w-4 shrink-0 text-neutral-600" aria-hidden="true" />
-            <div>
-              <h2 className="text-sm font-semibold text-neutral-900">Basic details</h2>
-              <p className="text-xs text-neutral-500">Name, SKU, description, and category for this product.</p>
-            </div>
-          </div>
-        )}
-
-        <TextField label="Name" error={errors.name?.message} {...register('name')} />
+        <TextField label="Name" requiredMark error={errors.name?.message} {...register('name')} />
         {/* Locked whenever the tenant has auto-generation on — see ProductSkuSettingsPage for the
             toggle. Create mode shows a live, client-rendered preview (`previewSkuDisplay`); edit
             mode shows the product's real sku. An edit-mode holder of PRODUCT_SKU_OVERRIDE (V23)
@@ -1105,8 +1353,10 @@ export function ProductFormPage() {
             </p>
           </div>
         ) : (
-          <TextField label="SKU" error={errors.sku?.message} {...register('sku')} />
+          <TextField label="SKU" requiredMark error={errors.sku?.message} {...register('sku')} />
         )}
+        </div>
+        </div>
 
         <div>
           <label htmlFor="description" className="mb-1.5 block text-sm font-medium text-neutral-700">
@@ -1148,7 +1398,14 @@ export function ProductFormPage() {
         {/* A seller's category goes further down, under its own heading: it is the company's own
             grouping, the server does not count it as an identity change, and placing it under
             "Changing anything here sends the listing back for review" would say otherwise. */}
-        {!isVendor && categoryField}
+        {/* A seller's category is the company's own grouping: not part of the listing, and said so. */}
+        {categoryField && (
+          <div>
+            {categoryField}
+            {isVendor && <p className="mt-1.5 text-xs text-neutral-500">Only your team sees this. Changing it does not affect your listing.</p>}
+          </div>
+        )}
+        </FormSection>
 
         {/* ------------------------------------------------- How you count and pack this product */}
         {/* Rendered for EVERY tenant, not gated on `isVendor` — unlike brand, this is a universal
@@ -1193,23 +1450,20 @@ export function ProductFormPage() {
             conversion it appears in. The common rule is that the definition of a unit is
             configuration and precedes the counting, and every one of those products learned it
             the way this one just did. */}
+        <FormSection
+          id="units"
+          current={shownStep}
+          title="Units"
+          description="What you count it in, and the packs and measures it comes in. Read it as one sentence: “Bag contains 50 kg.”"
+        >
         <div>
-          <div className="mb-3 flex items-center gap-2 border-b border-neutral-200 pb-2">
-            <Ruler className="h-4 w-4 shrink-0 text-primary-600" aria-hidden="true" />
-            <div>
-              <h2 className="text-sm font-semibold text-neutral-900">How you count and pack this product</h2>
-              <p className="text-xs text-neutral-500">
-                Read it as one sentence: “Bag contains 50 kg.”
-              </p>
-            </div>
-          </div>
-
           <div className="flex flex-col gap-4">
             <div>
               <div className="mb-1.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
                 {/* A locked stock unit is rendered as text, not a <select>, so there is no
                     control for this label to point at — pointing it at a hidden input would send
                     a screen reader somewhere invisible. */}
+                <span className="flex items-center">
                 <label
                   htmlFor={stockUnitLocked ? undefined : 'unitOfMeasure'}
                   className="block text-sm font-medium text-neutral-700"
@@ -1219,9 +1473,12 @@ export function ProductFormPage() {
                       from "Milliliter" for a sealed 750 ml bottle. The concept word stays as the
                       label so §1's vocabulary lock still holds and the field is still findable by
                       the name used everywhere else; the question rides underneath it. */}
-                  {UNIT_COPY.STOCK_UNIT}{' '}
-                  {!stockUnitLocked && <span className="font-normal text-neutral-500">(optional)</span>}
+                  {UNIT_COPY.STOCK_UNIT}
                 </label>
+                {/* Required for a new product (owner, 2026-11-10): every count, pack and price builds on it. An old one
+                    without it still saves. Beside the label, so the box is still called "Stock unit". */}
+                {!isEdit && <RequiredTag />}
+                </span>
                 <button
                   type="button"
                   onClick={() => setShowUnitRequestModal(true)}
@@ -1256,10 +1513,11 @@ export function ProductFormPage() {
                 <>
                   <select
                     id="unitOfMeasure"
+                    aria-required={!isEdit || undefined}
                     className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none sm:max-w-xs"
                     {...register('unitOfMeasure')}
                   >
-                    <option value="">No unit selected</option>
+                    <option value="">{isEdit ? 'No unit selected' : 'Choose a unit'}</option>
                     {baseUnitsByCategory.map((group) => (
                       <optgroup key={group.category} label={CATEGORY_LABELS[group.category]}>
                         {group.options.map((option) => (
@@ -1293,7 +1551,7 @@ export function ProductFormPage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="packagingUnit" className="mb-1.5 block text-sm font-medium text-neutral-700">
-                  {UNIT_COPY.PACK} <span className="font-normal text-neutral-500">(optional)</span>
+                  {UNIT_COPY.PACK}
                 </label>
                 <select
                   id="packagingUnit"
@@ -1380,8 +1638,20 @@ export function ProductFormPage() {
                 )}
               </p>
             )}
+            {/* A product's own units (UNITS_PLAN.md Parts 1-2): rice bought in bags, used in dericas. */}
+            <ProductUnitsField
+              draft={units}
+              onChange={setUnits}
+              stockUnitCode={watchedStockUnitCode ?? ''}
+              stockSymbol={stockUnitLabel ?? ''}
+              standardUnits={standardUnits}
+              otherKinds={otherKinds}
+              packOption={livePackOption}
+              stockWord={stockUnitLabel ?? ''}
+            />
           </div>
         </div>
+        </FormSection>
 
         {/* -------------------------------------------------------------- Pricing */}
         {/* Sellers only (a vendor, or ProcurePal — `useSellingPolicy`), and only Unit price now — the
@@ -1394,21 +1664,29 @@ export function ProductFormPage() {
             only price entry point is the "First supplier" block's `initialVendorCost` below, for
             its opening purchase — so a non-vendor has nothing left to show in this section, and
             it is not rendered for them at all. */}
+        {showsSellingPrice && (
+        <FormSection
+          id="price"
+          current={shownStep}
+          title="Price"
+          description={
+            requiresSellingPrice
+              ? isVendor
+                ? 'What buyers pay. This goes live straight away; your listing stays on the storefront.'
+                : 'What buyers pay once the product is listed on the storefront.'
+              : 'What you sell one for. Leave it blank if you don’t sell this.'
+          }
+        >
         {showsSellingPrice && !requiresSellingPrice && (
           <>
-            <div className="mt-2 flex items-center gap-2 border-b border-neutral-200 pb-2">
-              <Banknote className="h-4 w-4 shrink-0 text-accent-600" aria-hidden="true" />
-              <div>
-                <h2 className="text-sm font-semibold text-neutral-900">Selling</h2>
-                <p className="text-xs text-neutral-500">What you sell one for. Leave blank if you don't sell this.</p>
-              </div>
-            </div>
             <div>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-2">
                 <div className="flex-1">
                   <TextField
-                    label={priceUnitWord ? `Selling price (₦ per ${priceUnitWord}, optional)` : 'Selling price (₦, optional)'}
+                    label={priceUnitWord ? `Selling price (₦ per ${priceUnitWord})` : 'Selling price (₦)'}
                     inputMode="decimal"
+                    hint={priceHint}
+                    readOnly={!canChangePrices}
                     error={errors.unitPrice?.message}
                     {...register('unitPrice')}
                   />
@@ -1445,20 +1723,6 @@ export function ProductFormPage() {
 
         {showsSellingPrice && requiresSellingPrice && (
           <>
-            <div className="mt-2 flex items-center gap-2 border-b border-neutral-200 pb-2">
-              <Zap className="h-4 w-4 shrink-0 text-accent-600" aria-hidden="true" />
-              <div>
-                <h2 className="text-sm font-semibold text-neutral-900">Pricing</h2>
-                {/* The vendor line is about review: a price change never sends a listing back.
-                    ProcurePal is never reviewed and not every product of its is listed, so it gets
-                    the line that is true for it instead. */}
-                <p className="text-xs text-neutral-500">
-                  {isVendor
-                    ? 'This goes live straight away. Your listing stays on the storefront.'
-                    : 'Buyers pay this once the product is listed on the storefront.'}
-                </p>
-              </div>
-            </div>
             {/* "Unit price" alone was a price field with no basis — `UNIT_UX_CONTRACT.md` §7.2's
                 non-negotiable, and the one this section was still failing. A selling price is per
                 ONE stock unit (`CheckoutService` multiplies it by an order quantity, and order
@@ -1467,120 +1731,78 @@ export function ProductFormPage() {
                 ₦1,000 they just typed is the figure they meant. */}
             <TextField
               label={stockUnitLabel ? `Unit price (₦ per ${stockUnitLabel})` : 'Unit price'}
+              requiredMark
               inputMode="decimal"
               hint={
                 formatPackCostEcho(Number(watchedUnitPrice), quantityOption) ??
                 (stockUnitLabel ? `What a buyer pays for one ${stockUnitLabel}.` : undefined)
               }
+              readOnly={!canChangePrices}
               error={errors.unitPrice?.message}
               {...register('unitPrice')}
             />
           </>
         )}
 
-        {isVendor && categoryField && (
-          <>
-            <div className="mt-2 flex items-center gap-2 border-b border-neutral-200 pb-2">
-              <Tag className="h-4 w-4 shrink-0 text-neutral-600" aria-hidden="true" />
-              <div>
-                <h2 className="text-sm font-semibold text-neutral-900">Your category</h2>
-                <p className="text-xs text-neutral-500">
-                  Only your team sees this. Changing it does not affect your listing.
-                </p>
-              </div>
-            </div>
-            {categoryField}
-          </>
+        </FormSection>
         )}
 
-        {/* -------------------------------------------------------------- First supplier (optional) */}
-        {/* "First supplier" (§7.1 of the multi-vendor inventory design) — create only. A product no
-            longer has ONE supplier field; it has many `ProductVendor` rows, added and edited
-            from the Vendors tab on the product detail page. This section is the exception: the
-            FIRST such row is folded into product creation itself, so someone who already knows
-            who they're buying from and how much arrived doesn't have to save the product, then
-            open a second screen to record the delivery. It stays optional — a product can still
-            be created with zero stock and no vendor, e.g. cataloguing ahead of a first delivery —
-            and is gated the same way the old Supplier field was, on VIEW_VENDORS, since it needs
-            the vendor directory to offer anyone to pick.
-
-            Unlike every section above, this one gets a real card (rounded-lg border + tinted
-            neutral-50 background) rather than a plain divider — it is the one genuinely
-            optional, skippable block on the form, and that extra visual weight is what signals
-            "distinct and skippable" rather than "another required section". Neutral-tinted, not
-            primary/accent-tinted, so it doesn't read as a call-to-action. */}
-        {showOpeningStock && (
-          <div className="mt-2 flex flex-col gap-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
-            <div className="flex items-center gap-2">
-              <Truck className="h-4 w-4 shrink-0 text-primary-600" aria-hidden="true" />
-              <div>
-                <h2 className="text-sm font-semibold text-neutral-900">
-                  First {UNIT_COPY.SUPPLIER.toLowerCase()}{' '}
-                  <span className="font-normal text-neutral-500">(optional)</span>
-                </h2>
-                <p className="text-xs text-neutral-500">
-                  Who you're buying this from, what it cost, and how much arrived — this becomes the product's
-                  first {UNIT_COPY.SUPPLIER.toLowerCase()} record and its opening stock, in one step.
-                </p>
-              </div>
-            </div>
-
-            {/* `SupplierField` (`UX_CONSISTENCY_DESIGN_PLAN.md`, Pattern A) — "+ Add new supplier"
-                opens `VendorFormModal` over this screen rather than navigating to /app/vendors, so
-                everything typed into the rest of this product form survives the round trip. */}
-            <SupplierField
-              id="initialVendorId"
-              label={UNIT_COPY.SUPPLIER}
-              placeholderLabel={`No ${UNIT_COPY.SUPPLIER.toLowerCase()} yet`}
-              value={watch('initialVendorId') ?? ''}
-              onChange={(vendorId) => setValue('initialVendorId', vendorId, { shouldDirty: true, shouldValidate: true })}
+        {/* -------------------------------------------------------------- Suppliers */}
+        {/* Several at once (owner, 2026-11-10), each a card; on a new product, the stock on the shelf now is its own
+            question below them, "bought from" one of them or nobody. Gated on VIEW_VENDORS: it needs the directory. */}
+        {canViewVendors && (
+          <FormSection
+            id="suppliers"
+            current={shownStep}
+            title="Suppliers"
+            description="Who you buy it from, with the pack they send and what they charge. Add as many as you have."
+          >
+            <ProductSuppliersField
+              drafts={supplierDrafts}
+              onChange={setSupplierDrafts}
               vendors={vendorOptions}
-              canCreate={canManageVendors}
-              onCreated={addVendor}
-              error={errors.initialVendorId?.message}
+              onVendorAdded={addVendor}
+              canAddVendor={canManageVendors}
+              linked={isEdit ? linkedSuppliers : undefined}
+              productPack={livePackOption}
+              stockSymbol={stockUnitLabel ?? ''}
+              packagingOptions={packagingOptions}
             />
-
-            {/* The two halves of the opening delivery, and they are deliberately counted in
-                DIFFERENT units — `UNIT_UX_CONTRACT.md` §9.1 and §9.2 pulling in opposite
-                directions, which is why each one says its own on its face rather than inheriting
-                a basis from the block around it.
-
-                  Cost           typed per PACK (§9.2 as amended — the figure that is on the
-                                 invoice), converted by `toStockUnitPrice` and STORED per stock
-                                 unit, which is the only basis comparable across suppliers whose
-                                 packs differ and the job `Product.costPrice` does.
-                  Opening stock  in PACKS when the row declares one (§9.1) — deliveries arrive
-                                 in bags and an invoice counts bags (§9.3's receiving default).
-
-                "Cost / Per unit" and a bare "Quantity received" were the same unnamed basis that
-                produced the 50× costing error this remediation exists to close (plan §3's P0-1)
-                and the 12-kg-for-twelve-bags report §9 exists to close. Both now carry a live
-                echo of the other reading: §9.2's per-pack cost, and §9.1's stock-unit quantity.
-                Stacks at 360px. */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <TextField
-                label={packNoun ? `Cost (₦ per ${packNoun})` : stockUnitLabel ? `Cost (₦ per ${stockUnitLabel})` : 'Cost'}
-                inputMode="decimal"
-                hint={
-                  formatStockUnitCostEcho(Number(watchedInitialCost), quantityOption, stockUnitLabel ?? '') ??
-                  (packNoun
-                    ? `What you pay for one whole ${packNoun} — stored per ${stockUnitLabel}`
-                    : stockUnitLabel
-                      ? `What you pay for one ${stockUnitLabel}`
-                      : `Per ${UNIT_COPY.STOCK_UNIT.toLowerCase()}`)
-                }
-                error={errors.initialVendorCost?.message}
-                {...register('initialVendorCost')}
-              />
-              <TextField
-                label={fieldLabelInUnit(UNIT_COPY.OPENING_STOCK, quantityOption)}
-                inputMode="decimal"
-                hint={quantityHint(watchedOpeningStock)}
-                error={errors.initialVendorQuantity?.message}
-                {...register('initialVendorQuantity')}
-              />
-            </div>
-          </div>
+            {!isEdit && (
+              <div className="flex flex-col gap-3 border-t border-neutral-200 pt-5" data-opening-stock>
+                <h3 className="text-sm font-semibold text-neutral-900">Stock you have now</h3>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <TextField
+                    label={fieldLabelInUnit(UNIT_COPY.OPENING_STOCK, quantityOption)}
+                    inputMode="decimal"
+                    hint={quantityHint(watchedOpeningStock) ?? 'Leave it blank if there’s none yet.'}
+                    error={errors.initialVendorQuantity?.message}
+                    {...register('initialVendorQuantity')}
+                  />
+                  <div>
+                    <label htmlFor="opening-from" className="mb-1.5 block text-sm font-medium text-neutral-700">
+                      Bought from
+                    </label>
+                    <select
+                      id="opening-from"
+                      className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
+                      {...register('initialVendorId')}
+                    >
+                      <option value="">Nobody named</option>
+                      {supplierDrafts
+                        .filter((draft) => draft.companyVendorId)
+                        .map((draft) => (
+                          <option key={draft.key} value={draft.companyVendorId}>
+                            {vendorOptions.find((vendor) => vendor.id === draft.companyVendorId)?.name ?? 'Supplier'}
+                          </option>
+                        ))}
+                    </select>
+                    <p className="mt-1.5 text-xs text-neutral-500">One of the suppliers above, at their price.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </FormSection>
         )}
 
         {/* -------------------------------------------------------------- Stock alerts */}
@@ -1594,11 +1816,8 @@ export function ProductFormPage() {
             the question. `inputMode` moves from numeric to decimal for the same reason §9.1 accepts
             decimals: half a bag is a real shelf, and a numeric keypad with no decimal point on a
             phone would make it untypeable. */}
+        <FormSection id="alert" current={shownStep} title="Stock alert" description="We’ll tell you when it runs low.">
         <div>
-          <div className="mb-2 flex items-center gap-2 border-b border-neutral-200 pb-2">
-            <AlertTriangle className="h-4 w-4 shrink-0 text-warning-600" aria-hidden="true" />
-            <h2 className="text-sm font-semibold text-neutral-900">Stock alerts</h2>
-          </div>
           <TextField
             label={fieldLabelInUnit(UNIT_COPY.LOW_STOCK_ALERT_AT, quantityOption)}
             inputMode="decimal"
@@ -1606,29 +1825,78 @@ export function ProductFormPage() {
             error={errors.lowStockThreshold?.message}
             {...register('lowStockThreshold')}
           />
+          {isMultiBranch && isEdit && product?.branchStock != null && (
+            <BranchLevels key={product.id} product={product} unit={stockUnitLabel ?? undefined} />
+          )}
         </div>
+        </FormSection>
+
+        {/* -------------------------------------------------------------- Review (adding only) */}
+        {!isEdit && (
+          <FormSection id="review" current={shownStep} title="Review" description="Check it, then create it. Change anything from here.">
+            <dl className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white" data-review>
+              {reviewLines.map((line) => (
+                <div key={line.step} className="flex items-start gap-3 px-4 py-3" data-review-line={line.step}>
+                  <div className="min-w-0 flex-1">
+                    <dt className="text-xs font-medium text-neutral-500">{line.title}</dt>
+                    <dd className={`text-sm ${line.empty ? 'text-neutral-500' : 'text-neutral-900'}`}>{line.text}</dd>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => goTo(line.step)}
+                    aria-label={`Change ${line.title}`}
+                    className="min-h-10 shrink-0 rounded-md px-2 text-sm font-medium text-primary-700 hover:bg-primary-50"
+                  >
+                    Change
+                  </button>
+                </div>
+              ))}
+            </dl>
+          </FormSection>
+        )}
 
         <FormError message={formError} />
 
-        <div className="flex justify-end gap-2">
-          <Button
-            variant="secondary"
-            type="button"
-            onClick={async () => {
-              // Cancel means "not this product": its draft goes too. The back arrow keeps it.
-              // Awaited: going back can leave the page entirely (the form was opened directly),
-              // and an unfinished delete would bring the draft back next time.
-              if (!isEdit) await draft.clear()
-              navigate(-1)
-            }}
-          >
-            Cancel
-          </Button>
-          {/* Creating a product needs the server (its SKU, its duplicate checks), so offline the
-              draft waits and the button says so (A5). */}
-          <Button type="submit" variant="action" loading={isSubmitting} disabled={!isEdit && !online}>
-            {isEdit ? 'Save changes' : online ? 'Create product' : 'Create when online'}
-          </Button>
+        {isMultiBranch && isEdit && (
+          <p className="text-right text-sm text-neutral-600">Changes to this product apply at all {branchCount} branches.</p>
+        )}
+        </div>
+        {/* Adding: Next, step by step, and Create only on Review. Editing: Save from any section, since what's required
+            is already filled in (owner, 2026-11-10). Kept at the bottom of a phone's screen. */}
+        {/* Pinned to the bottom on a phone, where Next is always in reach; at the end of the card on a wider screen, so it
+            never covers a field (owner, 2026-11-10: "hidden"). */}
+        <div className="sticky bottom-0 z-10 flex items-center justify-end gap-2 border-t border-neutral-200 bg-neutral-50 px-4 py-3 sm:static sm:rounded-b-xl sm:px-7">
+          {!isEdit && stepIndex > 0 ? (
+            <Button variant="secondary" type="button" onClick={() => goTo(steps[stepIndex - 1].id)}>
+              Back
+            </Button>
+          ) : (
+            <Button
+              variant="secondary"
+              type="button"
+              onClick={async () => {
+                // Cancel means "not this product": its draft goes too. The back arrow keeps it.
+                // Awaited: going back can leave the page entirely (the form was opened directly),
+                // and an unfinished delete would bring the draft back next time.
+                if (!isEdit) await draft.clear()
+                navigate(-1)
+              }}
+            >
+              Cancel
+            </Button>
+          )}
+          {!isEdit && shownStep !== 'review' ? (
+            // Keyed apart from Create: one button changing into the other mid-click would submit the form.
+            <Button key="next" type="button" variant="action" onClick={() => void next()}>
+              Next: {steps[stepIndex + 1]?.label}
+            </Button>
+          ) : (
+            // Creating a product needs the server (its SKU, its duplicate checks), so offline the draft waits and the
+            // button says so (A5).
+            <Button key="create" type="submit" variant="action" loading={isSubmitting} disabled={!isEdit && !online}>
+              {isEdit ? 'Save changes' : online ? 'Create product' : 'Create when online'}
+            </Button>
+          )}
         </div>
         {!isEdit && !online && (
           <p className="text-right text-xs text-neutral-500">
@@ -1636,6 +1904,7 @@ export function ProductFormPage() {
           </p>
         )}
       </form>
+      </div>
 
       <ReviewImpactDialog
         open={pendingValues !== null}
@@ -1657,5 +1926,50 @@ export function ProductFormPage() {
         />
       )}
     </div>
+  )
+}
+
+/** The selling price, as typed, is not what it was before this save. */
+function priceChanged(before: Product | null | undefined, after: Product): boolean {
+  return (
+    after.unitPrice != null &&
+    (before?.unitPrice !== after.unitPrice ||
+      before?.unitPriceEntered !== after.unitPriceEntered ||
+      before?.unitPriceEnteredUnit !== after.unitPriceEnteredUnit)
+  )
+}
+
+/**
+ * One section of the form (owner, 2026-11-10): shown when it's the step on screen, kept in the page otherwise, so
+ * everything typed stays and is checked together on Create.
+ */
+function FormSection({
+  id,
+  current,
+  title,
+  description,
+  children,
+}: {
+  id: StepId
+  current: StepId
+  title: string
+  description?: string
+  children: React.ReactNode
+}) {
+  return (
+    <section
+      id={`section-${id}`}
+      aria-labelledby={`section-${id}-title`}
+      className={current === id ? 'flex flex-col gap-5' : 'hidden'}
+      data-form-section={id}
+    >
+      <div className="border-b border-neutral-100 pb-4">
+        <h2 id={`section-${id}-title`} className="text-lg font-semibold text-neutral-900">
+          {title}
+        </h2>
+        {description && <p className="mt-0.5 text-sm text-neutral-600">{description}</p>}
+      </div>
+      {children}
+    </section>
   )
 }

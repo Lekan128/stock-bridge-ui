@@ -30,6 +30,8 @@ export interface Company {
   paymentTerms: PaymentTerms
   createdAt: string
   updatedAt: string
+  /** The company's logo; absent (not null) when it has none — compare with `== null`. */
+  logoUrl?: string | null
 }
 
 /**

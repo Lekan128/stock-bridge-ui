@@ -17,7 +17,7 @@ export interface PendingStock {
 }
 
 /** What is waiting to be sent for one product — shown beside, never inside, its stock figure. */
-export function usePendingStock(productId: string | undefined): PendingStock {
+export function usePendingStock(productId: string | undefined, areaId?: string): PendingStock {
   const { ops } = useOutboxState()
   let delta = 0
   let count: PendingStock['count'] = null
@@ -25,10 +25,12 @@ export function usePendingStock(productId: string | undefined): PendingStock {
   let needsAttention = false
   for (const op of ops) {
     if (op.productId !== productId) continue
+    // Asked about one area (quick mode, Part 4 of the sheets plan): only the changes waiting for it.
+    if (areaId && (op.payload as { areaId?: string }).areaId !== areaId) continue
     waiting += 1
     if (op.status === 'needs_attention') needsAttention = true
     if (op.kind === 'COUNT') count = op
-    else delta += op.baseDelta
+    else if (op.baseDelta != null) delta += op.baseDelta
   }
   return { delta, count, waiting, needsAttention }
 }

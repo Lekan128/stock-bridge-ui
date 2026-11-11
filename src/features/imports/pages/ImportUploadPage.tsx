@@ -1,3 +1,4 @@
+import { RecordingBranchGate } from '@/features/branches/RecordingBranchGate'
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ClipboardPaste, Download, Lock, Upload } from 'lucide-react'
@@ -45,7 +46,19 @@ const KIND_PERMISSION: Record<ImportKind, Permission> = {
  * comes from, and what should happen to a product that already exists. The last one is a
  * validation input, not a preference, which is why it lives here and not on the review screen.
  */
+/**
+ * A stock sheet records stock at a branch, so in "All branches" it first asks which (MULTI_BRANCH_UX_PLAN.md
+ * §5.12); a product sheet's opening quantities go to the same answer. A one-branch company sees no question.
+ */
 export function ImportUploadPage() {
+  return (
+    <RecordingBranchGate question="Which branch is this stock for?">
+      <ImportUploadForm />
+    </RecordingBranchGate>
+  )
+}
+
+function ImportUploadForm() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const { showToast } = useToast()

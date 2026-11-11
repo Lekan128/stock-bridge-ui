@@ -1,4 +1,6 @@
 import type { AxiosProgressEvent } from 'axios'
+import { viewingBranchId } from '@/features/branches/viewingBranch'
+import { recordingBranchId } from '@/features/outbox/outboxStore'
 import { api } from '@/api/client'
 import type {
   CommitPreview,
@@ -154,6 +156,9 @@ const realBackend: ImportsBackend = {
     if (delivery?.deliveryDate) form.append('deliveryDate', delivery.deliveryDate)
     if (delivery?.invoiceNo) form.append('invoiceNo', delivery.invoiceNo)
     if (delivery?.vendorId) form.append('vendorId', delivery.vendorId)
+    // Where this sheet's stock lands (V52): the phone's branch.
+    const branchId = recordingBranchId()
+    if (branchId) form.append('branchId', branchId)
     onProgress?.(0)
     // The Content-Type header is deliberately not set: the browser has to write it itself so it
     // carries the multipart boundary. Setting it by hand is how multipart uploads silently 400.
@@ -271,11 +276,11 @@ const realBackend: ImportsBackend = {
   },
 
   createDelivery(body) {
-    return api.post<ImportSession>(`${BASE}/delivery`, body).then((r) => r.data)
+    return api.post<ImportSession>(`${BASE}/delivery`, { branchId: recordingBranchId(), ...body }).then((r) => r.data)
   },
 
   createFromPaste(body) {
-    return api.post<ImportSession>(`${BASE}/paste`, body).then((r) => r.data)
+    return api.post<ImportSession>(`${BASE}/paste`, { branchId: recordingBranchId(), ...body }).then((r) => r.data)
   },
 
   deliveryLinesByBarcode(barcode) {
@@ -311,16 +316,30 @@ interface StockInTemplateParams {
   filter?: StockInFilter
   vendorId?: string
   categoryId?: string
+  /** A picker's bounded lookup — see `DeliveryLinesParams`. */
+  search?: string
+  limit?: number
 }
 
 function stockInTemplateQuery(params: StockInTemplateParams): Record<string, string> {
   const query: Record<string, string> = {}
+  // A picker's bounded lookup (a purchase order's "what do you want"): search text and/or a limit.
+  // Never sent together with the whole-catalog filters, which is what it exists to avoid.
+  if (params.search?.trim() || params.limit != null) {
+    if (params.search?.trim()) query.search = params.search.trim()
+    else if (params.vendorId) query.vendorId = params.vendorId
+    query.limit = String(params.limit ?? 20)
+    return query
+  }
   // `productIds` wins over `filter` when present (contract §3), so it is never sent alongside.
   if (params.productIds?.length) query.productIds = params.productIds.join(',')
   else if (params.filter) {
     query.filter = params.filter
     if (params.filter === 'BY_VENDOR' && params.vendorId) query.vendorId = params.vendorId
     if (params.filter === 'BY_CATEGORY' && params.categoryId) query.categoryId = params.categoryId
+    // "Low stock" means low at the branch being viewed (multiple branches), as the Low stock page does.
+    const branchId = viewingBranchId()
+    if (params.filter === 'LOW_STOCK' && branchId) query.branchId = branchId
   }
   return query
 }

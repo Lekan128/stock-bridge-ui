@@ -1,7 +1,10 @@
+import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { PERMISSIONS } from '@/auth/permissions'
+import { Link } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { ErrorState } from '@/components/ErrorState'
 import { CompanyAccountFacts } from '@/features/company/components/CompanyAccountFacts'
+import { CompanyLogo } from '@/features/company/components/CompanyLogo'
 import { CompanyDetailsForm } from '@/features/company/components/CompanyDetailsForm'
 import { CompanyDetailsReadOnly } from '@/features/company/components/CompanyDetailsReadOnly'
 import { CompanySkeleton } from '@/features/company/components/CompanySkeleton'
@@ -25,17 +28,40 @@ export function CompanySettingsPage() {
 
   const permissions = user?.type === 'tenant' ? user.permissions : []
   const canEdit = permissions.includes(PERMISSIONS.MANAGE_COMPANY_PROFILE)
+  // The one branch word a one-branch company sees (MULTI_BRANCH_UX_PLAN.md rule 1).
+  const canManageBranches = permissions.includes(PERMISSIONS.MANAGE_BRANCHES)
+  const mayAddArea = useOptionalWorkingBranch()?.mayAddArea ?? false
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-neutral-900">Company settings</h1>
-        <p className="text-sm text-neutral-500">
-          {canEdit
-            ? "Your company's details as ProcurePal holds them."
-            : "Your company's details as ProcurePal holds them. Only an account owner can change them."}
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-neutral-900">Company settings</h1>
+          <p className="text-sm text-neutral-500">
+            {canEdit
+              ? "Your company's details as ProcurePal holds them."
+              : "Your company's details as ProcurePal holds them. Only an account owner can change them."}
+          </p>
+        </div>
+        {company && <CompanyLogo company={company} canEdit={canEdit} onUpdated={setCompany} />}
       </div>
+
+      {canManageBranches && (
+        <Link
+          to="/app/company/branches"
+          className="flex items-center justify-between rounded-xl border border-neutral-200 bg-white px-4 py-3 hover:bg-neutral-50"
+        >
+          <span>
+            <span className="block font-medium text-neutral-900">Branches</span>
+            <span className="block text-sm text-neutral-600">
+              {mayAddArea
+                ? 'Add a branch, or areas inside one (Store, Kitchen, Bar). Rename and close the ones you have.'
+                : 'Add a branch, or rename and close the ones you have.'}
+            </span>
+          </span>
+          <span aria-hidden className="text-neutral-400">›</span>
+        </Link>
+      )}
 
       {loading && <CompanySkeleton />}
 

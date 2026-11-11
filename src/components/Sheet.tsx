@@ -7,6 +7,8 @@ export interface SheetProps {
   open: boolean
   onClose: () => void
   title: string
+  /** A line under the title: where a stock sheet records and how much is there ("Kitchen · 12 bags here"). */
+  subtitle?: ReactNode
   children: ReactNode
   footer?: ReactNode
   /** How wide the side panel is on a laptop; a phone always gets the full-width sheet. */
@@ -28,7 +30,7 @@ const widths = {
  *
  * Shares `useDialogBehaviour` with `Modal`: focus trap, initial and returned focus, `inert` behind.
  */
-export function Sheet({ open, onClose, title, children, footer, size = 'md' }: SheetProps) {
+export function Sheet({ open, onClose, title, subtitle, children, footer, size = 'md' }: SheetProps) {
   const dialogRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
   useDialogBehaviour(dialogRef, open, onClose)
@@ -52,10 +54,14 @@ export function Sheet({ open, onClose, title, children, footer, size = 'md' }: S
         <div className="flex justify-center pt-2 sm:hidden" aria-hidden="true">
           <span className="h-1 w-10 rounded-full bg-neutral-300" />
         </div>
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-neutral-200 px-5 py-3 sm:py-4">
-          <h2 id={titleId} className="text-base font-semibold text-neutral-900">
-            {title}
-          </h2>
+        <div className="relative z-10 flex shrink-0 items-center justify-between gap-3 border-b border-neutral-200 px-5 py-3 sm:py-4">
+          {/* A long product name is cut on a phone; the line under it still says where. */}
+          <div className="min-w-0">
+            <h2 id={titleId} className="truncate text-base font-semibold text-neutral-900">
+              {title}
+            </h2>
+            {subtitle && <div className="mt-0.5 text-sm text-neutral-600">{subtitle}</div>}
+          </div>
           <button
             type="button"
             onClick={onClose}

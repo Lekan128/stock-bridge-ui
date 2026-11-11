@@ -1,7 +1,15 @@
-import { ArrowDownToLine, ArrowUpFromLine, PackagePlus, PackageMinus, SlidersHorizontal } from 'lucide-react'
+import { ArrowDownToLine, ArrowUpFromLine, Download, PackagePlus, PackageMinus, SlidersHorizontal } from 'lucide-react'
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Badge } from '@/components/Badge'
+import { Button } from '@/components/Button'
+import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
+import { hasAreas } from '@/features/branches/areas'
+import { MovesList } from '@/features/moves/MovesList'
+import { RequestsList } from '@/features/requests/RequestsList'
+import { useToast } from '@/components/useToast'
+import { stockMovementsApi } from '@/features/stock/api/stockMovementsApi'
+import { downloadBlob } from '@/utils/downloadBlob'
 import { EmptyState } from '@/components/EmptyState'
 import { ErrorState } from '@/components/ErrorState'
 import { Pagination } from '@/components/Pagination'
@@ -13,7 +21,7 @@ import { StatCard } from '@/components/analytics/StatCard'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
 import { formatDateTime } from '@/features/marketplace/formatters'
-import type { MovementType, OutReason } from '@/features/products/types'
+import type { MovementType, OutReason, StockMovement } from '@/features/products/types'
 import { useStockMovementReport } from '@/features/stock/hooks/useStockMovementReport'
 import { NO_REASON_LABEL, OUT_REASONS, outReasonLabel } from '@/features/stock/outReasons'
 import { useVendorOptions } from '@/features/vendors/hooks/useVendorOptions'
@@ -21,7 +29,11 @@ import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 
 const PAGE_SIZE = 25
 
-type DirectionFilter = 'all' | MovementType
+/**
+ * 'MOVES': moves between the branch's areas (V63), its own list - a move is not a ledger row. 'REQUESTS': what one
+ * area asked another for (Part 5), its own list too.
+ */
+type DirectionFilter = 'all' | MovementType | 'MOVES' | 'REQUESTS'
 
 const DIRECTIONS: { value: DirectionFilter; label: string }[] = [
   { value: 'all', label: 'Everything' },
@@ -34,6 +46,9 @@ const MOVEMENT_BADGE: Record<MovementType, { label: string; variant: 'success' |
   IN: { label: 'In', variant: 'success' },
   OUT: { label: 'Out', variant: 'warning' },
   ADJUSTMENT: { label: 'Adjustment', variant: 'neutral' },
+  TRANSFER_OUT: { label: 'Sent', variant: 'neutral' },
+  TRANSFER_IN: { label: 'Received', variant: 'neutral' },
+  MOVE: { label: 'Moved', variant: 'neutral' },
 }
 
 /**
@@ -87,6 +102,8 @@ export function StockMovementsPage() {
     return { preset: 'custom', from: parsedFrom, to: parsedTo }
   })
   const [direction, setDirection] = useState<DirectionFilter>(() => {
+    if (searchParams.get('moves') === '1') return 'MOVES'
+    if (searchParams.get('requests') === '1') return 'REQUESTS'
     const requested = searchParams.get('movementType')
     return requested === 'IN' || requested === 'OUT' || requested === 'ADJUSTMENT' ? requested : 'all'
   })
@@ -95,20 +112,55 @@ export function StockMovementsPage() {
   const [reasonFilter, setReasonFilter] = useState<'' | 'NONE' | OutReason>('')
   const [page, setPage] = useState(0)
   const reasonApplies = direction === 'OUT'
+  // "Adjustments" is stock written off - counts and damaged, expired or lost stock-outs - not the
+  // ledger's ADJUSTMENT type, which also holds fixes to sales.
+  const showingAdjustments = direction === 'ADJUSTMENT'
   const { recordsSales, requiresSellingPrice } = useSellingPolicy()
+  // "All branches" (MULTI_BRANCH_UX_PLAN.md §4.3): every branch's rows, each saying where.
+  const branch = useOptionalWorkingBranch()
+  const showBranch = (branch?.isMultiBranch ?? false) && (branch?.isAll ?? false)
+  const nameOf = (id: string | undefined) => branch?.nameOf(id)
+  // …and a filter to one of them (UX §5.1).
+  const [branchFilter, setBranchFilter] = useState('')
+  const filteredBranch = showBranch && branchFilter ? branchFilter : undefined
+  // Areas (V60): at a branch with areas, each row says which, and the moves between them are a choice.
+  const areaBranch = branch?.working && hasAreas(branch.working) ? branch.working : null
+  const areaName = (id: string | undefined) => areaBranch?.areas?.find((area) => area.id === id)?.name
+  const directions = areaBranch
+    ? [...DIRECTIONS, { value: 'MOVES' as const, label: 'Moves between areas' }, { value: 'REQUESTS' as const, label: 'Requests' }]
+    : DIRECTIONS
+  // A list of its own (moves, or requests) instead of the ledger's rows.
+  const showingMoves = (direction === 'MOVES' || direction === 'REQUESTS') && areaBranch != null
 
   const { vendors } = useVendorOptions(canViewVendors)
 
-  const { movements, totalPages, totalElements, summary, loading, error, refetch } = useStockMovementReport({
+  const filters = {
     from: toApiDateTime(range.from),
     to: toApiDateTime(range.to),
-    movementType: direction === 'all' ? undefined : direction,
+    movementType: direction === 'all' || direction === 'MOVES' || direction === 'REQUESTS' || showingAdjustments ? undefined : direction,
+    adjustments: showingAdjustments ? true : undefined,
     companyVendorId: companyVendorId || undefined,
     outReason: reasonApplies && reasonFilter && reasonFilter !== 'NONE' ? reasonFilter : undefined,
     noReason: reasonApplies && reasonFilter === 'NONE' ? true : undefined,
+    ...(filteredBranch ? { branchId: filteredBranch } : {}),
+  }
+  const { movements, totalPages, totalElements, summary, loading, error, refetch } = useStockMovementReport({
+    ...filters,
     page,
     size: PAGE_SIZE,
   })
+  const { showToast } = useToast()
+  const [exporting, setExporting] = useState(false)
+  async function exportIt() {
+    setExporting(true)
+    try {
+      downloadBlob(await stockMovementsApi.export(filters), 'stock-movements.xlsx')
+    } catch {
+      showToast("Couldn't download the movements. Try again.", 'error')
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const rangeLabel = formatDateRange(range.from, range.to)
   const showSkeleton = loading && movements.length === 0
@@ -130,10 +182,44 @@ export function StockMovementsPage() {
             period it really belongs to.
           </p>
         </div>
-        <DateRangeControl value={range} onChange={(next) => applyFilter(() => setRange(next))} />
+        {/* Dates, the download and suppliers are the ledger's: the moves list (newest first) has none. */}
+        {!showingMoves && (
+          <div className="flex flex-wrap items-center gap-2">
+            <DateRangeControl value={range} onChange={(next) => applyFilter(() => setRange(next))} />
+            <Button variant="secondary" onClick={() => void exportIt()} loading={exporting}>
+              <Download className="h-4 w-4" aria-hidden="true" />
+              Download
+            </Button>
+          </div>
+        )}
       </div>
 
-      {summary && (
+      {summary && showingAdjustments && !showingMoves && (
+        <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard
+              label="Written off"
+              value={formatCurrency(summary.writtenOffCost ?? 0)}
+              subtitle={`${formatNumber(summary.writtenOffQuantity ?? 0)} units · ${rangeLabel}`}
+              icon={SlidersHorizontal}
+            />
+          </div>
+          <p className="text-sm text-neutral-600" data-adjustments-note>
+            Counts that found less than the records, and stock given out as damaged, expired or lost, at what it cost. A
+            count that found more is taken off.
+            {(summary.writtenOffUnpricedCount ?? 0) > 0 && (
+              <>
+                {' '}
+                {formatNumber(summary.writtenOffUnpricedCount ?? 0)}{' '}
+                {summary.writtenOffUnpricedCount === 1 ? 'entry has' : 'entries have'} no cost, so the total leaves{' '}
+                {summary.writtenOffUnpricedCount === 1 ? 'it' : 'them'} out.
+              </>
+            )}
+          </p>
+        </div>
+      )}
+
+      {summary && !showingAdjustments && !showingMoves && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             label="Stock in value"
@@ -173,10 +259,21 @@ export function StockMovementsPage() {
         </div>
       )}
 
+      {/* Multiple branches (MULTI_BRANCH_BUILD_PLAN.md §4.3): at one branch, stock moved to and from the
+          others is its own line - never folded into units in or out, which stay purchases and issues. */}
+      {summary && !showingMoves && ((summary.movedInCount ?? 0) > 0 || (summary.movedOutCount ?? 0) > 0) && (
+        <p className="text-sm text-neutral-600" data-moved-between-branches>
+          Moved between branches: {formatNumber(summary.movedInQuantity ?? 0)} in from other branches ·{' '}
+          {formatNumber(summary.movedOutQuantity ?? 0)} out to other branches. Not counted in units in or out.
+        </p>
+      )}
+
       {/* The one thing that makes the two numbers above reconcilable. Without it, a large "units
           in" against a smaller "stock in value" reads as a bug rather than as deliveries whose
           price nobody recorded. Shown only when there is actually a gap to explain. */}
       {summary &&
+        !showingAdjustments &&
+        !showingMoves &&
         (summary.unpricedInCount > 0 ||
           (requiresSellingPrice && summary.unpricedOutCount > 0) ||
           (summary.unpricedSaleCount ?? 0) > 0 ||
@@ -229,7 +326,7 @@ export function StockMovementsPage() {
             onChange={(event) => applyFilter(() => setDirection(event.target.value as DirectionFilter))}
             className="rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
           >
-            {DIRECTIONS.map((option) => (
+            {directions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
@@ -261,9 +358,30 @@ export function StockMovementsPage() {
           </div>
         )}
 
+        {showBranch && branch && (
+          <div>
+            <label htmlFor="movement-branch" className="mb-1.5 block text-sm font-medium text-neutral-700">
+              Branch
+            </label>
+            <select
+              id="movement-branch"
+              value={branchFilter}
+              onChange={(event) => applyFilter(() => setBranchFilter(event.target.value))}
+              className="rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            >
+              <option value="">Every branch</option>
+              {branch.branches.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* Hidden rather than disabled for a user without VIEW_VENDORS: the options would be a
             request they are not allowed to make, and an empty picker looks broken. */}
-        {canViewVendors && (
+        {canViewVendors && !showingMoves && (
           <div>
             <label htmlFor="supplier" className="mb-1.5 block text-sm font-medium text-neutral-700">
               Supplier
@@ -284,14 +402,16 @@ export function StockMovementsPage() {
           </div>
         )}
 
-        {!showSkeleton && !error && (
+        {!showSkeleton && !error && !showingMoves && (
           <p className="py-2 text-sm text-neutral-500">
             {formatNumber(totalElements)} movement{totalElements === 1 ? '' : 's'}
           </p>
         )}
       </div>
 
-      {error && (
+      {showingMoves && areaBranch && (direction === 'REQUESTS' ? <RequestsList branchId={areaBranch.id} /> : <MovesList branchId={areaBranch.id} />)}
+
+      {!showingMoves && error && (
         <ErrorState
           variant={movements.length > 0 ? 'inline' : 'block'}
           title="We could not load stock movements"
@@ -300,7 +420,7 @@ export function StockMovementsPage() {
         />
       )}
 
-      {showSkeleton && (
+      {!showingMoves && showSkeleton && (
         <div className="space-y-2">
           {Array.from({ length: 6 }).map((_, index) => (
             <Skeleton key={index} className="h-12 w-full rounded-md" />
@@ -308,7 +428,7 @@ export function StockMovementsPage() {
         </div>
       )}
 
-      {!showSkeleton && !error && movements.length === 0 && (
+      {!showingMoves && !showSkeleton && !error && movements.length === 0 && (
         <EmptyState
           icon={SlidersHorizontal}
           title="Nothing moved in this period"
@@ -316,7 +436,7 @@ export function StockMovementsPage() {
         />
       )}
 
-      {movements.length > 0 && (
+      {!showingMoves && movements.length > 0 && (
         <>
           {/* The table scrolls inside its own container rather than the page — eight columns do
               not fit a phone, and a horizontally scrolling page loses the nav. */}
@@ -336,6 +456,8 @@ export function StockMovementsPage() {
                   <th scope="col" className="px-4 py-2.5 text-right font-medium">Quantity</th>
                   <th scope="col" className="px-4 py-2.5 text-right font-medium">Unit price</th>
                   <th scope="col" className="px-4 py-2.5 text-right font-medium">Value</th>
+                  {showBranch && <th scope="col" className="px-4 py-2.5 font-medium">Branch</th>}
+                  {areaBranch && <th scope="col" className="px-4 py-2.5 font-medium">Area</th>}
                   <th scope="col" className="px-4 py-2.5 font-medium">Supplier</th>
                   <th scope="col" className="px-4 py-2.5 font-medium">Note</th>
                 </tr>
@@ -362,7 +484,17 @@ export function StockMovementsPage() {
                         <Badge variant={badge.variant}>{badge.label}</Badge>
                         {/* Why it went out, under the badge rather than in a ninth column. */}
                         {movement.outReason && (
-                          <span className="mt-1 block text-xs text-neutral-600">{outReasonLabel(movement.outReason)}</span>
+                          <span className="mt-1 block text-xs text-neutral-600">
+                            {outReasonLabel(movement.outReason)}
+                            {movement.usedAreaId && areaName(movement.usedAreaId) ? ` at ${areaName(movement.usedAreaId)}` : ''}
+                            {/* A kitchen's count found it short (Part 3.5): used there, learned from the count. */}
+                            {movement.count && !movement.usedAreaId && areaName(movement.areaId) ? ` at ${areaName(movement.areaId)}` : ''}
+                            {movement.count ? ' · count' : ''}
+                          </span>
+                        )}
+                        {/* Where a move went, here when there is no Area column to say it (every branch). */}
+                        {movement.movementType === 'MOVE' && !areaBranch && (
+                          <span className="mt-1 block text-xs text-neutral-600">{routeOf(movement)}</span>
                         )}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-neutral-900">
@@ -378,6 +510,12 @@ export function StockMovementsPage() {
                       <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums font-medium text-neutral-900">
                         {movement.lineValue == null ? '—' : formatCurrency(movement.lineValue)}
                       </td>
+                      {showBranch && <td className="px-4 py-3 text-neutral-600">{nameOf(movement.branchId) ?? '—'}</td>}
+                      {areaBranch && (
+                        <td className="whitespace-nowrap px-4 py-3 text-neutral-600">
+                          {movement.movementType === 'MOVE' ? routeOf(movement) : (areaName(movement.areaId) ?? '—')}
+                        </td>
+                      )}
                       <td className="px-4 py-3 text-neutral-600">{movement.companyVendorName ?? '—'}</td>
                       <td className="max-w-xs px-4 py-3 text-neutral-500">{movement.note ?? '—'}</td>
                     </tr>
@@ -392,4 +530,9 @@ export function StockMovementsPage() {
       )}
     </div>
   )
+}
+
+/** A move's two areas: "Store → Kitchen". */
+function routeOf(movement: StockMovement): string {
+  return `${movement.areaName ?? '—'} → ${movement.toAreaName ?? '—'}`
 }

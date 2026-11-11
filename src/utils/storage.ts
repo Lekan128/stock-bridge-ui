@@ -70,6 +70,18 @@ export const authStorage = {
     localStorage.removeItem(REFRESH_TOKEN_KEY)
     localStorage.removeItem(SESSION_PROFILE_KEY)
   },
+
+  /**
+   * Calls `listener` when ANOTHER tab signs in, switches account or signs out (`storage` events
+   * never fire in the tab that wrote). Null when signed out. Returns the unsubscribe.
+   */
+  onSessionProfileChange: (listener: (profile: StoredSessionProfile | null) => void): (() => void) => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === SESSION_PROFILE_KEY || event.key === null) listener(readSessionProfile())
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  },
 }
 
 export const superAdminAuthStorage = {
@@ -256,6 +268,30 @@ export const cartStorage = {
       localStorage.removeItem(CART_KEY)
     } catch {
       // Ignore — see write().
+    }
+  },
+}
+
+const PUSH_OFFER_DISMISSED_KEY = 'procurepaddy.pushOfferDismissed.v1'
+
+/**
+ * "Get a notification on this phone when someone asks" (STOCK_AREAS_PART_5.md), under a request waiting to be
+ * moved: "Not now" hides it on this device for good - the switch on Profile is still there.
+ */
+export const pushOfferStorage = {
+  isDismissed: (): boolean => {
+    try {
+      return localStorage.getItem(PUSH_OFFER_DISMISSED_KEY) === '1'
+    } catch {
+      return false
+    }
+  },
+
+  dismiss: (): void => {
+    try {
+      localStorage.setItem(PUSH_OFFER_DISMISSED_KEY, '1')
+    } catch {
+      // Private browsing / quota: the offer simply comes back next load.
     }
   },
 }

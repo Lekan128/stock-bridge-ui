@@ -95,6 +95,7 @@ async function goOnline() {
 
 const rice = await createProduct('Rice (c5)', 1000, 250)
 await createProduct('Beans (c5)', 100, 250)
+await api('/api/company-vendors', { token, method: 'POST', body: { name: 'Dash Foods', contactPhone: '08031113333' } })
 await createProduct('Salt (c5)', 0, 50)
 const oil = await createProduct('Oil (c5)', 30, 10)
 const now = new Date()
@@ -161,8 +162,20 @@ await check('a change the server refused shows here, and Review opens the sync c
 })
 
 await check('an unfinished form on this phone is listed with Continue', async () => {
+  // Record a delivery asks who it's from first, then what arrived (purchase order redesign, 2026-11-06).
   await page.goto(`${UI}/app/products/receive`)
-  await page.getByLabel(/Beans \(c5\).*how many arrived/).first().fill('4') // loose kg and the 50 kg bag are two lines
+  await page.getByRole('button', { name: /^Dash Foods/ }).click()
+  // Settled: no open order to this supplier, so the search for what arrived is open.
+  await page.getByText('No order to Dash Foods is waiting for goods.').waitFor()
+  // The page redraws once the supplier is chosen: type once it has, and again if the first went nowhere.
+  const search = page.getByLabel('Search or scan a product')
+  const add = page.getByRole('button', { name: /^Add Beans \(c5\)/ }).first()
+  for (let i = 0; i < 3 && !(await add.isVisible().catch(() => false)); i++) {
+    await search.fill('Beans')
+    await add.waitFor({ timeout: 4000 }).catch(() => {})
+  }
+  await add.click()
+  await page.getByLabel(/How many Beans \(c5\) arrived/).first().fill('4')
   await page.getByText(/Draft saved on this phone at/).waitFor()
   await page.goto(`${UI}/app`)
   const draft = needRow('Unfinished: delivery')

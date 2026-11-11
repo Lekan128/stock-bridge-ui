@@ -209,8 +209,11 @@ export function unitNoun(option: UnitOption): string {
  */
 export function pluraliseUnitNoun(noun: string, quantity: number): string {
   if (quantity === 1) return noun
-  if (!/^[A-Za-z]{3,}$/.test(noun)) return noun
+  // A kitchen's own unit can be two words (UNITS_PLAN.md Part 1): "small bowl" → "small bowls".
+  if (!/^([A-Za-z]+ )*[A-Za-z]{3,}$/.test(noun)) return noun
   if (noun.endsWith('s')) return noun
+  // "box" → "boxes", "pouch" → "pouches", "dish" → "dishes" (owner's test: "2 boxs").
+  if (/(x|z|ch|sh)$/i.test(noun)) return `${noun}es`
   return `${noun}s`
 }
 
@@ -221,6 +224,8 @@ export function pluraliseUnitNoun(noun: string, quantity: number): string {
  */
 export function stockUnitWord(symbol: string, quantity: number): string {
   const word = /^[A-Z][a-z]/.test(symbol) ? symbol.charAt(0).toLowerCase() + symbol.slice(1) : symbol
+  // A product with no unit set: "1 unit", not "1 units".
+  if (word === UNIT_COPY.NO_UNIT_LABEL && quantity === 1) return 'unit'
   return pluraliseUnitNoun(word, quantity)
 }
 
@@ -250,6 +255,17 @@ export function formatQuantity(quantity: number, unitLabel: string | null | unde
  */
 export function formatCount(quantity: number, unitLabel: string): string {
   return formatQuantity(quantity, unitLabel)
+}
+
+/**
+ * A stock figure restated in one of the product's own units, which are only roughly right (a heaped derica isn't a
+ * level one, UNITS_PLAN.md §3): `"about 254.7 dericas"`, never `"254.667 dericas"`. A pack keeps its exact figure.
+ */
+export function formatRestated(stockQuantity: number, option: UnitOption): string {
+  const inUnit = option.factorToStockUnit > 0 ? stockQuantity / option.factorToStockUnit : 0
+  if (!option.isMeasure) return formatQuantityInUnit(Math.round(inUnit * 1000) / 1000, option)
+  const rounded = Math.round(inUnit * 10) / 10
+  return `${rounded === inUnit ? '' : 'about '}${formatQuantityInUnit(rounded, option)}`
 }
 
 /** `(20, {label: "Bag of 50 kg", ...})` → `"20 bags"`. The sentence form of a unit option. */
@@ -752,5 +768,5 @@ export function notAWholeCountMessage(
 }
 
 export function roundsToZeroMessage(quantity: number, option: UnitOption, stockUnitLabel: string): string {
-  return `${formatQuantityInUnit(quantity, option)} is less than one whole ${stockUnitLabel} — enter a larger amount, or change this product's ${UNIT_COPY.STOCK_UNIT.toLowerCase()}.`
+  return `${formatQuantityInUnit(quantity, option)} is too little to record — the smallest amount is 0.001 ${stockUnitLabel}.`
 }

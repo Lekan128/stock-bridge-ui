@@ -61,6 +61,11 @@ export interface CompanyVendor {
   editable: boolean
   /** DELETE is a deactivation server-side, so an inactive row simply stops appearing in the list. */
   active: boolean
+  /**
+   * "Email the order to this supplier" starts switched on: an email to them has gone through before.
+   * Back off when one bounces or their address is changed. Never a permission.
+   */
+  emailOrders?: boolean
   createdAt: string
   updatedAt: string
 }

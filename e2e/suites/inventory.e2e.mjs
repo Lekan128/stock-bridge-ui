@@ -94,7 +94,7 @@ await page.waitForFunction(() => navigator.serviceWorker.controller?.state === '
 const toast = (text) => page.getByRole('status').filter({ hasText: text })
 const row = (name) => page.locator('tr[data-product-row]').filter({ hasText: name })
 
-await check('one compact bar: search, Filters, chips with counts, the daily action, Add product, ⋯ — on one row', async () => {
+await check('the title shares its row with the actions; search, Filters and chips with counts on the row below', async () => {
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.reload()
   await row('Rice (c1)').waitFor()
@@ -104,14 +104,24 @@ await check('one compact bar: search, Filters, chips with counts, the daily acti
   const record = page.getByRole('button', { name: 'Record a delivery' }).first()
   const add = page.getByRole('button', { name: 'Add product' }).first()
   const more = page.getByRole('button', { name: 'More inventory actions' }).first()
-  const tops = await Promise.all([search, filters, chips, record, add, more].map(async (l) => (await l.boundingBox()).y))
-  assert(Math.max(...tops) - Math.min(...tops) < 12, `not one row: ${tops}`)
+  // Owner, 2026-11-01: the actions in the title's row (it was empty), the finding on its own row - so the search
+  // keeps its room at any width.
+  const middle = async (l) => {
+    const box = await l.boundingBox()
+    return box.y + box.height / 2
+  }
+  const title = page.getByRole('heading', { name: 'Inventory', level: 1 })
+  const titleRow = await Promise.all([title, record, add, more].map(middle))
+  const findRow = await Promise.all([search, filters, chips].map(middle))
+  assert(Math.max(...titleRow) - Math.min(...titleRow) < 12, `actions not beside the title: ${titleRow}`)
+  assert(Math.max(...findRow) - Math.min(...findRow) < 12, `search, Filters and chips not on one row: ${findRow}`)
+  assert(Math.min(...findRow) > Math.max(...titleRow), 'the finding row is not under the title row')
   await chips.getByRole('button', { name: /^All\s*4$/ }).waitFor()
   await chips.getByRole('button', { name: /^Low\s*1$/ }).waitFor()
   assert((await record.getAttribute('class')).includes('bg-action'), 'Record a delivery is not the action')
   assert(!(await add.getAttribute('class')).includes('bg-action'), 'two action buttons')
   await more.click()
-  for (const item of ['Expected deliveries', 'Bulk upload', 'Manage categories', 'SKU settings', 'Download my products']) {
+  for (const item of ['Bulk upload', 'Manage categories', 'SKU settings', 'Download my products']) {
     await page.getByRole('menuitem', { name: item }).waitFor()
   }
   await page.keyboard.press('Escape')
@@ -157,6 +167,36 @@ await check('quick + on a row opens Stock in for that product, without leaving t
   await toast('Undone · Rice (c1) is back to 1,000 kg').waitFor()
   await row('Rice (c1)').getByText('1,000', { exact: true }).waitFor()
   assert((await onHand(rice.id)) === 1000, 'server not restored')
+})
+
+await check('⋯ → Count stock: a shop with one area counts down a list, a table on a laptop; Counted today stays after a reload', async () => {
+  await page.getByRole('button', { name: 'More inventory actions' }).first().click()
+  await page.getByRole('menuitem', { name: 'Count stock' }).click()
+  await page.waitForURL(/\/app\/products\/count$/)
+  await page.getByRole('heading', { name: 'Count stock', level: 1 }).waitFor()
+  const list = page.locator('[data-count-list]')
+  const riceRow = list.locator('[data-count-row="Rice (c1)"]')
+  await riceRow.waitFor()
+  // Low ones too (Beans), but nothing at 0: the mystery item has none.
+  await list.locator('[data-count-row="Beans (c1)"]').waitFor()
+  assert((await list.locator('[data-count-row="Mystery item (c1)"]').count()) === 0, 'a product at 0 is on the list')
+  await page.screenshot({ path: SHOTS + '2b-count-stock.png' })
+  await riceRow.getByLabel('Rice (c1): kg here').fill('998')
+  await riceRow.locator('[data-count-preview]').getByText(/^2 kg short · missing$/).waitFor()
+  await riceRow.getByRole('button', { name: 'Save' }).click()
+  const counted = page.getByRole('region', { name: /^Counted today/ })
+  await counted.getByText('Rice (c1)').waitFor()
+  for (let i = 0; i < 40 && (await onHand(rice.id)) !== 998; i++) await page.waitForTimeout(250)
+  assert((await onHand(rice.id)) === 998, `the count made it ${await onHand(rice.id)} kg`)
+  // The server says so too: after a reload, still counted today, as typed.
+  await page.reload()
+  await page.getByRole('region', { name: /^Counted today/ }).locator('[data-counted-row="Rice (c1)"]').waitFor({ timeout: 20000 })
+  assert((await list.locator('[data-count-row="Rice (c1)"]').count()) === 0, 'Rice is still to count')
+  // Search finds what isn't on the list, at 0 too.
+  await page.getByPlaceholder('Search name or SKU').fill('Mystery')
+  await list.locator('[data-count-row="Mystery item (c1)"]').waitFor()
+  await page.goto(`${UI}/app/products`)
+  await page.getByRole('heading', { name: 'Inventory', level: 1 }).waitFor()
 })
 
 await check('keys: / searches, j and k move between rows, i and o open stock in and out', async () => {

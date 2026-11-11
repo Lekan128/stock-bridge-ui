@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import { marketplaceAdminApi } from '@/features/marketplace/api/marketplaceAdminApi'
 import { StockBreakdown } from '@/features/marketplace/components/StockBreakdown'
@@ -69,17 +69,17 @@ export function MarketplaceDetailsModal({ product, categories, onClose, onSaved 
   }
 
   return (
-    <Modal
+    <Sheet
       open
       onClose={onClose}
       title="Marketplace details"
-      size="lg"
+      size="md"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
+          <Button variant="action" onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
             Save details
           </Button>
         </>
@@ -144,6 +144,6 @@ export function MarketplaceDetailsModal({ product, categories, onClose, onSaved 
 
         <FormError message={formError} />
       </form>
-    </Modal>
+    </Sheet>
   )
 }

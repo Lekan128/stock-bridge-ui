@@ -21,7 +21,7 @@ import { marketplacePaths } from '@/routes/marketplacePaths'
  * brand + search + cart + account, and a category rail. Search is prominent and never collapses
  * into an icon — on a supply catalog it is the primary navigation, not a secondary affordance.
  */
-export function StorefrontHeader() {
+export function StorefrontHeader({ comingSoon = false }: { comingSoon?: boolean }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const { isAuthenticated, client, user } = useAuth()
   const { canShop } = useCart()
@@ -59,29 +59,34 @@ export function StorefrontHeader() {
       <header className="sticky top-0 z-30 border-b border-neutral-200 bg-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setDrawerOpen(true)}
-              aria-label="Open menu"
-              aria-expanded={drawerOpen}
-              className="-ml-2 rounded-md p-2 text-neutral-600 hover:bg-neutral-100 md:hidden"
-            >
-              <Menu className="h-5 w-5" />
-            </button>
+            {/* Categories and catalogue links live in the drawer, so it goes while the marketplace is closed. */}
+            {!comingSoon && (
+              <button
+                type="button"
+                onClick={() => setDrawerOpen(true)}
+                aria-label="Open menu"
+                aria-expanded={drawerOpen}
+                className="-ml-2 rounded-md p-2 text-neutral-600 hover:bg-neutral-100 md:hidden"
+              >
+                <Menu className="h-5 w-5" />
+              </button>
+            )}
 
             <Link to={marketplacePaths.home} className="shrink-0 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
-              <Logo brand="procurePal" size={28} />
+              <Logo size={28} />
             </Link>
 
             {/* Desktop search: given the whole middle of the bar, the widest element in the header. */}
-            <div className="hidden min-w-0 flex-1 px-4 md:block">
-              <StorefrontSearchInput />
-            </div>
+            {!comingSoon && (
+              <div className="hidden min-w-0 flex-1 px-4 md:block">
+                <StorefrontSearchInput />
+              </div>
+            )}
 
-            <div className="ml-auto flex items-center gap-1 md:ml-0">
+            <div className={`ml-auto flex items-center gap-1 ${comingSoon ? '' : 'md:ml-0'}`}>
               {/* Hidden for a signed-in vendor: they sell here and cannot buy, so a cart badge
                   would count a basket that has no checkout behind it. See CartContext.canShop. */}
-              {canShop && <StorefrontCartButton />}
+              {canShop && !comingSoon && <StorefrontCartButton />}
 
               {isAuthenticated ? (
                 <div className="flex items-center gap-1">
@@ -119,40 +124,44 @@ export function StorefrontHeader() {
           </div>
 
           {/* Mobile search row — the accessibility/UX bar requires search to work at 375px. */}
-          <div className="pb-3 md:hidden">
-            <StorefrontSearchInput />
-          </div>
+          {!comingSoon && (
+            <div className="pb-3 md:hidden">
+              <StorefrontSearchInput />
+            </div>
+          )}
         </div>
 
         {/* Category rail — desktop only; the drawer carries the same links on mobile. */}
-        <div className="hidden border-t border-neutral-100 bg-neutral-50 md:block">
-          <div className="mx-auto flex max-w-7xl items-center gap-1 px-4 sm:px-6 lg:px-8">
-            <StorefrontCategoryMenu />
-            <Link
-              to={marketplacePaths.home}
-              className="rounded-md px-2.5 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100"
-            >
-              All products
-            </Link>
-            {isAuthenticated && (
+        {!comingSoon && (
+          <div className="hidden border-t border-neutral-100 bg-neutral-50 md:block">
+            <div className="mx-auto flex max-w-7xl items-center gap-1 px-4 sm:px-6 lg:px-8">
+              <StorefrontCategoryMenu />
               <Link
-                to="/app/orders"
+                to={marketplacePaths.home}
                 className="rounded-md px-2.5 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100"
               >
-                My orders
+                All products
               </Link>
-            )}
-            <span className="ml-auto py-2 text-xs text-neutral-500">
-              Free delivery on orders over{' '}
-              <strong className="font-semibold text-neutral-700">
-                {formatNairaWhole(settings.freeDeliveryThreshold)}
-              </strong>
-            </span>
+              {isAuthenticated && (
+                <Link
+                  to="/app/orders"
+                  className="rounded-md px-2.5 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100"
+                >
+                  My orders
+                </Link>
+              )}
+              <span className="ml-auto py-2 text-xs text-neutral-500">
+                Free delivery on orders over{' '}
+                <strong className="font-semibold text-neutral-700">
+                  {formatNairaWhole(settings.freeDeliveryThreshold)}
+                </strong>
+              </span>
+            </div>
           </div>
-        </div>
+        )}
       </header>
 
-      <StorefrontMobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+      {!comingSoon && <StorefrontMobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />}
     </>
   )
 }

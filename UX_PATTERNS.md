@@ -149,3 +149,34 @@ waiting on the phone is simply never sent.
 - Gap: writes are sent while the app is open; there is no Background Sync once it is closed.
 - Gap (A4): a late offline delivery absorbed by a later count still adjusts the supplier's own
   tally.
+
+---
+
+## Pattern D — branch-honest UI
+
+**The rule.** A company can count stock at several branches (`MULTI_BRANCH_UX_PLAN.md` at the project
+root, rules 1–10). Every screen that shows or records stock answers to these five parts:
+
+1. **Invisible at one branch.** `useWorkingBranch().isMultiBranch` false means no branch word, chip,
+   column or field — Company settings' Branches link is the only exception. Requests stay exactly as
+   they were (no `branchId` sent). `e2e/suites/branches.e2e.mjs` check 1 walks the workspace for it.
+2. **Every write names its branch before it is saved, and on its receipt.** Stock writes go through
+   `submitStockWrite`, which stamps the phone's branch *when the write is made*; a sheet shows it in
+   its title (`useSheetBranch().titleSuffix`). Writes that bypass the outbox (imports, Record a
+   delivery, expected deliveries, opening stock) attach `recordingBranchId()`.
+3. **"All branches" never records.** A sheet there asks "Which branch?" first (`useSheetBranch().field`,
+   and its `missing` blocks the save); quick mode and Record a sale ask before the first scan
+   (`RecordingBranchGate`).
+4. **Figures are the branch's.** A product's hero, bar and count read the working branch
+   (`scopeProduct`); the on-phone list reads `branchStock` per row (`catalog.worker.ts asSeen`); reports
+   ask for the viewed branch (`viewingBranchId()`), and a switch drops their cached answers. A figure
+   from one branch is never shown under another's name.
+5. **Another branch's figures come from the server, or not at all.** A person without "View all
+   branches" is never sent them, so there is nothing to hide on the phone.
+
+**Checklist for a new stock screen or write:**
+1. Does it render anything branch-related when `isMultiBranch` is false? It must not.
+2. Does its write go through `submitStockWrite`, or attach `recordingBranchId()`?
+3. In "All branches", can it record without the person choosing a branch? It must not.
+4. Is every figure on it the working branch's (or labelled as the company's in "All branches")?
+5. Is its cached answer dropped when the branch changes?

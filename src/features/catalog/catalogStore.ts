@@ -1,6 +1,6 @@
 import Dexie from 'dexie'
 import { catalogApi } from '@/features/catalog/catalogApi'
-import type { CatalogMeta, CatalogQuery, CatalogQueryResult, CatalogRow } from '@/features/catalog/types'
+import { CATALOG_ROW_FORMAT, type CatalogMeta, type CatalogQuery, type CatalogQueryResult, type CatalogRow } from '@/features/catalog/types'
 import type { Product } from '@/features/products/types'
 import { isAppError } from '@/types/api'
 
@@ -103,10 +103,32 @@ export function queryCatalog(query: CatalogQuery): Promise<CatalogQueryResult> {
 let databaseName: string | null = null
 let stopTriggers: (() => void) | null = null
 
+const PURGED_KEY = 'pp.catalogPurged.v1'
+
+/**
+ * Once per device, deletes every catalogue copy made before the two-tab fix (`createApiClient`):
+ * a tab that silently picked up another tab's session synced THAT company's products into its own
+ * copy, so any copy from before may hold another company's products. Each one is rebuilt from the
+ * server on next start.
+ */
+async function purgeCopiesFromBeforeTabFix(): Promise<void> {
+  try {
+    if (localStorage.getItem(PURGED_KEY) === '1') return
+    const names = (await indexedDB.databases()).map((database) => database.name)
+    for (const name of names) {
+      if (name?.startsWith('procurepaddy-catalog:')) await Dexie.delete(name)
+    }
+    localStorage.setItem(PURGED_KEY, '1')
+  } catch {
+    // No databases() (older Safari) or storage blocked: tried again on the next start.
+  }
+}
+
 export async function startCatalog(name: string): Promise<void> {
   if (databaseName === name) return
   // Someone else was signed in on this device: their copy is deleted, not just closed.
   await stopCatalog({ deleteData: databaseName != null })
+  await purgeCopiesFromBeforeTabFix()
   databaseName = name
   setState({ ...INITIAL, phase: 'starting' })
   startWorker()
@@ -208,10 +230,29 @@ export async function syncCatalog(): Promise<void> {
   }
 }
 
+/**
+ * Starts the copy over (MULTI_BRANCH_BUILD_PLAN.md §6.1): every row carries a figure per branch the
+ * person sees, so when that set of branches changes - a branch added, somebody given another - rows
+ * already on the phone lack the new one, and no product changed to send it. Online only: offline the
+ * old copy is still the best there is, and the provider asks again when the branches next load.
+ */
+export async function resyncCatalog(): Promise<boolean> {
+  if (!databaseName || !worker || !navigator.onLine) return false
+  await call({ type: 'reset' })
+  setState({ phase: 'loading', loaded: 0, total: null, version: state.version + 1 })
+  void syncCatalog()
+  return true
+}
+
 /** The first full copy, resuming from where an interrupted one stopped. */
 async function loadSnapshotIfNeeded(name: string): Promise<CatalogMeta | null> {
   let meta = await currentMeta()
-  if (meta.phase === 'ready') return meta
+  // A copy in an older row shape is taken again - online only: offline it's still the best there is.
+  if (meta.phase === 'ready' && (meta.rowFormat === CATALOG_ROW_FORMAT || !navigator.onLine)) return meta
+  if (meta.phase === 'ready') {
+    meta = await call<CatalogMeta>({ type: 'reset' })
+    setState({ phase: 'loading', loaded: 0, total: null, version: state.version + 1 })
+  }
 
   let afterId = meta.phase === 'snapshot' ? meta.afterId : null
   if (afterId == null && meta.phase !== 'empty') {
@@ -346,5 +387,12 @@ export function toProduct(row: CatalogRow): Product {
     updatedAt: '',
     hasMultiplePacks: row.hasMultiplePacks,
     expectedQuantity: row.expectedQuantity ?? undefined,
+    // Every branch's figure the person sees: Send stock shows both ends' (MULTI_BRANCH_UX_PLAN.md §5.4).
+    branchStock: row.branchStock,
+    areaStock: row.areaStock,
+    measures: row.measures,
+    usedInUnit: row.usedInUnit ?? null,
+    countIn: row.countIn ?? undefined,
+    counts: row.counts ?? undefined,
   }
 }

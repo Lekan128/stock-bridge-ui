@@ -104,7 +104,8 @@ export function useSaleBasket() {
   }, 0)
 
   /** Records every line under one new sale id, in order; returns how each one stands. */
-  async function record(): Promise<RecordedSale> {
+  /** `areaId`: where in the branch the sale comes from (V60), chosen on the screen; absent without a choice. */
+  async function record(areaId?: string): Promise<RecordedSale> {
     const saleId = crypto.randomUUID()
     const time = new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
     const label = `${time} sale (${lines.length} ${lines.length === 1 ? 'item' : 'items'})`
@@ -132,6 +133,7 @@ export function useSaleBasket() {
             // multiplies back, which would turn "₦5,000 a carton" sold by the piece into ₦4,999.92.
             ...(amount != null ? { lineTotal: amount } : {}),
             note: note.trim() || undefined,
+            areaId,
           },
           baseDelta: -base,
         })

@@ -151,9 +151,12 @@ export const stockApi = {
       .post<StockMutationResponse>(`/api/products/${productId}/stock/adjustment`, payload, idempotent(idempotencyKey))
       .then((r) => r.data),
 
-  history: (productId: string, page: number, size = 10) =>
+  /** `branchId`: one branch's history (V51); absent, every branch the person sees. */
+  history: (productId: string, page: number, size = 10, branchId?: string) =>
     api
-      .get<PageResponse<StockMovement>>(`/api/products/${productId}/stock/history`, { params: { page, size } })
+      .get<PageResponse<StockMovement>>(`/api/products/${productId}/stock/history`, {
+        params: { page, size, branchId },
+      })
       .then((r) => r.data),
 
   /**

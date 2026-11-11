@@ -364,6 +364,13 @@ export interface DeliveryLinesParams {
   vendorId?: string
   categoryId?: string
   productIds?: string[]
+  /**
+   * A bounded lookup for a picker: the products whose name, code or barcode contains this text. The
+   * server caps how many come back, so it works the same at thirty products and thirty thousand.
+   */
+  search?: string
+  /** With `vendorId` and no `search`: only that many of the supplier's own products. */
+  limit?: number
 }
 
 export interface DeliveryLineInput {
@@ -373,7 +380,14 @@ export interface DeliveryLineInput {
   quantity: number
   /** Price of ONE `unit`. Left out, the last price paid is used. */
   price?: number
+  /** How many of what came went back with the driver (V79): never stock, still owed on the order. */
+  sentBack?: number
+  sentBackReason?: SendBackReason
+  sentBackNote?: string
 }
+
+/** Why goods went back at the gate (V79, PURCHASE_ORDER_PLAN.md section 11.6). */
+export type SendBackReason = 'WRONG_ITEM' | 'DAMAGED' | 'EXPIRED' | 'NOT_ORDERED' | 'PRICE' | 'OTHER'
 
 /**
  * POST /api/imports/paste — rows pasted rather than uploaded (task 3.2).

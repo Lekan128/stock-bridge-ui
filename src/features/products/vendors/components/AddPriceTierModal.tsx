@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import { productVendorsApi } from '@/features/products/api/productVendorsApi'
 import { UnitToggle } from '@/features/products/components/UnitToggle'
@@ -170,17 +170,17 @@ export function AddPriceTierModal({
   }
 
   return (
-    <Modal
+    <Sheet
       open
       onClose={onClose}
       title={`Add price break — ${vendor.companyVendorName} (${pack.label})`}
-      size="sm"
+      size="md"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit(onSubmit)} loading={isSubmitting} disabled={quantityRoundsToZero}>
+          <Button variant="action" onClick={handleSubmit(onSubmit)} loading={isSubmitting} disabled={quantityRoundsToZero}>
             Add
           </Button>
         </>
@@ -254,6 +254,6 @@ export function AddPriceTierModal({
 
         <FormError message={formError} />
       </form>
-    </Modal>
+    </Sheet>
   )
 }

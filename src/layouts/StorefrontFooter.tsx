@@ -14,7 +14,7 @@ const CURRENT_YEAR = new Date().getFullYear()
  * supplier is real before they decide whether to order, and a footer with no contact detail is the
  * fastest way to fail that check.
  */
-export function StorefrontFooter() {
+export function StorefrontFooter({ comingSoon = false }: { comingSoon?: boolean }) {
   const { isAuthenticated } = useAuth()
   const { settings } = useMarketplaceSettings()
 
@@ -23,43 +23,56 @@ export function StorefrontFooter() {
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-4">
           <div className="sm:col-span-2">
-            <Logo brand="procurePal" size={28} />
-            <p className="mt-3 max-w-md text-sm text-neutral-600">
-              ProcurePal supplies Nigerian businesses — kitchens, retailers, pharmacies and site
-              teams — with the stock they run on. Order at wholesale prices, pay on delivery or up
-              front, and watch every delivery land straight in your own inventory.
-            </p>
+            <Logo size={28} />
+            {comingSoon ? (
+              // Before launch: what it will do, with no fees or payment terms that aren't set yet.
+              <p className="mt-3 max-w-md text-sm text-neutral-600">
+                The Procurepaddy marketplace is opening for Nigerian businesses — kitchens, retailers,
+                pharmacies and site teams — and every order will land straight in your own inventory.
+              </p>
+            ) : (
+              <p className="mt-3 max-w-md text-sm text-neutral-600">
+                The Procurepaddy marketplace supplies Nigerian businesses — kitchens, retailers,
+                pharmacies and site teams — with the stock they run on, from ProcurePal and other
+                suppliers. Order at wholesale prices, pay on delivery or up front, and watch every
+                delivery land straight in your own inventory.
+              </p>
+            )}
           </div>
 
-          <div>
-            <h2 className="text-sm font-semibold text-neutral-900">For businesses</h2>
-            <ul className="mt-3 flex flex-col gap-2 text-sm text-neutral-600">
-              <li className="flex items-start gap-2">
-                <Warehouse className="mt-0.5 h-4 w-4 shrink-0 text-primary-500" aria-hidden="true" />
-                Deliveries post into your inventory as incoming stock, then become on-hand stock the
-                moment you confirm receipt.
-              </li>
-              <li className="flex items-start gap-2">
-                <Truck className="mt-0.5 h-4 w-4 shrink-0 text-primary-500" aria-hidden="true" />
-                Free delivery on orders over {formatNairaWhole(settings.freeDeliveryThreshold)}.
-              </li>
-              {settings.payOnDeliveryEnabled && (
+          {!comingSoon && (
+            <div>
+              <h2 className="text-sm font-semibold text-neutral-900">For businesses</h2>
+              <ul className="mt-3 flex flex-col gap-2 text-sm text-neutral-600">
                 <li className="flex items-start gap-2">
-                  <Headset className="mt-0.5 h-4 w-4 shrink-0 text-primary-500" aria-hidden="true" />
-                  Pay on delivery available on approved accounts.
+                  <Warehouse className="mt-0.5 h-4 w-4 shrink-0 text-primary-500" aria-hidden="true" />
+                  Deliveries post into your inventory as incoming stock, then become on-hand stock the
+                  moment you confirm receipt.
                 </li>
-              )}
-            </ul>
-          </div>
+                <li className="flex items-start gap-2">
+                  <Truck className="mt-0.5 h-4 w-4 shrink-0 text-primary-500" aria-hidden="true" />
+                  Free delivery on orders over {formatNairaWhole(settings.freeDeliveryThreshold)}.
+                </li>
+                {settings.payOnDeliveryEnabled && (
+                  <li className="flex items-start gap-2">
+                    <Headset className="mt-0.5 h-4 w-4 shrink-0 text-primary-500" aria-hidden="true" />
+                    Pay on delivery available on approved accounts.
+                  </li>
+                )}
+              </ul>
+            </div>
+          )}
 
           <div>
             <h2 className="text-sm font-semibold text-neutral-900">Get started</h2>
             <ul className="mt-3 flex flex-col gap-2 text-sm">
-              <li>
-                <Link to={marketplacePaths.home} className="text-neutral-600 hover:text-primary-600 hover:underline">
-                  Browse the catalog
-                </Link>
-              </li>
+              {!comingSoon && (
+                <li>
+                  <Link to={marketplacePaths.home} className="text-neutral-600 hover:text-primary-600 hover:underline">
+                    Browse the catalog
+                  </Link>
+                </li>
+              )}
               {isAuthenticated ? (
                 <>
                   <li>
@@ -67,11 +80,13 @@ export function StorefrontFooter() {
                       My workspace
                     </Link>
                   </li>
-                  <li>
-                    <Link to="/app/orders" className="text-neutral-600 hover:text-primary-600 hover:underline">
-                      My orders
-                    </Link>
-                  </li>
+                  {!comingSoon && (
+                    <li>
+                      <Link to="/app/orders" className="text-neutral-600 hover:text-primary-600 hover:underline">
+                        My orders
+                      </Link>
+                    </li>
+                  )}
                 </>
               ) : (
                 <>
@@ -118,9 +133,9 @@ export function StorefrontFooter() {
         </div>
 
         <div className="mt-10 flex flex-col gap-2 border-t border-neutral-200 pt-6 text-xs text-neutral-500 sm:flex-row sm:items-center sm:justify-between">
-          <p>© {CURRENT_YEAR} ProcurePal. All prices in Nigerian naira (₦). Delivery within Nigeria only.</p>
           <p>
-            Powered by <span className="font-medium text-neutral-600">Procurepaddy</span>
+            © {CURRENT_YEAR} Procurepaddy.
+            {comingSoon ? '' : ' All prices in Nigerian naira (₦). Delivery within Nigeria only.'}
           </p>
         </div>
       </div>

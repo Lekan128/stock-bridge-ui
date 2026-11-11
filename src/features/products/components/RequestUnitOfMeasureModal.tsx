@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import { productsApi } from '@/features/products/api/productsApi'
 import { requestUnitOfMeasureSchema, type RequestUnitOfMeasureFormValues } from '@/features/products/schemas'
@@ -51,7 +51,7 @@ export function RequestUnitOfMeasureModal({ onClose, onSuccess }: RequestUnitOfM
   }
 
   return (
-    <Modal
+    <Sheet
       open
       onClose={onClose}
       title="Request a new unit"
@@ -61,7 +61,7 @@ export function RequestUnitOfMeasureModal({ onClose, onSuccess }: RequestUnitOfM
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
+          <Button variant="action" onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
             Send request
           </Button>
         </>
@@ -91,6 +91,6 @@ export function RequestUnitOfMeasureModal({ onClose, onSuccess }: RequestUnitOfM
         </div>
         <FormError message={formError} />
       </form>
-    </Modal>
+    </Sheet>
   )
 }

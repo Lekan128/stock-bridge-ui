@@ -144,6 +144,9 @@ export const copy = {
     noProductsAction: 'Go to products',
     supplierEmpty: (supplierName: string) => `${supplierName} has no products yet`,
     supplierEmptyAction: 'Show all products',
+    /** Receiving a purchase order: its own lines first, then the rest of the catalog. */
+    onOrder: (poNumber: string) => `Check against ${poNumber} — change any number that's different from what came`,
+    anythingElse: 'Anything else that came',
     noMatch: (query: string) => `Nothing matches “${query}”.`,
     loadFailed: "We couldn't load your products.",
     hiddenTyped: (count: number) =>

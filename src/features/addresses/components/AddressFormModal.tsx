@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import { NIGERIAN_STATES } from '@/constants/nigerianStates'
 import { addressesApi } from '@/features/addresses/api/addressesApi'
@@ -157,17 +157,17 @@ export function AddressFormModal({
   }
 
   return (
-    <Modal
+    <Sheet
       open
       onClose={onClose}
       title={isEdit ? copy.editTitle : copy.addTitle}
-      size="lg"
+      size="md"
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button type="submit" form="address-form" loading={isSubmitting}>
+          <Button variant="action" type="submit" form="address-form" loading={isSubmitting}>
             {isEdit ? 'Save changes' : copy.addSubmit}
           </Button>
         </>
@@ -282,6 +282,6 @@ export function AddressFormModal({
 
         <FormError message={formError} />
       </form>
-    </Modal>
+    </Sheet>
   )
 }

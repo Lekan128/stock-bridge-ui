@@ -1,5 +1,7 @@
 import { ArrowLeft, FileText, Landmark, MapPin, Mail, Package, Phone, ReceiptText } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { PERMISSIONS } from '@/auth/permissions'
+import { useAuth } from '@/auth/useAuth'
 import { buttonClassName } from '@/components/Button'
 import { ErrorState } from '@/components/ErrorState'
 import { EmptyState } from '@/components/EmptyState'
@@ -22,6 +24,9 @@ export function VendorDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { detail, loading, error, refetch } = useVendor(id)
+  const { user } = useAuth()
+  const canOrder =
+    user?.type === 'tenant' && (user.permissions.includes(PERMISSIONS.CREATE_PURCHASE_ORDER) || user.permissions.includes(PERMISSIONS.SEND_PURCHASE_ORDER))
 
   if (loading) {
     return (
@@ -88,10 +93,17 @@ export function VendorDetailPage() {
           </div>
         </div>
 
-        <Link to={`/app/vendors/${vendor.id}/purchases`} className={buttonClassName('secondary')}>
-          <ReceiptText className="h-4 w-4" aria-hidden="true" />
-          Purchase history
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          {canOrder && (
+            <Link to={`/app/purchase-orders/new?vendor=${vendor.id}`} className={buttonClassName('action')}>
+              New purchase order
+            </Link>
+          )}
+          <Link to={`/app/vendors/${vendor.id}/purchases`} className={buttonClassName('secondary')}>
+            <ReceiptText className="h-4 w-4" aria-hidden="true" />
+            Purchase history
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">

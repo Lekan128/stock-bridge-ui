@@ -1,5 +1,13 @@
+import { useRecordsHere } from '@/features/branches/useRecordsHere'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Truck, X, Zap } from 'lucide-react'
+import { ArrowLeftRight, MessageSquarePlus, PackagePlus, Truck, X } from 'lucide-react'
+import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
+import { hasAreas } from '@/features/branches/areas'
+import { myAreas, useWorkArea } from '@/features/branches/workArea'
+import { ReceivedSheet } from '@/features/moves/ReceivedSheet'
+import { useMoveSheet } from '@/features/moves/useMoveSheet'
+import { useMoveIntent } from '@/features/moves/moveIntent'
+import { BranchLevelDialog } from '@/features/branches/BranchLevelDialog'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
@@ -25,7 +33,7 @@ import {
 } from '@/features/products/components/ProductTable'
 import { AttentionLine, type AttentionItem } from '@/features/products/components/AttentionLine'
 import { InventoryActionBar } from '@/features/products/components/InventoryActionBar'
-import { InventoryBar, type InventoryBarProps, type StockLevelFilter } from '@/features/products/components/InventoryBar'
+import { InventoryActions, InventoryBar, type InventoryBarProps, type StockLevelFilter } from '@/features/products/components/InventoryBar'
 import { useStockActions } from '@/features/products/hooks/useStockActions'
 import type { CardSelection } from '@/features/catalog/CatalogProductList'
 import { useDataIssuesNotice } from '@/features/products/quality/useDataIssuesNotice'
@@ -42,6 +50,7 @@ import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import type { PriceFilter } from '@/features/catalog/types'
 import { PriceSheetLink } from '@/features/selling/components/PriceSheetLink'
 import { SellingStaffNotice } from '@/features/selling/components/SellingStaffNotice'
+import { WaitingMovesLine } from '@/features/moves/WaitingMovesLine'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { StockWorthLine } from '@/features/selling/components/StockWorthLine'
 import { downloadBlob } from '@/utils/downloadBlob'
@@ -115,8 +124,44 @@ export function ProductListPage() {
    * still sees the affordance that leads to bulk stock-in.
    */
   const canImport = canManageProducts || permissions.includes(PERMISSIONS.MANAGE_INVENTORY)
-  const canStockIn = permissions.includes(PERMISSIONS.STOCK_IN)
-  const canStockOut = permissions.includes(PERMISSIONS.STOCK_OUT)
+  // At a branch the person only views, nothing here records (UX §4.1, "View only").
+  const recordsHere = useRecordsHere()
+  // Bringing stock in from a sheet records it - not at a branch the person only views.
+  const canStockInSheet = canImport && recordsHere
+  const canStockIn = recordsHere && permissions.includes(PERMISSIONS.STOCK_IN)
+  const canStockOut = recordsHere && permissions.includes(PERMISSIONS.STOCK_OUT)
+  // Count stock (the "⋯" page) corrects figures, as the product page's Count does: whoever manages the stock here.
+  const canCount = recordsHere && permissions.includes(PERMISSIONS.MANAGE_INVENTORY)
+  // Select rows → Send (MULTI_BRANCH_UX_PLAN.md §5.4): from the branch this phone is at.
+  const branch = useOptionalWorkingBranch()
+  const canSendSelected =
+    (branch?.isMultiBranch ?? false) &&
+    permissions.includes(PERMISSIONS.SEND_STOCK) &&
+    branch?.working != null &&
+    branch.recordable.some((entry) => entry.id === branch.working?.id)
+  // A low-stock level for the selection at this branch (Phase 4): at a branch, MANAGE_PRODUCTS.
+  const levelBranch = branch?.isMultiBranch && !branch.isAll && canManageProducts ? branch.working : null
+  const [settingLevel, setSettingLevel] = useState(false)
+  // All branches, on a laptop: every branch's figure in a By branch column (UX §5.1).
+  const offersByBranch = (branch?.isMultiBranch ?? false) && (branch?.isAll ?? false)
+  const [byBranchChosen, setByBranch] = useState(false)
+  const byBranch = offersByBranch && byBranchChosen
+  // Move stock between this branch's areas (STOCK_AREAS_PART_2.md): done every day where there are areas,
+  // so it sits on the list itself, and the selection can be moved too.
+  const canMove =
+    canStockOut &&
+    branch?.working != null &&
+    !branch.isAll &&
+    hasAreas(branch.working) &&
+    branch.recordable.some((entry) => entry.id === branch.working?.id)
+  const canSelect = canImport || canSendSelected || canMove || levelBranch != null
+  const moveSheet = useMoveSheet()
+  // Give back or report what arrived (Part 6): for anyone who works in an area of this branch.
+  const givesHere =
+    (canStockIn || canStockOut) && branch?.working != null && !branch.isAll && hasAreas(branch.working) && myAreas(branch.working).length > 0
+  const [givenOpen, setGivenOpen] = useState(false)
+  // One button, worded for who's holding the phone (Part 5): Ask for stock for a cook, Move stock otherwise.
+  const moveIntent = useMoveIntent()
   const [searchParams, setSearchParams] = useSearchParams()
   const { search: committedSearch, statusFilter, categoryFilter, stockLevelFilter, priceFilter: requestedPriceFilter, sort, page } =
     readListState(searchParams)
@@ -176,8 +221,20 @@ export function ProductListPage() {
   const categoryList = useCompanyCategories(true)
 
   const online = useOnlineStatus()
+  // In an area view (Part 3.6) the list is the area's products; the rest are one tap away.
+  const [showOthers, setShowOthers] = useState(false)
+  const areaView = useWorkArea(branch && !branch.isAll ? branch.working : null)
+  const whereShown = areaView.area ? `the ${areaView.area.name}` : areaView.viewAreaIds ? 'your areas' : null
   const catalogList = useCatalogList(
-    { search: committedSearch, status: statusFilter, categoryId: categoryFilter, stockStatus: stockLevelFilter, price: priceFilter, sort },
+    {
+      search: committedSearch,
+      status: statusFilter,
+      categoryId: categoryFilter,
+      stockStatus: stockLevelFilter,
+      price: priceFilter,
+      sort,
+      showOthers: whereShown ? showOthers : undefined,
+    },
     onDevice,
   )
   const [renderedProducts, setRenderedProducts] = useState<Product[]>([])
@@ -198,7 +255,8 @@ export function ProductListPage() {
   const { data, loading, error, refetch } = server
   const showingSaved = onDevice ? (!online || catalog.behind) && catalog.syncedAt != null : server.showingSaved
   const updatedAt = onDevice ? catalog.syncedAt : server.updatedAt
-  const retryRefresh = onDevice ? () => void syncCatalog() : refetch
+  // A promise, so "Trying…" lasts as long as the attempt does.
+  const retryRefresh = onDevice ? () => syncCatalog() : refetch
 
   // Quick stock in / out from a row or card (C1, U2): the same sheets and Undo as the product page.
   // The device catalogue and caches update through the outbox; the server's paged list is refetched.
@@ -285,7 +343,7 @@ export function ProductListPage() {
   })
 
   /** Phone selection: a long press starts it with that card ticked. */
-  const cardSelection: CardSelection | undefined = canImport
+  const cardSelection: CardSelection | undefined = canSelect
     ? {
         active: selecting,
         selectedIds,
@@ -312,6 +370,14 @@ export function ProductListPage() {
    * query string so the sheet downloaded on the next screen is pre-filled with exactly these
    * products — contract §3's `productIds`, which wins over `filter`.
    */
+  function handleSendSelected() {
+    navigate(`/app/transfers/send?products=${selectedIds.join(',')}`)
+  }
+
+  function handleMoveSelected() {
+    moveSheet.open(selectedIds)
+  }
+
   function handleStockInSelected() {
     navigate(`/app/products/import/new?kind=STOCK_IN&productIds=${selectedIds.join(',')}`)
   }
@@ -433,13 +499,24 @@ export function ProductListPage() {
       : {}),
     onClearFilters: () => updateListState({ status: null, category: null, price: null }),
     canManageProducts,
-    canRecordDelivery: permissions.includes(PERMISSIONS.MANAGE_INVENTORY),
-    onQuickMode: canStockIn || canStockOut || permissions.includes(PERMISSIONS.MANAGE_INVENTORY) ? () => navigate('/app/quick') : undefined,
+    canRecordDelivery: recordsHere && permissions.includes(PERMISSIONS.MANAGE_INVENTORY),
+    onQuickMode:
+      canStockIn || canStockOut || (recordsHere && permissions.includes(PERMISSIONS.MANAGE_INVENTORY)) ? () => navigate('/app/quick') : undefined,
     onAddProduct: () => setAddProductOpen(true),
     onBulkUpload: () => navigate('/app/products/import'),
     onRecordDelivery: () => navigate('/app/products/receive'),
+    onMoveStock: canMove ? () => moveSheet.open() : undefined,
+    moveLabel: moveIntent,
+    // The other way, in "⋯" (owner, 2026-11-01: "I can't find Ask"): Ask for stock beside Move stock, and back.
+    onOtherMove: canMove
+      ? moveIntent.intent === 'move'
+        ? { label: 'Ask for stock', onSelect: () => moveSheet.open([], 'ask') }
+        : { label: 'Move stock', onSelect: () => moveSheet.open([], 'move') }
+      : undefined,
+    onGiveBack: givesHere ? () => setGivenOpen(true) : undefined,
+    // A list to count down, not a button on every row (owner, 2026-11-10).
+    onCountStock: canCount ? () => navigate('/app/products/count') : undefined,
     onRecordSale: recordsSales && canStockOut ? () => navigate('/app/sell') : undefined,
-    onExpectedDeliveries: () => navigate('/app/products/expected'),
     onExport: () => void handleExport(),
     onSkuSettings: () => navigate('/app/products/sku-settings'),
     onManageCategories: () => setManageCategoriesOpen(true),
@@ -448,24 +525,21 @@ export function ProductListPage() {
   return (
     // Room at the bottom on a phone for the action bar pinned there.
     <div className="flex flex-col gap-4 pb-20 md:pb-0">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold text-neutral-900">Inventory</h1>
-        {/* On a phone, quick mode is one tap from the list (C4); on a laptop it is in "⋯". */}
-        {barProps.onQuickMode && (
-          <button
-            type="button"
-            onClick={barProps.onQuickMode}
-            className="inline-flex h-10 items-center gap-1.5 rounded-md border border-neutral-200 bg-white px-3 text-sm font-medium text-neutral-700 md:hidden"
-          >
-            <Zap className="h-4 w-4" aria-hidden="true" />
-            Quick mode
-          </button>
-        )}
+      {/* On a laptop the title and the screen's actions share a row (owner, 2026-11-01). On a phone the top bar
+          already says "Inventory", so the heading is for screen readers and the actions are in the bar at the bottom. */}
+      <div className="md:flex md:items-center md:justify-between md:gap-3">
+        <h1 className="sr-only text-2xl font-semibold text-neutral-900 md:not-sr-only">Inventory</h1>
+        <div className="hidden shrink-0 items-center gap-2 md:flex">
+          <InventoryActions {...barProps} />
+        </div>
       </div>
 
       <SavedDataNote showing={showingSaved} updatedAt={updatedAt} subject="stock levels" onRetry={retryRefresh} />
 
       <SellingStaffNotice />
+
+      {/* Moves waiting for this person to confirm (Part 4): the same line as quick mode's, on a laptop too. */}
+      <WaitingMovesLine />
 
       {/* The first full download, on a catalogue big enough for it to take a moment. Smaller ones
           finish before this could be read. */}
@@ -486,6 +560,19 @@ export function ProductListPage() {
 
       <AttentionLine items={attention} />
 
+      {offersByBranch && (
+        <button
+          type="button"
+          aria-pressed={byBranch}
+          onClick={() => setByBranch((on) => !on)}
+          className={`hidden min-h-9 items-center self-start rounded-md border px-3 text-sm font-medium md:inline-flex ${
+            byBranch ? 'border-primary-300 bg-primary-50 text-primary-800' : 'border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50'
+          }`}
+        >
+          By branch
+        </button>
+      )}
+
       {/* The skeleton is for the FIRST load only. After that the rows on screen stay put while the
           next answer loads — dimmed, with a thin bar — instead of the whole table unmounting into
           a skeleton on every keystroke, chip and page turn. */}
@@ -501,15 +588,27 @@ export function ProductListPage() {
           canManageProducts={canManageProducts}
           onBulkUpload={() => navigate('/app/products/import')}
           onShowAll={() => handleStatusFilterChange('all')}
-          selection={canImport ? { selectedIds, onToggle: toggleSelected, onToggleAll: toggleAllOnPage } : undefined}
+          whereShown={whereShown}
+          showOthers={showOthers}
+          onShowOthers={setShowOthers}
+          selection={canSelect ? { selectedIds, onToggle: toggleSelected, onToggleAll: toggleAllOnPage } : undefined}
           selectionBar={
-            canImport && selectedIds.length > 0 ? (
-              <SelectionBar count={selectedIds.length} onStockIn={handleStockInSelected} onClear={() => setSelectedIds([])} />
+            canSelect && selectedIds.length > 0 ? (
+              <SelectionBar
+                count={selectedIds.length}
+                onStockIn={canStockInSheet ? handleStockInSelected : undefined}
+                onSend={canSendSelected ? handleSendSelected : undefined}
+                onMove={canMove ? handleMoveSelected : undefined}
+                moveLabel={moveIntent}
+                onSetLevel={levelBranch ? () => setSettingLevel(true) : undefined}
+                onClear={() => setSelectedIds([])}
+              />
             ) : null
           }
           onRenderedChange={setRenderedProducts}
           quickActions={quickActions}
           cardSelection={cardSelection}
+          byBranch={byBranch}
         />
       )}
 
@@ -567,8 +666,16 @@ export function ProductListPage() {
                 ))}
               </div>
               {/* On a phone, selection lives in the bottom bar instead (C1, U4). */}
-              {canImport && selectedIds.length > 0 && (
-                <SelectionBar count={selectedIds.length} onStockIn={handleStockInSelected} onClear={() => setSelectedIds([])} />
+              {canSelect && selectedIds.length > 0 && (
+                <SelectionBar
+                count={selectedIds.length}
+                onStockIn={canStockInSheet ? handleStockInSelected : undefined}
+                onSend={canSendSelected ? handleSendSelected : undefined}
+                onMove={canMove ? handleMoveSelected : undefined}
+                moveLabel={moveIntent}
+                onSetLevel={levelBranch ? () => setSettingLevel(true) : undefined}
+                onClear={() => setSelectedIds([])}
+              />
               )}
               <div className="hidden overflow-hidden rounded-lg border border-neutral-200 bg-white md:block">
                 <ProductTable
@@ -577,11 +684,12 @@ export function ProductListPage() {
                   onSortChange={handleSortChange}
                   incomingFor={incomingFor}
                   selection={
-                    canImport
+                    canSelect
                       ? { selectedIds, onToggle: toggleSelected, onToggleAll: toggleAllOnPage }
                       : undefined
                   }
                   quickActions={quickActions}
+                  byBranch={byBranch}
                 />
               </div>
             </>
@@ -602,7 +710,8 @@ export function ProductListPage() {
           <>
             {' '}· <Kbd>o</Kbd> stock out
           </>
-        )}{' '}
+        )}
+{' '}
         · <Kbd>Enter</Kbd> open
       </p>
 
@@ -610,8 +719,12 @@ export function ProductListPage() {
         {...barProps}
         selecting={selecting}
         selectedCount={selectedIds.length}
-        canStockInSelected={canImport}
+        canStockInSelected={canStockInSheet}
         onStockInSelected={handleStockInSelected}
+        canSendSelected={canSendSelected}
+        onSendSelected={handleSendSelected}
+        onMoveSelected={canMove ? handleMoveSelected : undefined}
+        onSetLevelSelected={levelBranch ? () => setSettingLevel(true) : undefined}
         onDoneSelecting={() => {
           setSelecting(false)
           setSelectedIds([])
@@ -619,6 +732,21 @@ export function ProductListPage() {
       />
 
       {stockActions.sheet}
+      {moveSheet.sheet}
+      {givenOpen && <ReceivedSheet onClose={() => setGivenOpen(false)} />}
+
+      {settingLevel && levelBranch && (
+        <BranchLevelDialog
+          branch={levelBranch}
+          productIds={selectedIds}
+          onClose={() => setSettingLevel(false)}
+          onDone={() => {
+            setSettingLevel(false)
+            setSelectedIds([])
+            setSelecting(false)
+          }}
+        />
+      )}
 
       <ManageCategoriesModal
         open={manageCategoriesOpen && canManageProducts}
@@ -637,17 +765,60 @@ export function ProductListPage() {
 }
 
 /** "3 products selected · Stock in selected · Clear" above the desktop table. */
-function SelectionBar({ count, onStockIn, onClear }: { count: number; onStockIn: () => void; onClear: () => void }) {
+function SelectionBar({
+  count,
+  onStockIn,
+  onSend,
+  onMove,
+  moveLabel,
+  onSetLevel,
+  onClear,
+}: {
+  count: number
+  onStockIn?: () => void
+  /** Send the selected products to another branch (MULTI_BRANCH_UX_PLAN.md §5.4). */
+  onSend?: () => void
+  /** Move them between this branch's areas (STOCK_AREAS_PART_2.md). */
+  onMove?: () => void
+  /** Ask or Move, as the one button reads for this person (Part 5). */
+  moveLabel?: { intent: 'move' | 'ask' }
+  /** One low-stock level for them at this branch (Phase 4). */
+  onSetLevel?: () => void
+  onClear: () => void
+}) {
   return (
     <div className="hidden items-center justify-between gap-3 rounded-lg border border-primary-200 bg-primary-50 px-4 py-2.5 md:flex">
       <p className="text-sm font-medium text-primary-900">
         {count} product{count === 1 ? '' : 's'} selected
       </p>
       <div className="flex items-center gap-2">
-        <Button variant="secondary" onClick={onStockIn}>
-          <Truck className="h-4 w-4" aria-hidden="true" />
-          Stock in selected
-        </Button>
+        {onStockIn && (
+          <Button variant="secondary" onClick={onStockIn}>
+            <PackagePlus className="h-4 w-4" aria-hidden="true" />
+            Stock in selected
+          </Button>
+        )}
+        {onSend && (
+          <Button variant="secondary" onClick={onSend}>
+            <Truck className="h-4 w-4" aria-hidden="true" />
+            Send to another branch
+          </Button>
+        )}
+        {onMove && (
+          <Button variant="secondary" onClick={onMove}>
+            {moveLabel?.intent === 'ask' ? (
+              <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
+            )}
+            {moveLabel?.intent === 'ask' ? 'Ask for these' : 'Move to an area'}
+          </Button>
+        )}
+        {onSetLevel && (
+          <Button variant="secondary" onClick={onSetLevel}>
+            Set low-stock level
+          </Button>
+        )}
         <button
           type="button"
           onClick={onClear}
@@ -672,11 +843,16 @@ interface OnDeviceListProps {
   canManageProducts: boolean
   onBulkUpload: () => void
   onShowAll: () => void
+  /** In an area view: "the Kitchen" / "your areas" (Part 3.6); null otherwise. */
+  whereShown: string | null
+  showOthers: boolean
+  onShowOthers: (show: boolean) => void
   selection?: ProductTableSelection
   selectionBar: ReactNode
   onRenderedChange: (products: Product[]) => void
   quickActions?: ProductQuickActions
   cardSelection?: CardSelection
+  byBranch: boolean
 }
 
 /**
@@ -694,15 +870,30 @@ function OnDeviceList({
   canManageProducts,
   onBulkUpload,
   onShowAll,
+  whereShown,
+  showOthers,
+  onShowOthers,
   selection,
   selectionBar,
   onRenderedChange,
   quickActions,
   cardSelection,
+  byBranch,
 }: OnDeviceListProps) {
   if (!list.ready) return <ProductListSkeleton />
   if (list.catalogSize === 0) {
     return <EmptyProductsState canManageProducts={canManageProducts} onBulkUpload={onBulkUpload} />
+  }
+  // The area holds none of the catalogue yet: say so, with the rest one tap away.
+  if (list.total === 0 && whereShown && list.elsewhere > 0 && !committedSearch) {
+    return (
+      <div className="flex flex-col items-center gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-10 text-center text-sm text-neutral-600">
+        <p>Nothing in {whereShown} yet. Move stock here, or stock it in.</p>
+        <Button variant="secondary" onClick={() => onShowOthers(true)}>
+          Show the other {list.elsewhere} {list.elsewhere === 1 ? 'product' : 'products'}
+        </Button>
+      </div>
+    )
   }
   if (list.total === 0) {
     const onlyInactiveExist = isDefaultView && statusFilter === 'active' && list.activeCount === 0
@@ -734,7 +925,27 @@ function OnDeviceList({
         onRenderedChange={onRenderedChange}
         quickActions={quickActions}
         cardSelection={cardSelection}
+        byBranch={byBranch}
       />
+      {/* An area view lists the area's products; the others are counted here, one tap away (Part 3.6). */}
+      {whereShown && !committedSearch && (list.elsewhere > 0 || showOthers) && (
+        <p className="text-sm text-neutral-600" data-elsewhere>
+          {showOthers ? (
+            <>Also showing products that aren't in {whereShown}. </>
+          ) : (
+            <>
+              {list.elsewhere} other {list.elsewhere === 1 ? "product isn't" : "products aren't"} in {whereShown}.{' '}
+            </>
+          )}
+          <button
+            type="button"
+            onClick={() => onShowOthers(!showOthers)}
+            className="-my-3 inline-flex min-h-11 items-center font-medium text-primary-700 hover:underline"
+          >
+            {showOthers ? 'Hide them' : 'Show them'}
+          </button>
+        </p>
+      )}
     </div>
   )
 }

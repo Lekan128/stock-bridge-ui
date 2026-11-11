@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import { marketplaceAdminApi } from '@/features/marketplace/api/marketplaceAdminApi'
 import {
@@ -79,7 +79,7 @@ export function CategoryFormModal({ category, categories, onClose, onSaved }: Ca
   }
 
   return (
-    <Modal
+    <Sheet
       open
       onClose={onClose}
       title={editing ? 'Edit category' : 'New category'}
@@ -89,7 +89,7 @@ export function CategoryFormModal({ category, categories, onClose, onSaved }: Ca
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
+          <Button variant="action" onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
             {editing ? 'Save category' : 'Create category'}
           </Button>
         </>
@@ -153,6 +153,6 @@ export function CategoryFormModal({ category, categories, onClose, onSaved }: Ca
 
         <FormError message={formError} />
       </form>
-    </Modal>
+    </Sheet>
   )
 }

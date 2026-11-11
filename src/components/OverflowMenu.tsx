@@ -16,6 +16,8 @@ export interface OverflowMenuProps {
   /** Read out for the "⋯" button: "More actions for Mama Gold Rice". */
   label?: string
   align?: 'left' | 'right'
+  /** `above` for a "⋯" in a bar along the bottom of the screen, whose menu would otherwise open off it. */
+  side?: 'below' | 'above'
 }
 
 /**
@@ -23,7 +25,7 @@ export interface OverflowMenuProps {
  * header carries its main action and nothing loud beside it. Arrow keys move between items,
  * Escape closes and puts focus back on the button.
  */
-export function OverflowMenu({ items, label = 'More actions', align = 'right' }: OverflowMenuProps) {
+export function OverflowMenu({ items, label = 'More actions', align = 'right', side = 'below' }: OverflowMenuProps) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -72,9 +74,9 @@ export function OverflowMenu({ items, label = 'More actions', align = 'right' }:
           id={menuId}
           role="menu"
           aria-label={label}
-          className={`absolute z-30 mt-2 min-w-48 rounded-md border border-neutral-200 bg-white py-1 shadow-paper ${
+          className={`absolute z-30 min-w-48 rounded-md border border-neutral-200 bg-white py-1 shadow-paper ${
             align === 'right' ? 'right-0' : 'left-0'
-          }`}
+          } ${side === 'above' ? 'bottom-full mb-2' : 'mt-2'}`}
           onKeyDown={(event) => {
             const index = itemRefs.current.indexOf(document.activeElement as HTMLButtonElement)
             if (event.key === 'ArrowDown') {

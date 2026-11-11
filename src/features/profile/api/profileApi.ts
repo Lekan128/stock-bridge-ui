@@ -7,5 +7,8 @@ export const profileApi = {
   /** REPLACE semantics — the payload must always carry all five fields. */
   update: (payload: UpdateProfilePayload) => api.put<Profile>('/api/me', payload).then((r) => r.data),
 
+  /** Quick mode's buttons (owner, 2026-11-01): one to four, or null for the usual ones. */
+  setQuickModeTabs: (tabs: string[] | null) => api.put<Profile>('/api/me/quick-mode', { tabs }).then((r) => r.data),
+
   changePassword: (payload: ChangePasswordPayload) => api.post<void>('/api/me/password', payload).then((r) => r.data),
 }

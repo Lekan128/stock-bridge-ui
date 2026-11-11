@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/Button'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import type { VendorApplication } from '@/features/admin/types'
 import { slugify } from '@/utils/slugify'
@@ -81,10 +81,10 @@ export function ApproveVendorDialog({
     !submitting
 
   return (
-    <Modal
+    <Sheet
       open={application !== null}
       onClose={onCancel}
-      size="lg"
+      size="md"
       title={application ? `Approve ${application.businessName}` : 'Approve application'}
       footer={
         <>
@@ -92,7 +92,7 @@ export function ApproveVendorDialog({
             Cancel
           </Button>
           <Button
-            variant="primary"
+            variant="action"
             disabled={!canSubmit}
             loading={submitting}
             onClick={() =>
@@ -122,6 +122,7 @@ export function ApproveVendorDialog({
       <div className="mt-4 flex flex-col gap-4">
         <TextField
           label="Username"
+          autoComplete="off"
           name="vendor-username"
           value={username}
           onChange={(event) => setUsername(event.target.value)}
@@ -196,6 +197,6 @@ export function ApproveVendorDialog({
           </p>
         </div>
       </div>
-    </Modal>
+    </Sheet>
   )
 }

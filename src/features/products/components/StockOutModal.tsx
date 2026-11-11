@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useSheetBranch } from '@/features/branches/useSheetBranch'
 import { useEffect, useState } from 'react'
 import { AlertTriangle, ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
@@ -13,22 +14,22 @@ import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeas
 import { stockOutSchema, type StockOutFormValues } from '@/features/products/schemas'
 import type { OutReason, Product, StockOutPayload } from '@/features/products/types'
 import {
-  UNIT_COPY,
   formatEnteredAndBase,
   formatQuantity,
-  formatQuantityInUnit,
+  formatRestated,
   howYouCountIt,
   roundsToZeroMessage,
+  UNIT_COPY,
   unitNoun,
 } from '@/features/products/unitCopy'
 import {
   convertsCleanly,
-  fromBaseQuantity,
   productsOwnUnits,
   stockUnitLabel,
   stockUnitOption,
   toBaseQuantity,
   unitOptionsForProduct,
+  usedInOption,
 } from '@/features/products/unitSet'
 import { StockReceipt } from '@/features/products/components/StockReceipt'
 import { OutReasonChooser, OutReasonLink } from '@/features/stock/components/OutReasonField'
@@ -38,6 +39,7 @@ import { formatMoney, parseMoneyInput } from '@/features/selling/money'
 import { usualAmount } from '@/features/selling/sale/saleLine'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { submitStockWrite } from '@/features/outbox/outboxStore'
+import { SendFromOtherBranch } from '@/features/transfers/SendFromOtherBranch'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
 
@@ -161,6 +163,8 @@ function newRowKey(): string {
  * was guessing is a strange thing to hand someone.
  */
 export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOutModalProps) {
+  // Where this goes out from (MULTI_BRANCH_UX_PLAN.md §5.2): in the title, or asked first in "All branches".
+  const sheetBranch = useSheetBranch()
   const { options: unitOfMeasureOptions } = useUnitOfMeasureOptions()
 
   const [choosingLots, setChoosingLots] = useState(false)
@@ -254,7 +258,9 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
    * away in the toggle, and a code the user has picked (`unitCode`) always wins over this.
    */
   const selectedOption =
-    (unitCode == null ? undefined : unitOptions.find((option) => option.label === unitCode)) ?? stockUnitOption(unitOptions)
+    (unitCode == null ? undefined : unitOptions.find((option) => option.label === unitCode)) ??
+    // The product's usual unit for using it, the cook's Derica (UNITS_PLAN.md Part 2), else the stock unit.
+    usedInOption(product, unitOptions, stockUnitOption(unitOptions))
   const stockUnitText = stockUnitLabel(unitOptions)
 
   /**
@@ -267,8 +273,11 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
    * rounding it to 20 would quietly lose 10 kg.
    */
   const packOption = unitOptions.find((option) => option.isPack) ?? null
-  const onHandInPacks =
-    packOption == null ? null : formatQuantityInUnit(fromBaseQuantity(product.quantityOnHand, packOption), packOption)
+  // Of what the sheet's branch and area hold, said on the line under the title (Part 1).
+  const onHandHere = sheetBranch.onHand(product)
+  // Said in the product's usual unit for using it when it has one, the cook's dericas (UNITS_PLAN.md Part 2).
+  const restateIn = usedInOption(product, unitOptions, packOption ?? stockUnitOption(unitOptions))
+  const onHandInPacks = restateIn.isStockUnit ? null : formatRestated(onHandHere, restateIn)
 
   /**
    * What the unit control actually offers: the product's own ways of counting (its stock unit and
@@ -437,9 +446,10 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
         productId: product.id,
         productName: product.name,
         summary: reason ? `${quantityBothWays} · ${outReasonLabel(reason)}` : quantityBothWays,
-        payload,
+        payload: { ...payload, branchId: sheetBranch.branchId, areaId: sheetBranch.areaId },
         baseDelta: -baseQuantity,
       })
+      sheetBranch.remember()
       if (outcome.status === 'sent') setResult(outcome.response as StockOutResponse)
       else {
         setQueued(true)
@@ -478,14 +488,25 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
       open
       onClose={onClose}
       size={choosingLots ? 'xl' : 'md'}
-      title={step === 'form' ? 'Stock out' : queued ? 'Saved on this phone' : result ? 'Stock out recorded' : 'Recording stock out'}
+      // What and where before anything is typed (STOCK_SHEETS_AND_AREA_COUNT_PLAN.md Part 1): the product in the
+      // title, the place and its figure on the line under it - the Kitchen can only give out what it has.
+      title={
+        step === 'form'
+          ? `Stock out · ${product.name}`
+          : queued
+            ? 'Saved on this phone'
+            : result
+              ? `Stock out recorded · ${product.name}`
+              : `Recording stock out · ${product.name}`
+      }
+      subtitle={step === 'form' ? sheetBranch.line(formatQuantity(onHandHere, stockUnitText), onHandInPacks) : undefined}
       footer={
         step === 'form' ? (
           <>
             <Button variant="secondary" onClick={onClose}>
               Cancel
             </Button>
-            <Button variant="action" onClick={handleSubmit(() => void submit())} loading={submitting} disabled={roundsToZero}>
+            <Button variant="action" onClick={handleSubmit(() => void submit())} loading={submitting} disabled={roundsToZero || sheetBranch.missing}>
               Confirm
             </Button>
           </>
@@ -501,14 +522,6 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
     >
       {step === 'form' && (
         <form onSubmit={handleSubmit(() => void submit())} noValidate className="flex flex-col gap-4">
-          {/* Base units, and said so (plan §3's P2 — this figure used to be rendered bare), with
-              the pack equivalent beside it so the balance is legible to someone counting bags on a
-              shelf as well as to the ledger. See `onHandInPacks`. */}
-          <p className="text-sm text-neutral-500">
-            Current {UNIT_COPY.ON_HAND.toLowerCase()}: {formatQuantity(product.quantityOnHand, stockUnitText)}
-            {onHandInPacks && ` (${onHandInPacks})`}
-          </p>
-
           <div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-2">
               <div className="flex-1">
@@ -773,6 +786,7 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
                   Only {formatQuantity(oversellInfo.available, stockUnitText)} available — you requested{' '}
                   {formatQuantity(oversellInfo.requested, stockUnitText)}.
                 </p>
+                <SendFromOtherBranch product={product} shortAt={sheetBranch.branchId} unit={stockUnitText} />
               </div>
             </div>
           ) : (
@@ -783,6 +797,7 @@ export function StockOutModal({ product, onClose, onSuccess, onQueued }: StockOu
 
       {step === 'receipt' && (
         <StockReceipt
+          branchId={sheetBranch.branchId}
           state={result ? 'synced' : queued ? 'recorded' : 'sending'}
           kind="Stock out"
           id={result?.movement?.id ?? queuedOpId}

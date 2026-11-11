@@ -125,7 +125,7 @@ await check('idle: a quiet "All caught up" icon that still opens the centre, wit
   assert((await pill().innerText()).trim() === '', 'idle pill shows text')
   await openCentre()
   await centre().getByText('All caught up. Everything recorded on this phone has been sent.').waitFor()
-  await centre().getByText(/\d+ products on this phone, up to date as of/).waitFor({ timeout: 20000 })
+  await centre().getByText(/\d+ products? on this phone, up to date as of/).waitFor({ timeout: 20000 })
   assert((await centre().getByText('Stock changes').count()) === 0, 'empty stock list shown')
   await page.screenshot({ path: SHOTS + '1-idle.png' })
   await closeCentre()

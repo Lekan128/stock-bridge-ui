@@ -1,3 +1,4 @@
+import type { AreaFigure, BranchFigure } from '@/features/branches/types'
 export interface Product {
   id: string
   name: string
@@ -115,6 +116,27 @@ export interface Product {
   isLowStock: boolean
   createdAt: string
   updatedAt: string
+  /**
+   * Multiple branches (V52): this product at each branch the person sees - the product page only, at
+   * a company with more than one branch. Absent otherwise (`== null`).
+   */
+  branchStock?: BranchFigure[]
+  /**
+   * Areas inside a branch (V60): this product in each area that keeps stock, at each branch the person
+   * sees that has areas - "Store 30 · Kitchen 6". Absent otherwise (`== null`).
+   */
+  areaStock?: AreaFigure[]
+  /** The product's own units (UNITS_PLAN.md Part 1, API V82): "1 Derica = 0.6 kg". Hidden ones were used. */
+  measures?: ProductMeasure[]
+  /** Where a stock-out, count, move or quick mode starts for it (Part 2): a measure, a unit or a pack key. */
+  usedInUnit?: string | null
+  /** The units a count of it opens in (V84), as unit keys. Absent or empty: its pack and its usual unit. */
+  countIn?: string[]
+  /**
+   * When each area of the branches the phone carries last counted it - a branch's only area too - and how it was
+   * typed (2026-11-10): the count list's "Counted today". The phone's catalogue only; absent when never counted.
+   */
+  counts?: { areaId: string; at: string; countedAs?: { unit: string; quantity: number }[] }[]
   warnings?: string[] | null
   /**
    * True when `packagingUnit`/`packagingSize` above are the DEFAULT among more than one distinct
@@ -139,6 +161,12 @@ export interface Product {
    * `== null`, never `=== null`.
    */
   expectedQuantity?: number
+  /**
+   * Sent from another branch and not yet received (MULTI_BRANCH_UX_PLAN.md §5.9) - set on the phone by
+   * `scopeProduct` from the branch figures, never sent by the API on the product itself. Beside the
+   * figure, never in it (rule 5).
+   */
+  transferOnTheWay?: number
 }
 
 /** Mirrors Spring Data's Page<T> JSON shape. */
@@ -189,6 +217,8 @@ export interface ProductListParams {
  * fields.
  */
 export interface InitialVendorPayload {
+  /** Where the opening stock is (V52); set by `productsApi.create` from the phone's branch. */
+  branchId?: string
   /** An entry in this company's own vendor directory (`/app/vendors`). */
   companyVendorId: string
   vendorSku?: string
@@ -242,6 +272,12 @@ export interface ProductFormPayload {
   packagingUnit?: string
   /** Renamed from the old `unitCount`. */
   packagingSize?: number
+  /** The product's own units, the whole list (UNITS_PLAN.md Part 1). One left out that was used is hidden. */
+  measures?: ProductMeasure[]
+  /** Where stock-outs and counts start (Part 2): a measure, a unit or a pack key; blank is the stock unit. */
+  usedInUnit?: string
+  /** The units a count opens in (V84), the whole list; empty goes back to the pack and the usual unit. */
+  countIn?: string[]
   // No `costPrice` here: the product's cost is a server-computed weighted-average rollup from
   // actual purchases (see MULTI_VENDOR_INVENTORY_DESIGN.md §5.3), never a value this form
   // submits. It is still read-only on `Product` above, for the detail page to display.
@@ -255,6 +291,10 @@ export interface ProductFormPayload {
    * `ProductVendor` rows, and this is only how the FIRST one gets created.
    */
   initialVendor?: InitialVendorPayload
+  /** Create only (2026-11-10): its suppliers, several at once, each with its pack and price per stock unit. */
+  suppliers?: { companyVendorId: string; cost?: number; packagingUnit?: string; packagingSize?: number }[]
+  /** Create only: what's on the shelf as it's added, in stock units, and who it was bought from if anyone. */
+  openingStock?: { quantity: number; companyVendorId?: string; branchId?: string }
   /**
    * A company category id. On create, omitted means uncategorised. On update, omitted means
    * "leave it as it is" — removing a category takes {@link ProductUpdatePayload.clearCategory}.
@@ -355,9 +395,22 @@ export interface UnitOption {
    * this is the same line on screen.
    */
   isPack?: boolean
+  /** One of the product's own units, a derica or a cup (UNITS_PLAN.md Part 1): set once on the product. */
+  isMeasure?: boolean
   /** Exactly one `true` per set — what a form preselects. The product's own pack if it has one,
    *  else the stock unit. */
   isDefault: boolean
+}
+
+/**
+ * One of a product's own units (UNITS_PLAN.md Part 1): what the kitchen calls it and how much of the stock unit one
+ * holds - "Derica", 0.6 (kg). The same every time, unlike a pack, so it is set once on the product.
+ */
+export interface ProductMeasure {
+  name: string
+  size: number
+  /** Used, then taken off (Part 3): kept so the past still reads, never offered for new entries. */
+  hidden?: boolean
 }
 
 /** Body for `POST /api/products/unit-of-measure-requests` — the "can't find your unit?" form. */
@@ -383,9 +436,30 @@ export interface ProductUpdatePayload extends Partial<ProductFormPayload> {
   // has no use for it and `ProductFormPage` never populates it outside the create form.
 }
 
-export type MovementType = 'IN' | 'OUT' | 'ADJUSTMENT'
+/**
+ * TRANSFER_OUT / TRANSFER_IN: stock sent to, or received from, another branch (V53). MOVE: a line of a
+ * move between two areas of a branch (V63) - in the lists only, never a ledger row; it changes no
+ * branch figure.
+ */
+export type MovementType = 'IN' | 'OUT' | 'ADJUSTMENT' | 'TRANSFER_OUT' | 'TRANSFER_IN' | 'MOVE'
 
 export interface StockMovement {
+  /** Where it happened (V51). Absent from an older API. */
+  branchId?: string
+  /** Areas (V60): the area of that branch it happened in; absent on rows from before areas. */
+  areaId?: string
+  /** A give to an area that uses what it's given (V63): that area - "Used at Housekeeping". */
+  usedAreaId?: string
+  /**
+   * Written by a stock count (Part 3.5): a kitchen's count records what it found short as a Used stock-out,
+   * which reads "Used at Kitchen · count". Absent on everything else.
+   */
+  count?: boolean
+  /** A MOVE row: where it went (`areaId` is where it came from), the move, and both areas by name. */
+  toAreaId?: string
+  moveId?: string
+  areaName?: string
+  toAreaName?: string
   id: string
   productId: string
   /**
@@ -479,6 +553,17 @@ export interface StockMutationResponse {
 }
 
 export interface StockInPayload {
+  /**
+   * The branch this was recorded at (V51). Stamped by `submitStockWrite` when the write is made, from
+   * the phone's working branch, so a later switch never moves a queued write. Absent at a one-branch
+   * company: the server's only branch, and the request exactly what it was before branches.
+   */
+  branchId?: string
+  /**
+   * The area of that branch it happened in (V60): chosen on the sheet at a branch with two or more
+   * areas that keep stock. Absent otherwise - the server's only area, or its delivery area for stock in.
+   */
+  areaId?: string
   quantity: number
   /** Which of the product's configured units the quantity was entered in — omit for base unit. */
   unit?: string
@@ -499,6 +584,17 @@ export interface StockInPayload {
 export type OutReason = 'SALE' | 'USED' | 'DAMAGED' | 'EXPIRED' | 'LOST' | 'RETURNED_TO_SUPPLIER' | 'OTHER'
 
 export interface StockOutPayload {
+  /**
+   * The branch this was recorded at (V51). Stamped by `submitStockWrite` when the write is made, from
+   * the phone's working branch, so a later switch never moves a queued write. Absent at a one-branch
+   * company: the server's only branch, and the request exactly what it was before branches.
+   */
+  branchId?: string
+  /**
+   * The area of that branch it happened in (V60): chosen on the sheet at a branch with two or more
+   * areas that keep stock. Absent otherwise - the server's only area, or its delivery area for stock in.
+   */
+  areaId?: string
   quantity: number
   unit?: string
   /** Omitted (simple path) = server computes FIFO. Present = manual per-lot override. */

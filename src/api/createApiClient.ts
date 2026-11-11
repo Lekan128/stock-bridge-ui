@@ -1,6 +1,7 @@
 import axios, { type AxiosError } from 'axios'
 import { isAppError, type AppError, type AppFieldError } from '@/types/api'
 import type { AuthTokens } from '@/types/auth'
+import { decodeJwtPayload } from '@/utils/jwt'
 
 declare module 'axios' {
   export interface AxiosRequestConfig {
@@ -132,7 +133,9 @@ function normalizeResponseBody(status: number, responseData: unknown): AppError 
     // (which has neither field) is completely unaffected.
     const availableQuantity = typeof data.availableQuantity === 'number' ? data.availableQuantity : undefined
     const requestedQuantity = typeof data.requestedQuantity === 'number' ? data.requestedQuantity : undefined
-    return { status, message: data.message, availableQuantity, requestedQuantity }
+    // A waybill's 409 also names the product it was short of (multiple branches).
+    const productId = typeof data.productId === 'string' ? data.productId : undefined
+    return { status, message: data.message, availableQuantity, requestedQuantity, ...(productId ? { productId } : {}) }
   }
 
   if (data && (typeof data.title === 'string' || typeof data.detail === 'string' || Array.isArray(data.errors))) {
@@ -153,6 +156,22 @@ export interface ApiClientOptions {
   getRefreshToken: () => string | null
   setRefreshToken: (token: string) => void
   clearSession: () => void
+  /** A refresh came back as a different user or company (another tab signed in). Defaults to a reload. */
+  onSessionReplaced?: () => void
+}
+
+/** A refresh returned another user's session; this tab is starting again as them. */
+export class SessionReplacedError extends Error {
+  constructor() {
+    super('Someone else signed in on this device.')
+    this.name = 'SessionReplacedError'
+  }
+}
+
+/** Who a token is for: the user, and for a tenant token the company. Empty if unreadable. */
+export function sessionIdentity(token: string): string {
+  const claims = decodeJwtPayload<{ sub?: string; clientId?: string }>(token)
+  return `${claims?.sub ?? ''}|${claims?.clientId ?? ''}`
 }
 
 /**
@@ -162,7 +181,14 @@ export interface ApiClientOptions {
  * and SuperAdminAuthContext.tsx, neither of which should ever be able to clobber the other's
  * session.
  */
-export function createApiClient({ refreshPath, loginRedirectPath, getRefreshToken, setRefreshToken, clearSession }: ApiClientOptions) {
+export function createApiClient({
+  refreshPath,
+  loginRedirectPath,
+  getRefreshToken,
+  setRefreshToken,
+  clearSession,
+  onSessionReplaced = () => window.location.reload(),
+}: ApiClientOptions) {
   const instance = axios.create({ baseURL })
 
   // The access token lives only in memory, never in localStorage — a stolen localStorage
@@ -221,6 +247,18 @@ export function createApiClient({ refreshPath, loginRedirectPath, getRefreshToke
 
     const { data } = await instance.post<AuthTokens>(refreshPath, { refreshToken }, { public: true })
 
+    // The refresh token is shared by every tab, so if another tab signed in as someone else since
+    // this one did, the refresh just returned THEIR session. Adopting it silently is how one
+    // company's catalogue sync and writes ran under another's token, behind the first company's
+    // name and cache. Keep the token (it is the other tab's, and the server has rotated it), but
+    // start this tab again as whoever is signed in now instead of carrying on as before.
+    if (accessToken != null && sessionIdentity(data.accessToken) !== sessionIdentity(accessToken)) {
+      setAccessToken(null)
+      setRefreshToken(data.refreshToken)
+      onSessionReplaced()
+      throw new SessionReplacedError()
+    }
+
     setAccessToken(data.accessToken)
     setRefreshToken(data.refreshToken)
     return data.accessToken
@@ -248,6 +286,9 @@ export function createApiClient({ refreshPath, loginRedirectPath, getRefreshToke
           config.headers.set('Authorization', `Bearer ${newToken}`)
           return instance(config)
         } catch (refreshError) {
+          // Someone else is signed in now and this tab is reloading as them; clearing the
+          // session here would sign THEM out.
+          if (refreshError instanceof SessionReplacedError) return Promise.reject(refreshError)
           // Only a refusal ends the session. A refresh that never got an answer — the signal
           // dropped between the 401 and the refresh, or the server is waking up — says nothing
           // about whether the session is valid, and logging out over it threw away a working

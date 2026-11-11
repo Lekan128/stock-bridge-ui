@@ -110,6 +110,8 @@ await check('from Inventory on a phone, one tap opens quick mode, full screen, w
   const box = await page.locator('.fixed.inset-0').first().boundingBox()
   assert(box.width >= 389 && box.height >= 843, 'not full screen')
   // The app's own words, and each mode says what it does (it said Receive / Issue / Count, unexplained).
+  // The row keeps its place, empty, until the person's own buttons are known.
+  await page.getByRole('group', { name: 'What are you doing?' }).getByRole('button', { name: 'Stock in' }).waitFor()
   const modes = await page.getByRole('group', { name: 'What are you doing?' }).getByRole('button').allInnerTexts()
   assert(JSON.stringify(modes) === JSON.stringify(['Stock in', 'Stock out', 'Count']), `modes: ${modes}`)
   await page.getByText('Goods coming in, like a delivery or a return. Adds them to your stock.').waitFor()
@@ -164,11 +166,18 @@ await check('offline: a scanned barcode finds the product on the phone; the issu
   assert((await onHand(soap.id)) === 35, `server has ${await onHand(soap.id)}`)
 })
 
+/** A count in two units (bags + kg): the keypad types into the kg box. */
+async function kgBox() {
+  await page.getByRole('group', { name: 'Count in several units' }).getByRole('button', { name: /Type kg$/ }).click()
+}
+
 await check('count: says what it does, then the shelf figure and its difference from the app, then recorded', async () => {
   await page.getByRole('button', { name: 'Count', exact: true }).click()
   await page.getByText("Count what's on the shelf. The app's figure is corrected to match").waitFor()
   await search().fill('rice (c4)')
   await page.getByRole('button', { name: /Rice \(c4\)/ }).click()
+  // Rice comes in bags, so it's counted in two boxes (UNITS_PLAN.md Part 4): all of it in kg here.
+  await kgBox()
   await keypad(['9', '9', '6'])
   await page.getByText('vs what the app says').waitFor()
   await page.locator('[data-stock-figure]').getByText('−4').waitFor()
@@ -191,6 +200,7 @@ await check('a count straight after an offline sale compares against the stock a
   await search().fill('rice (c4)')
   await page.getByRole('button', { name: /Rice \(c4\)/ }).click()
   await page.getByText('On hand 990 kg').waitFor()
+  await kgBox()
   await keypad(['9', '8', '8'])
   await page.locator('[data-stock-figure]').getByText('−2').waitFor()
   await page.getByRole('button', { name: 'Change' }).click()

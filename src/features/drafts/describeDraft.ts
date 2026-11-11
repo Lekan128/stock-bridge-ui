@@ -20,7 +20,7 @@ interface ProductLike {
 
 /**
  * A draft as the sync centre lists it (A6). Keys are `delivery:new`, `delivery:{expectedId}`,
- * `product:new` and `sale:new` (see `RecordDeliveryPage`, `ProductFormPage` and `useSaleBasket`); anything else — a key a later
+ * `product:new`, `order:new`, `sale:new` and `transfer:new` (see `RecordDeliveryPage`, `ProductFormPage`, `useSaleBasket` and `SendStockPage`); anything else — a key a later
  * version added — is listed plainly rather than hidden, so logout's count always matches the list.
  */
 export function describeDraft(draft: StoredDraft): DraftSummary {
@@ -40,9 +40,29 @@ export function describeDraft(draft: StoredDraft): DraftSummary {
     }
   }
 
+  if (kind === 'order') {
+    // A purchase order still being typed: how many items are on it (`items` since the 2026-11-04
+    // redesign; `entries` before it).
+    const value = draft.value as DeliveryLike & { items?: unknown[] }
+    const entries = Object.values(value.entries ?? {})
+    const lines = Array.isArray(value.items)
+      ? value.items.length
+      : entries.filter((entry) => entry.quantity?.trim()).length || entries.length
+    return {
+      title: 'Purchase order',
+      detail: lines > 0 ? `${lines} ${lines === 1 ? 'item' : 'items'}` : null,
+      to: '/app/purchase-orders/new',
+    }
+  }
+
   if (kind === 'sale') {
     const items = ((draft.value as { lines?: unknown[] }).lines ?? []).length
     return { title: 'Sale', detail: items > 0 ? `${items} ${items === 1 ? 'item' : 'items'}` : null, to: '/app/sell' }
+  }
+
+  if (kind === 'transfer') {
+    const items = ((draft.value as { lines?: unknown[] }).lines ?? []).length
+    return { title: 'Waybill', detail: items > 0 ? `${items} ${items === 1 ? 'item' : 'items'}` : null, to: '/app/transfers/send' }
   }
 
   if (kind === 'product') {

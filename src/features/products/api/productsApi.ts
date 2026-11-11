@@ -1,4 +1,6 @@
 import { api } from '@/api/client'
+import { viewingBranchId } from '@/features/branches/viewingBranch'
+import { recordingBranchId } from '@/features/outbox/outboxStore'
 import type {
   BulkUploadResponse,
   PageResponse,
@@ -24,15 +26,29 @@ function buildProductFormData(payload: object, image?: File | null): FormData {
 
 export const productsApi = {
   list: (params: ProductListParams) =>
-    api.get<PageResponse<Product>>('/api/products', { params }).then((r) => r.data),
+    // At a branch, that branch's figures and stock filter (Phase 4) - the list before the phone's
+    // catalogue is ready, and on screens that ask the server.
+    api.get<PageResponse<Product>>('/api/products', { params: { branchId: viewingBranchId(), ...params } }).then((r) => r.data),
 
   get: (id: string) => api.get<Product>(`/api/products/${id}`).then((r) => r.data),
 
-  lowStock: () => api.get<Product[]>('/api/products/low-stock').then((r) => r.data),
+  // Low at the branch being viewed; in "All branches", low at any (each with its branch figures).
+  lowStock: () => api.get<Product[]>('/api/products/low-stock', { params: { branchId: viewingBranchId() } }).then((r) => r.data),
 
   create: (payload: ProductFormPayload, image?: File | null) =>
     api
-      .post<Product>('/api/products', buildProductFormData(payload, image), {
+      .post<Product>(
+        '/api/products',
+        buildProductFormData(
+          // The opening stock lands at the phone's branch (V52).
+          {
+            ...payload,
+            ...(payload.initialVendor ? { initialVendor: { ...payload.initialVendor, branchId: recordingBranchId() } } : {}),
+            ...(payload.openingStock ? { openingStock: { ...payload.openingStock, branchId: recordingBranchId() } } : {}),
+          },
+          image,
+        ),
+        {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
       .then((r) => r.data),
@@ -56,7 +72,9 @@ export const productsApi = {
 
   template: () => api.get('/api/products/template', { responseType: 'blob' }).then((r) => r.data as Blob),
 
-  export: () => api.get('/api/products/export', { responseType: 'blob' }).then((r) => r.data as Blob),
+  // The stock column is the branch being viewed's (multiple branches), as Inventory shows it.
+  export: () =>
+    api.get('/api/products/export', { params: { branchId: viewingBranchId() }, responseType: 'blob' }).then((r) => r.data as Blob),
 
   /** "Add prices in a sheet" (`SELLING_PRICE_PLAN.md` §6.8): the products with no selling price, to fill in. */
   exportPrices: () => api.get('/api/products/export/prices', { responseType: 'blob' }).then((r) => r.data as Blob),

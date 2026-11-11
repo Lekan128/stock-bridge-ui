@@ -1,5 +1,13 @@
+import { useRecordsHere } from '@/features/branches/useRecordsHere'
 import { useEffect, useState, type ReactNode } from 'react'
-import { ArrowLeft, Minus, Pencil, Plus, ShoppingBag } from 'lucide-react'
+import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
+import { carryBranchStock, scopeProduct, scopeToAreas } from '@/features/branches/scopeProduct'
+import { useWorkArea } from '@/features/branches/workArea'
+import { OtherBranchesList } from '@/features/branches/OtherBranchesList'
+import { AreaBreakdown } from '@/features/branches/AreaBreakdown'
+import { hasAreas } from '@/features/branches/areas'
+import { Archive, ArchiveRestore, ArrowLeft, ArrowLeftRight, FileText, MessageSquarePlus, Minus, Pencil, Plus, ShoppingBag, Truck } from 'lucide-react'
+import { formatNumber } from '@/features/products/unitCopy'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { PERMISSIONS } from '@/auth/permissions'
@@ -20,6 +28,8 @@ import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeas
 import { useProduct } from '@/features/products/hooks/useProduct'
 import { useProductIncoming } from '@/features/products/hooks/useProductIncoming'
 import { useStockActions } from '@/features/products/hooks/useStockActions'
+import { useMoveSheet } from '@/features/moves/useMoveSheet'
+import { useMoveIntent } from '@/features/moves/moveIntent'
 import { useStockHistory } from '@/features/products/hooks/useStockHistory'
 import {
   UNIT_COPY,
@@ -58,7 +68,15 @@ export function ProductDetailPage() {
   const { showToast } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = parseDetailTab(searchParams.get('tab'))
-  const { product, setProduct, loading, error, showingSaved, updatedAt, refetch: refetchProduct } = useProduct(id)
+  const { product: wholeProduct, setProduct, loading, error, showingSaved, updatedAt, refetch: refetchProduct } = useProduct(id)
+  // At a branch, the page reads that branch's figure (MULTI_BRANCH_UX_PLAN.md §5.9); the whole product,
+  // with every branch's figure, stays for the "At other branches" list.
+  const { working, isMultiBranch, recordable } = useWorkingBranch()
+  // As the branch holds it, then as the areas chosen in the top bar hold it (Part 3.6).
+  const work = useWorkArea(working)
+  const viewAreas = work.viewAreaIds
+  const where = work.area ? `in the ${work.area.name}` : viewAreas ? 'in your areas' : null
+  const product = wholeProduct ? scopeToAreas(scopeProduct(wholeProduct, working), viewAreas) : wholeProduct
   const { options: unitOfMeasureOptions } = useUnitOfMeasureOptions()
   const { refetch: refetchLowStockAlerts } = useLowStockAlerts()
   // A single-element array so the hook's "does the API send incomingQuantity?" check works the
@@ -68,11 +86,20 @@ export function ProductDetailPage() {
   const { data: history, loading: historyLoading, error: historyError, refetch: refetchHistory } = useStockHistory(
     id,
     historyPage,
+    { branchId: isMultiBranch ? working?.id : undefined },
   )
   // Stock in / out / count, and the toast with Undo after — shared with the Inventory list (C1).
+  const moveSheet = useMoveSheet()
+  // A cook asks for more; everyone else moves it (Part 5).
+  const moveIntent = useMoveIntent()
   const stockActions = useStockActions({
+    current: product,
     onChanged: (changed) => {
-      setProduct(changed)
+      // The write's answer carries the company figure only: keep the branch list, moved by the same
+      // amount at the branch written to, and read the product again for the truth.
+      setProduct((previous) => carryBranchStock(previous, changed, working?.id ?? null))
+      // Areas (V60): which area moved isn't in the answer either, so its line is read again too.
+      if (isMultiBranch || wholeProduct?.areaStock != null) refetchProduct()
       setHistoryPage(0)
       refetchHistory()
       refetchLowStockAlerts()
@@ -107,10 +134,22 @@ export function ProductDetailPage() {
 
   const canManageInventory = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_INVENTORY)
   const canManageProducts = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_PRODUCTS)
+  // Either order privilege (V78): someone who can only create makes an order that waits for approval.
+  const canOrder =
+    user?.type === 'tenant' && (user.permissions.includes(PERMISSIONS.CREATE_PURCHASE_ORDER) || user.permissions.includes(PERMISSIONS.SEND_PURCHASE_ORDER))
   // Independently grantable since V27 — a role may receive stock, issue it, both or neither,
   // separately from MANAGE_INVENTORY (which still gates Adjust below). See StockController.
-  const canStockIn = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.STOCK_IN)
-  const canStockOut = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.STOCK_OUT)
+  // At a branch the person only views, nothing here records (UX §4.1, "View only").
+  const recordsHere = useRecordsHere()
+  const canStockIn = recordsHere && user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.STOCK_IN)
+  const canStockOut = recordsHere && user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.STOCK_OUT)
+  // "Send to another branch" (MULTI_BRANCH_UX_PLAN.md §5.4): from the branch this phone is at.
+  const canSend =
+    isMultiBranch &&
+    user?.type === 'tenant' &&
+    user.permissions.includes(PERMISSIONS.SEND_STOCK) &&
+    working != null &&
+    recordable.some((branch) => branch.id === working.id)
 
   /**
    * Back to wherever the user came from — usually the Inventory list WITH its search, filters
@@ -217,7 +256,7 @@ export function ProductDetailPage() {
   const canSell = recordsSales && canStockOut
   const sellLeads = canSell && product.unitPrice != null
   const stockButtons =
-    canStockIn || canStockOut || canManageInventory ? (
+    canStockIn || canStockOut || (canManageInventory && recordsHere) ? (
       <>
         {canSell && (
           <Button variant={sellLeads ? 'action' : 'secondary'} onClick={() => navigate(`/app/sell?product=${product.id}`)}>
@@ -237,27 +276,64 @@ export function ProductDetailPage() {
             Stock out
           </Button>
         )}
-        {canManageInventory && (
+        {canManageInventory && recordsHere && (
           <Button variant="secondary" onClick={() => stockActions.open('count', product)}>
             Count
+          </Button>
+        )}
+        {/* Running low: the next thing to do is usually to order more (purchase order redesign). */}
+        {canOrder && (product.isLowStock || product.quantityOnHand <= 0) && (
+          <Button variant="secondary" onClick={() => navigate(`/app/purchase-orders/new?products=${product.id}`)}>
+            Order more
           </Button>
         )}
       </>
     ) : null
 
-  // Edit and the rare, destructive things live in "⋯" (C2, finding U3); Deactivate behind its confirmation.
+  // Edit and the rare, destructive things live in "⋯" (C2, finding U3); Deactivate behind its confirmation. Every item
+  // has its picture (owner, 2026-11-10: one without "just seems off"); Order more has Purchase orders' own.
+  const orderItem: OverflowMenuItem[] = canOrder
+    ? [
+        {
+          label: 'Order more',
+          icon: <FileText className="h-4 w-4 text-neutral-500" aria-hidden="true" />,
+          onSelect: () => navigate(`/app/purchase-orders/new?products=${product.id}`),
+        },
+      ]
+    : []
+  const sendItem: OverflowMenuItem[] = canSend
+    ? [
+        ...orderItem,
+        {
+          label: 'Send to another branch',
+          icon: <Truck className="h-4 w-4 text-neutral-500" aria-hidden="true" />,
+          onSelect: () => navigate(`/app/transfers/send?product=${product.id}`),
+        },
+      ]
+    : orderItem
   const menuItems: OverflowMenuItem[] = canManageProducts
     ? [
+        ...sendItem,
         {
           label: 'Edit product',
           icon: <Pencil className="h-4 w-4 text-neutral-500" aria-hidden="true" />,
           onSelect: () => navigate(`/app/products/${product.id}/edit`),
         },
         product.active
-          ? { label: 'Deactivate', tone: 'danger', onSelect: () => setConfirmDeactivate(true) }
-          : { label: activating ? 'Activating…' : 'Activate', onSelect: () => void handleActivate(), disabled: activating },
+          ? {
+              label: 'Deactivate',
+              tone: 'danger',
+              icon: <Archive className="h-4 w-4" aria-hidden="true" />,
+              onSelect: () => setConfirmDeactivate(true),
+            }
+          : {
+              label: activating ? 'Activating…' : 'Activate',
+              icon: <ArchiveRestore className="h-4 w-4 text-neutral-500" aria-hidden="true" />,
+              onSelect: () => void handleActivate(),
+              disabled: activating,
+            },
       ]
-    : []
+    : sendItem
 
   return (
     // Room at the bottom on a phone for the action bar pinned there.
@@ -299,7 +375,30 @@ export function ProductDetailPage() {
         actions={stockButtons ?? undefined}
         lastMovement={lastMovement}
         sellingPrice={showsSellingPrice ? sellingPriceText(product, stockUnitText, packOption) : null}
+        where={where}
       />
+      {/* Where in the branch it is, and moving it between areas (STOCK_AREAS_PART_2.md). */}
+      {hasAreas(working) && (
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <AreaBreakdown product={product} unitLabel={stockUnitText} />
+          {canStockOut && (
+            <button
+              type="button"
+              onClick={() => moveSheet.open([product.id])}
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-neutral-300 bg-white px-3 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
+            >
+              {moveIntent.intent === 'ask' ? (
+                <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
+              )}
+              {moveIntent.intent === 'ask' ? 'Ask for more' : 'Move'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {wholeProduct && <OtherBranchesList product={wholeProduct} unitLabel={stockUnitText} />}
 
       <SoldThisMonth productId={product.id} stockUnit={stockUnitText} />
 
@@ -381,6 +480,41 @@ export function ProductDetailPage() {
                   )}
                 </DetailRow>
               )}
+              {/* The product's own units (UNITS_PLAN.md Part 1), where the rest of how it's counted is: "Derica = 0.6 kg
+                  · Cup = 0.2 kg", and which one stock-outs and counts open in. Changed on the form, where they're set. */}
+              {product.unitOfMeasure && ((product.measures ?? []).some((measure) => !measure.hidden) || canManageProducts) && (
+                <DetailRow label="Also used in">
+                  {(product.measures ?? []).some((measure) => !measure.hidden) ? (
+                    <span className="font-medium text-neutral-900" data-product-measures>
+                      {(product.measures ?? [])
+                        .filter((measure) => !measure.hidden)
+                        .map((measure) => `${measure.name} = ${formatNumber(measure.size)} ${stockUnitText}`)
+                        .join(' · ')}
+                    </span>
+                  ) : (
+                    <span className="text-neutral-500">—</span>
+                  )}
+                  {product.usedInUnit && (
+                    <span className="block text-xs text-neutral-500">
+                      Stock out opens in {product.usedInUnit.includes(':') ? packLabel : product.usedInUnit}
+                    </span>
+                  )}
+                  {/* The units a count opens in (V84), when chosen; else the pack and the usual unit, said nowhere. */}
+                  {(product.countIn ?? []).length > 0 && (
+                    <span className="block text-xs text-neutral-500" data-product-count-in>
+                      Counted in{' '}
+                      {(product.countIn ?? [])
+                        .map((key) => (key.includes(':') ? packLabel : key.toLowerCase() === (product.unitOfMeasure ?? '').toLowerCase() ? stockUnitText : key))
+                        .join(' + ')}
+                    </span>
+                  )}
+                  {canManageProducts && (
+                    <Link to={`/app/products/${product.id}/edit#units`} className="ml-2 text-xs font-medium text-primary-600 hover:underline">
+                      {(product.measures ?? []).some((measure) => !measure.hidden) ? 'Change' : 'Add a unit'}
+                    </Link>
+                  )}
+                </DetailRow>
+              )}
               {/* An em dash, not an absent row: "nobody has said yet" is the true reading. Only the
                   preferred supplier; the Suppliers tab has the rest. */}
               <DetailRow label={`Preferred ${UNIT_COPY.SUPPLIER.toLowerCase()}`}>
@@ -431,6 +565,7 @@ export function ProductDetailPage() {
       {stockButtons && <ProductActionBar>{stockButtons}</ProductActionBar>}
 
       {stockActions.sheet}
+      {moveSheet.sheet}
 
       <ConfirmDialog
         open={confirmDeactivate}

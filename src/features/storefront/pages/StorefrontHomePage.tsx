@@ -3,7 +3,7 @@ import { PackageSearch, SearchX } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { EmptyState } from '@/components/EmptyState'
 import { ErrorState } from '@/components/ErrorState'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { Pagination } from '@/components/Pagination'
 import { CatalogFilterPanel } from '@/features/storefront/components/CatalogFilterPanel'
 import { CatalogGridSkeleton } from '@/features/storefront/components/CatalogGridSkeleton'
@@ -169,9 +169,9 @@ export function StorefrontHomePage() {
         </div>
       </div>
 
-      <Modal open={filtersOpen} onClose={() => setFiltersOpen(false)} title="Filter products" size="md">
+      <Sheet open={filtersOpen} onClose={() => setFiltersOpen(false)} title="Filter products" size="md">
         {filterPanel}
-      </Modal>
+      </Sheet>
     </div>
   )
 }

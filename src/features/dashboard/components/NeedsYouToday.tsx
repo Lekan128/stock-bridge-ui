@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { CheckCircle2, ClipboardList, PackageX, Plus, TriangleAlert, Truck, Wrench } from 'lucide-react'
+import { CheckCircle2, ClipboardList, MessageSquarePlus, PackageX, Plus, TriangleAlert, Truck, Wrench } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { buttonClassName } from '@/components/Button'
 import { Stamp } from '@/components/Stamp'
@@ -17,6 +17,18 @@ import { useDataIssuesNotice } from '@/features/products/quality/useDataIssuesNo
 import type { Product } from '@/features/products/types'
 import { resolveUnitSymbol } from '@/features/products/unitSet'
 import { SyncCentre } from '@/features/sync/SyncCentre'
+import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
+import { PERMISSIONS } from '@/auth/permissions'
+import { useAuth } from '@/auth/useAuth'
+import { formatNumber } from '@/features/products/unitCopy'
+import { useTransfers } from '@/features/transfers/useTransfers'
+import { MoveSheet } from '@/features/moves/MoveSheet'
+import { itemsWord } from '@/features/moves/moveWords'
+import type { AreaMove } from '@/features/moves/types'
+import { useWaitingMoves } from '@/features/moves/useWaitingMoves'
+import { useMoveSheet } from '@/features/moves/useMoveSheet'
+import { askedFor } from '@/features/requests/requestWords'
+import { useWaitingRequests } from '@/features/requests/useWaitingRequests'
 
 const SHOWN_PER_KIND = 4
 
@@ -73,6 +85,29 @@ export function NeedsYouToday({ canStockIn, canReceive }: NeedsYouTodayProps) {
 
   const dataIssues = useDataIssuesNotice()
 
+  // Multiple branches (MULTI_BRANCH_UX_PLAN.md §5.5, §5.7): what is on the way here, and stock that
+  // went missing on the way and nobody has checked - at both ends, until somebody does.
+  const branch = useOptionalWorkingBranch()
+  const { user } = useAuth()
+  const seesTransfers =
+    user?.type === 'tenant' &&
+    [PERMISSIONS.STOCK_IN, PERMISSIONS.STOCK_OUT, PERMISSIONS.SEND_STOCK, PERMISSIONS.MANAGE_INVENTORY].some((code) =>
+      user.permissions.includes(code),
+    )
+  const multi = (branch?.isMultiBranch ?? false) && seesTransfers
+  const here = branch?.isAll ? undefined : branch?.working?.id
+  const openTransfers = useTransfers({ branchId: here, openOnly: true }, multi)
+  const recentTransfers = useTransfers({ branchId: here }, multi)
+  const arriving = (openTransfers.data?.content ?? []).filter((t) => here == null || t.toBranchId === here)
+  const unchecked = (recentTransfers.data?.content ?? []).filter((t) => t.missing > 0)
+
+  // Areas that confirm (STOCK_AREAS_PART_4.md): moves waiting for an area this person works in.
+  const waitingMoves = useWaitingMoves().moves
+  const [openMove, setOpenMove] = useState<AreaMove | null>(null)
+  // Asked for (Part 5): requests to move, for the people of the area asked. Move opens filled.
+  const waitingRequests = useWaitingRequests().requests
+  const moveSheet = useMoveSheet()
+
   const rows: ReactNode[] = []
   if (refused > 0) {
     rows.push(
@@ -86,6 +121,71 @@ export function NeedsYouToday({ canStockIn, canReceive }: NeedsYouTodayProps) {
           <button type="button" onClick={() => setSyncOpen(true)} className={buttonClassName('secondary', 'whitespace-nowrap')}>
             Review
           </button>
+        }
+      />,
+    )
+  }
+  for (const request of waitingRequests.slice(0, SHOWN_PER_KIND)) {
+    rows.push(
+      <NeedRow
+        key={`request-${request.id}`}
+        icon={<MessageSquarePlus className="h-5 w-5 text-neutral-500" aria-hidden="true" />}
+        title={askedFor(request)}
+        detail={`Of the ${request.fromAreaName}${request.askedByName ? ` · ${request.askedByName}` : ''}`}
+        action={
+          <button
+            type="button"
+            onClick={() => moveSheet.openRequest(request)}
+            className={buttonClassName('secondary', 'whitespace-nowrap')}
+          >
+            Move them
+          </button>
+        }
+      />,
+    )
+  }
+  for (const move of waitingMoves.slice(0, SHOWN_PER_KIND)) {
+    rows.push(
+      <NeedRow
+        key={`move-${move.id}`}
+        icon={<ClipboardList className="h-5 w-5 text-neutral-500" aria-hidden="true" />}
+        title={`${itemsWord(move.lines.length)} from the ${move.fromAreaName} to confirm`}
+        detail={`To the ${move.toAreaName}${move.movedByName ? ` · moved by ${move.movedByName}` : ''}`}
+        action={
+          <button type="button" onClick={() => setOpenMove(move)} className={buttonClassName('secondary', 'whitespace-nowrap')}>
+            Confirm
+          </button>
+        }
+      />,
+    )
+  }
+  for (const transfer of arriving.slice(0, SHOWN_PER_KIND)) {
+    const items = transfer.lines.length
+    rows.push(
+      <NeedRow
+        key={`transfer-${transfer.id}`}
+        icon={<Truck className="h-5 w-5 text-neutral-500" aria-hidden="true" />}
+        title={`${items} ${items === 1 ? 'item' : 'items'} on the way from ${transfer.fromBranchName}`}
+        detail={`${transfer.waybill}${transfer.sentByName ? ` · sent by ${transfer.sentByName}` : ''}${here == null ? ` · to ${transfer.toBranchName}` : ''}`}
+        action={
+          <Link to={`/app/transfers/${transfer.id}`} className={buttonClassName('secondary', 'whitespace-nowrap')}>
+            Receive
+          </Link>
+        }
+      />,
+    )
+  }
+  for (const transfer of unchecked.slice(0, SHOWN_PER_KIND)) {
+    rows.push(
+      <NeedRow
+        key={`missing-${transfer.id}`}
+        icon={<TriangleAlert className="h-5 w-5 text-warning-700" aria-hidden="true" />}
+        title={`${formatNumber(transfer.missing)} missing from ${transfer.waybill}`}
+        detail={`${transfer.fromBranchName} to ${transfer.toBranchName} · not checked yet`}
+        action={
+          <Link to={`/app/transfers/${transfer.id}`} className={buttonClassName('secondary', 'whitespace-nowrap')}>
+            Open
+          </Link>
         }
       />,
     )
@@ -198,6 +298,8 @@ export function NeedsYouToday({ canStockIn, canReceive }: NeedsYouTodayProps) {
         <ul className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">{rows}</ul>
       )}
       {stockActions.sheet}
+      {openMove && <MoveSheet key={openMove.id} move={openMove} onClose={() => setOpenMove(null)} />}
+      {moveSheet.sheet}
       <SyncCentre open={syncOpen} onClose={() => setSyncOpen(false)} />
     </section>
   )

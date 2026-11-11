@@ -22,7 +22,7 @@ You need three things running:
    precache and code splitting only exist in a build.
 
    ```sh
-   VITE_API_BASE_URL=http://localhost:8081 npm run build
+   VITE_API_BASE_URL=http://localhost:8081 VITE_MARKETPLACE_OPEN=true npm run build
    npx vite preview --port 4173
    ```
 
@@ -60,6 +60,7 @@ Screenshots — the ones suites take on purpose, and one per page whenever a che
 | `pwa-shell` | Installable; opens offline straight into the workspace; updates wait for the user. |
 | `landing` | Builds the page both ways. Founding offer: real HTML with FAQ markup and working links, under 70 KB of JavaScript, live counts, the stamp, the two-field form booking a setup (cleaned up after), the sticky phone button, axe clean. Early access: title, canonical and JSON-LD, hydrates cleanly, old marketplace addresses keep their query strings, an installed app still gets the real page. Leaves the early-access build in place. |
 | `lost-refresh` | A token refresh whose reply is lost doesn't log the user out (D7). |
+| `two-tabs` | Two companies in two tabs of one browser: a tab whose session changes underneath it (another tab signed in) starts again as the new account instead of syncing its products into the old company's list and cache. |
 | `data-layer` | Screens open from the saved copy, marked as such, and refresh behind it. |
 | `catalog` | The on-device catalogue: search and filters offline, deletes, logout wipes it; at 100k, sync time, search latency, rows rendered, memory. |
 | `outbox` | Stock writes offline are kept, ordered, sent once (Idempotency-Key), and reconciled. |
@@ -76,6 +77,8 @@ Screenshots — the ones suites take on purpose, and one per page whenever a che
 | `price-sheets` | Selling prices on spreadsheets: a bare "Price" column is asked about and holds the file; a sheet's selling prices offered to an owner who doesn't sell yet; below cost as a grid warning; "Add prices in a sheet" downloads; a delivery that now costs more than the price says so on the receipt and the bulk result; axe on the question and the result. |
 | `sales-report` | The Sales page against a hand-worked day: today's list, the one gaps sentence, a by-product footer equal to its rows, a leak filter, Fix these → Add price, Cancel sale (struck through, with who), export; the same figures on the dashboard's Sales today, the Movements split and the product page; no Sales nav when selling is off; axe throughout. |
 | `dashboard` | Stock health, Needs you today, the chart, offline. |
+| `areas` | Areas inside a branch (STOCK_AREAS_PART_1.md): adding Store/Kitchen/Bar/Housekeeping, the "Store 10 · Kitchen 3" line, sheets asking which area, a stock-out judged against its area, closing, and nothing changing for a company without areas. |
+| `surfaces` | Every form that moved into a Sheet (SURFACES_AUDIT.md) opens as a side panel on a laptop and a bottom sheet on a phone, footer on screen, focus inside, Escape closes it; a screenshot of each. Uses the local super admin (`admin` / `changeme`) and the seeded ProcurePal tenant. |
 | `chaos` | Zero lost writes with the tab killed; a lost reply recorded once; two phones counting and selling; a permission removed while offline. |
 | `metrics` | Taps to record a stock-in, time to first product row cold and warm (targets in the plan). |
 | `a11y` | axe on the key screens at phone and laptop size; sheet focus; announcements; 44 px targets in quick mode. |

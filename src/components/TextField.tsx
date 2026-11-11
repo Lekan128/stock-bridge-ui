@@ -4,10 +4,27 @@ export interface TextFieldProps extends InputHTMLAttributes<HTMLInputElement> {
   label: string
   error?: string
   hint?: string
+  /** The label for screen readers only, where the field already says what it is (an area's name on its card). */
+  hideLabel?: boolean
+  /** Says "Required" beside the label (owner, 2026-11-10): what must be filled is clear before anything is typed. */
+  requiredMark?: boolean
+}
+
+/**
+ * "Required", beside a label. In words, not a lone *, because most fields on a form are optional and the few that
+ * aren't should say so plainly to someone who reads slowly.
+ */
+export function RequiredTag() {
+  // Seen, not read out as part of the field's name: the control itself says it's required (aria-required).
+  return (
+    <span aria-hidden="true" className="ml-1.5 rounded bg-neutral-100 px-1.5 py-0.5 text-xs font-medium text-neutral-700">
+      Required
+    </span>
+  )
 }
 
 export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function TextField(
-  { label, error, hint, id, name, className = '', ...props },
+  { label, error, hint, hideLabel = false, requiredMark = false, id, name, className = '', ...props },
   ref,
 ) {
   const inputId = id ?? name
@@ -16,14 +33,25 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function T
 
   return (
     <div>
-      <label htmlFor={inputId} className="mb-1.5 block text-sm font-medium text-neutral-700">
-        {label}
-      </label>
+      {requiredMark && !hideLabel ? (
+        // The tag beside the label, not in it: the field's name stays "Name"; the control says it's required.
+        <div className="mb-1.5 flex items-center">
+          <label htmlFor={inputId} className="block text-sm font-medium text-neutral-700">
+            {label}
+          </label>
+          <RequiredTag />
+        </div>
+      ) : (
+        <label htmlFor={inputId} className={hideLabel ? 'sr-only' : 'mb-1.5 block text-sm font-medium text-neutral-700'}>
+          {label}
+        </label>
+      )}
       <input
         ref={ref}
         id={inputId}
         name={name}
         aria-invalid={!!error || undefined}
+        aria-required={requiredMark || undefined}
         aria-describedby={[errorId, hintId].filter(Boolean).join(' ') || undefined}
         // The `disabled:` variants matter wherever a field is gated on an earlier answer
         // (PACK_ENTRY_REDESIGN.md §6.1 disables "How many ... in one pack?" until a stock unit is

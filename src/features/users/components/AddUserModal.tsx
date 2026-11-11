@@ -1,15 +1,21 @@
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useWatch } from 'react-hook-form'
+import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
+import { WorksAtField } from '@/features/branches/WorksAtField'
 import { useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
-import { Modal } from '@/components/Modal'
+import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import { usersApi } from '@/features/users/api/usersApi'
 import { RoleSelectField } from '@/features/users/components/RoleSelectField'
 import { createUserFormDefaults, createUserSchema, type CreateUserFormValues } from '@/features/users/schemas'
 import type { TenantUserSummary } from '@/features/users/types'
 import { isAppError } from '@/types/api'
+import { useUsers } from '@/features/users/hooks/useUsers'
+import { formatDisplayName } from '@/features/users/formatters'
+import { sharedSignInNote } from '@/features/users/sharedSignIn'
 
 export interface AddUserModalProps {
   onClose: () => void
@@ -24,6 +30,11 @@ function optional(value: string): string | undefined {
 
 export function AddUserModal({ onClose, onSuccess }: AddUserModalProps) {
   const [formError, setFormError] = useState<string | null>(null)
+  // Where they'll work (MULTI_BRANCH_UX_PLAN.md §5.10): starts at the branch you're at.
+  const { isMultiBranch, working } = useWorkingBranch()
+  const [branchIds, setBranchIds] = useState<string[]>(() => (working ? [working.id] : []))
+  // …and in which areas (STOCK_AREAS_PART_3.md): every area unless narrowed.
+  const [areaIds, setAreaIds] = useState<string[]>([])
 
   const {
     register,
@@ -35,6 +46,19 @@ export function AddUserModal({ onClose, onSuccess }: AddUserModalProps) {
     resolver: zodResolver(createUserSchema),
     defaultValues: createUserFormDefaults(),
   })
+  const roleId = useWatch({ control, name: 'roleId' })
+  // Everyone here, to say when an email or number typed is someone else's too (owner, 2026-11-01).
+  const everyone = useUsers({ page: 0, size: 200 }).data?.content ?? []
+  const [typedEmail, typedPhone, typedFirst, typedLast, typedUsername] = useWatch({
+    control,
+    name: ['email', 'phone', 'firstName', 'lastName', 'username'],
+  })
+  const thisPerson = {
+    name:
+      formatDisplayName({ username: typedUsername || '', firstName: typedFirst, lastName: typedLast }) || 'This person',
+  }
+  const sharedEmail = sharedSignInNote('email', typedEmail, thisPerson, everyone)
+  const sharedPhone = sharedSignInNote('number', typedPhone, thisPerson, everyone)
 
   async function onSubmit(values: CreateUserFormValues) {
     setFormError(null)
@@ -48,6 +72,8 @@ export function AddUserModal({ onClose, onSuccess }: AddUserModalProps) {
         email: optional(values.email),
         phone: optional(values.phone),
         jobTitle: optional(values.jobTitle),
+        branchIds: isMultiBranch && branchIds.length > 0 ? branchIds : undefined,
+        areaIds: areaIds.length > 0 ? areaIds : undefined,
       })
       onSuccess(user)
     } catch (err) {
@@ -60,17 +86,17 @@ export function AddUserModal({ onClose, onSuccess }: AddUserModalProps) {
   }
 
   return (
-    <Modal
+    <Sheet
       open
       onClose={onClose}
       title="Add user"
-      size="lg"
+      size="md"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
+          <Button variant="action" onClick={handleSubmit(onSubmit)} loading={isSubmitting}>
             Add user
           </Button>
         </>
@@ -79,14 +105,16 @@ export function AddUserModal({ onClose, onSuccess }: AddUserModalProps) {
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
         <TextField
           label="Username"
+          autoComplete="off"
           hint="Can be an email or any username — this is what they'll use to log in along with your Company ID"
           error={errors.username?.message}
           {...register('username')}
         />
-        <TextField label="Password" type="password" error={errors.password?.message} {...register('password')} />
+        <TextField label="Password" type="password" autoComplete="new-password" error={errors.password?.message} {...register('password')} />
         <TextField
           label="Confirm password"
           type="password"
+          autoComplete="new-password"
           error={errors.confirmPassword?.message}
           {...register('confirmPassword')}
         />
@@ -97,6 +125,7 @@ export function AddUserModal({ onClose, onSuccess }: AddUserModalProps) {
             <RoleSelectField value={field.value} onChange={field.onChange} error={errors.roleId?.message} />
           )}
         />
+        <WorksAtField roleId={roleId} value={branchIds} onChange={setBranchIds} areaIds={areaIds} onAreasChange={setAreaIds} />
 
         <div className="border-t border-neutral-200 pt-4">
           <p className="text-sm font-medium text-neutral-700">Profile details</p>
@@ -105,17 +134,29 @@ export function AddUserModal({ onClose, onSuccess }: AddUserModalProps) {
           </p>
           <div className="mt-3 flex flex-col gap-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <TextField label="First name" error={errors.firstName?.message} {...register('firstName')} />
-              <TextField label="Last name" error={errors.lastName?.message} {...register('lastName')} />
+              <TextField label="First name" autoComplete="off" error={errors.firstName?.message} {...register('firstName')} />
+              <TextField label="Last name" autoComplete="off" error={errors.lastName?.message} {...register('lastName')} />
             </div>
-            <TextField label="Email" type="email" error={errors.email?.message} {...register('email')} />
-            <TextField label="Phone" type="tel" error={errors.phone?.message} {...register('phone')} />
-            <TextField label="Job title" error={errors.jobTitle?.message} {...register('jobTitle')} />
+            <TextField label="Email" type="email" autoComplete="off" error={errors.email?.message} {...register('email')} />
+            <SharedNote text={sharedEmail} />
+            <TextField label="Phone" autoComplete="off" type="tel" error={errors.phone?.message} {...register('phone')} />
+            <SharedNote text={sharedPhone} />
+            <TextField label="Job title" autoComplete="off" error={errors.jobTitle?.message} {...register('jobTitle')} />
           </div>
         </div>
 
         <FormError message={formError} />
       </form>
-    </Modal>
+    </Sheet>
+  )
+}
+
+/** Under Email or Phone: someone else here has it too, so it won't sign anyone in (owner, 2026-11-01). */
+function SharedNote({ text }: { text: string | null }) {
+  if (!text) return null
+  return (
+    <p className="-mt-2 text-sm text-warning-800" data-shared-sign-in>
+      {text}
+    </p>
   )
 }

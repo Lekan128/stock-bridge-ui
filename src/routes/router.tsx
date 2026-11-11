@@ -1,4 +1,6 @@
 import { Suspense, lazy } from 'react'
+import { BranchesPage } from '@/features/branches/BranchesPage'
+import { RecordingBranchGate } from '@/features/branches/RecordingBranchGate'
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
 import { RedirectIfAuthenticated } from '@/auth/RedirectIfAuthenticated'
@@ -15,6 +17,7 @@ import { StorefrontLayout } from '@/layouts/StorefrontLayout'
 import { ScrollToTop } from '@/routes/ScrollToTop'
 import { lazyPage } from '@/routes/lazyPage'
 import { MARKETPLACE_BASE } from '@/routes/marketplacePaths'
+import { MARKETPLACE_OPEN } from '@/features/storefront/marketplaceLaunch'
 
 // Eager: log in and sign up, the landing page's two doors. They are the first paint for someone
 // arriving from it, so they must not wait on a second network round trip.
@@ -53,6 +56,11 @@ const StorefrontProductDetailPage = lazy(() =>
   import('@/pages/StorefrontProductDetailPage').then((m) => ({ default: m.StorefrontProductDetailPage })),
 )
 const CartPage = lazy(() => import('@/pages/CartPage').then((m) => ({ default: m.CartPage })))
+const MarketplaceComingSoonPage = lazy(() =>
+  import('@/features/storefront/pages/MarketplaceComingSoonPage').then((m) => ({
+    default: m.MarketplaceComingSoonPage,
+  })),
+)
 const QuickModePage = lazyPage(() => import('@/features/quick/QuickModePage').then((m) => m.QuickModePage), <BootstrappingScreen />)
 const CheckoutPage = lazy(() =>
   import('@/pages/CheckoutPage').then((m) => ({ default: m.CheckoutPage })),
@@ -134,6 +142,12 @@ const RecordDeliveryPage = lazy(() =>
     default: m.RecordDeliveryPage,
   })),
 )
+// Count stock: the closing count on a laptop, from Inventory's "⋯" (2026-11-10).
+const CountStockPage = lazy(() =>
+  import('@/features/products/pages/CountStockPage').then((m) => ({
+    default: m.CountStockPage,
+  })),
+)
 // Record a sale: a basket of one item or twenty (SELLING_PRICE_PLAN.md §6.1).
 const RecordSalePage = lazy(() =>
   import('@/features/selling/sale/RecordSalePage').then((m) => ({
@@ -145,6 +159,11 @@ const SalesPage = lazy(() =>
     default: m.SalesPage,
   })),
 )
+// Transfers between branches (MULTI_BRANCH_UX_PLAN.md §5.4-5.7): one chunk for the three screens,
+// which only a company with two branches ever opens - one, so Send can move to the waybill offline.
+const TransfersPage = lazy(() => import('@/features/transfers/screens').then((m) => ({ default: m.TransfersPage })))
+const SendStockPage = lazy(() => import('@/features/transfers/screens').then((m) => ({ default: m.SendStockPage })))
+const TransferDetailPage = lazy(() => import('@/features/transfers/screens').then((m) => ({ default: m.TransferDetailPage })))
 // What has been ordered from a supplier off the platform and not received yet (task 3.1). Two
 // chunks, like the import screens: the list is read by anyone who can see products, while the
 // screen that writes one down is reached far less often and by fewer people.
@@ -153,9 +172,36 @@ const ExpectedDeliveriesPage = lazy(() =>
     default: m.ExpectedDeliveriesPage,
   })),
 )
-const NewExpectedDeliveryPage = lazy(() =>
-  import('@/features/expected/pages/NewExpectedDeliveryPage').then((m) => ({
-    default: m.NewExpectedDeliveryPage,
+/** products/expected/:id -> purchase-orders/:id, keeping the id. */
+function OldPurchaseOrderRedirect() {
+  const { id } = useParams()
+  return <Navigate to={`/app/purchase-orders/${id ?? ''}`} replace />
+}
+const PurchaseOrderPage = lazy(() =>
+  import('@/features/expected/pages/PurchaseOrderPage').then((m) => ({
+    default: m.PurchaseOrderPage,
+  })),
+)
+// The page a supplier opens from the link in an email or WhatsApp message - no account, no
+// workspace. Lazy: nobody reaches it as a cold first paint of the app.
+const PublicPurchaseOrderPage = lazy(() =>
+  import('@/features/publicOrder/PublicPurchaseOrderPage').then((m) => ({
+    default: m.PublicPurchaseOrderPage,
+  })),
+)
+// Price requests (PURCHASE_ORDER_PLAN.md section 11.3): asking, the request page, and the supplier's own page.
+const AskForPricesPage = lazy(() =>
+  import('@/features/expected/pages/AskForPricesPage').then((m) => ({ default: m.AskForPricesPage })),
+)
+const PriceRequestPage = lazy(() =>
+  import('@/features/expected/pages/PriceRequestPage').then((m) => ({ default: m.PriceRequestPage })),
+)
+const PublicPriceRequestPage = lazy(() =>
+  import('@/features/publicOrder/PublicPriceRequestPage').then((m) => ({ default: m.PublicPriceRequestPage })),
+)
+const PurchaseOrderFormPage = lazy(() =>
+  import('@/features/expected/pages/PurchaseOrderFormPage').then((m) => ({
+    default: m.PurchaseOrderFormPage,
   })),
 )
 
@@ -438,50 +484,59 @@ export function AppRoutes() {
         {/* ---------------------------------------------------- ProcurePal marketplace (public) */}
         {/* Under /marketplace since the Procurepaddy landing page took / (LANDING_PAGE_PLAN.md,
             step 2). Paths come from marketplacePaths; the old ones redirect below. */}
-        <Route path={MARKETPLACE_BASE} element={<StorefrontLayout />}>
-          <Route index element={<StorefrontHomePage />} />
-          <Route path="product/:idOrSlug" element={<StorefrontProductDetailPage />} />
-          {/* One seller's storefront. Public, like the rest of the catalog — a buyer deciding
-              whether to order from a third party should not have to sign in to see who they are. */}
-          <Route path="seller/:idOrSlug" element={<SellerStorefrontPage />} />
-          {/* Anonymous carts are allowed — the cart lives in localStorage until login (contract §8). */}
-          <Route path="cart" element={<CartPage />} />
-          <Route
-            path="checkout"
-            element={
-              <RequireAuth>
-                <CheckoutPage />
-              </RequireAuth>
-            }
-          />
-          {/* Both Monnify landing paths render the same verify-and-route screen: `checkout/return`
-            is the configured redirect URL, `checkout/processing` the in-app waiting state. */}
-          <Route
-            path="checkout/processing"
-            element={
-              <RequireAuth>
-                <PaymentReturnPage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="checkout/return"
-            element={
-              <RequireAuth>
-                <PaymentReturnPage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="order-confirmation/:orderId"
-            element={
-              <RequireAuth>
-                <OrderConfirmationPage />
-              </RequireAuth>
-            }
-          />
-          <Route path="*" element={<NotFoundPage />} />
-        </Route>
+        {MARKETPLACE_OPEN ? (
+          <Route path={MARKETPLACE_BASE} element={<StorefrontLayout />}>
+            <Route index element={<StorefrontHomePage />} />
+            <Route path="product/:idOrSlug" element={<StorefrontProductDetailPage />} />
+            {/* One seller's storefront. Public, like the rest of the catalog — a buyer deciding
+                whether to order from a third party should not have to sign in to see who they are. */}
+            <Route path="seller/:idOrSlug" element={<SellerStorefrontPage />} />
+            {/* Anonymous carts are allowed — the cart lives in localStorage until login (contract §8). */}
+            <Route path="cart" element={<CartPage />} />
+            <Route
+              path="checkout"
+              element={
+                <RequireAuth>
+                  <CheckoutPage />
+                </RequireAuth>
+              }
+            />
+            {/* Both Monnify landing paths render the same verify-and-route screen: `checkout/return`
+              is the configured redirect URL, `checkout/processing` the in-app waiting state. */}
+            <Route
+              path="checkout/processing"
+              element={
+                <RequireAuth>
+                  <PaymentReturnPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="checkout/return"
+              element={
+                <RequireAuth>
+                  <PaymentReturnPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="order-confirmation/:orderId"
+              element={
+                <RequireAuth>
+                  <OrderConfirmationPage />
+                </RequireAuth>
+              }
+            />
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
+        ) : (
+          // Closed in production until launch (marketplaceLaunch.ts): every marketplace address,
+          // old links and Monnify returns included, gets the "opens soon" page instead of a 404.
+          <Route path={MARKETPLACE_BASE} element={<StorefrontLayout comingSoon />}>
+            <Route index element={<MarketplaceComingSoonPage />} />
+            <Route path="*" element={<MarketplaceComingSoonPage />} />
+          </Route>
+        )}
 
         {/* The landing page, and the marketplace's old addresses. */}
         <Route path="/" element={<RootRoute />} />
@@ -493,7 +548,8 @@ export function AppRoutes() {
         <Route path="/checkout/return" element={<LegacyMarketplaceRedirect />} />
         <Route path="/order-confirmation/:orderId" element={<LegacyMarketplaceRedirect />} />
 
-        <Route element={<StorefrontLayout />}>
+        {/* Before launch, no search, cart or catalogue links here either (marketplaceLaunch.ts). */}
+        <Route element={<StorefrontLayout comingSoon={!MARKETPLACE_OPEN} />}>
           {/* The target of the link in every confirmation email. Deliberately public and
             deliberately inside the storefront chrome: the person clicking may have no session on
             this device (phone vs. the laptop they signed up on), and whatever the outcome they
@@ -541,6 +597,11 @@ export function AppRoutes() {
           right. This creates no account at all — it adds a business to a waitlist a super admin
           reviews by hand — so a signed-in buyer who wants to also sell must be able to reach it. */}
         <Route path="/vendor-application" element={<VendorApplicationPage />} />
+        {/* A supplier opening a purchase order (PURCHASE_ORDER_PLAN.md section 3.5). Public and
+          outside every layout on purpose: no login, no navigation, one column for a phone. The
+          long random token in the path is the access check. */}
+        <Route path="/o/:token" element={<PublicPurchaseOrderPage />} />
+        <Route path="/q/:token" element={<PublicPriceRequestPage />} />
 
         {/* ------------------------------------------------------- Legacy workspace paths → /app */}
         {/* The workspace moved from `/` to `/app` when `/` became the storefront. These keep every
@@ -652,7 +713,9 @@ export function AppRoutes() {
             path="quick"
             element={
               <RequirePermission anyOf={[PERMISSIONS.STOCK_IN, PERMISSIONS.STOCK_OUT, PERMISSIONS.MANAGE_INVENTORY]}>
-                <QuickModePage />
+                <RecordingBranchGate doing="recording">
+                  <QuickModePage />
+                </RecordingBranchGate>
               </RequirePermission>
             }
           />
@@ -660,7 +723,9 @@ export function AppRoutes() {
             path="sell"
             element={
               <RequirePermission permission={PERMISSIONS.STOCK_OUT}>
-                <RecordSalePage />
+                <RecordingBranchGate doing="selling">
+                  <RecordSalePage />
+                </RecordingBranchGate>
               </RequirePermission>
             }
           />
@@ -672,14 +737,61 @@ export function AppRoutes() {
               </RequirePermission>
             }
           />
+          {/* Transfers: reading is any of the stock authorities, as the API's list is; sending is
+            SEND_STOCK. "send" is static, so it is declared before ":id". */}
+          <Route
+            path="transfers"
+            element={
+              <RequirePermission anyOf={[PERMISSIONS.STOCK_IN, PERMISSIONS.STOCK_OUT, PERMISSIONS.SEND_STOCK, PERMISSIONS.MANAGE_INVENTORY]}>
+                <TransfersPage />
+              </RequirePermission>
+            }
+          />
+          {/* Move stock lives in quick mode and in a Sheet now, not on a screen of its own; an old link lands on
+              quick mode's Move. */}
+          <Route path="move" element={<Navigate to="/app/quick?mode=move" replace />} />
+          <Route
+            path="transfers/send"
+            element={
+              <RequirePermission permission={PERMISSIONS.SEND_STOCK}>
+                <SendStockPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="transfers/:id"
+            element={
+              <RequirePermission anyOf={[PERMISSIONS.STOCK_IN, PERMISSIONS.STOCK_OUT, PERMISSIONS.SEND_STOCK, PERMISSIONS.MANAGE_INVENTORY]}>
+                <TransferDetailPage />
+              </RequirePermission>
+            }
+          />
+          {/* Count stock: whoever manages the stock, at the branch they record at (static, above products/:id). */}
+          <Route
+            path="products/count"
+            element={
+              <RequirePermission permission={PERMISSIONS.MANAGE_INVENTORY}>
+                <RecordingBranchGate question="Which branch are you counting?">
+                  <CountStockPage />
+                </RecordingBranchGate>
+              </RequirePermission>
+            }
+          />
           <Route
             path="products/receive"
             element={
               <RequirePermission permission={PERMISSIONS.MANAGE_INVENTORY}>
-                <RecordDeliveryPage />
+                <RecordingBranchGate question="Which branch is this delivery for?">
+                  <RecordDeliveryPage />
+                </RecordingBranchGate>
               </RequirePermission>
             }
           />
+          {/* The old addresses, kept so a bookmark or a link already sent still lands somewhere: purchase
+            orders used to live under products/expected. */}
+          <Route path="products/expected" element={<Navigate to="/app/purchase-orders" replace />} />
+          <Route path="products/expected/new" element={<Navigate to="/app/purchase-orders/new" replace />} />
+          <Route path="products/expected/:id" element={<OldPurchaseOrderRedirect />} />
           {/* Expected deliveries — static, so declared above products/:id like the routes either
             side of it.
 
@@ -688,7 +800,7 @@ export function AppRoutes() {
             a hundred bags are on their way is the same authority as saying they arrived. The list
             hides its own write affordances from a reader who lacks the second. */}
           <Route
-            path="products/expected"
+            path="purchase-orders"
             element={
               <RequirePermission permission={PERMISSIONS.VIEW_PRODUCTS}>
                 <ExpectedDeliveriesPage />
@@ -696,10 +808,43 @@ export function AppRoutes() {
             }
           />
           <Route
-            path="products/expected/new"
+            path="purchase-orders/new"
             element={
-              <RequirePermission permission={PERMISSIONS.MANAGE_INVENTORY}>
-                <NewExpectedDeliveryPage />
+              <RequirePermission anyOf={[PERMISSIONS.CREATE_PURCHASE_ORDER, PERMISSIONS.SEND_PURCHASE_ORDER]}>
+                <PurchaseOrderFormPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="purchase-orders/:id/change"
+            element={
+              <RequirePermission anyOf={[PERMISSIONS.CREATE_PURCHASE_ORDER, PERMISSIONS.SEND_PURCHASE_ORDER]}>
+                <PurchaseOrderFormPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="purchase-orders/ask"
+            element={
+              <RequirePermission anyOf={[PERMISSIONS.CREATE_PURCHASE_ORDER, PERMISSIONS.SEND_PURCHASE_ORDER]}>
+                <AskForPricesPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="purchase-orders/rfq/:id"
+            element={
+              <RequirePermission permission={PERMISSIONS.VIEW_PRODUCTS}>
+                <PriceRequestPage />
+              </RequirePermission>
+            }
+          />
+          {/* One purchase order — after "new", which would otherwise read as an id. */}
+          <Route
+            path="purchase-orders/:id"
+            element={
+              <RequirePermission permission={PERMISSIONS.VIEW_PRODUCTS}>
+                <PurchaseOrderPage />
               </RequirePermission>
             }
           />
@@ -958,6 +1103,14 @@ export function AppRoutes() {
             Company ID they need to onboard a colleague) even though only an OWNER can change
             them. The page gates the edit form on MANAGE_COMPANY_PROFILE instead. */}
           <Route path="company" element={<CompanySettingsPage />} />
+          <Route
+            path="company/branches"
+            element={
+              <RequirePermission permission={PERMISSIONS.MANAGE_BRANCHES}>
+                <BranchesPage />
+              </RequirePermission>
+            }
+          />
           <Route
             path="users"
             element={

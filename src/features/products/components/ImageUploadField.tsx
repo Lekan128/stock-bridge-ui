@@ -10,9 +10,12 @@ export interface ImageUploadFieldProps {
   removed: boolean
   onFileSelect: (file: File | null) => void
   onRemove: () => void
+  /** A small tile, beside the name on the product form (2026-11-10), not a big box above it. */
+  compact?: boolean
 }
 
-export function ImageUploadField({ file, existingImageUrl, removed, onFileSelect, onRemove }: ImageUploadFieldProps) {
+export function ImageUploadField({ file, existingImageUrl, removed, onFileSelect, onRemove, compact = false }: ImageUploadFieldProps) {
+  const tile = compact ? 'h-24 w-24' : 'h-40 w-40'
   const [dragOver, setDragOver] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -54,7 +57,7 @@ export function ImageUploadField({ file, existingImageUrl, removed, onFileSelect
   if (displayedUrl) {
     return (
       <div className="flex flex-col gap-2">
-        <div className="relative h-40 w-40 overflow-hidden rounded-lg border border-neutral-200">
+        <div className={`relative ${tile} overflow-hidden rounded-lg border border-neutral-200`}>
           <img src={displayedUrl} alt="Product preview" className="h-full w-full object-cover" />
           <button
             type="button"
@@ -70,7 +73,7 @@ export function ImageUploadField({ file, existingImageUrl, removed, onFileSelect
           onClick={() => inputRef.current?.click()}
           className="self-start text-sm font-medium text-primary-600 hover:underline"
         >
-          Replace image
+          {compact ? 'Replace' : 'Replace image'}
         </button>
         <input
           ref={inputRef}
@@ -97,12 +100,12 @@ export function ImageUploadField({ file, existingImageUrl, removed, onFileSelect
           setDragOver(false)
           validateAndSelect(e.dataTransfer.files[0])
         }}
-        className={`flex h-40 w-40 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed text-center text-xs text-neutral-500 transition-colors ${
+        className={`flex ${tile} cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed text-center text-xs text-neutral-500 transition-colors ${
           dragOver ? 'border-primary-400 bg-primary-50' : 'border-neutral-300 bg-neutral-50 hover:bg-neutral-100'
         }`}
       >
         <ImageUp className="h-6 w-6 text-neutral-500" />
-        <span className="px-3">Drag & drop or tap to select an image</span>
+        <span className="px-2">{compact ? 'Add a photo' : 'Drag & drop or tap to select an image'}</span>
         <input
           ref={inputRef}
           type="file"
