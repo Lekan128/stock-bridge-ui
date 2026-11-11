@@ -21,7 +21,7 @@ const ssr = `${root}dist-ssr/`
 const siteUrl = (process.env.SITE_URL || 'https://procurepaddy.com').replace(/\/$/, '')
 const noindex = process.env.SITE_NOINDEX === 'true'
 
-const { renderHome, renderFounding, renderPages, SITEMAP_PATHS } = await import(pathToFileURL(`${ssr}entry-server.js`).href)
+const { renderHome, renderFounding, renderPages, renderMarketplace, SITEMAP_PATHS } = await import(pathToFileURL(`${ssr}entry-server.js`).href)
 const headOptions = {
   siteUrl,
   googleVerification: process.env.GOOGLE_SITE_VERIFICATION,
@@ -80,12 +80,26 @@ for (const page of pages) {
   )
 }
 
+// /marketplace while the marketplace is closed (VITE_MARKETPLACE_OPEN unset): its "opens soon" page
+// as real HTML, in the storefront's face (Inter), not the marketing pages' Plex. Only the exact
+// address: /marketplace/... stays the app. Nothing is written once the marketplace is open.
+const marketplace = renderMarketplace(headOptions)
+if (marketplace) {
+  writeFileSync(
+    `${dist}${marketplace.file}`,
+    template
+      .replace('data-surface="marketing"', 'data-surface="storefront" data-page="marketplace"')
+      .replace('<!--marketing-head-->', robotsMeta + marketplace.head)
+      .replace('<!--marketing-html-->', marketplace.html),
+  )
+}
+
 // Netlify: each page is served as itself, ahead of the app shell's catch-all (public/_redirects
 // ends with /* /index.html). Written into the copy in dist, just before that last rule.
 const redirects = readFileSync(`${dist}_redirects`, 'utf8')
 const catchAll = '# Everything else is the app.'
 if (!redirects.includes(catchAll)) throw new Error(`public/_redirects is missing "${catchAll}"`)
-const rules = pages.map((page) => `${page.path}  /${page.file}  200!`).join('\n')
+const rules = [...pages, ...(marketplace ? [marketplace] : [])].map((page) => `${page.path}  /${page.file}  200!`).join('\n')
 writeFileSync(
   `${dist}_redirects`,
   redirects.replace(catchAll, `# The marketing pages, written by scripts/prerender.mjs.\n${rules}\n\n${catchAll}`),
@@ -123,5 +137,5 @@ Sitemap: ${siteUrl}/sitemap.xml
 
 rmSync(ssr, { recursive: true, force: true })
 console.log(
-  `prerendered / (${foundingOffer ? 'founding offer' : 'early access'}), /founding${founding ? '' : ' (redirect)'} and ${pages.length} more pages for ${siteUrl}${noindex ? ' (noindex)' : ''}; wrote sitemap.xml, robots.txt and the _redirects rules`,
+  `prerendered / (${foundingOffer ? 'founding offer' : 'early access'}), /founding${founding ? '' : ' (redirect)'}, ${pages.length} more pages${marketplace ? ' and /marketplace (opens soon)' : ''} for ${siteUrl}${noindex ? ' (noindex)' : ''}; wrote sitemap.xml, robots.txt and the _redirects rules`,
 )
