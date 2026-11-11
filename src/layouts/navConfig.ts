@@ -155,18 +155,21 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       // No permission gate: the storefront is public, so hiding the way to it would only
       // strand a user who is allowed to look at it anyway.
-      // Before launch it stays, tagged Soon, because the marketplace is a reason to sign up; its
-      // orders list is left out, since there can be no orders yet.
+      // Before launch it stays, tagged Soon, because the marketplace is a reason to sign up. Its
+      // orders and the delivery addresses only checkout uses are left out: there can be no orders
+      // and no deliveries yet.
       { path: marketplacePaths.home, label: 'Marketplace', icon: Store, leavesWorkspace: true, soon: !MARKETPLACE_OPEN },
       ...(MARKETPLACE_OPEN
-        ? [{ path: '/app/orders', label: 'Marketplace orders', icon: ReceiptText, requiredPermission: PERMISSIONS.VIEW_ORDERS }]
+        ? [
+            { path: '/app/orders', label: 'Marketplace orders', icon: ReceiptText, requiredPermission: PERMISSIONS.VIEW_ORDERS },
+            {
+              path: '/app/addresses',
+              label: 'Delivery Addresses',
+              icon: MapPin,
+              requiredPermission: PERMISSIONS.MANAGE_DELIVERY_ADDRESSES,
+            },
+          ]
         : []),
-      {
-        path: '/app/addresses',
-        label: 'Delivery Addresses',
-        icon: MapPin,
-        requiredPermission: PERMISSIONS.MANAGE_DELIVERY_ADDRESSES,
-      },
       // VIEW_VENDORS, not MANAGE_VENDORS — reading the supplier list is deliberately wider than
       // maintaining it (finance and inventory both need it), and the page hides its own add/edit
       // controls behind MANAGE_VENDORS. A STOREKEEPER holds neither code, so this entry does not

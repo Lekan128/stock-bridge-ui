@@ -74,7 +74,7 @@ once both merges land. Merge the API first when the UI depends on new endpoints.
 ## Opening the marketplace in production
 
 Production shows a "The marketplace opens soon" page on every `/marketplace/…` address, and the
-workspace sidebar tags Marketplace "Soon" and leaves out Marketplace orders. Staging and deploy
+workspace sidebar tags Marketplace "Soon" and leaves out Marketplace orders and Delivery Addresses. Staging and deploy
 previews have the real marketplace (`VITE_MARKETPLACE_OPEN = "true"` in `netlify.toml`).
 
 To open it: Netlify UI > Site configuration > Environment variables > add `VITE_MARKETPLACE_OPEN`

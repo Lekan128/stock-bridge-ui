@@ -3,7 +3,7 @@
  *
  * Closed, every `/marketplace/…` address shows the "opens soon" page (MarketplaceComingSoonPage),
  * the storefront header and footer drop search, cart and categories, and the workspace sidebar
- * tags Marketplace "Soon" and leaves out Marketplace orders.
+ * tags Marketplace "Soon" and leaves out Marketplace orders and Delivery Addresses.
  *
  * Read at build time, like VITE_FOUNDING_OFFER:
  * - production: closed, because nothing sets the variable. To open it, set
