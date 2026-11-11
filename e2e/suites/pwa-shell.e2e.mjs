@@ -35,7 +35,7 @@ function assert(cond, msg) {
 // always differs from what the browser has installed.
 execSync('npm run build', {
   cwd: UI_DIR,
-  env: { ...process.env, VITE_API_BASE_URL: API },
+  env: { ...process.env, VITE_API_BASE_URL: API, VITE_MARKETPLACE_OPEN: 'true' },
   stdio: 'ignore',
 })
 
@@ -177,7 +177,7 @@ await check('update waits for the user, then Reload switches to the new version'
   // Ship a "new deploy": same code, different baked-in base URL, so the entry chunk's hash moves.
   execSync('npm run build', {
     cwd: UI_DIR,
-    env: { ...process.env, VITE_API_BASE_URL: `${API}/` },
+    env: { ...process.env, VITE_API_BASE_URL: `${API}/`, VITE_MARKETPLACE_OPEN: 'true' },
     stdio: 'ignore',
   })
 

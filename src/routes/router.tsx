@@ -17,6 +17,7 @@ import { StorefrontLayout } from '@/layouts/StorefrontLayout'
 import { ScrollToTop } from '@/routes/ScrollToTop'
 import { lazyPage } from '@/routes/lazyPage'
 import { MARKETPLACE_BASE } from '@/routes/marketplacePaths'
+import { MARKETPLACE_OPEN } from '@/features/storefront/marketplaceLaunch'
 
 // Eager: log in and sign up, the landing page's two doors. They are the first paint for someone
 // arriving from it, so they must not wait on a second network round trip.
@@ -55,6 +56,11 @@ const StorefrontProductDetailPage = lazy(() =>
   import('@/pages/StorefrontProductDetailPage').then((m) => ({ default: m.StorefrontProductDetailPage })),
 )
 const CartPage = lazy(() => import('@/pages/CartPage').then((m) => ({ default: m.CartPage })))
+const MarketplaceComingSoonPage = lazy(() =>
+  import('@/features/storefront/pages/MarketplaceComingSoonPage').then((m) => ({
+    default: m.MarketplaceComingSoonPage,
+  })),
+)
 const QuickModePage = lazyPage(() => import('@/features/quick/QuickModePage').then((m) => m.QuickModePage), <BootstrappingScreen />)
 const CheckoutPage = lazy(() =>
   import('@/pages/CheckoutPage').then((m) => ({ default: m.CheckoutPage })),
@@ -478,50 +484,59 @@ export function AppRoutes() {
         {/* ---------------------------------------------------- ProcurePal marketplace (public) */}
         {/* Under /marketplace since the Procurepaddy landing page took / (LANDING_PAGE_PLAN.md,
             step 2). Paths come from marketplacePaths; the old ones redirect below. */}
-        <Route path={MARKETPLACE_BASE} element={<StorefrontLayout />}>
-          <Route index element={<StorefrontHomePage />} />
-          <Route path="product/:idOrSlug" element={<StorefrontProductDetailPage />} />
-          {/* One seller's storefront. Public, like the rest of the catalog — a buyer deciding
-              whether to order from a third party should not have to sign in to see who they are. */}
-          <Route path="seller/:idOrSlug" element={<SellerStorefrontPage />} />
-          {/* Anonymous carts are allowed — the cart lives in localStorage until login (contract §8). */}
-          <Route path="cart" element={<CartPage />} />
-          <Route
-            path="checkout"
-            element={
-              <RequireAuth>
-                <CheckoutPage />
-              </RequireAuth>
-            }
-          />
-          {/* Both Monnify landing paths render the same verify-and-route screen: `checkout/return`
-            is the configured redirect URL, `checkout/processing` the in-app waiting state. */}
-          <Route
-            path="checkout/processing"
-            element={
-              <RequireAuth>
-                <PaymentReturnPage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="checkout/return"
-            element={
-              <RequireAuth>
-                <PaymentReturnPage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="order-confirmation/:orderId"
-            element={
-              <RequireAuth>
-                <OrderConfirmationPage />
-              </RequireAuth>
-            }
-          />
-          <Route path="*" element={<NotFoundPage />} />
-        </Route>
+        {MARKETPLACE_OPEN ? (
+          <Route path={MARKETPLACE_BASE} element={<StorefrontLayout />}>
+            <Route index element={<StorefrontHomePage />} />
+            <Route path="product/:idOrSlug" element={<StorefrontProductDetailPage />} />
+            {/* One seller's storefront. Public, like the rest of the catalog — a buyer deciding
+                whether to order from a third party should not have to sign in to see who they are. */}
+            <Route path="seller/:idOrSlug" element={<SellerStorefrontPage />} />
+            {/* Anonymous carts are allowed — the cart lives in localStorage until login (contract §8). */}
+            <Route path="cart" element={<CartPage />} />
+            <Route
+              path="checkout"
+              element={
+                <RequireAuth>
+                  <CheckoutPage />
+                </RequireAuth>
+              }
+            />
+            {/* Both Monnify landing paths render the same verify-and-route screen: `checkout/return`
+              is the configured redirect URL, `checkout/processing` the in-app waiting state. */}
+            <Route
+              path="checkout/processing"
+              element={
+                <RequireAuth>
+                  <PaymentReturnPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="checkout/return"
+              element={
+                <RequireAuth>
+                  <PaymentReturnPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="order-confirmation/:orderId"
+              element={
+                <RequireAuth>
+                  <OrderConfirmationPage />
+                </RequireAuth>
+              }
+            />
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
+        ) : (
+          // Closed in production until launch (marketplaceLaunch.ts): every marketplace address,
+          // old links and Monnify returns included, gets the "opens soon" page instead of a 404.
+          <Route path={MARKETPLACE_BASE} element={<StorefrontLayout comingSoon />}>
+            <Route index element={<MarketplaceComingSoonPage />} />
+            <Route path="*" element={<MarketplaceComingSoonPage />} />
+          </Route>
+        )}
 
         {/* The landing page, and the marketplace's old addresses. */}
         <Route path="/" element={<RootRoute />} />
@@ -533,7 +548,8 @@ export function AppRoutes() {
         <Route path="/checkout/return" element={<LegacyMarketplaceRedirect />} />
         <Route path="/order-confirmation/:orderId" element={<LegacyMarketplaceRedirect />} />
 
-        <Route element={<StorefrontLayout />}>
+        {/* Before launch, no search, cart or catalogue links here either (marketplaceLaunch.ts). */}
+        <Route element={<StorefrontLayout comingSoon={!MARKETPLACE_OPEN} />}>
           {/* The target of the link in every confirmation email. Deliberately public and
             deliberately inside the storefront chrome: the person clicking may have no session on
             this device (phone vs. the laptop they signed up on), and whatever the outcome they

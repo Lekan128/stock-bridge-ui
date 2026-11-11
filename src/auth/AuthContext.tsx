@@ -1,7 +1,7 @@
 import { createContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { authApi } from '@/api/authApi'
 import { refreshSession, setAccessToken, setAuthFailureHandler } from '@/api/client'
-import { isTransientRefreshFailure } from '@/api/createApiClient'
+import { isTransientRefreshFailure, SessionReplacedError } from '@/api/createApiClient'
 import type { ClientSignupRequest, ClientType, TenantLoginRequest, TenantLoginResponse, TenantUser } from '@/types/auth'
 import { decodeJwtPayload, type TenantAccessTokenClaims } from '@/utils/jwt'
 import { authStorage } from '@/utils/storage'
@@ -138,6 +138,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return 'resumed'
       } catch (err) {
         if (isTransientRefreshFailure(err)) return 'transient'
+        // Another tab signed someone else in and this one is reloading as them: theirs to keep.
+        if (err instanceof SessionReplacedError) return 'resumed'
         setAccessToken(null)
         authStorage.clearSession()
         clearSessionState()
@@ -266,6 +268,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     authStorage.clearSession()
     clearSessionState()
   }
+
+  // Another tab signed in as someone else, or signed out: this tab's screens, caches and on-device
+  // catalogue belong to the old session, so it starts again as whoever is signed in now. Without
+  // this, the next token refresh here picks up the other tab's session (the refresh token is
+  // shared) while everything on screen still says the first company — see createApiClient.
+  const signedInAs = user ? `${user.id}|${client?.id ?? ''}` : null
+  useEffect(() => {
+    if (signedInAs == null) return
+    return authStorage.onSessionProfileChange((profile) => {
+      const now = profile ? `${profile.user.id}|${profile.client.id ?? ''}` : null
+      if (now !== signedInAs) window.location.reload()
+    })
+  }, [signedInAs])
 
   const value = useMemo<AuthContextValue>(
     () => ({

@@ -8,6 +8,13 @@ import { FOUNDERS } from '@/marketing/founders'
 import { PAGES, checkPaths } from '@/marketing/pages/registry'
 import { marketingFile } from '@/marketing/paths'
 import { HOME, HOME_FOUNDING, headTags, type HeadOptions } from '@/marketing/site'
+import { MarketplacePage } from '@/marketing/pages/MarketplacePage'
+import {
+  MARKETPLACE_SOON_DESCRIPTION,
+  MARKETPLACE_SOON_TITLE,
+} from '@/features/storefront/components/marketplaceSoonLinks'
+import { MARKETPLACE_OPEN } from '@/features/storefront/marketplaceLaunch'
+import { MARKETPLACE_BASE } from '@/routes/marketplacePaths'
 
 /**
  * Build-time rendering for the marketing pages (LANDING_PAGE_PLAN.md §5): `scripts/prerender.mjs`
@@ -72,5 +79,24 @@ export function renderPath(path: string, options: HeadOptions): { html: string; 
   }
 }
 
-/** What the sitemap lists: every indexable marketing page (not /founding, which is noindex). */
-export const SITEMAP_PATHS = ['/', ...PAGES.map((page) => page.meta.path)]
+/**
+ * `/marketplace` while the marketplace is closed: the "opens soon" page as real HTML, so search
+ * engines index the address now and keep it when the catalogue opens there. Null once it is open:
+ * `/marketplace` is then the app's catalogue, and the prerender writes nothing for it.
+ */
+export function renderMarketplace(options: HeadOptions): { path: string; file: string; html: string; head: string } | null {
+  if (MARKETPLACE_OPEN) return null
+  const meta = { path: MARKETPLACE_BASE, title: MARKETPLACE_SOON_TITLE, description: MARKETPLACE_SOON_DESCRIPTION }
+  return {
+    path: MARKETPLACE_BASE,
+    file: marketingFile(MARKETPLACE_BASE),
+    html: renderToString(<StrictMode><MarketplacePage /></StrictMode>),
+    head: headTags(meta, options, { breadcrumbs: [{ name: 'Marketplace', path: MARKETPLACE_BASE }] }),
+  }
+}
+
+/**
+ * What the sitemap lists: every indexable marketing page (not /founding, which is noindex), and the
+ * marketplace's "opens soon" page while it is closed.
+ */
+export const SITEMAP_PATHS = ['/', ...PAGES.map((page) => page.meta.path), ...(MARKETPLACE_OPEN ? [] : [MARKETPLACE_BASE])]

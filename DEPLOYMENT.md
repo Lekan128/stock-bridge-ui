@@ -71,6 +71,21 @@ Because the two repos deploy independently, a change that spans both (a new endp
 that calls it) is live on staging only once *both* staging deploys finish, and in production only
 once both merges land. Merge the API first when the UI depends on new endpoints.
 
+## Opening the marketplace in production
+
+Production shows a "The marketplace opens soon" page on every `/marketplace/…` address, and the
+workspace sidebar tags Marketplace "Soon" and leaves out Marketplace orders and Delivery Addresses. Staging and deploy
+previews have the real marketplace (`VITE_MARKETPLACE_OPEN = "true"` in `netlify.toml`).
+In a closed build `scripts/prerender.mjs` also writes `/marketplace` as real HTML (the same page,
+with its own title, description and canonical) and lists it in the sitemap, so search engines index
+the address before launch; once open, that file and sitemap entry are simply not written.
+
+To open it: Netlify UI > Site configuration > Environment variables > add `VITE_MARKETPLACE_OPEN`
+= `true` for the **Production** context, then trigger a production deploy (Deploys > Trigger
+deploy). Like every `VITE_` variable it is baked in at build time, so changing it does nothing
+until the next build. To close it again, delete the variable and redeploy. Open it only once the
+production API's marketplace (catalogue, Monnify live keys, delivery settings) is ready.
+
 ## Checking what is deployed
 
 Netlify UI > Deploys shows the branch and commit for every deploy, and lets you roll back by

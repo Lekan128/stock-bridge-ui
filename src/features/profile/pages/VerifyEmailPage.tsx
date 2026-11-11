@@ -7,6 +7,7 @@ import { Spinner } from '@/components/Spinner'
 import { emailApi } from '@/features/profile/api/emailApi'
 import { useEmailVerification } from '@/features/profile/hooks/useEmailVerification'
 import { isAppError } from '@/types/api'
+import { MARKETPLACE_OPEN } from '@/features/storefront/marketplaceLaunch'
 import { marketplacePaths } from '@/routes/marketplacePaths'
 
 type Phase = 'missing-token' | 'verifying' | 'verified' | 'rejected' | 'unreachable'
@@ -157,8 +158,8 @@ export function VerifyEmailPage() {
               </Link>
             )}
 
-            <Link to={marketplacePaths.home} className={buttonClassName('secondary')}>
-              Back to the marketplace
+            <Link to={MARKETPLACE_OPEN ? marketplacePaths.home : '/'} className={buttonClassName('secondary')}>
+              {MARKETPLACE_OPEN ? 'Back to the marketplace' : 'Go to the home page'}
             </Link>
           </div>
         )}

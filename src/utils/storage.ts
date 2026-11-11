@@ -70,6 +70,18 @@ export const authStorage = {
     localStorage.removeItem(REFRESH_TOKEN_KEY)
     localStorage.removeItem(SESSION_PROFILE_KEY)
   },
+
+  /**
+   * Calls `listener` when ANOTHER tab signs in, switches account or signs out (`storage` events
+   * never fire in the tab that wrote). Null when signed out. Returns the unsubscribe.
+   */
+  onSessionProfileChange: (listener: (profile: StoredSessionProfile | null) => void): (() => void) => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === SESSION_PROFILE_KEY || event.key === null) listener(readSessionProfile())
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  },
 }
 
 export const superAdminAuthStorage = {

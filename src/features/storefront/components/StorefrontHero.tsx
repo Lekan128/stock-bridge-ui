@@ -1,8 +1,35 @@
-import { PackageCheck, Truck, Wallet } from 'lucide-react'
+import { PackageCheck, Truck, Wallet, type LucideIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { ContourLines } from '@/components/brand/ContourLines'
 import type { MarketplaceSettings } from '@/features/storefront/types'
 import { formatNairaWhole } from '@/utils/money'
+
+export interface HeroPoint {
+  icon: LucideIcon
+  title: string
+  body: string
+}
+
+/**
+ * The three promises along the bottom of the navy hero. Shared with the "opens soon" page
+ * (MarketplaceComingSoonPage), so the marketplace is described the same way before and after it
+ * opens.
+ */
+export function HeroPointList({ points }: { points: HeroPoint[] }) {
+  return (
+    <ul className="mt-8 grid gap-4 sm:mt-10 sm:grid-cols-3">
+      {points.map((point) => (
+        <li key={point.title} className="flex gap-3 rounded-lg bg-white/[0.06] p-3.5 ring-1 ring-white/10">
+          <point.icon className="mt-0.5 h-5 w-5 shrink-0 text-accent-300" aria-hidden="true" />
+          <div>
+            <p className="text-sm font-semibold">{point.title}</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-primary-100">{point.body}</p>
+          </div>
+        </li>
+      ))}
+    </ul>
+  )
+}
 
 export interface StorefrontHeroProps {
   settings: MarketplaceSettings
@@ -18,7 +45,7 @@ export interface StorefrontHeroProps {
  * order confirmation page so the promise and the payoff use the same words.
  */
 export function StorefrontHero({ settings }: StorefrontHeroProps) {
-  const points = [
+  const points: HeroPoint[] = [
     {
       icon: PackageCheck,
       title: 'Straight into your inventory',
@@ -49,14 +76,14 @@ export function StorefrontHero({ settings }: StorefrontHeroProps) {
       <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
         <div className="max-w-2xl">
           <p className="text-xs font-semibold uppercase tracking-widest text-primary-200">
-            ProcurePal wholesale marketplace
+            Procurepaddy marketplace
           </p>
           <h1 className="mt-2 text-2xl font-bold leading-tight sm:text-4xl">
             Restock your business — and your stock records — in one go.
           </h1>
           <p className="mt-3 text-sm leading-relaxed text-primary-100 sm:text-base">
             Buy the staples, packaging and equipment your business runs on at wholesale prices. What you order
-            is booked straight into your ProcurePal inventory, so your stock levels stay right without anyone
+            is booked straight into your Procurepaddy inventory, so your stock levels stay right without anyone
             keying them in twice.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
@@ -75,17 +102,7 @@ export function StorefrontHero({ settings }: StorefrontHeroProps) {
           </div>
         </div>
 
-        <ul className="mt-8 grid gap-4 sm:mt-10 sm:grid-cols-3">
-          {points.map((point) => (
-            <li key={point.title} className="flex gap-3 rounded-lg bg-white/[0.06] p-3.5 ring-1 ring-white/10">
-              <point.icon className="mt-0.5 h-5 w-5 shrink-0 text-accent-300" aria-hidden="true" />
-              <div>
-                <p className="text-sm font-semibold">{point.title}</p>
-                <p className="mt-0.5 text-xs leading-relaxed text-primary-100">{point.body}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <HeroPointList points={points} />
       </div>
     </section>
   )

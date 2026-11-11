@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { buttonClassName } from '@/components/Button'
 import { EmptyState } from '@/components/EmptyState'
+import { MARKETPLACE_OPEN } from '@/features/storefront/marketplaceLaunch'
 import { marketplacePaths } from '@/routes/marketplacePaths'
 
 /**
@@ -21,8 +22,9 @@ export function NotFoundPage() {
         description="That link doesn't lead anywhere — it may have moved, or the address may be mistyped."
         action={
           <>
-            <Link to={marketplacePaths.home} className={buttonClassName('primary')}>
-              Go to the marketplace
+            {/* Before launch the marketplace is an "opens soon" page, not somewhere to recover to. */}
+            <Link to={MARKETPLACE_OPEN ? marketplacePaths.home : '/'} className={buttonClassName('primary')}>
+              {MARKETPLACE_OPEN ? 'Go to the marketplace' : 'Go to the home page'}
             </Link>
             {isAuthenticated && (
               <Link to="/app" className={buttonClassName('secondary')}>
