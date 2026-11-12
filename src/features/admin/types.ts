@@ -23,6 +23,25 @@ export interface SuperAdminClientSummary {
   createdAt: string
   /** Sells from its stock (API V45). Absent from an API older than the field: read as false. */
   sellsStock?: boolean
+  /** The shared demo company prospects try (API V86). Absent from an older API: read as false. */
+  demo?: boolean
+}
+
+/** GET/POST /api/superadmin/clients/{id}/demo-reset: how the last "Reset demo" went. */
+export interface DemoResetStatus {
+  state: 'RUNNING' | 'DONE' | 'FAILED'
+  step: string
+  startedAt: string
+  finishedAt?: string
+  result?: {
+    products: number
+    suppliers: number
+    pictures: number
+    movements: number
+    transfers: number
+    purchaseOrders: number
+  }
+  problem?: string
 }
 
 /**
