@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/Button'
 import { Sheet } from '@/components/Sheet'
+import { PasswordField } from '@/components/PasswordField'
 import { TextField } from '@/components/TextField'
 import type { VendorApplication } from '@/features/admin/types'
 import { slugify } from '@/utils/slugify'
@@ -136,20 +137,18 @@ export function ApproveVendorDialog({
           hint="The short identifier they type alongside their username. Lowercase letters, numbers and hyphens only."
         />
         <div className="grid gap-4 sm:grid-cols-2">
-          <TextField
+          <PasswordField
             label="Password"
             name="vendor-password"
-            type="password"
             autoComplete="new-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             hint="At least 8 characters."
             error={password.length > 0 && password.length < 8 ? 'Must be at least 8 characters' : undefined}
           />
-          <TextField
+          <PasswordField
             label="Confirm password"
             name="vendor-confirm-password"
-            type="password"
             autoComplete="new-password"
             value={confirmPassword}
             onChange={(event) => setConfirmPassword(event.target.value)}
