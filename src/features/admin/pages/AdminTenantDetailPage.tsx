@@ -26,6 +26,7 @@ import { Button } from '@/components/Button'
 import { useToast } from '@/components/useToast'
 import { superAdminApiClient } from '@/features/admin/api/superAdminApi'
 import { ClientStatusBadge } from '@/features/admin/components/ClientStatusBadge'
+import { DemoCompanyPanel } from '@/features/admin/components/DemoCompanyPanel'
 import { EditClientModal } from '@/features/admin/components/EditClientModal'
 import { ResetCatalogModal } from '@/features/admin/components/ResetCatalogModal'
 import { SuspendClientDialog } from '@/features/admin/components/SuspendClientDialog'
@@ -170,6 +171,7 @@ export function AdminTenantDetailPage() {
                   Platform owner
                 </Badge>
               )}
+              {client.demo && <Badge variant="info">Demo</Badge>}
             </div>
             <p className="mt-0.5 text-sm text-neutral-500">
               {client.slug} · {client.adminEmail}
@@ -224,6 +226,17 @@ export function AdminTenantDetailPage() {
           variant={client.lowStockProductCount > 0 ? 'warning' : 'default'}
         />
       </div>
+
+      {!client.platformOwner && (
+        <DemoCompanyPanel
+          client={client}
+          onChanged={setClient}
+          onReset={() => {
+            void superAdminApiClient.getClient(client.id).then(setClient)
+            setDataVersion((v) => v + 1)
+          }}
+        />
+      )}
 
       <TenantUsersPanel clientId={client.id} clientName={client.name} />
 

@@ -36,7 +36,10 @@ export function ClientTable({ clients, onRowClick, onRequestSuspend, onActivate,
             onClick={() => onRowClick(client)}
             className="cursor-pointer hover:bg-neutral-50"
           >
-            <td className="border-b border-neutral-100 px-4 py-2.5 font-medium text-neutral-900">{client.name}</td>
+            <td className="border-b border-neutral-100 px-4 py-2.5 font-medium text-neutral-900">
+              {client.name}
+              {client.demo && <span className="ml-2 text-xs font-medium text-primary-700">Demo</span>}
+            </td>
             <td className="border-b border-neutral-100 px-4 py-2.5 text-neutral-600">{client.slug}</td>
             <td className="border-b border-neutral-100 px-4 py-2.5">
               <ClientStatusBadge active={client.active} />
