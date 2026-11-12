@@ -97,9 +97,14 @@ export const superAdminApiClient = {
     throw error
   },
 
-  /** Makes the company the shared demo (nothing leaves it), or an ordinary company again. */
-  setClientDemo: (id: string, demo: boolean) =>
-    superAdminApi.put<SuperAdminClientDetail>(`/api/superadmin/clients/${id}/demo`, { demo }).then((r) => r.data),
+  /**
+   * Makes the company the shared demo (nothing leaves it), or an ordinary company again. `confirm` is the
+   * company's code, typed. The server refuses a company that has been used, unless it was a demo before.
+   */
+  setClientDemo: (id: string, demo: boolean, confirm: string) =>
+    superAdminApi
+      .put<SuperAdminClientDetail>(`/api/superadmin/clients/${id}/demo`, { demo, confirm })
+      .then((r) => r.data),
 
   /** How the last "Reset demo" went; null when none has run since the server started. */
   demoResetStatus: (id: string) =>

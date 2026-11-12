@@ -60,6 +60,11 @@ export interface SuperAdminClientDetail extends SuperAdminClientSummary {
   phone?: string | null
   platformOwner: boolean
   paymentTerms: PaymentTerms
+  /**
+   * Whether it may be made a demo now (API V86): only a brand-new, empty company, or one that was a demo
+   * before. Absent from an older API: read as false, so the offer never shows.
+   */
+  canBecomeDemo?: boolean
 }
 
 /**
