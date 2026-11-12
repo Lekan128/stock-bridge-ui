@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
 import { Sheet } from '@/components/Sheet'
-import { TextField } from '@/components/TextField'
+import { PasswordField } from '@/components/PasswordField'
 import { usersApi } from '@/features/users/api/usersApi'
 import { resetPasswordFormDefaults, resetPasswordSchema, type ResetPasswordFormValues } from '@/features/users/schemas'
 import type { TenantUserSummary } from '@/features/users/types'
@@ -56,16 +56,14 @@ export function ResetPasswordModal({ user, onClose, onSuccess }: ResetPasswordMo
       }
     >
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
-        <TextField
+        <PasswordField
           label="New password"
-          type="password"
           autoComplete="new-password"
           error={errors.newPassword?.message}
           {...register('newPassword')}
         />
-        <TextField
+        <PasswordField
           label="Confirm new password"
-          type="password"
           autoComplete="new-password"
           error={errors.confirmNewPassword?.message}
           {...register('confirmNewPassword')}

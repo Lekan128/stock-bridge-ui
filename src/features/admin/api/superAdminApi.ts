@@ -14,6 +14,7 @@ import type {
   ApproveVendorApplicationPayload,
   CatalogResetPayload,
   CatalogResetPreview,
+  DemoResetStatus,
   ClientListParams,
   CreateVendorPayload,
   EscrowHoldSettings,
@@ -95,6 +96,27 @@ export const superAdminApiClient = {
     }
     throw error
   },
+
+  /**
+   * Makes the company the shared demo (nothing leaves it), or an ordinary company again. `confirm` is the
+   * company's code, typed. The server refuses a company that has been used, unless it was a demo before.
+   */
+  setClientDemo: (id: string, demo: boolean, confirm: string) =>
+    superAdminApi
+      .put<SuperAdminClientDetail>(`/api/superadmin/clients/${id}/demo`, { demo, confirm })
+      .then((r) => r.data),
+
+  /** How the last "Reset demo" went; null when none has run since the server started. */
+  demoResetStatus: (id: string) =>
+    superAdminApi
+      .get<DemoResetStatus | ''>(`/api/superadmin/clients/${id}/demo-reset`)
+      .then((r) => (r.status === 204 || !r.data ? null : r.data)),
+
+  /** Wipes the demo and fills it again with a fresh 90 days. Answers at once; it runs for a few minutes. */
+  resetDemo: (id: string, confirm: string) =>
+    superAdminApi
+      .post<DemoResetStatus>(`/api/superadmin/clients/${id}/demo-reset`, { confirm })
+      .then((r) => r.data),
 
   // ------------------------------------------------------------------ Listing moderation (M4)
   // Vendors' products only. The server pins this queue to the vendor-seller set, so a buying

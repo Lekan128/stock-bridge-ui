@@ -7,6 +7,7 @@ import { useSuperAdminAuth } from '@/auth/useSuperAdminAuth'
 import { AuthCard } from '@/components/AuthCard'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
+import { PasswordField } from '@/components/PasswordField'
 import { TextField } from '@/components/TextField'
 import { isAppError } from '@/types/api'
 
@@ -57,9 +58,8 @@ export function SuperAdminLoginPage() {
           error={errors.username?.message}
           {...register('username')}
         />
-        <TextField
+        <PasswordField
           label="Password"
-          type="password"
           autoComplete="current-password"
           error={errors.password?.message}
           {...register('password')}

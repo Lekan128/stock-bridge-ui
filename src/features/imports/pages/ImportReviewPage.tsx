@@ -70,6 +70,17 @@ export function ImportReviewPage() {
   const [checkingLinkedPacks, setCheckingLinkedPacks] = useState(false)
   const [linkedPacks, setLinkedPacks] = useState<ImportLinkedPack[]>([])
 
+  // A file that has become clean shows every row, whatever filter it opened on. One that opened
+  // with something to fix starts on "Issues", and once the last fix lands the filter control goes
+  // away with the counters — leaving "See all N rows" asking for issues and finding none.
+  const sessionClean =
+    session != null &&
+    !session.needsMapping &&
+    session.errorCount === 0 &&
+    session.warningCount === 0 &&
+    session.unresolvedValues.every((value) => value.resolution != null)
+  const rowFilter: RowFilter = sessionClean ? 'ALL' : filter
+
   const {
     rows,
     totalPages,
@@ -77,7 +88,7 @@ export function ImportReviewPage() {
     error: rowsError,
     applyRow,
     refetch: refetchRows,
-  } = useImportRows(sessionId, filter, page)
+  } = useImportRows(sessionId, rowFilter, page)
 
   const mutations = useRowMutations(sessionId, { applyRow, applySession: apply })
 
@@ -260,8 +271,8 @@ export function ImportReviewPage() {
       {!rowsLoading && !rowsError && rows.length === 0 && (
         <EmptyState
           tone="positive"
-          title={filter === 'ISSUES' ? copy.review.noIssues : copy.review.noRows}
-          description={filter === 'ISSUES' ? copy.review.noIssuesBody : undefined}
+          title={rowFilter === 'ISSUES' ? copy.review.noIssues : copy.review.noRows}
+          description={rowFilter === 'ISSUES' ? copy.review.noIssuesBody : undefined}
         />
       )}
 

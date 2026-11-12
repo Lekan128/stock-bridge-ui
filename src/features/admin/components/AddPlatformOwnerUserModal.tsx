@@ -5,6 +5,7 @@ import { Controller, useForm } from 'react-hook-form'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
 import { Sheet } from '@/components/Sheet'
+import { PasswordField } from '@/components/PasswordField'
 import { TextField } from '@/components/TextField'
 import { superAdminApiClient } from '@/features/admin/api/superAdminApi'
 import { AdminRoleSelectField } from '@/features/admin/components/AdminRoleSelectField'
@@ -115,10 +116,9 @@ export function AddPlatformOwnerUserModal({ isFirstUser, onClose, onSuccess }: A
           error={errors.username?.message}
           {...register('username')}
         />
-        <TextField label="Password" type="password" autoComplete="new-password" error={errors.password?.message} {...register('password')} />
-        <TextField
+        <PasswordField label="Password" autoComplete="new-password" error={errors.password?.message} {...register('password')} />
+        <PasswordField
           label="Confirm password"
-          type="password"
           autoComplete="new-password"
           error={errors.confirmPassword?.message}
           {...register('confirmPassword')}
