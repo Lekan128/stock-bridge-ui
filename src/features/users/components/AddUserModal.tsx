@@ -7,6 +7,7 @@ import { Controller, useForm } from 'react-hook-form'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
 import { Sheet } from '@/components/Sheet'
+import { PasswordField } from '@/components/PasswordField'
 import { TextField } from '@/components/TextField'
 import { usersApi } from '@/features/users/api/usersApi'
 import { RoleSelectField } from '@/features/users/components/RoleSelectField'
@@ -110,10 +111,9 @@ export function AddUserModal({ onClose, onSuccess }: AddUserModalProps) {
           error={errors.username?.message}
           {...register('username')}
         />
-        <TextField label="Password" type="password" autoComplete="new-password" error={errors.password?.message} {...register('password')} />
-        <TextField
+        <PasswordField label="Password" autoComplete="new-password" error={errors.password?.message} {...register('password')} />
+        <PasswordField
           label="Confirm password"
-          type="password"
           autoComplete="new-password"
           error={errors.confirmPassword?.message}
           {...register('confirmPassword')}

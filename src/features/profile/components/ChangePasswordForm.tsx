@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Button } from '@/components/Button'
 import { FormError } from '@/components/FormError'
-import { TextField } from '@/components/TextField'
+import { PasswordField } from '@/components/PasswordField'
 import { useToast } from '@/components/useToast'
 import { profileApi } from '@/features/profile/api/profileApi'
 import {
@@ -63,24 +63,21 @@ export function ChangePasswordForm() {
         </p>
       </div>
 
-      <TextField
+      <PasswordField
         label="Current password"
-        type="password"
         autoComplete="current-password"
         error={errors.currentPassword?.message}
         {...register('currentPassword')}
       />
-      <TextField
+      <PasswordField
         label="New password"
-        type="password"
         autoComplete="new-password"
         hint="At least 8 characters"
         error={errors.newPassword?.message}
         {...register('newPassword')}
       />
-      <TextField
+      <PasswordField
         label="Confirm new password"
-        type="password"
         autoComplete="new-password"
         error={errors.confirmNewPassword?.message}
         {...register('confirmNewPassword')}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/Button'
 import { Sheet } from '@/components/Sheet'
+import { PasswordField } from '@/components/PasswordField'
 import { TextField } from '@/components/TextField'
 import type { CreateVendorPayload } from '@/features/admin/types'
 import { slugify } from '@/utils/slugify'
@@ -277,20 +278,18 @@ export function AddVendorModal({ open, submitting, onCancel, onConfirm }: AddVen
               onChange={(event) => setUsername(event.target.value)}
             />
             <div className="grid gap-4 sm:grid-cols-2">
-              <TextField
+              <PasswordField
                 label="Password"
                 name="new-vendor-password"
-                type="password"
                 autoComplete="new-password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 hint="At least 8 characters."
                 error={password.length > 0 && password.length < 8 ? 'Must be at least 8 characters' : undefined}
               />
-              <TextField
+              <PasswordField
                 label="Confirm password"
                 name="new-vendor-confirm-password"
-                type="password"
                 autoComplete="new-password"
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}

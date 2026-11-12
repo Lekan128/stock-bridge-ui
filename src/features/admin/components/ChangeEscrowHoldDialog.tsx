@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { Modal } from '@/components/Modal'
+import { PasswordField } from '@/components/PasswordField'
 import { TextField } from '@/components/TextField'
 import { describeHold } from '@/features/admin/formatters'
 import type { EscrowHoldSettings } from '@/features/admin/types'
@@ -46,8 +47,8 @@ const MAX_REASON = 500
  * <h2>Password handling</h2>
  * Held in local state, cleared whenever the dialog closes or the target value changes, and never
  * put anywhere else. `autoComplete="current-password"` so a manager offers the right credential;
- * `type="password"` so it is not on screen in a room with other people, which for a super admin
- * console is the realistic threat rather than a theoretical one.
+ * Hidden by default (a PasswordField, with Show for checking it) so it is not on screen in a room with
+ * other people, which for a super admin console is the realistic threat rather than a theoretical one.
  */
 export function ChangeEscrowHoldDialog({
   open,
@@ -143,10 +144,9 @@ export function ChangeEscrowHoldDialog({
       </dl>
 
       <div className="mt-5 flex flex-col gap-4">
-        <TextField
+        <PasswordField
           label="Your password"
           name="escrow-hold-password"
-          type="password"
           autoComplete="current-password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
