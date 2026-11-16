@@ -1,3 +1,4 @@
+import { WaitingSalesLine } from '@/features/selling/sale/WaitingSalesLine'
 import { useRecordsHere } from '@/features/branches/useRecordsHere'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowLeftRight, MessageSquarePlus, PackagePlus, Truck, X } from 'lucide-react'
@@ -537,6 +538,9 @@ export function ProductListPage() {
       <SavedDataNote showing={showingSaved} updatedAt={updatedAt} subject="stock levels" onRetry={retryRefresh} />
 
       <SellingStaffNotice />
+
+      {/* Baskets left open on this phone (selling till Step 1 fixes). */}
+      {recordsSales && canStockOut && <WaitingSalesLine />}
 
       {/* Moves waiting for this person to confirm (Part 4): the same line as quick mode's, on a laptop too. */}
       <WaitingMovesLine />

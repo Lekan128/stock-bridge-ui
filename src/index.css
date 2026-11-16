@@ -182,3 +182,28 @@
     inset: 0 0 auto 0;
   }
 }
+
+/* A sale's receipt prints on its own, sized for a 58 or 80 mm receipt roll and fine on A4
+   (selling till Step 1 fixes, src/features/selling/sale/SaleReceipt.tsx). */
+.sale-print {
+  display: none;
+}
+@media print {
+  html[data-page='sale-receipt'] body * {
+    visibility: hidden;
+  }
+  html[data-page='sale-receipt'] .sale-print,
+  html[data-page='sale-receipt'] .sale-print * {
+    visibility: visible;
+  }
+  html[data-page='sale-receipt'] .sale-print {
+    display: block;
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 72mm;
+    padding: 2mm;
+    color: #000;
+    background: #fff;
+    font: 11px/1.45 ui-monospace, Menlo, Consolas, monospace;
+  }
+}
