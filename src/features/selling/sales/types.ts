@@ -85,7 +85,7 @@ export interface SalesReportParams {
   productId?: string
 }
 
-export type CostBasis = 'FIFO' | 'AVERAGE' | 'UNKNOWN'
+export type CostBasis = 'FIFO' | 'AVERAGE' | 'UNKNOWN' | 'ESTIMATE'
 
 export interface SaleLineDetail {
   movementId: string

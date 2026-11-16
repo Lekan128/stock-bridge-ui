@@ -80,7 +80,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
     }
     setAskUnpriced(false)
   }
-  const finder = useProductFinder(term, addProduct, 30)
+  const finder = useProductFinder(term, addProduct, 30, true)
   // Where in the branch this sale comes from, at a branch with a choice of areas (V60): the Bar, not the Store.
   const branchHere = useOptionalWorkingBranch()
   const area = useSheetArea(branchHere && !branchHere.isAll ? branchHere.working : null)
@@ -438,7 +438,8 @@ function BasketLine({ line, place, catalogue, canMakeUsual, makeUsual, onMakeUsu
   const pending = usePendingStock(line.product.id, place.areaId)
   const onRecord = placeFigure(line.product, place).quantity + pending.delta
   const base = toBaseQuantity(line.quantity, option)
-  const short = base > onRecord
+  // A made-here item (V90) has no stock to run short of.
+  const short = !line.product.madeHere && base > onRecord
   const [editingPrice, setEditingPrice] = useState(false)
   // The box can be emptied to type a new number; a blank or 0 snaps back to the line's quantity.
   const [qtyText, setQtyText] = useState<string | null>(null)

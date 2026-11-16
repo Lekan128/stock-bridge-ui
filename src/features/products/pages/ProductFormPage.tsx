@@ -267,7 +267,10 @@ export function ProductFormPage() {
     : isMultiBranch
       ? `Same price at all ${branchCount} branches.`
       : undefined
-  const { showsSellingPrice, requiresSellingPrice } = useSellingPolicy()
+  const { showsSellingPrice, requiresSellingPrice, sellsMadeHere } = useSellingPolicy()
+  // Made here, not kept in stock (V90, selling till Step 4): chosen at the top when adding; fixed once added.
+  const [madeHereChoice, setMadeHereChoice] = useState(false)
+  const [roughCost, setRoughCost] = useState('')
   /** The pack a company's selling price is typed per ("CARTON"), or null for the stock unit (V47). */
   const [priceUnitCode, setPriceUnitCode] = useState<string | null>(null)
   // The product's own units and where its stock-outs start (UNITS_PLAN.md Parts 1-2), beside the form's fields.
@@ -434,6 +437,7 @@ export function ProductFormPage() {
           ? seededUnit
           : `${product.packagingSize} ${seededUnit}`,
     )
+    setRoughCost(product.estimatedCost != null ? String(product.estimatedCost) : '')
     reset({
       name: product.name,
       sku: product.sku,
@@ -881,8 +885,13 @@ export function ProductFormPage() {
               {
                 ...toProductUpdatePayload(values, product?.categoryId),
                 ...companyPriceFields(values),
-                ...unitFields,
-                lowStockThreshold,
+                ...(madeHere ? {} : unitFields),
+                ...(madeHere ? {} : { lowStockThreshold }),
+                ...(madeHere
+                  ? roughCost.trim() === ''
+                    ? { clearEstimatedCost: true }
+                    : { estimatedCost: Number(roughCost) }
+                  : {}),
                 removeImage: removeImage || undefined,
               },
               imageFile,
@@ -893,7 +902,22 @@ export function ProductFormPage() {
             // user could abandon halfway through. `toInitialVendorPayload` returns undefined
             // when the block was left blank, so this is a no-op for a product created with no
             // supplier or stock yet.
-            await productsApi.create(
+            madeHere
+            ? // Made here (V90): name, category, photo, price and a rough cost - nothing about stock.
+              await productsApi.create(
+                {
+                  ...toProductPayload(values),
+                  ...companyPriceFields(values),
+                  unitOfMeasure: undefined,
+                  packagingUnit: undefined,
+                  packagingSize: undefined,
+                  lowStockThreshold: undefined,
+                  madeHere: true,
+                  ...(roughCost.trim() !== '' && Number.isFinite(Number(roughCost)) ? { estimatedCost: Number(roughCost) } : {}),
+                },
+                imageFile,
+              )
+            : await productsApi.create(
               {
                 ...toProductPayload(values),
                 ...companyPriceFields(values),
@@ -998,7 +1022,7 @@ export function ProductFormPage() {
    * own `UnitPriceRequiredException`, which is why the message matches it exactly.
    */
   async function onSubmit(values: ProductFormValues) {
-    if (!isEdit && !values.unitOfMeasure) {
+    if (!isEdit && !values.unitOfMeasure && !madeHere) {
       setError('unitOfMeasure', { message: 'Choose what it’s counted in.' })
       setStep('units')
       return
@@ -1093,15 +1117,17 @@ export function ProductFormPage() {
 
   // The steps this person has (owner, 2026-11-10): Price only where products are sold, Suppliers only for someone
   // who sees them, Review only when adding.
+  const madeHere = isEdit ? product?.madeHere === true : sellsMadeHere && madeHereChoice
   const stepProblem = (stepId: StepId) =>
     sectionProblem?.step === stepId || Object.keys(errors).some((field) => FIELD_STEP[field] === stepId)
   const steps: FormStep[] = (
     [
       { id: 'basics', label: 'Basics', icon: Tag },
-      { id: 'units', label: 'Units', icon: Ruler },
+      // Made here (V90): no units, suppliers or stock alert - nothing about stock applies.
+      ...(madeHere ? [] : [{ id: 'units', label: 'Units', icon: Ruler }]),
       ...(showsSellingPrice ? [{ id: 'price', label: 'Price', icon: Banknote, optional: !requiresSellingPrice }] : []),
-      ...(canViewVendors ? [{ id: 'suppliers', label: 'Suppliers', icon: Truck, optional: true }] : []),
-      { id: 'alert', label: 'Stock alert', icon: Bell, optional: true },
+      ...(canViewVendors && !madeHere ? [{ id: 'suppliers', label: 'Suppliers', icon: Truck, optional: true }] : []),
+      ...(madeHere ? [] : [{ id: 'alert', label: 'Stock alert', icon: Bell, optional: true }]),
       ...(isEdit ? [] : [{ id: 'review', label: 'Review', icon: ClipboardCheck }]),
     ] as (Omit<FormStep, 'done' | 'problem' | 'id'> & { id: StepId })[]
   ).map((candidate) => ({
@@ -1264,6 +1290,40 @@ export function ProductFormPage() {
           caveat="Add the photo again if it had one."
         />
       )}
+
+      {/* "Kept in stock" or "Made here" (V90, selling till Step 4): the same form, the steps that apply. */}
+      {!isEdit && sellsMadeHere && (
+        <div className="flex max-w-xl flex-col gap-1.5">
+          <div role="radiogroup" aria-label="What is it?" className="grid grid-cols-2 gap-1 rounded-lg border border-neutral-200 bg-white p-1">
+            {([
+              [false, 'Kept in stock'],
+              [true, 'Made here'],
+            ] as const).map(([value, label]) => (
+              <button
+                key={label}
+                type="button"
+                role="radio"
+                aria-checked={madeHereChoice === value}
+                onClick={() => {
+                  setMadeHereChoice(value)
+                  setStep('basics')
+                }}
+                className={`min-h-11 rounded-md text-sm font-semibold ${
+                  madeHereChoice === value ? 'bg-neutral-900 text-white' : 'text-neutral-700 hover:bg-neutral-50'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="text-sm text-neutral-600">
+            {madeHereChoice
+              ? 'You make or prepare it when someone buys it: a meal, a cocktail, a service. It isn’t counted as stock.'
+              : 'You buy it and count it: drinks, rice, oil, napkins.'}
+          </p>
+        </div>
+      )}
+      {isEdit && madeHere && <p className="text-sm text-neutral-600">Made here: sold, not kept in stock.</p>}
 
       <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[13rem_minmax(0,48rem)] lg:gap-8">
         <div className="lg:sticky lg:top-6 lg:self-start">
@@ -1744,6 +1804,17 @@ export function ProductFormPage() {
           </>
         )}
 
+        {/* A made-here item's rough cost to make one (V90): profit shows until a recipe works it out. */}
+        {madeHere && (
+          <TextField
+            id="estimatedCost"
+            label="Rough cost to make one (₦, optional)"
+            inputMode="decimal"
+            hint="So the Sales page can show profit. Leave it empty if you don’t know."
+            value={roughCost}
+            onChange={(event) => setRoughCost(event.target.value)}
+          />
+        )}
         </FormSection>
         )}
 
@@ -1835,7 +1906,7 @@ export function ProductFormPage() {
         {!isEdit && (
           <FormSection id="review" current={shownStep} title="Review" description="Check it, then create it. Change anything from here.">
             <dl className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white" data-review>
-              {reviewLines.map((line) => (
+              {reviewLines.filter((line) => steps.some((candidate) => candidate.id === line.step)).map((line) => (
                 <div key={line.step} className="flex items-start gap-3 px-4 py-3" data-review-line={line.step}>
                   <div className="min-w-0 flex-1">
                     <dt className="text-xs font-medium text-neutral-500">{line.title}</dt>

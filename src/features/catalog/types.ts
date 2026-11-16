@@ -47,6 +47,8 @@ export interface CatalogRow {
   countIn?: string[] | null
   /** When each area last counted it, a branch's only area too, and as typed (2026-11-10). */
   counts?: { areaId: string; at: string; countedAs?: { unit: string; quantity: number }[] }[] | null
+  /** Made here, not kept in stock (V90). Absent on rows synced before it: false. */
+  madeHere?: boolean
 }
 
 export interface SnapshotPage {
@@ -102,6 +104,11 @@ export interface CatalogQuery {
   countedInArea?: { areaId: string; since: number; counted: boolean }
   /** Only what's there - low or not - nothing at 0: the count list (2026-11-10). */
   onlyHeld?: boolean
+  /**
+   * Made-here items (V90, selling till Step 4): left out unless asked - every stock screen leaves them out by
+   * default. 'only': the Inventory's "Made here" tab; 'include': selling, where both are sold.
+   */
+  madeHere?: 'only' | 'include'
 }
 
 export interface CatalogQueryResult {

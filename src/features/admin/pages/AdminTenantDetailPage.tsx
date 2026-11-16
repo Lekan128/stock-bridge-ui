@@ -55,6 +55,7 @@ export function AdminTenantDetailPage() {
   const [editing, setEditing] = useState(false)
   const [resettingCatalog, setResettingCatalog] = useState(false)
   const [changingSelling, setChangingSelling] = useState(false)
+  const [changingMadeHere, setChangingMadeHere] = useState(false)
   const [sellingSaving, setSellingSaving] = useState(false)
   const [sellingError, setSellingError] = useState<string | null>(null)
 
@@ -66,6 +67,20 @@ export function AdminTenantDetailPage() {
       await superAdminApiClient.updateClientSelling(client.id, !client.sellsStock, reason)
       setClient({ ...client, sellsStock: !client.sellsStock })
       setChangingSelling(false)
+    } catch (err) {
+      setSellingError(isAppError(err) ? err.message : "Couldn't change it. Try again.")
+    } finally {
+      setSellingSaving(false)
+    }
+  }
+  async function changeMadeHere(reason: string) {
+    if (!client) return
+    setSellingSaving(true)
+    setSellingError(null)
+    try {
+      await superAdminApiClient.updateClientMadeHere(client.id, !client.sellsMadeHere, reason)
+      setClient({ ...client, sellsMadeHere: !client.sellsMadeHere })
+      setChangingMadeHere(false)
     } catch (err) {
       setSellingError(isAppError(err) ? err.message : "Couldn't change it. Try again.")
     } finally {
@@ -182,6 +197,7 @@ export function AdminTenantDetailPage() {
                 {formatPaymentTerms(client.paymentTerms)}
               </Badge>
               <Badge variant={client.sellsStock ? 'success' : 'neutral'}>{client.sellsStock ? 'Sells from stock' : 'Does not sell'}</Badge>
+              {client.sellsStock && client.sellsMadeHere && <Badge variant="success">Sells things they make</Badge>}
               {/* ProcurePal is the one tenant whose users a super admin may write, and this is
                   the only screen that knows which row that is. */}
               {client.platformOwner && (
@@ -203,6 +219,12 @@ export function AdminTenantDetailPage() {
           <Button variant="secondary" onClick={() => setChangingSelling(true)}>
             {client.sellsStock ? 'Turn off selling' : 'Turn on selling'}
           </Button>
+          {/* "Sell things you make" (V90): only once they sell. */}
+          {client.sellsStock && (
+            <Button variant="secondary" onClick={() => setChangingMadeHere(true)}>
+              {client.sellsMadeHere ? 'Turn off things they make' : 'Turn on things they make'}
+            </Button>
+          )}
           {client.active ? (
             <Button variant="danger" onClick={() => setConfirmSuspend(true)}>
               Suspend
@@ -311,6 +333,18 @@ export function AdminTenantDetailPage() {
           error={sellingError}
           onCancel={() => setChangingSelling(false)}
           onConfirm={(reason) => void changeSelling(reason)}
+        />
+      )}
+      {client && (
+        <ChangeSellingDialog
+          madeHere
+          open={changingMadeHere}
+          clientName={client.name}
+          sellsStock={client.sellsMadeHere === true}
+          submitting={sellingSaving}
+          error={sellingError}
+          onCancel={() => setChangingMadeHere(false)}
+          onConfirm={(reason) => void changeMadeHere(reason)}
         />
       )}
       {resettingCatalog && (

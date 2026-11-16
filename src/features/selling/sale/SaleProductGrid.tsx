@@ -57,7 +57,8 @@ export function SaleProductGrid({
   const listing = tab !== 'top' && search === ''
   const categoryId = tab === 'all' || tab === 'top' ? '' : tab
   const list = useCatalogList(
-    { search: '', status: 'active', categoryId, stockStatus: 'all', sort: { field: 'name', direction: 'asc' } },
+    // Made-here items (V90) are sold too.
+    { search: '', status: 'active', categoryId, stockStatus: 'all', sort: { field: 'name', direction: 'asc' }, madeHere: 'include' },
     onDevice && listing,
   )
   const server = useProducts(

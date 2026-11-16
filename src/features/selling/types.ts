@@ -17,6 +17,10 @@ export interface SellingSettings {
   /** Products whose only price is an old one set aside before selling existed, waiting for review. */
   legacyPriceCount: number
   legacyPricesDismissed: boolean
+  /** "Sell things you make" (API V90): made-here items, under selling. Off until turned on. */
+  sellsMadeHere?: boolean
+  madeHereChangedAt?: string
+  madeHereChangedByName?: string
 }
 
 export interface UpdateSellingSettingsPayload {

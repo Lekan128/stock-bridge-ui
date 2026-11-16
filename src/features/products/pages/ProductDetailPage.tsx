@@ -44,6 +44,7 @@ import { VendorsTab } from '@/features/products/vendors/components/VendorsTab'
 import { isAppError } from '@/types/api'
 import { PriceHistory } from '@/features/selling/components/PriceHistory'
 import { SoldThisMonth } from '@/features/selling/sales/SoldThisMonth'
+import { formatMoney } from '@/features/selling/money'
 import { perStockUnitEcho, sellingPriceText } from '@/features/selling/priceText'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { OverflowMenu, type OverflowMenuItem } from '@/components/OverflowMenu'
@@ -222,6 +223,65 @@ export function ProductDetailPage() {
     return (
       <div className="rounded-md border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700">
         {error ?? 'Product not found.'}
+      </div>
+    )
+  }
+
+  // Made here (V90, selling till Step 4): no stock, deliveries or suppliers - its price, its rough cost, what sold.
+  if (product.madeHere) {
+    const profit = product.unitPrice != null && product.estimatedCost != null ? product.unitPrice - product.estimatedCost : null
+    return (
+      <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={goBack}
+            aria-label="Back"
+            className="rounded-md p-1.5 text-neutral-600 hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+          >
+            <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+          </button>
+          <h1 className="min-w-0 truncate text-2xl font-semibold text-neutral-900">{product.name}</h1>
+        </div>
+        <p className="-mt-2 text-sm text-neutral-600">Made here: sold, not kept in stock.</p>
+        <dl className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
+          {[
+            ['Price', product.unitPrice != null ? formatMoney(product.unitPrice) : 'No price yet'],
+            ['Category', product.categoryName ?? 'None'],
+            ...(showsSellingPrice
+              ? [
+                  [
+                    'Rough cost to make one',
+                    product.estimatedCost != null
+                      ? `${formatMoney(product.estimatedCost)}${
+                          profit != null && product.unitPrice
+                            ? ` · profit ${formatMoney(profit)} each (${Math.round((profit / product.unitPrice) * 100)}%)`
+                            : ''
+                        }`
+                      : 'Not set',
+                  ],
+                ]
+              : []),
+          ].map(([label, value]) => (
+            <div key={label} className="flex items-baseline justify-between gap-3 px-4 py-3">
+              <dt className="text-sm text-neutral-600">{label}</dt>
+              <dd className="text-right text-sm font-medium text-neutral-900 tabular-nums">{value}</dd>
+            </div>
+          ))}
+        </dl>
+        {recordsSales && <SoldThisMonth productId={product.id} stockUnit="PIECE" />}
+        <div className="grid grid-cols-2 gap-3">
+          {recordsSales && (
+            <Button variant="action" onClick={() => navigate(`/app/sell?product=${product.id}`)}>
+              Sell
+            </Button>
+          )}
+          {canManageProducts && (
+            <Button variant="secondary" onClick={() => navigate(`/app/products/${product.id}/edit`)}>
+              Edit
+            </Button>
+          )}
+        </div>
       </div>
     )
   }

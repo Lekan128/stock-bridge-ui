@@ -479,6 +479,49 @@ await check('lab baseline (§9): a three-item scanned sale in quick mode, on a p
   assert(ms < 10_000, `took ${ms} ms`)
 })
 
+await check('made here (Step 4): the owner turns it on; a made-here item is added through the same form, has its own tab, sells with no stock and refuses stock in', async () => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto(`${UI}/app/company`)
+  await page.getByRole('switch', { name: 'Sell things you make' }).click()
+  await page.getByText('You can now add things you make.').waitFor()
+
+  await page.goto(`${UI}/app/products/new`)
+  await page.getByRole('radio', { name: 'Made here' }).click()
+  const steps = page.getByRole('navigation', { name: 'Steps to add a product' })
+  assert((await steps.getByText('Units').count()) === 0, 'a Units step for a made-here item')
+  await page.getByLabel('Name').fill(`Pepper soup ${unique}`)
+  const sku = page.getByLabel('SKU')
+  if (await sku.count()) await sku.fill(`PS-${unique}`)
+  await page.getByRole('button', { name: /^Next: Price/ }).click()
+  await page.getByLabel(/^Selling price/).fill('6500')
+  await page.getByLabel('Rough cost to make one (₦, optional)').fill('2800')
+  await page.screenshot({ path: SHOTS + '6a-made-here-price.png' })
+  await page.getByRole('button', { name: /^Next: Review/ }).click()
+  await page.getByRole('button', { name: 'Create product' }).click()
+  await page.getByText('Made here: sold, not kept in stock.').waitFor()
+  await page.screenshot({ path: SHOTS + '6b-made-here-page.png' })
+  const soupId = page.url().split('/').pop()
+
+  await page.goto(`${UI}/app/products`)
+  await page.getByRole('tab', { name: /^Made here/ }).click()
+  await page.getByText(`Pepper soup ${unique}`).first().waitFor()
+  await page.getByText('Made here', { exact: true }).first().waitFor()
+  await page.screenshot({ path: SHOTS + '6c-made-here-tab.png' })
+
+  await page.goto(`${UI}/app/sell`)
+  await search().fill('Pepper soup')
+  await page.getByRole('list', { name: 'Tap to add' }).getByRole('button', { name: new RegExp(`^Add Pepper soup ${unique}`) }).click()
+  await page.getByRole('button', { name: `More Pepper soup ${unique}` }).click()
+  await pay('Cash', '₦13,000')
+  await page.locator('[data-receipt="synced"]').getByText(`Pepper soup ${unique} × 2`).waitFor()
+  await page.getByRole('button', { name: 'Next sale' }).click()
+
+  const soup = (await api(`/api/products/${soupId}`, { token })).json
+  assert(soup.madeHere === true && soup.quantityOnHand === 0, `soup: ${JSON.stringify(soup).slice(0, 200)}`)
+  const refused = await api(`/api/products/${soupId}/stock/stock-in`, { token, method: 'POST', body: { quantity: 5 } })
+  assert(refused.status === 409, `stock in on a made-here item: ${refused.status}`)
+})
+
 await check('staff are told once that sales are recorded now; the owner who turned it on is not', async () => {
   assert((await page.goto(`${UI}/app/products`), await page.getByText('Your company now records sales.').count()) === 0, 'owner told')
   const role = (await api('/api/roles', { token, method: 'POST', body: { name: `Cashier ${unique}`, permissionCodes: ['VIEW_PRODUCTS', 'STOCK_OUT'] } })).json

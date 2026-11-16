@@ -356,7 +356,8 @@ export function toCatalogRow(product: Product): CatalogRow {
     active: product.active,
     isLowStock: product.isLowStock,
     // Same rule as the server's StockStatus.of; the feed's own value replaces this moments later.
-    stockStatus: quantity <= 0 ? 'OUT' : threshold != null && quantity <= threshold ? 'LOW' : 'OK',
+    stockStatus: product.madeHere ? 'OK' : quantity <= 0 ? 'OUT' : threshold != null && quantity <= threshold ? 'LOW' : 'OK',
+    madeHere: product.madeHere === true,
   }
 }
 
@@ -394,5 +395,6 @@ export function toProduct(row: CatalogRow): Product {
     usedInUnit: row.usedInUnit ?? null,
     countIn: row.countIn ?? undefined,
     counts: row.counts ?? undefined,
+    madeHere: row.madeHere === true,
   }
 }

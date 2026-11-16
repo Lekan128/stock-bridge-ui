@@ -126,6 +126,8 @@ function query(q: CatalogQuery): CatalogQueryResult {
   const byBranchQuantity = (q.branchId != null || (q.areaIds?.length ?? 0) > 0) && q.sort.field === 'quantityOnHand'
   for (const stored of sortedRows(byBranchQuantity ? 'name' : q.sort.field, q.sort.direction)) {
     const row = asSeen(stored, q)
+    // Made-here items (V90) stay out of every stock list unless asked for.
+    if (q.madeHere === 'only' ? !row.madeHere : q.madeHere !== 'include' && row.madeHere) continue
     if (q.status === 'active' && !row.active) continue
     if (q.status === 'inactive' && row.active) continue
     if (q.categoryId && row.categoryId !== q.categoryId) continue

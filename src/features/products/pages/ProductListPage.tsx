@@ -167,7 +167,10 @@ export function ProductListPage() {
   const { search: committedSearch, statusFilter, categoryFilter, stockLevelFilter, priceFilter: requestedPriceFilter, sort, page } =
     readListState(searchParams)
   // Only where a selling price exists at all - for anyone else the filter is ignored, not obeyed.
-  const { showsSellingPrice, recordsSales } = useSellingPolicy()
+  const { showsSellingPrice, recordsSales, sellsMadeHere } = useSellingPolicy()
+  // "Kept in stock" or "Made here" (V90, selling till Step 4): two tabs once a company sells what it makes.
+  const [madeHereTab, setMadeHereTab] = useState(false)
+  const showingMadeHere = sellsMadeHere && madeHereTab
   const priceFilter: PriceFilter = showsSellingPrice ? requestedPriceFilter : 'all'
   // What is in the box right now; the URL only takes it once typing pauses.
   const [search, setSearch] = useState(committedSearch)
@@ -235,9 +238,14 @@ export function ProductListPage() {
       price: priceFilter,
       sort,
       showOthers: whereShown ? showOthers : undefined,
+      madeHere: showingMadeHere ? 'only' : undefined,
     },
     onDevice,
   )
+  const madeHereCount = useCatalogList(
+    { search: '', status: 'active', categoryId: '', stockStatus: 'all', sort: { field: 'name', direction: 'asc' }, madeHere: 'only' },
+    onDevice && sellsMadeHere,
+  ).total
   const [renderedProducts, setRenderedProducts] = useState<Product[]>([])
 
   const server = useProducts(
@@ -539,6 +547,28 @@ export function ProductListPage() {
 
       <SellingStaffNotice />
 
+      {sellsMadeHere && (
+        <div role="tablist" aria-label="Kind of product" className="flex gap-5 border-b border-neutral-200">
+          {([
+            [false, 'Kept in stock'],
+            [true, `Made here${onDevice ? ` · ${madeHereCount.toLocaleString()}` : ''}`],
+          ] as const).map(([value, label]) => (
+            <button
+              key={String(value)}
+              type="button"
+              role="tab"
+              aria-selected={madeHereTab === value}
+              onClick={() => setMadeHereTab(value)}
+              className={`-mb-px min-h-11 border-b-2 px-0.5 text-sm font-semibold ${
+                madeHereTab === value ? 'border-neutral-900 text-neutral-900' : 'border-transparent text-neutral-500 hover:text-neutral-800'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Baskets left open on this phone (selling till Step 1 fixes). */}
       {recordsSales && canStockOut && <WaitingSalesLine />}
 
@@ -556,9 +586,10 @@ export function ProductListPage() {
         </p>
       )}
 
-      <InventoryBar ref={searchRef} {...barProps} />
+      <InventoryBar ref={searchRef} {...barProps} hideStockLevels={showingMadeHere} />
 
-      <StockWorthLine />
+      {/* What stock is worth: nothing to do with made-here items (V90). */}
+      {!showingMadeHere && <StockWorthLine />}
 
       {priceFilter === 'none' && <PriceSheetLink lead="Pricing many at once?">Fill them in a sheet</PriceSheetLink>}
 

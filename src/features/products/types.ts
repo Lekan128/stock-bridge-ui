@@ -137,6 +137,10 @@ export interface Product {
    * typed (2026-11-10): the count list's "Counted today". The phone's catalogue only; absent when never counted.
    */
   counts?: { areaId: string; at: string; countedAs?: { unit: string; quantity: number }[] }[]
+  /** Made here, not kept in stock (API V90, selling till Step 4). Absent: kept in stock. */
+  madeHere?: boolean
+  /** A made-here item's rough cost to make one, until a recipe works it out. */
+  estimatedCost?: number | null
   warnings?: string[] | null
   /**
    * True when `packagingUnit`/`packagingSize` above are the DEFAULT among more than one distinct
@@ -243,6 +247,10 @@ export interface InitialVendorPayload {
 }
 
 export interface ProductFormPayload {
+  /** Made here, not kept in stock (API V90): create only, and only with "Sell things you make" on. */
+  madeHere?: boolean
+  /** A made-here item's rough cost to make one. */
+  estimatedCost?: number
   name: string
   sku: string
   description?: string
@@ -420,6 +428,8 @@ export interface UnitOfMeasureRequestPayload {
 }
 
 export interface ProductUpdatePayload extends Partial<ProductFormPayload> {
+  /** Takes a made-here item's rough cost off (V90). */
+  clearEstimatedCost?: boolean
   active?: boolean
   removeImage?: boolean
   /** Removes the product's category. Needed because an absent `categoryId` leaves it unchanged. */
