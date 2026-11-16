@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { PaymentChip } from '@/features/selling/sale/payment'
 import { useAuth } from '@/auth/useAuth'
 import { Button } from '@/components/Button'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -140,9 +141,12 @@ export function SaleDetailSheet({ saleId, onClose, onChanged }: SaleDetailSheetP
         {!sale && !error && <p className="text-sm text-neutral-500">Loading…</p>}
         {sale && (
           <div className="flex flex-col gap-4">
-            <p className="text-sm text-neutral-600">
-              {when}
-              {sale.recordedByName && ` · recorded by ${sale.recordedByName}`}
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-neutral-600">
+              <span>
+                {when}
+                {sale.recordedByName && ` · recorded by ${sale.recordedByName}`}
+              </span>
+              <PaymentChip method={sale.paymentMethod} />
             </p>
             <ul className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
               {sale.lines.map((line) => (

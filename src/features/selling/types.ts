@@ -46,4 +46,6 @@ export interface MySalesTotals {
   lineCount: number
   salesAmount: number
   unpricedLineCount: number
+  /** Split by how the customer paid (API V88). */
+  byPayment?: import('@/features/selling/sales/types').PaymentTotals
 }

@@ -7,6 +7,7 @@ import type { Product } from '@/features/products/types'
 import { formatEnteredAndBase } from '@/features/products/unitCopy'
 import { stockUnitLabel, toBaseQuantity } from '@/features/products/unitSet'
 import { formatMoney } from '@/features/selling/money'
+import type { SalePaymentMethod } from '@/features/selling/sale/payment'
 import { lineAmount, openingUnit, optionOf, unitsFor, type SaleLine } from '@/features/selling/sale/saleLine'
 import { isAppError } from '@/types/api'
 
@@ -29,6 +30,10 @@ export interface RecordedSale {
   lines: RecordedLine[]
   /** What the recorded lines came to - refused lines and unpriced ones are not in it. */
   total: number
+  /** How the customer paid (selling till Step 1). */
+  paymentMethod: SalePaymentMethod
+  /** When it was recorded on this phone (ms) - the receipt's time. */
+  recordedAt: number
 }
 
 interface BasketDraft {
@@ -105,7 +110,8 @@ export function useSaleBasket() {
 
   /** Records every line under one new sale id, in order; returns how each one stands. */
   /** `areaId`: where in the branch the sale comes from (V60), chosen on the screen; absent without a choice. */
-  async function record(areaId?: string): Promise<RecordedSale> {
+  /** `paymentMethod`: how the customer paid - it rides on every line; the server keeps the first to arrive. */
+  async function record(areaId: string | undefined, paymentMethod: SalePaymentMethod): Promise<RecordedSale> {
     const saleId = crypto.randomUUID()
     const time = new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
     const label = `${time} sale (${lines.length} ${lines.length === 1 ? 'item' : 'items'})`
@@ -134,6 +140,7 @@ export function useSaleBasket() {
             ...(amount != null ? { lineTotal: amount } : {}),
             note: note.trim() || undefined,
             areaId,
+            paymentMethod,
           },
           baseDelta: -base,
         })
@@ -157,7 +164,7 @@ export function useSaleBasket() {
     const refused = new Map(recorded.filter((r) => r.status === 'refused').map((r) => [r.line.key, r.message]))
     setLines((all) => all.filter((line) => refused.has(line.key)).map((line) => ({ ...line, problem: refused.get(line.key) })))
     if (refused.size === 0) setNote('')
-    return { saleId, label, lines: recorded, total }
+    return { saleId, label, lines: recorded, total, paymentMethod, recordedAt: Date.now() }
   }
 
   return { lines, note, setNote, add, update, remove, restore, total, record, catalogue, draftSavedAt: draft.savedAt }

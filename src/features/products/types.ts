@@ -611,6 +611,11 @@ export interface StockOutPayload {
   saleId?: string
   /** What the whole line went for, when a total was typed rather than a price each - kept exactly. */
   lineTotal?: number
+  /**
+   * How the customer paid for the sale this line is part of (API V88, selling till Step 1): the same on
+   * every line of a basket; the server keeps the first to arrive.
+   */
+  paymentMethod?: 'CASH' | 'TRANSFER' | 'CARD'
 }
 
 // `ProductVendor` / `ProductVendorPriceTier` (GET /api/products/{productId}/vendors) live in

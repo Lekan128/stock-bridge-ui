@@ -1,3 +1,5 @@
+import type { SalePaymentMethod } from '@/features/selling/sale/payment'
+
 /**
  * The Sales report (`GET /api/analytics/sales`) and one sale (`GET /api/sales/{id}`) - plan §4.7,
  * §6.11. Money is in naira. The API omits null fields, so every nullable one is optional here and is
@@ -26,6 +28,20 @@ export interface SalesTotals {
   cancelledLineCount: number
   belowUsualPriceLineCount: number
   belowCostLineCount: number
+  /** What came in by each way of paying (API V88). Absent from an API older than selling till Step 1. */
+  byPayment?: PaymentTotals
+}
+
+/** The sales amount split by how the customer paid; "not recorded" is a sale from before payments. */
+export interface PaymentTotals {
+  cashAmount: number
+  cashSales: number
+  transferAmount: number
+  transferSales: number
+  cardAmount: number
+  cardSales: number
+  notRecordedAmount: number
+  notRecordedSales: number
 }
 
 export interface SalesReportRow {
@@ -42,6 +58,8 @@ export interface SalesReportRow {
   detail?: string
   /** Sale rows at a multi-branch company: where it was recorded. */
   branch?: string
+  /** Sale rows: how the customer paid; absent for a sale from before payments were recorded. */
+  paymentMethod?: SalePaymentMethod
   totals: SalesTotals
 }
 
@@ -96,4 +114,6 @@ export interface SaleDetail {
   lineCount: number
   cancelledLineCount: number
   unpricedLineCount: number
+  /** How the customer paid; absent for a sale from before payments were recorded. */
+  paymentMethod?: SalePaymentMethod
 }

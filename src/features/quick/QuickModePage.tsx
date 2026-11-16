@@ -55,6 +55,7 @@ import { useCatalogState } from '@/features/catalog/useCatalog'
 import { CountList, type CountedHere, type RowCounted } from '@/features/quick/CountList'
 import { formatMoney } from '@/features/selling/money'
 import { MySalesToday } from '@/features/selling/sale/MySalesToday'
+import { paymentLabel } from '@/features/selling/sale/paymentMethod'
 import { SaleBasketEditor } from '@/features/selling/sale/SaleBasketEditor'
 import { undoSale, useSaleBasket, type RecordedSale } from '@/features/selling/sale/useSaleBasket'
 import { MODES, useQuickModeTabs, type Mode } from '@/features/quick/quickTabs'
@@ -195,7 +196,7 @@ export function QuickModePage() {
         mode: 'sell',
         productId: '',
         productName: sale.label,
-        summary: `${items} · ${formatMoney(sale.total)}`,
+        summary: `${items} · ${formatMoney(sale.total)} · ${paymentLabel(sale.paymentMethod)}`,
         sale,
       },
       kept.every((line) => line.status === 'sent') ? 'synced' : 'recorded',

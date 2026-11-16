@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import { Minus, Plus, Search } from 'lucide-react'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
-import { Button } from '@/components/Button'
 import { TextField } from '@/components/TextField'
 import { useToast } from '@/components/useToast'
 import { useProductFinder } from '@/features/catalog/useProductFinder'
@@ -24,6 +23,7 @@ import {
   usualPrice,
   type SaleLine,
 } from '@/features/selling/sale/saleLine'
+import { PaymentButtons, type SalePaymentMethod } from '@/features/selling/sale/payment'
 import type { RecordedSale, useSaleBasket } from '@/features/selling/sale/useSaleBasket'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { placeFigure } from '@/features/branches/areas'
@@ -60,7 +60,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId }: S
   const [openKey, setOpenKey] = useState<string | null>(null)
   const [noteOpen, setNoteOpen] = useState(false)
   const [askUnpriced, setAskUnpriced] = useState(false)
-  const [recording, setRecording] = useState(false)
+  const [recording, setRecording] = useState<SalePaymentMethod | null>(null)
   const [makeUsual, setMakeUsual] = useState<Set<string>>(new Set())
   const searchRef = useRef<HTMLInputElement>(null)
 
@@ -100,18 +100,19 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId }: S
     return lineAmount(line, optionOf(line, options), options) == null
   })
 
-  async function record() {
+  /** One tap on Cash, Transfer or Card records the whole sale, paid that way (selling till Step 1). */
+  async function record(paymentMethod: SalePaymentMethod) {
     if (unpriced.length > 0 && !askUnpriced) {
       setAskUnpriced(true)
       return
     }
-    setRecording(true)
+    setRecording(paymentMethod)
     setAskUnpriced(false)
     const usualToSet = basket.lines.filter((line) => makeUsual.has(line.key))
-    const sale = await basket.record(areaId !== undefined ? (areaId ?? undefined) : area.areaId)
+    const sale = await basket.record(areaId !== undefined ? (areaId ?? undefined) : area.areaId, paymentMethod)
     // The screen chose the area (quick mode): it remembers it, not the basket's own question.
     if (areaId === undefined) area.remember()
-    setRecording(false)
+    setRecording(null)
     setOpenKey(null)
     setMakeUsual(new Set())
     setNoteOpen(false)
@@ -244,18 +245,19 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId }: S
         <div className="sticky bottom-0 -mx-4 flex flex-col gap-2 border-t border-neutral-200 bg-white px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:mx-0 sm:rounded-b-lg">
           {askUnpriced && (
             <p role="alert" className="text-sm text-neutral-800">
-              {unpriced.length === 1 ? `${unpriced[0].product.name} has no price.` : `${unpriced.length} items have no price.`} Record{' '}
-              {unpriced.length === 1 ? 'it' : 'them'} without one, or tap {unpriced.length === 1 ? 'it' : 'them'} to add a price.
+              {unpriced.length === 1 ? `${unpriced[0].product.name} has no price.` : `${unpriced.length} items have no price.`} Tap{' '}
+              {unpriced.length === 1 ? 'it' : 'them'} to add a price, or tap how they paid again to record without one.
             </p>
           )}
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-sm text-neutral-600" aria-live="polite">
-              {itemCount} {itemCount === 1 ? 'item' : 'items'}, {formatMoney(basket.total)}
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="text-sm text-neutral-600">
+              {itemCount} {itemCount === 1 ? 'item' : 'items'} · collect
             </p>
-            <Button variant="action" onClick={() => void record()} loading={recording} className="min-h-12 px-5 text-base">
-              {askUnpriced ? 'Record without a price' : `Record sale ${formatMoney(basket.total)}`}
-            </Button>
+            <p className="text-2xl font-semibold text-neutral-900 tabular-nums" aria-live="polite">
+              {formatMoney(basket.total)}
+            </p>
           </div>
+          <PaymentButtons label={`Collect ${formatMoney(basket.total)} by`} busy={recording} onPick={(method) => void record(method)} />
         </div>
       )}
     </>
