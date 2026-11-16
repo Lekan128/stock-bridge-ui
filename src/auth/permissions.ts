@@ -58,6 +58,12 @@ export const PERMISSIONS = {
   /** V53: send stock to another branch. Given to every role holding STOCK_OUT; can be taken away. */
   SEND_STOCK: 'SEND_STOCK',
   /**
+   * V89 (selling till Step 3): cancel any sale at any time, and approve or decline a cashier's request to.
+   * Given to every role holding MANAGE_INVENTORY. Without it, a cashier cancels only their own sale in its
+   * first two minutes, and asks after that.
+   */
+  CANCEL_SALES: 'CANCEL_SALES',
+  /**
    * V78 (PURCHASE_ORDER_PLAN.md section 11.5): make purchase orders that wait for approval, or approve
    * and send them. Both given to every role holding MANAGE_INVENTORY; an owner takes SEND away from a
    * role that should only ask.

@@ -16,6 +16,7 @@ import { formatNumber, stockUnitWord } from '@/features/products/unitCopy'
 import { formatMoney } from '@/features/selling/money'
 import { SaleDetailSheet } from '@/features/selling/sales/SaleDetailSheet'
 import { salesReportApi } from '@/features/selling/sales/salesReportApi'
+import { CANCEL_REASON_LABELS } from '@/features/selling/sale/cancelReasons'
 import { PaymentChip, type SalePaymentMethod } from '@/features/selling/sale/payment'
 import type { PaymentTotals, SalesFilter, SalesGrouping, SalesReport, SalesReportRow, SalesTotals } from '@/features/selling/sales/types'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
@@ -314,6 +315,11 @@ function SaleRow({
     ? new Date(row.occurredAt).toLocaleString(undefined, withDate ? { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' } : { hour: 'numeric', minute: '2-digit' })
     : ''
   const notes = [
+    // Selling till Step 3: who cancelled it and why - "sell, keep the cash, cancel" is what this list is for.
+    allCancelled && row.cancelReason && CANCEL_REASON_LABELS[row.cancelReason],
+    allCancelled && row.cancelledByName && `by ${row.cancelledByName}`,
+    allCancelled && row.cancelRequestedByName && row.cancelRequestedByName !== row.cancelledByName && `asked by ${row.cancelRequestedByName}`,
+    row.cancelState === 'REQUESTED' && 'asked to cancel',
     t.unpricedLineCount > 0 && t.unpricedLineCount < t.lineCount && `${t.unpricedLineCount} without a price`,
     t.cancelledLineCount > 0 && !allCancelled && `${t.cancelledLineCount} cancelled`,
     t.belowUsualPriceLineCount > 0 && 'below usual price',

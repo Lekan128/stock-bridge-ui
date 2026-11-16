@@ -93,6 +93,8 @@ async function eventually(read, ok, seconds = 40) {
 
 async function phone(refreshToken, viewport = { width: 390, height: 844 }) {
   const context = await browser.newContext({ viewport })
+  // Share copies the receipt where the browser can't share (selling till Step 2).
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: UI }).catch(() => {})
   await context.addInitScript(
     ([rt]) => {
       if (!localStorage.getItem('__seeded')) {
@@ -184,6 +186,11 @@ await check('one tap on Cash records the lot as one cash sale; the basket is emp
   await page.locator('[data-receipt="synced"]').getByText(`${rice.name} × 2`).waitFor()
   await page.getByRole('button', { name: 'Print' }).waitFor()
   await page.getByRole('button', { name: 'Next sale' }).waitFor()
+  // Share: this browser can't share, so it copies the receipt as text (Step 2).
+  await page.getByRole('button', { name: 'Share' }).click()
+  await page.getByText('Receipt copied. Paste it into a chat or a message.').waitFor()
+  const copied = await page.evaluate(() => navigator.clipboard.readText()).catch(() => '')
+  assert(copied.includes('Receipt No.') && copied.includes('Total: ₦4,300') && copied.includes('Paid by: Cash'), `copied: ${copied}`)
   await page.screenshot({ path: SHOTS + '2-receipt.png' })
   await axeClean(page, 'receipt')
   const [riceLine] = await saleLines(rice.id)
@@ -207,11 +214,17 @@ await check('a wrong tap is fixed with "Change how they paid", in place, and the
   await page.locator('[data-sale-paid]').getByText('₦4,300 · Transfer').waitFor()
 })
 
-await check('Undo takes the whole sale back and puts its items back in the basket', async () => {
-  await page.locator('[data-sale-paid]').getByRole('button', { name: 'Undo' }).click()
-  await page.getByText('Sale undone. The items are back.').waitFor()
+await check('Cancel sale, in its first two minutes, with a reason: kept on record, stock back, items back in the basket', async () => {
+  await page.locator('[data-sale-paid]').getByRole('button', { name: 'Receipt' }).click()
+  await page.getByRole('button', { name: 'Cancel sale' }).click()
+  await page.getByRole('radio', { name: 'Wrong item' }).click()
+  await page.screenshot({ path: SHOTS + '2a-cancel-why.png' })
+  await page.getByRole('region', { name: 'Cancel this sale' }).getByRole('button', { name: 'Cancel sale' }).click()
+  await page.getByText('Sale cancelled. The items are back.').waitFor()
   await eventually(() => onHand(rice.id), (n) => n === 100)
   assert((await onHand(soap.id)) === 100, 'soap not put back')
+  const kept = (await api(`/api/sales/${firstSaleId}`, { token })).json
+  assert(kept.cancelState === 'CANCELLED' && kept.cancelReason === 'WRONG_ITEM', `sale after cancel: ${JSON.stringify(kept).slice(0, 300)}`)
   await line(rice).waitFor()
   await line(soap).waitFor()
   await page.screenshot({ path: SHOTS + '2b-undone.png' })
@@ -414,6 +427,21 @@ await check('a line\'s total can be typed instead of the price each; the price e
   await page.screenshot({ path: SHOTS + '5c-tablet-landscape.png' })
   await page.setViewportSize({ width: 390, height: 844 })
   await line(salt).getByRole('button', { name: `Remove ${salt.name}` }).click()
+})
+
+await check('My sales today lists the cashier\'s own sales; each opens its receipt to print, share or cancel', async () => {
+  await page.goto(`${UI}/app/sell`)
+  await page.getByRole('link', { name: 'My sales today' }).first().click()
+  await page.getByRole('heading', { name: 'My sales today', level: 1 }).waitFor()
+  const list = page.getByRole('list', { name: 'My sales today' })
+  await list.getByText(/^Cancelled · /).first().waitFor()
+  await list.getByRole('button').first().click()
+  await page.getByRole('heading', { name: 'Receipt', level: 1 }).waitFor()
+  await page.getByRole('button', { name: 'Print' }).waitFor()
+  await page.getByRole('button', { name: 'Share' }).waitFor()
+  await page.screenshot({ path: SHOTS + '5d-sale-receipt-again.png' })
+  await page.getByRole('main').getByRole('button', { name: 'Back', exact: true }).click()
+  await page.getByRole('heading', { name: 'My sales today', level: 1 }).waitFor()
 })
 
 await check('the Sales page splits today into Cash, Transfer and Card, and each sale says how it was paid', async () => {

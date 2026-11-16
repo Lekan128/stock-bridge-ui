@@ -9,7 +9,7 @@ import { requestsApi } from '@/features/requests/requestsApi'
 import { WaitingMovesLine } from '@/features/moves/WaitingMovesLine'
 import { usePendingStock } from '@/features/outbox/useOutbox'
 import { useEffect, useRef, useState, type RefObject } from 'react'
-import { Delete, Printer, Search, X } from 'lucide-react'
+import { Delete, Printer, Search, Share2, X } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Stamp, type StampKind } from '@/components/Stamp'
@@ -66,6 +66,12 @@ import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
 import { printReceipt } from '@/features/selling/sale/printReceipt'
 import { PrintableReceipt } from '@/features/selling/sale/SaleReceipt'
+import { receiptFromRecorded, shareReceipt } from '@/features/selling/sale/receipt'
+import { CancelSalePanel } from '@/features/selling/sale/CancelSale'
+import { CANCEL_ALONE_FOR_MS } from '@/features/selling/sale/cancelReasons'
+import { useAuth } from '@/auth/useAuth'
+import { PERMISSIONS } from '@/auth/permissions'
+import { useToast } from '@/components/useToast'
 
 
 /**
@@ -173,6 +179,15 @@ export function QuickModePage() {
     if (printJob) printReceipt()
   }, [printJob])
   const printSale = (sale: RecordedSale) => setPrintJob((job) => ({ sale, n: (job?.n ?? 0) + 1 }))
+  const { client } = useAuth()
+  const { showToast } = useToast()
+  const receiptOf = (sale: RecordedSale) =>
+    receiptFromRecorded(sale, basket.catalogue, client?.name ?? 'Sale', branch?.isMultiBranch ? branch.nameOf(branch.working?.id) : undefined)
+  async function shareSale(sale: RecordedSale) {
+    const outcome = await shareReceipt(receiptOf(sale))
+    if (outcome === 'copied') showToast('Receipt copied. Paste it into a chat or a message.', 'success')
+    if (outcome === 'failed') showToast("Couldn't share the receipt. Try Print.", 'error')
+  }
   const [movesRecorded, setMovesRecorded] = useState(0)
   const rootRef = useRef<HTMLDivElement>(null)
 
@@ -344,9 +359,18 @@ export function QuickModePage() {
             sale={saleCard.sale}
             kind={saleCard.kind}
             onPrint={() => printSale(saleCard.sale)}
+            onShare={() => void shareSale(saleCard.sale)}
             onNext={() => {
               setSaleCard(null)
               searchRef.current?.focus()
+            }}
+            onCancelled={() => {
+              // Cancelled in its first two minutes: its items come back to fix and take again.
+              const cancelled = saleCard.sale
+              basket.restoreSale(cancelled)
+              setSession((all) => all.map((e) => (e.key === cancelled.saleId ? { ...e, undone: true } : e)))
+              setSaleCard(null)
+              setSalesRecorded((n) => n + 1)
             }}
           />
         ) : mode === 'sell' ? (
@@ -411,6 +435,7 @@ export function QuickModePage() {
         <SessionList
           entries={session}
           onPrint={printSale}
+          onShare={(sale) => void shareSale(sale)}
           onUndone={(key) => {
             const undoneSale = session.find((e) => e.key === key)?.sale
             setSession((all) => all.map((e) => (e.key === key ? { ...e, undone: true } : e)))
@@ -419,7 +444,7 @@ export function QuickModePage() {
             if (saleCard?.sale.saleId === key) setSaleCard(null)
           }}
         />
-        {printJob && <PrintableReceipt key={printJob.n} sale={printJob.sale} catalogue={basket.catalogue} />}
+        {printJob && <PrintableReceipt key={printJob.n} receipt={receiptOf(printJob.sale)} />}
       </div>
     </div>,
     document.body,
@@ -1095,7 +1120,27 @@ function QuickReason({ value, onChange }: { value: OutReason | null; onChange: (
  * A sale just paid, quick-mode style (owner, 2026-11-16): the stamp, the amount and how it was paid, what was
  * in it, and Print - it stays until Next sale, since most cashiers print.
  */
-function QuickSaleCard({ sale, kind, onPrint, onNext }: { sale: RecordedSale; kind: StampKind; onPrint: () => void; onNext: () => void }) {
+function QuickSaleCard({
+  sale,
+  kind,
+  onPrint,
+  onShare,
+  onNext,
+  onCancelled,
+}: {
+  sale: RecordedSale
+  kind: StampKind
+  onPrint: () => void
+  onShare: () => void
+  onNext: () => void
+  onCancelled: () => void
+}) {
+  const { user } = useAuth()
+  const { showToast } = useToast()
+  const online = useOnlineStatus()
+  const [asked, setAsked] = useState(false)
+  const fresh = Date.now() - sale.recordedAt < CANCEL_ALONE_FOR_MS
+  const canCancelSales = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.CANCEL_SALES)
   const kept = sale.lines.filter((line) => line.status !== 'refused')
   const refused = sale.lines.filter((line) => line.status === 'refused')
   const names = kept.map((line) => (line.line.quantity > 1 ? `${line.line.product.name} × ${line.line.quantity}` : line.line.product.name))
@@ -1116,15 +1161,40 @@ function QuickSaleCard({ sale, kind, onPrint, onNext }: { sale: RecordedSale; ki
           </p>
         )}
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <button type="button" onClick={onPrint} className="flex min-h-12 items-center justify-center gap-2 rounded-lg bg-action text-base font-semibold text-white hover:bg-action-hover">
+      <div className="grid grid-cols-3 gap-2">
+        <button type="button" onClick={onPrint} className="flex min-h-12 items-center justify-center gap-1.5 rounded-lg bg-action text-base font-semibold text-white hover:bg-action-hover">
           <Printer className="h-5 w-5" aria-hidden="true" />
           Print
+        </button>
+        <button type="button" onClick={onShare} className="flex min-h-12 items-center justify-center gap-1.5 rounded-lg bg-action text-base font-semibold text-white hover:bg-action-hover">
+          <Share2 className="h-5 w-5" aria-hidden="true" />
+          Share
         </button>
         <button type="button" onClick={onNext} className="min-h-12 rounded-lg border border-neutral-300 bg-white text-base font-semibold text-neutral-900 hover:bg-neutral-50">
           Next sale
         </button>
       </div>
+      {asked ? (
+        <p className="text-center text-sm font-medium text-warning-800">Asked to cancel. Waiting for a manager.</p>
+      ) : (
+        <div className="flex justify-center">
+          <CancelSalePanel
+            saleId={sale.saleId}
+            canCancelNow={canCancelSales || fresh}
+            canAsk
+            blocked={kind !== 'synced' || !online ? 'This sale is still on this phone. Cancel it when you are back online.' : null}
+            onDone={(_, done) => {
+              if (done === 'requested') {
+                setAsked(true)
+                showToast('Asked. A manager will see it.', 'success')
+              } else {
+                showToast('Sale cancelled. The items are back.', 'success')
+                onCancelled()
+              }
+            }}
+          />
+        </div>
+      )}
     </div>
   )
 }
@@ -1147,11 +1217,13 @@ function SessionList({
   entries,
   onUndone,
   onPrint,
+  onShare,
 }: {
   entries: SessionEntry[]
   onUndone: (key: string) => void
   /** A sale's receipt, printed again from the list. */
   onPrint: (sale: RecordedSale) => void
+  onShare: (sale: RecordedSale) => void
 }) {
   const { ops, recentlySent } = useOutboxState()
   const [error, setError] = useState<string | null>(null)
@@ -1236,11 +1308,17 @@ function SessionList({
               <span className="flex shrink-0 items-center gap-2">
                 <Stamp kind={stampFor(entry)} />
                 {entry.sale && (
-                  <button type="button" onClick={() => onPrint(entry.sale!)} className="h-10 rounded-md px-2 text-sm font-semibold text-primary-700 underline">
-                    Print
-                  </button>
+                  <>
+                    <button type="button" onClick={() => onPrint(entry.sale!)} className="h-10 rounded-md px-2 text-sm font-semibold text-primary-700 underline">
+                      Print
+                    </button>
+                    <button type="button" onClick={() => onShare(entry.sale!)} className="h-10 rounded-md px-2 text-sm font-semibold text-primary-700 underline">
+                      Share
+                    </button>
+                  </>
                 )}
-                {entry === latest && (
+                {/* A sale is cancelled with a reason from its card, never undone without one (Step 3). */}
+                {entry === latest && !entry.sale && (
                   <button type="button" onClick={() => void undo(entry)} className="h-10 rounded-md px-2 text-sm font-semibold text-primary-700 underline">
                     Undo
                   </button>

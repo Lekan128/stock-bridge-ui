@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/auth/useAuth'
 import { useApiQuery } from '@/data/useApiQuery'
@@ -36,7 +37,11 @@ export function MySalesToday({ refreshKey }: { refreshKey: number }) {
 
   return (
     <p className="text-sm text-neutral-600 tabular-nums" aria-live="polite">
-      Your sales today:{' '}
+      {/* Opens the list, to print again, share or cancel one (selling till Step 3). */}
+      <Link to="/app/sell/today" className="font-medium text-primary-700 hover:underline">
+        Your sales today
+      </Link>
+      :{' '}
       <span className="font-semibold text-neutral-900">
         {data ? `${data.saleCount.toLocaleString()} · ${formatMoney(data.salesAmount)}` : '…'}
       </span>

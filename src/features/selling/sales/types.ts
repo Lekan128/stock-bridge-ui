@@ -60,6 +60,11 @@ export interface SalesReportRow {
   branch?: string
   /** Sale rows: how the customer paid; absent for a sale from before payments were recorded. */
   paymentMethod?: SalePaymentMethod
+  /** Sale rows: where cancelling it has got to (API V89). */
+  cancelState?: SaleCancelState
+  cancelReason?: SaleCancelReason
+  cancelledByName?: string
+  cancelRequestedByName?: string
   totals: SalesTotals
 }
 
@@ -116,4 +121,18 @@ export interface SaleDetail {
   unpricedLineCount: number
   /** How the customer paid; absent for a sale from before payments were recorded. */
   paymentMethod?: SalePaymentMethod
+  /** Where it was sold, at a company with several branches. */
+  branchName?: string
+  /** Cancelling (API V89): asked and waiting, declined (the sale stands), or the whole sale cancelled. */
+  cancelState?: SaleCancelState
+  cancelReason?: SaleCancelReason
+  cancelNote?: string
+  cancelRequestedByName?: string
+  cancelRequestedAt?: string
+  /** Who cancelled it, or declined the request. */
+  cancelDecidedByName?: string
+  cancelDecidedAt?: string
 }
+
+export type SaleCancelState = 'REQUESTED' | 'DECLINED' | 'CANCELLED'
+export type SaleCancelReason = 'WRONG_ITEM' | 'WRONG_AMOUNT' | 'CHANGED_MIND' | 'OTHER'

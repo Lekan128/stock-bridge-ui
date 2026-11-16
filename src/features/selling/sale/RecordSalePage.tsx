@@ -1,30 +1,33 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Check, Printer } from 'lucide-react'
+import { ArrowLeft, Check } from 'lucide-react'
 import { api } from '@/api/client'
+import { PERMISSIONS } from '@/auth/permissions'
+import { useAuth } from '@/auth/useAuth'
 import { Button } from '@/components/Button'
 import { useToast } from '@/components/useToast'
+import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { useCatalogState } from '@/features/catalog/useCatalog'
 import { useProduct } from '@/features/products/hooks/useProduct'
 import { formatMoney } from '@/features/selling/money'
+import { CancelSalePanel } from '@/features/selling/sale/CancelSale'
+import { CANCEL_ALONE_FOR_MS } from '@/features/selling/sale/cancelReasons'
 import { PaymentButtons } from '@/features/selling/sale/payment'
 import { paymentLabel, type SalePaymentMethod } from '@/features/selling/sale/paymentMethod'
-import { printReceipt } from '@/features/selling/sale/printReceipt'
-import { PrintableReceipt, SaleReceiptCard } from '@/features/selling/sale/SaleReceipt'
+import { receiptFromRecorded } from '@/features/selling/sale/receipt'
+import { ReceiptActions } from '@/features/selling/sale/ReceiptActions'
+import { SaleReceiptCard } from '@/features/selling/sale/SaleReceipt'
 import { SaleBasketEditor } from '@/features/selling/sale/SaleBasketEditor'
-import { undoSale, useSaleBasket, type RecordedSale } from '@/features/selling/sale/useSaleBasket'
+import { useSaleBasket, type RecordedSale } from '@/features/selling/sale/useSaleBasket'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
 
-/** How long Undo and "Change how they paid" are offered: the server allows two minutes (D8); a little sooner here. */
-const UNDO_FOR_MS = 110_000
-
 /**
- * Record a sale (`SELLING_PRICE_PLAN.md` §6.1; selling till Step 1 and its fixes). Tap a picture, scan or
- * search to add; one tap on how they paid records it, and the screen is straight away ready for the next
- * customer. A green line says what was just paid, with its Receipt (to read, print, or change how it was
- * paid) and Undo - which puts the items back in the basket.
+ * Record a sale (`SELLING_PRICE_PLAN.md` §6.1; selling till Steps 1-3). Tap a product, scan or search to add;
+ * one tap on how they paid records it, and the receipt shows - Print, Share, Next sale. Cancelling is never
+ * erasing: in the first two minutes the cashier cancels with a reason (the items come back to fix), after
+ * that they ask a manager.
  *
  * Nothing about cost or profit is on this screen, ever: the customer can see it (plan principle 11).
  */
@@ -33,48 +36,30 @@ export function RecordSalePage() {
   const location = useLocation()
   const [params] = useSearchParams()
   const { recordsSales, loaded } = useSellingPolicy()
-  const { showToast } = useToast()
   const online = useOnlineStatus()
   const catalog = useCatalogState()
   const basket = useSaleBasket()
   const [last, setLast] = useState<RecordedSale | null>(null)
   const [showReceipt, setShowReceipt] = useState(false)
-  const [undoing, setUndoing] = useState(false)
 
   // Opened from a product's Sell button: that product is the first line.
   const { product: startProduct } = useProduct(params.get('product') ?? undefined)
 
-  // Undo goes when its time is up - re-render then, so the button does not linger.
+  // "Change how they paid" and cancelling alone go when their time is up - re-render then.
   const [, setTick] = useState(0)
   useEffect(() => {
     if (!last) return
-    const timer = window.setTimeout(() => setTick((n) => n + 1), Math.max(0, UNDO_FOR_MS - (Date.now() - last.recordedAt)))
+    const timer = window.setTimeout(() => setTick((n) => n + 1), Math.max(0, CANCEL_ALONE_FOR_MS - (Date.now() - last.recordedAt)))
     return () => window.clearTimeout(timer)
   }, [last])
 
   const kept = last ? last.lines.filter((line) => line.status !== 'refused') : []
   const refused = last ? last.lines.filter((line) => line.status === 'refused') : []
-  const canUndo = last != null && kept.length > 0 && Date.now() - last.recordedAt < UNDO_FOR_MS
 
   /** Paid: the receipt, ready to print - most cashiers print (owner, 2026-11-16). All refused: stay on the basket. */
   function recorded(sale: RecordedSale) {
     setLast(sale)
     setShowReceipt(sale.lines.some((line) => line.status !== 'refused'))
-  }
-
-  async function undo() {
-    if (!last) return
-    setUndoing(true)
-    const problems = await undoSale(last)
-    setUndoing(false)
-    if (problems.length === 0) {
-      basket.restoreSale(last)
-      setLast(null)
-      setShowReceipt(false)
-      showToast('Sale undone. The items are back.', 'success')
-    } else {
-      showToast(`Some of it couldn't be undone. ${problems.join(' ')}`, 'error')
-    }
   }
 
   function goBack() {
@@ -86,6 +71,13 @@ export function RecordSalePage() {
     if (location.key !== 'default') navigate(-1)
     else navigate('/app/products')
   }
+
+  // The cashier's own sales today: reprint, share or cancel one (selling till Step 3).
+  const mySales = (
+    <Link to="/app/sell/today" className="inline-flex min-h-11 items-center text-sm font-semibold whitespace-nowrap text-primary-700 hover:underline">
+      My sales today
+    </Link>
+  )
 
   if (!loaded) return null
   if (!recordsSales) {
@@ -113,18 +105,22 @@ export function RecordSalePage() {
           <ArrowLeft className="h-5 w-5" aria-hidden="true" />
         </button>
         <h1 className="text-2xl font-semibold text-neutral-900">{showReceipt ? 'Receipt' : 'Record a sale'}</h1>
+        {!showReceipt && <span className="ml-auto">{mySales}</span>}
       </div>
 
       {showReceipt && last ? (
         <ReceiptView
           sale={last}
           catalogue={basket.catalogue}
-          canChange={canUndo && kept.every((line) => line.status === 'sent')}
-          canUndo={canUndo}
-          undoing={undoing}
-          onUndo={() => void undo()}
           onNext={() => setShowReceipt(false)}
           onPaymentChanged={(paymentMethod) => setLast({ ...last, paymentMethod })}
+          onCancelled={() => {
+            // Cancelled in its first two minutes: its items come back to fix and take again.
+            basket.restoreSale(last)
+            setLast(null)
+            setShowReceipt(false)
+          }}
+          online={online}
         />
       ) : (
         <>
@@ -136,6 +132,7 @@ export function RecordSalePage() {
           <SaleBasketEditor
             wide
             onBack={goBack}
+            topRight={mySales}
             basket={basket}
             startProduct={startProduct}
             onRecorded={recorded}
@@ -155,16 +152,6 @@ export function RecordSalePage() {
                       >
                         Receipt
                       </button>
-                      {canUndo && (
-                        <button
-                          type="button"
-                          onClick={() => void undo()}
-                          disabled={undoing}
-                          className="inline-flex min-h-11 items-center px-2 text-sm font-semibold text-primary-700 hover:underline disabled:opacity-50"
-                        >
-                          {undoing ? 'Undoing…' : 'Undo'}
-                        </button>
-                      )}
                     </div>
                   )}
                   {refused.length > 0 && (
@@ -194,26 +181,35 @@ export function RecordSalePage() {
 function ReceiptView({
   sale,
   catalogue,
-  canChange,
-  canUndo,
-  undoing,
-  onUndo,
   onNext,
   onPaymentChanged,
+  onCancelled,
+  online,
 }: {
   sale: RecordedSale
   catalogue: ReturnType<typeof useSaleBasket>['catalogue']
-  /** Within the two minutes, and the server has the whole sale. */
-  canChange: boolean
-  canUndo: boolean
-  undoing: boolean
-  onUndo: () => void
   onNext: () => void
   onPaymentChanged: (method: SalePaymentMethod) => void
+  onCancelled: () => void
+  online: boolean
 }) {
   const { showToast } = useToast()
+  const { user, client } = useAuth()
+  const branch = useOptionalWorkingBranch()
   const [changing, setChanging] = useState(false)
   const [changingTo, setChangingTo] = useState<SalePaymentMethod | null>(null)
+  const [asked, setAsked] = useState(false)
+
+  const kept = sale.lines.filter((line) => line.status !== 'refused')
+  const sent = kept.every((line) => line.status === 'sent')
+  const fresh = Date.now() - sale.recordedAt < CANCEL_ALONE_FOR_MS
+  const canCancelSales = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.CANCEL_SALES)
+  const receipt = receiptFromRecorded(
+    sale,
+    catalogue,
+    client?.name ?? 'Sale',
+    branch?.isMultiBranch ? branch.nameOf(branch.working?.id) : undefined,
+  )
 
   async function changePayment(method: SalePaymentMethod) {
     setChangingTo(method)
@@ -243,8 +239,7 @@ function ReceiptView({
           <p className="mt-1">It's still in the sale. Tap Next sale to change it and take it.</p>
         </div>
       )}
-      <SaleReceiptCard sale={sale} catalogue={catalogue} />
-      <PrintableReceipt sale={sale} catalogue={catalogue} />
+      <SaleReceiptCard receipt={receipt} />
       {changing ? (
         <div className="flex flex-col gap-2">
           <p className="text-sm font-medium text-neutral-900">How did they pay?</p>
@@ -255,27 +250,38 @@ function ReceiptView({
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3">
-            <Button variant="action" onClick={printReceipt} className="min-h-12 text-base">
-              <Printer className="h-5 w-5" aria-hidden="true" />
-              Print
-            </Button>
-            <Button variant="secondary" onClick={onNext} className="min-h-12 text-base">
-              Next sale
-            </Button>
-          </div>
-          <div className="flex flex-wrap justify-center gap-x-6">
-            {canChange && (
-              <button type="button" onClick={() => setChanging(true)} className="inline-flex min-h-11 items-center text-sm font-semibold text-primary-700 hover:underline">
-                Change how they paid
-              </button>
-            )}
-            {canUndo && (
-              <button type="button" onClick={onUndo} disabled={undoing} className="inline-flex min-h-11 items-center text-sm font-semibold text-primary-700 hover:underline disabled:opacity-50">
-                {undoing ? 'Undoing…' : 'Undo sale'}
-              </button>
-            )}
-          </div>
+          <ReceiptActions receipt={receipt} />
+          <Button variant="secondary" onClick={onNext} className="min-h-12 text-base">
+            Next sale
+          </Button>
+          {asked ? (
+            <p role="status" className="rounded-lg border border-warning-200 bg-warning-50 px-4 py-3 text-sm font-medium text-warning-900">
+              Asked to cancel. Waiting for a manager.
+            </p>
+          ) : (
+            <div className="flex flex-wrap items-start justify-center gap-x-6">
+              {fresh && sent && (
+                <button type="button" onClick={() => setChanging(true)} className="inline-flex min-h-11 items-center text-sm font-semibold text-primary-700 hover:underline">
+                  Change how they paid
+                </button>
+              )}
+              <CancelSalePanel
+                saleId={sale.saleId}
+                canCancelNow={canCancelSales || fresh}
+                canAsk
+                blocked={!sent || !online ? 'This sale is still on this phone. Cancel it when you are back online.' : null}
+                onDone={(_, kind) => {
+                  if (kind === 'requested') {
+                    setAsked(true)
+                    showToast('Asked. A manager will see it.', 'success')
+                  } else {
+                    showToast('Sale cancelled. The items are back.', 'success')
+                    onCancelled()
+                  }
+                }}
+              />
+            </div>
+          )}
         </>
       )}
     </div>

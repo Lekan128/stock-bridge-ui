@@ -40,6 +40,8 @@ export interface SaleBasketEditorProps {
   wide?: boolean
   /** The till's own Back, on a wide screen (its top bar takes the page's place). */
   onBack?: () => void
+  /** At the right of the till's top bar on a wide screen: "My sales today". */
+  topRight?: ReactNode
 }
 
 /** A keyboard-and-mouse screen, where focusing the search costs nothing; on a phone it would pop the keyboard up. */
@@ -52,7 +54,7 @@ const finePointer = typeof window !== 'undefined' && window.matchMedia?.('(point
  * one tap on Cash, Transfer or Card records it all. Several baskets can be open ("+ New sale").
  * Nothing about cost or profit on it, ever.
  */
-export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, banner, wide = false, onBack }: SaleBasketEditorProps) {
+export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, banner, wide = false, onBack, topRight }: SaleBasketEditorProps) {
   const { user } = useAuth()
   const { showToast } = useToast()
   const online = useOnlineStatus()
@@ -196,6 +198,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
       <div role="group" aria-label="Sales on this phone" className="ml-4 flex min-w-0 items-center gap-1.5 overflow-x-auto">
         {tabs}
       </div>
+      {topRight && <div className="ml-2 shrink-0">{topRight}</div>}
     </div>,
     topbarSlot,
   )
