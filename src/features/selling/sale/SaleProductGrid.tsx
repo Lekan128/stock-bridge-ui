@@ -18,14 +18,6 @@ type Basket = ReturnType<typeof useSaleBasket>
 type Tab = 'top' | 'all' | string
 
 const PAGE = 60
-const STRIPES = ['#b42318', '#1d6fb8', '#2f6b2f', '#7a4b16', '#6b3fa0', '#0f766e', '#9a3412', '#3f3f46']
-
-function stripeOf(id: string): string {
-  let hash = 0
-  for (const char of id) hash = (hash * 31 + char.charCodeAt(0)) | 0
-  return STRIPES[Math.abs(hash) % STRIPES.length]
-}
-
 /**
  * The products to tap (selling till Step 1, round 3): small name-and-price buttons, three to a row, under
  * category chips - "Top sellers" first, then the company's categories, then "All". The search above narrows
@@ -126,7 +118,7 @@ export function SaleProductGrid({
       )}
 
       {products.length > 0 && (
-        <ul className="grid grid-cols-3 gap-1.5 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5" aria-label="Tap to add">
+        <ul className="grid grid-cols-3 gap-1.5 sm:grid-cols-4 lg:grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] lg:gap-2" aria-label="Tap to add">
           {products.map((product) => {
             const price = usualPrice(product, openingUnit(product, unitsFor(product, basket.catalogue)))
             const inSale = basket.lines.filter((line) => line.product.id === product.id).reduce((sum, line) => sum + line.quantity, 0)
@@ -136,16 +128,19 @@ export function SaleProductGrid({
                   type="button"
                   onClick={() => onPick(product)}
                   aria-label={`Add ${product.name}${inSale > 0 ? `, ${inSale} in the sale` : ''}`}
-                  style={{ borderLeftColor: stripeOf(product.categoryId ?? product.id) }}
-                  className="relative flex min-h-14 w-full flex-col justify-center rounded-md border border-l-4 border-neutral-200 bg-white px-2 py-1.5 text-left hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 active:scale-[0.98]"
+                  className={`relative flex min-h-14 w-full flex-col justify-between gap-1 rounded-lg border px-2.5 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 active:scale-[0.98] lg:min-h-[4.75rem] lg:px-3 lg:py-2.5 ${
+                    inSale > 0 ? 'border-primary-200 bg-primary-50' : 'border-neutral-200 bg-white hover:border-neutral-300 hover:bg-neutral-50'
+                  }`}
                 >
-                  <span className="line-clamp-2 text-sm leading-tight font-medium text-neutral-900">{product.name}</span>
-                  <span className="text-xs text-neutral-600 tabular-nums">{price != null ? formatMoney(price) : 'No price'}</span>
-                  {inSale > 0 && (
-                    <span aria-hidden="true" className="absolute -top-1.5 -right-1 min-w-5 rounded-full bg-action px-1 text-center text-xs leading-5 font-bold text-white tabular-nums">
-                      {formatNumber(inSale)}
-                    </span>
-                  )}
+                  <span className="line-clamp-2 text-sm leading-tight font-medium text-neutral-900 lg:text-[0.95rem]">{product.name}</span>
+                  <span className="flex items-baseline justify-between gap-1">
+                    <span className="text-xs text-neutral-600 tabular-nums lg:text-sm">{price != null ? formatMoney(price) : 'No price'}</span>
+                    {inSale > 0 && (
+                      <span aria-hidden="true" className="text-xs font-bold text-primary-700 tabular-nums lg:text-sm">
+                        × {formatNumber(inSale)}
+                      </span>
+                    )}
+                  </span>
                 </button>
               </li>
             )

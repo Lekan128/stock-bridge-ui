@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { Minus, Plus, Search, X } from 'lucide-react'
+import { ArrowLeft, Minus, Plus, Search, X } from 'lucide-react'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
 import { useToast } from '@/components/useToast'
@@ -37,6 +37,8 @@ export interface SaleBasketEditorProps {
   banner?: ReactNode
   /** Record a sale on a wide screen: products on the left, the sale on the right, like a till. */
   wide?: boolean
+  /** The till's own Back, on a wide screen (its top bar takes the page's place). */
+  onBack?: () => void
 }
 
 /** A keyboard-and-mouse screen, where focusing the search costs nothing; on a phone it would pop the keyboard up. */
@@ -49,7 +51,7 @@ const finePointer = typeof window !== 'undefined' && window.matchMedia?.('(point
  * one tap on Cash, Transfer or Card records it all. Several baskets can be open ("+ New sale").
  * Nothing about cost or profit on it, ever.
  */
-export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, banner, wide = false }: SaleBasketEditorProps) {
+export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, banner, wide = false, onBack }: SaleBasketEditorProps) {
   const { user } = useAuth()
   const { showToast } = useToast()
   const online = useOnlineStatus()
@@ -132,8 +134,67 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
     }
   }
 
+  // On a wide screen (Record a sale, owner 2026-11-16): a till. A bar across the top with the sales on this
+  // phone; products fill the left; the sale runs the full height of the right edge, total and pay at the bottom.
+  const W = wide
+  const tabs = (
+    <>
+      {waiting.length > 0 &&
+        basket.baskets.map((b, index) => {
+          const isActive = b.id === basket.activeId
+          if (!isActive && b.lines.length === 0) return null
+          return (
+            <button
+              key={b.id}
+              type="button"
+              aria-pressed={isActive}
+              onClick={() => basket.switchTo(b.id)}
+              className={`inline-flex min-h-10 items-center rounded-lg border px-3 text-sm font-semibold tabular-nums ${
+                isActive ? 'border-action bg-action text-white' : 'border-warning-300 bg-warning-50 text-warning-900'
+              }`}
+            >
+              Sale {index + 1}
+              {b.lines.length > 0 && ` · ${formatMoney(basket.totalOf(b))}`}
+            </button>
+          )
+        })}
+      {itemCount > 0 && (
+        <button
+          type="button"
+          onClick={() => {
+            basket.newSale()
+            setTerm('')
+            setAskUnpriced(false)
+          }}
+          className="inline-flex min-h-10 items-center rounded-lg px-3 text-sm font-semibold text-primary-700 hover:bg-primary-50"
+        >
+          + New sale
+        </button>
+      )}
+    </>
+  )
+
+  const topBar = W && (
+    <div className="hidden h-14 items-center gap-3 border-b border-neutral-200 bg-white px-4 lg:col-span-2 lg:row-start-1 lg:flex">
+      {onBack && (
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Back"
+          className="rounded-md p-1.5 text-neutral-600 hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+        >
+          <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+        </button>
+      )}
+      <h1 className="text-lg font-semibold text-neutral-900">Record a sale</h1>
+      <div role="group" aria-label="Sales on this phone" className="ml-6 flex flex-wrap items-center gap-1.5">
+        {tabs}
+      </div>
+    </div>
+  )
+
   const search = (
-    <div className="flex flex-col gap-3 lg:col-start-1">
+    <div className={`flex flex-col gap-3 ${W ? 'lg:col-start-1 lg:row-start-2 lg:bg-neutral-50 lg:px-4 lg:pt-4' : ''}`}>
       {areaId === undefined && area.field}
       <div className="relative">
         <Search className="pointer-events-none absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-neutral-500" aria-hidden="true" />
@@ -156,7 +217,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
             if (event.key === 'Escape') setTerm('')
           }}
           placeholder="Scan or search a product…"
-          className="h-12 w-full rounded-lg border-2 border-neutral-300 bg-white pr-3 pl-11 text-base text-neutral-900 placeholder:text-neutral-500 focus:border-primary-600 focus:outline-none"
+          className="h-12 w-full rounded-lg border border-neutral-300 bg-white pr-3 pl-11 text-base text-neutral-900 placeholder:text-neutral-500 focus:border-primary-600 focus:ring-2 focus:ring-primary-100 focus:outline-none"
         />
       </div>
       {typing && finder.answered && finder.results.length === 0 && online && canManageProducts && (
@@ -171,142 +232,141 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
     </div>
   )
 
+  const footer = (
+    <div
+      className={`sticky bottom-0 z-10 -mx-4 ${itemCount === 0 ? 'hidden lg:flex' : 'flex'} flex-col gap-1.5 border-t border-neutral-200 bg-white px-4 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] sm:mx-0 sm:rounded-b-lg ${
+        W ? 'lg:static lg:mx-0 lg:gap-3 lg:rounded-none lg:px-4 lg:pt-3 lg:pb-4' : ''
+      }`}
+    >
+      {askUnpriced && (
+        <p role="alert" className="text-sm text-neutral-800">
+          {unpriced.length === 1 ? `${unpriced[0].product.name} has no price.` : `${unpriced.length} items have no price.`} Tap “Add
+          price” on {unpriced.length === 1 ? 'it' : 'them'}, or tap how they paid again to record without one.
+        </p>
+      )}
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="text-sm text-neutral-600">
+          <span className={W ? 'lg:hidden' : ''}>
+            {itemCount} {itemCount === 1 ? 'item' : 'items'} · collect
+          </span>
+          {W && <span className="hidden lg:inline">Total</span>}
+        </p>
+        <p className={`text-xl font-semibold text-neutral-900 tabular-nums ${W ? 'lg:text-3xl' : ''}`} aria-live="polite">
+          {formatMoney(basket.total)}
+        </p>
+      </div>
+      <div className={itemCount === 0 ? 'pointer-events-none opacity-35' : ''} aria-hidden={itemCount === 0 || undefined}>
+        <PaymentButtons label={`Collect ${formatMoney(basket.total)} by`} busy={recording} onPick={(method) => void record(method)} />
+      </div>
+    </div>
+  )
+
   const sale = (
-    <div className={`${hideSale} flex-col gap-2 lg:col-start-2 lg:row-span-2 lg:row-start-1 ${wide ? 'lg:sticky lg:top-4 lg:rounded-lg lg:border lg:border-neutral-200 lg:bg-white lg:p-3' : ''}`}>
-      {(waiting.length > 0 || itemCount > 0 || wide) && (
-        <div className="flex flex-wrap items-center gap-2">
-          {waiting.length > 0 ? (
-            <div role="group" aria-label="Sales on this phone" className="flex flex-wrap items-center gap-1.5">
-              {basket.baskets.map((b, index) => {
-                const isActive = b.id === basket.activeId
-                if (!isActive && b.lines.length === 0) return null
-                return (
-                  <button
-                    key={b.id}
-                    type="button"
-                    aria-pressed={isActive}
-                    onClick={() => basket.switchTo(b.id)}
-                    className={`inline-flex min-h-10 items-center rounded-full border px-3 text-sm font-semibold tabular-nums ${
-                      isActive ? 'border-action bg-action text-white' : 'border-warning-300 bg-warning-50 text-warning-900'
-                    }`}
-                  >
-                    Sale {index + 1}
-                    {b.lines.length > 0 && ` · ${formatMoney(basket.totalOf(b))}`}
-                  </button>
-                )
-              })}
-            </div>
-          ) : (
-            wide && <h2 className="hidden text-base font-semibold text-neutral-900 lg:block">Sale</h2>
-          )}
+    <div
+      className={`${hideSale} relative flex-col gap-2 ${
+        W ? 'lg:col-start-2 lg:row-span-2 lg:row-start-2 lg:flex lg:min-h-0 lg:gap-0 lg:border-l lg:border-neutral-200 lg:bg-white' : ''
+      }`}
+    >
+      {/* On a phone: the waiting sales and "+ New sale" sit above the lines. On a wide screen they are in the top bar. */}
+      {(waiting.length > 0 || itemCount > 0) && (
+        <div role="group" aria-label="Sales on this phone" className={`flex flex-wrap items-center justify-end gap-1.5 ${W ? 'lg:hidden' : ''}`}>
+          {tabs}
+        </div>
+      )}
+      {W && (
+        <div className="hidden items-baseline justify-between px-4 pt-3 pb-1 lg:flex">
+          <h2 className="text-base font-semibold text-neutral-900">{waiting.length > 0 ? `Sale ${basket.baskets.findIndex((b) => b.id === basket.activeId) + 1}` : 'Sale'}</h2>
           {itemCount > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                basket.newSale()
-                setTerm('')
-                setAskUnpriced(false)
-              }}
-              className="ml-auto inline-flex min-h-10 items-center rounded-full border border-dashed border-primary-400 px-3 text-sm font-semibold text-primary-700 hover:bg-primary-50"
-            >
-              + New sale
-            </button>
+            <span className="text-sm text-neutral-500">
+              {itemCount} {itemCount === 1 ? 'item' : 'items'}
+            </span>
           )}
         </div>
       )}
 
-      {banner}
+      {banner && <div className={W ? 'lg:px-4 lg:pb-2' : ''}>{banner}</div>}
 
-      {itemCount === 0 ? (
-        <p className="text-sm text-neutral-600">Tap a product, or scan or search to add it.</p>
-      ) : (
-        <ul className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white" aria-label="This sale">
-          {/* Newest first: what was just added sits right under the search (owner, 2026-11-16). */}
-          {[...basket.lines].reverse().map((line) => (
-            <BasketLine
-              key={line.key}
-              line={line}
-              place={place}
-              catalogue={basket.catalogue}
-              canMakeUsual={canManageProducts && online && line.product.unitPrice == null}
-              makeUsual={makeUsual.has(line.key)}
-              onMakeUsual={(on) =>
-                setMakeUsual((current) => {
-                  const next = new Set(current)
-                  if (on) next.add(line.key)
-                  else next.delete(line.key)
-                  return next
-                })
-              }
-              onChange={(patch) => {
-                basket.update(line.key, patch)
-                setAskUnpriced(false)
-              }}
-              onRemove={() => {
-                const removed = basket.remove(line.key)
-                if (removed) {
-                  showToast(`${removed.product.name} taken off the sale.`, 'info', {
-                    action: { label: 'Undo', onAction: () => basket.restore(removed) },
+      <div className={W ? 'lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:px-4' : ''}>
+        {itemCount === 0 ? (
+          <>
+            <p className={`text-sm text-neutral-600 ${W ? 'lg:hidden' : ''}`}>Tap a product, or scan or search to add it.</p>
+            {W && (
+              <div className="hidden h-full flex-col items-center justify-center gap-1 py-16 text-center lg:flex">
+                <p className="text-sm font-semibold text-neutral-600">No items yet</p>
+                <p className="text-sm text-neutral-500">Click a product, or scan or search.</p>
+              </div>
+            )}
+          </>
+        ) : (
+          <ul
+            className={`flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white ${W ? 'lg:rounded-none lg:border-0' : ''}`}
+            aria-label="This sale"
+          >
+            {/* Newest first: what was just added sits right under the search (owner, 2026-11-16). */}
+            {[...basket.lines].reverse().map((line) => (
+              <BasketLine
+                key={line.key}
+                line={line}
+                place={place}
+                catalogue={basket.catalogue}
+                canMakeUsual={canManageProducts && online && line.product.unitPrice == null}
+                makeUsual={makeUsual.has(line.key)}
+                onMakeUsual={(on) =>
+                  setMakeUsual((current) => {
+                    const next = new Set(current)
+                    if (on) next.add(line.key)
+                    else next.delete(line.key)
+                    return next
                   })
                 }
-              }}
-            />
+                onChange={(patch) => {
+                  basket.update(line.key, patch)
+                  setAskUnpriced(false)
+                }}
+                onRemove={() => {
+                  const removed = basket.remove(line.key)
+                  if (removed) {
+                    showToast(`${removed.product.name} taken off the sale.`, 'info', {
+                      action: { label: 'Undo', onAction: () => basket.restore(removed) },
+                    })
+                  }
+                }}
+              />
+            ))}
+          </ul>
+        )}
+
+        {itemCount > 0 &&
+          (noteOpen || basket.note ? (
+            <div className="mt-2 flex flex-col gap-1">
+              <label htmlFor="sale-note" className="text-sm font-medium text-neutral-800">
+                Note (optional)
+              </label>
+              <input
+                id="sale-note"
+                value={basket.note}
+                onChange={(event) => basket.setNote(event.target.value)}
+                placeholder="A customer's name, a table"
+                className="h-11 rounded-md border border-neutral-300 bg-white px-3 text-base"
+              />
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setNoteOpen(true)}
+              className="inline-flex min-h-11 items-center self-start rounded-sm text-sm font-medium text-primary-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+            >
+              Add a note
+            </button>
           ))}
-        </ul>
-      )}
+      </div>
 
-      {itemCount > 0 &&
-        (noteOpen || basket.note ? (
-          <div className="flex flex-col gap-1">
-            <label htmlFor="sale-note" className="text-sm font-medium text-neutral-800">
-              Note (optional)
-            </label>
-            <input
-              id="sale-note"
-              value={basket.note}
-              onChange={(event) => basket.setNote(event.target.value)}
-              placeholder="A customer's name, a table"
-              className="h-11 rounded-md border border-neutral-300 bg-white px-3 text-base"
-            />
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setNoteOpen(true)}
-            className="-my-2 inline-flex min-h-11 items-center self-start rounded-sm text-sm font-medium text-primary-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-          >
-            Add a note
-          </button>
-        ))}
-
-      {itemCount > 0 && (
-        <div
-          className={`sticky bottom-0 z-10 -mx-4 flex flex-col gap-1.5 border-t border-neutral-200 bg-white px-4 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] sm:mx-0 sm:rounded-b-lg ${
-            wide ? 'lg:static lg:mx-0 lg:border-0 lg:px-0 lg:pb-0' : ''
-          }`}
-        >
-          {askUnpriced && (
-            <p role="alert" className="text-sm text-neutral-800">
-              {unpriced.length === 1 ? `${unpriced[0].product.name} has no price.` : `${unpriced.length} items have no price.`} Tap “Add
-              price” on {unpriced.length === 1 ? 'it' : 'them'}, or tap how they paid again to record without one.
-            </p>
-          )}
-          <div className="flex items-baseline justify-between gap-3">
-            <p className="text-sm text-neutral-600">
-              {itemCount} {itemCount === 1 ? 'item' : 'items'} · collect
-            </p>
-            <p className="text-xl font-semibold text-neutral-900 tabular-nums" aria-live="polite">
-              {formatMoney(basket.total)}
-            </p>
-          </div>
-          <PaymentButtons label={`Collect ${formatMoney(basket.total)} by`} busy={recording} onPick={(method) => void record(method)} />
-        </div>
-      )}
+      {(itemCount > 0 || W) && footer}
     </div>
   )
 
   const products = (
-    <div className="lg:col-start-1">
+    <div className={W ? 'lg:col-start-1 lg:row-start-3 lg:min-h-0 lg:overflow-y-auto lg:bg-neutral-50 lg:px-4 lg:pt-3 lg:pb-6' : ''}>
       <SaleProductGrid
         basket={basket}
         search={finder.search}
@@ -320,9 +380,10 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
   return (
     <div
       className={`flex flex-col gap-4 ${
-        wide ? 'lg:grid lg:grid-cols-[minmax(0,1.4fr)_minmax(22rem,1fr)] lg:grid-rows-[auto_1fr] lg:items-start lg:gap-x-6 lg:gap-y-4' : ''
+        W ? 'lg:grid lg:h-full lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_24rem] lg:grid-rows-[auto_auto_minmax(0,1fr)] lg:gap-0' : ''
       }`}
     >
+      {topBar}
       {search}
       {sale}
       {products}
@@ -376,37 +437,13 @@ function BasketLine({ line, place, catalogue, canMakeUsual, makeUsual, onMakeUsu
   const unitWord = option.isStockUnit ? null : option.label.toLowerCase()
 
   return (
-    <li className="flex min-w-0 flex-col gap-1.5 px-2.5 py-2">
-      <div className="flex items-center gap-1.5">
-        <div className="min-w-[5rem] flex-1">
-          <p className="truncate text-sm font-medium text-neutral-900">{name}</p>
-          <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-neutral-500 tabular-nums">
-            {options.length > 1 && (
-              <>
-                <label htmlFor={`sale-unit-${line.key}`} className="sr-only">
-                  Unit for {name}
-                </label>
-                <select
-                  id={`sale-unit-${line.key}`}
-                  value={option.label}
-                  onChange={(event) => onChange({ unitLabel: event.target.value, priceTyped: null, totalTyped: null })}
-                  className="h-7 max-w-[9rem] rounded border border-neutral-300 bg-white px-1 text-xs font-medium text-neutral-800"
-                >
-                  {options.map((choice) => (
-                    <option key={choice.label} value={choice.label}>
-                      {choice.label}
-                    </option>
-                  ))}
-                </select>
-              </>
-            )}
-            <span>
-              {each != null ? `${formatMoney(each)} ${unitWord ? `a ${unitWord}` : 'each'}` : 'No price'}
-              {changed && usual != null && ` · usual ${formatMoney(usual)}`}
-            </span>
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center">
+    <li className={`flex min-w-0 flex-col gap-1.5 px-3 py-2.5 ${editingPrice ? 'bg-neutral-50' : ''}`}>
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="min-w-0 truncate text-base font-medium text-neutral-900">{name}</p>
+        <p className="shrink-0 text-base font-semibold text-neutral-900 tabular-nums">{amount != null ? formatMoney(amount) : ''}</p>
+      </div>
+      <div className="flex min-w-0 items-center gap-2">
+        <div className="flex shrink-0 items-center rounded-full bg-neutral-100">
           <button
             type="button"
             aria-label={`Fewer ${name}`}
@@ -415,7 +452,7 @@ function BasketLine({ line, place, catalogue, canMakeUsual, makeUsual, onMakeUsu
               setQtyText(null)
               onChange({ quantity: line.quantity - 1 })
             }}
-            className="flex h-11 w-10 items-center justify-center rounded-l-md border border-neutral-300 bg-white disabled:opacity-40"
+            className="flex h-11 w-11 items-center justify-center rounded-full text-neutral-800 hover:bg-neutral-200 disabled:opacity-30 lg:h-9 lg:w-9"
           >
             <Minus className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -432,7 +469,7 @@ function BasketLine({ line, place, catalogue, canMakeUsual, makeUsual, onMakeUsu
               if (event.target.value.trim() !== '' && Number.isFinite(value) && value >= 1) onChange({ quantity: value })
             }}
             onBlur={() => setQtyText(null)}
-            className="h-11 w-10 border-y border-neutral-300 bg-white text-center text-base tabular-nums"
+            className="h-9 w-9 rounded-md bg-transparent text-center text-base font-semibold text-neutral-900 tabular-nums focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
           <button
             type="button"
@@ -441,25 +478,46 @@ function BasketLine({ line, place, catalogue, canMakeUsual, makeUsual, onMakeUsu
               setQtyText(null)
               onChange({ quantity: line.quantity + 1 })
             }}
-            className="flex h-11 w-10 items-center justify-center rounded-r-md border border-neutral-300 bg-white"
+            className="flex h-11 w-11 items-center justify-center rounded-full text-neutral-800 hover:bg-neutral-200 lg:h-9 lg:w-9"
           >
             <Plus className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
+        {options.length > 1 && (
+          <>
+            <label htmlFor={`sale-unit-${line.key}`} className="sr-only">
+              Unit for {name}
+            </label>
+            <select
+              id={`sale-unit-${line.key}`}
+              value={option.label}
+              onChange={(event) => onChange({ unitLabel: event.target.value, priceTyped: null, totalTyped: null })}
+              className="h-9 max-w-[8rem] shrink-0 rounded-md border border-neutral-200 bg-white px-1.5 text-sm text-neutral-800"
+            >
+              {options.map((choice) => (
+                <option key={choice.label} value={choice.label}>
+                  {choice.label}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
         <button
           type="button"
           aria-expanded={editingPrice}
           aria-label={amount != null ? `Change price of ${name}, ${formatMoney(amount)}` : `Add a price for ${name}`}
           onClick={() => setEditingPrice((open) => !open)}
-          className="min-h-11 min-w-[4.5rem] shrink-0 text-right text-sm font-semibold text-primary-700 tabular-nums underline decoration-dashed decoration-2 underline-offset-4"
+          className={`-my-1 inline-flex min-h-11 min-w-0 items-center rounded px-1 text-left text-sm leading-tight tabular-nums hover:underline hover:underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 lg:min-h-9 ${
+            each == null ? 'font-semibold text-primary-700' : changed ? 'text-warning-800' : 'text-neutral-600'
+          }`}
         >
-          {amount != null ? formatMoney(amount) : 'Add price'}
+          {each != null ? `${formatMoney(each)} ${unitWord ? `a ${unitWord}` : 'each'}${changed && usual != null ? ` · usual ${formatMoney(usual)}` : ''}` : 'Add price'}
         </button>
         <button
           type="button"
           aria-label={`Remove ${name}`}
           onClick={onRemove}
-          className="flex h-11 w-9 shrink-0 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 hover:text-danger-700"
+          className="ml-auto flex h-11 w-9 shrink-0 items-center justify-center rounded-md text-neutral-400 hover:bg-neutral-100 hover:text-danger-700 lg:h-9"
         >
           <X className="h-4 w-4" aria-hidden="true" />
         </button>

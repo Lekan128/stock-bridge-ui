@@ -101,8 +101,9 @@ export function RecordSalePage() {
   }
 
   return (
-    <div className={`mx-auto flex w-full flex-col gap-4 ${showReceipt ? 'max-w-2xl' : 'max-w-2xl lg:max-w-6xl'}`}>
-      <div className="flex items-center gap-2">
+    // A till on a wide screen: the whole window, its own top bar (AppLayout drops the page padding here).
+    <div className={`mx-auto flex w-full flex-col gap-4 ${showReceipt ? 'max-w-2xl lg:p-6' : 'max-w-2xl lg:h-full lg:max-w-none lg:gap-0'}`}>
+      <div className={`flex items-center gap-2 ${showReceipt ? '' : 'lg:hidden'}`}>
         <button
           type="button"
           onClick={goBack}
@@ -128,12 +129,13 @@ export function RecordSalePage() {
       ) : (
         <>
           {!online && catalog.syncedAt != null && (
-            <p className="text-xs text-neutral-500">
+            <p className="text-xs text-neutral-500 lg:hidden">
               Offline · prices as of {new Date(catalog.syncedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
             </p>
           )}
           <SaleBasketEditor
             wide
+            onBack={goBack}
             basket={basket}
             startProduct={startProduct}
             onRecorded={recorded}
