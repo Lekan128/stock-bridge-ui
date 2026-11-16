@@ -407,6 +407,11 @@ await check('a line\'s total can be typed instead of the price each; the price e
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.waitForTimeout(300)
   await page.screenshot({ path: SHOTS + '5b-laptop.png' })
+  // The till's title sits in the app's own top bar on a large screen.
+  await page.locator('#topbar-page-slot').getByRole('heading', { name: 'Record a sale', level: 1 }).waitFor()
+  await page.setViewportSize({ width: 1100, height: 760 })
+  await page.waitForTimeout(300)
+  await page.screenshot({ path: SHOTS + '5c-tablet-landscape.png' })
   await page.setViewportSize({ width: 390, height: 844 })
   await line(salt).getByRole('button', { name: `Remove ${salt.name}` }).click()
 })

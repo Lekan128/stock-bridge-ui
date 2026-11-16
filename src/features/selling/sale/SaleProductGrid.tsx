@@ -39,7 +39,7 @@ export function SaleProductGrid({
 }) {
   const { user } = useAuth()
   const canView = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.VIEW_PRODUCTS)
-  const [tab, setTab] = useState<Tab>('top')
+  const [tab, setTab] = useState<Tab>('all')
   const [shown, setShown] = useState(PAGE)
   useEffect(() => setShown(PAGE), [tab])
 
@@ -83,10 +83,11 @@ export function SaleProductGrid({
     return { products: server.data?.content ?? [], more: (server.data?.totalElements ?? 0) > shown }
   }, [search, searchResults, tab, top.data, onDevice, list, shown, server.data])
 
+  // All first and chosen (owner, 2026-11-16); Top sellers next; then the company's categories.
   const chips: { value: Tab; label: string }[] = [
+    { value: 'all', label: 'All' },
     { value: 'top', label: 'Top sellers' },
     ...categories.filter((category) => category.productCount > 0).map((category) => ({ value: category.id, label: category.name })),
-    { value: 'all', label: 'All' },
   ]
 
   return (

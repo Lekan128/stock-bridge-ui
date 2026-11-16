@@ -34,6 +34,9 @@ export function Topbar({ onOpenMobileSidebar }: TopbarProps) {
             the page's own heading scrolls away and the sidebar that would say where you are is
             hidden. */}
         <p className="min-w-0 truncate text-base font-semibold text-neutral-900 md:hidden">{pageTitle}</p>
+        {/* A page that wants the bar's empty left side on a large screen fills this (Record a sale's till: its
+            title and the sales waiting). Empty everywhere else. */}
+        <div id="topbar-page-slot" className="hidden min-w-0 items-center gap-3 lg:flex" />
       </div>
       {/* Tighter on a phone, so the page's name beside the menu button reads whole ("Inventory", not "Inve…"). */}
       <div className="flex shrink-0 items-center gap-1 sm:gap-2">

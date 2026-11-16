@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Minus, Plus, Search, X } from 'lucide-react'
 import { PERMISSIONS } from '@/auth/permissions'
@@ -63,6 +64,10 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
   const [recording, setRecording] = useState<SalePaymentMethod | null>(null)
   const [makeUsual, setMakeUsual] = useState<Set<string>>(new Set())
   const searchRef = useRef<HTMLInputElement>(null)
+  const [topbarSlot, setTopbarSlot] = useState<HTMLElement | null>(null)
+  useEffect(() => {
+    if (wide) setTopbarSlot(document.getElementById('topbar-page-slot'))
+  }, [wide])
 
   function addProduct(product: Product) {
     basket.add(product)
@@ -174,8 +179,9 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
     </>
   )
 
-  const topBar = W && (
-    <div className="hidden h-14 items-center gap-3 border-b border-neutral-200 bg-white px-4 lg:col-span-2 lg:row-start-1 lg:flex">
+  // In the app's own top bar, which is otherwise empty on its left (owner, 2026-11-16) - no second bar.
+  const topBar = W && topbarSlot && createPortal(
+    <div className="flex min-w-0 items-center gap-3">
       {onBack && (
         <button
           type="button"
@@ -187,14 +193,15 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
         </button>
       )}
       <h1 className="text-lg font-semibold text-neutral-900">Record a sale</h1>
-      <div role="group" aria-label="Sales on this phone" className="ml-6 flex flex-wrap items-center gap-1.5">
+      <div role="group" aria-label="Sales on this phone" className="ml-4 flex min-w-0 items-center gap-1.5 overflow-x-auto">
         {tabs}
       </div>
-    </div>
+    </div>,
+    topbarSlot,
   )
 
   const search = (
-    <div className={`flex flex-col gap-3 ${W ? 'lg:col-start-1 lg:row-start-2 lg:bg-neutral-50 lg:px-4 lg:pt-4' : ''}`}>
+    <div className={`flex flex-col gap-3 ${W ? 'lg:col-start-1 lg:row-start-1 lg:bg-neutral-50 lg:px-4 lg:pt-4' : ''}`}>
       {areaId === undefined && area.field}
       <div className="relative">
         <Search className="pointer-events-none absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-neutral-500" aria-hidden="true" />
@@ -264,7 +271,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
   const sale = (
     <div
       className={`${hideSale} relative flex-col gap-2 ${
-        W ? 'lg:col-start-2 lg:row-span-2 lg:row-start-2 lg:flex lg:min-h-0 lg:gap-0 lg:border-l lg:border-neutral-200 lg:bg-white' : ''
+        W ? 'lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:flex lg:min-h-0 lg:gap-0 lg:border-l lg:border-neutral-200 lg:bg-white' : ''
       }`}
     >
       {/* On a phone: the waiting sales and "+ New sale" sit above the lines. On a wide screen they are in the top bar. */}
@@ -366,7 +373,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
   )
 
   const products = (
-    <div className={W ? 'lg:col-start-1 lg:row-start-3 lg:min-h-0 lg:overflow-y-auto lg:bg-neutral-50 lg:px-4 lg:pt-3 lg:pb-6' : ''}>
+    <div className={W ? 'lg:col-start-1 lg:row-start-2 lg:min-h-0 lg:overflow-y-auto lg:bg-neutral-50 lg:px-4 lg:pt-3 lg:pb-6' : ''}>
       <SaleProductGrid
         basket={basket}
         search={finder.search}
@@ -380,7 +387,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
   return (
     <div
       className={`flex flex-col gap-4 ${
-        W ? 'lg:grid lg:h-full lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_24rem] lg:grid-rows-[auto_auto_minmax(0,1fr)] lg:gap-0' : ''
+        W ? 'lg:grid lg:h-full lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_24rem] lg:grid-rows-[auto_minmax(0,1fr)] lg:gap-0' : ''
       }`}
     >
       {topBar}

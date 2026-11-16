@@ -17,12 +17,27 @@ const DesignPreviewChip =
     ? lazy(() => import('@/features/designPreview/DesignPreviewChip').then((m) => ({ default: m.DesignPreviewChip })))
     : null
 
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches)
+  useEffect(() => {
+    const list = window.matchMedia(query)
+    const change = () => setMatches(list.matches)
+    change()
+    list.addEventListener('change', change)
+    return () => list.removeEventListener('change', change)
+  }, [query])
+  return matches
+}
+
 export function AppLayout() {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   // Record a sale is a till (selling till Step 1, owner 2026-11-16): the menu shrinks to icons and the page
   // takes the whole window on a large screen. Opening the menu there doesn't change it everywhere else.
-  const till = useLocation().pathname === '/app/sell'
+  // Only below a full laptop width (a tablet, a small laptop) does the menu shrink by itself (owner, 2026-11-16).
+  const roomy = useMediaQuery('(min-width: 1280px)')
+  const onTill = useLocation().pathname === '/app/sell'
+  const till = onTill && !roomy
   const [tillMenuOpen, setTillMenuOpen] = useState(false)
 
   // The workspace is where the offline shell is installed — see `pwa/serviceWorker.ts` for why
@@ -62,7 +77,7 @@ export function AppLayout() {
         {/* data-scroll-container: this is the actual scroll region in this layout (the window
             itself never scrolls, since the root is h-screen overflow-hidden) - ScrollToTop
             targets it by that attribute on every navigation. */}
-        <main data-scroll-container className={`flex-1 overflow-y-auto p-6 ${till ? 'lg:overflow-hidden lg:p-0' : ''}`}>
+        <main data-scroll-container className={`flex-1 overflow-y-auto p-6 ${onTill ? 'lg:overflow-hidden lg:p-0' : ''}`}>
           <Outlet />
         </main>
       </div>
