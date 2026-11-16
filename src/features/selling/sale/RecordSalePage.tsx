@@ -56,9 +56,10 @@ export function RecordSalePage() {
   const refused = last ? last.lines.filter((line) => line.status === 'refused') : []
   const canUndo = last != null && kept.length > 0 && Date.now() - last.recordedAt < UNDO_FOR_MS
 
+  /** Paid: the receipt, ready to print - most cashiers print (owner, 2026-11-16). All refused: stay on the basket. */
   function recorded(sale: RecordedSale) {
     setLast(sale)
-    setShowReceipt(false)
+    setShowReceipt(sale.lines.some((line) => line.status !== 'refused'))
   }
 
   async function undo() {
@@ -100,7 +101,7 @@ export function RecordSalePage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+    <div className={`mx-auto flex w-full flex-col gap-4 ${showReceipt ? 'max-w-2xl' : 'max-w-2xl lg:max-w-6xl'}`}>
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -118,6 +119,10 @@ export function RecordSalePage() {
           sale={last}
           catalogue={basket.catalogue}
           canChange={canUndo && kept.every((line) => line.status === 'sent')}
+          canUndo={canUndo}
+          undoing={undoing}
+          onUndo={() => void undo()}
+          onNext={() => setShowReceipt(false)}
           onPaymentChanged={(paymentMethod) => setLast({ ...last, paymentMethod })}
         />
       ) : (
@@ -128,6 +133,7 @@ export function RecordSalePage() {
             </p>
           )}
           <SaleBasketEditor
+            wide
             basket={basket}
             startProduct={startProduct}
             onRecorded={recorded}
@@ -187,12 +193,20 @@ function ReceiptView({
   sale,
   catalogue,
   canChange,
+  canUndo,
+  undoing,
+  onUndo,
+  onNext,
   onPaymentChanged,
 }: {
   sale: RecordedSale
   catalogue: ReturnType<typeof useSaleBasket>['catalogue']
   /** Within the two minutes, and the server has the whole sale. */
   canChange: boolean
+  canUndo: boolean
+  undoing: boolean
+  onUndo: () => void
+  onNext: () => void
   onPaymentChanged: (method: SalePaymentMethod) => void
 }) {
   const { showToast } = useToast()
@@ -215,6 +229,18 @@ function ReceiptView({
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-col gap-4">
+      {sale.lines.some((line) => line.status === 'refused') && (
+        <div role="alert" className="rounded-lg border border-warning-200 bg-warning-50 px-4 py-3 text-sm text-warning-900">
+          {sale.lines
+            .filter((line) => line.status === 'refused')
+            .map((line) => (
+              <p key={line.line.key}>
+                {line.line.product.name} was not recorded: {line.message}
+              </p>
+            ))}
+          <p className="mt-1">It's still in the sale. Tap Next sale to change it and take it.</p>
+        </div>
+      )}
       <SaleReceiptCard sale={sale} catalogue={catalogue} />
       <PrintableReceipt sale={sale} catalogue={catalogue} />
       {changing ? (
@@ -226,17 +252,29 @@ function ReceiptView({
           </button>
         </div>
       ) : (
-        <div className="flex flex-wrap items-center gap-3">
-          <Button variant="action" onClick={printReceipt} className="min-h-12 px-5 text-base">
-            <Printer className="h-5 w-5" aria-hidden="true" />
-            Print
-          </Button>
-          {canChange && (
-            <Button variant="secondary" onClick={() => setChanging(true)}>
-              Change how they paid
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <Button variant="action" onClick={printReceipt} className="min-h-12 text-base">
+              <Printer className="h-5 w-5" aria-hidden="true" />
+              Print
             </Button>
-          )}
-        </div>
+            <Button variant="secondary" onClick={onNext} className="min-h-12 text-base">
+              Next sale
+            </Button>
+          </div>
+          <div className="flex flex-wrap justify-center gap-x-6">
+            {canChange && (
+              <button type="button" onClick={() => setChanging(true)} className="inline-flex min-h-11 items-center text-sm font-semibold text-primary-700 hover:underline">
+                Change how they paid
+              </button>
+            )}
+            {canUndo && (
+              <button type="button" onClick={onUndo} disabled={undoing} className="inline-flex min-h-11 items-center text-sm font-semibold text-primary-700 hover:underline disabled:opacity-50">
+                {undoing ? 'Undoing…' : 'Undo sale'}
+              </button>
+            )}
+          </div>
+        </>
       )}
     </div>
   )

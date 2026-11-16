@@ -9,7 +9,7 @@ import { requestsApi } from '@/features/requests/requestsApi'
 import { WaitingMovesLine } from '@/features/moves/WaitingMovesLine'
 import { usePendingStock } from '@/features/outbox/useOutbox'
 import { useEffect, useRef, useState, type RefObject } from 'react'
-import { Delete, Search, X } from 'lucide-react'
+import { Delete, Printer, Search, X } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Stamp, type StampKind } from '@/components/Stamp'
@@ -64,6 +64,8 @@ import type { AskShare } from '@/features/requests/whatsAppShare'
 import { SyncPill } from '@/features/sync/SyncPill'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
+import { printReceipt } from '@/features/selling/sale/printReceipt'
+import { PrintableReceipt } from '@/features/selling/sale/SaleReceipt'
 
 
 /**
@@ -163,6 +165,14 @@ export function QuickModePage() {
   // Held here, not in the Sell step, so the basket (a draft on the phone) outlives the stamp.
   const basket = useSaleBasket()
   const [salesRecorded, setSalesRecorded] = useState(0)
+  /** The sale just paid: its card stays until Next sale, so the receipt can be printed (owner, 2026-11-16). */
+  const [saleCard, setSaleCard] = useState<{ sale: RecordedSale; kind: StampKind } | null>(null)
+  /** A receipt to print: set, rendered, then printed. `n` lets the same sale print twice. */
+  const [printJob, setPrintJob] = useState<{ sale: RecordedSale; n: number } | null>(null)
+  useEffect(() => {
+    if (printJob) printReceipt()
+  }, [printJob])
+  const printSale = (sale: RecordedSale) => setPrintJob((job) => ({ sale, n: (job?.n ?? 0) + 1 }))
   const [movesRecorded, setMovesRecorded] = useState(0)
   const rootRef = useRef<HTMLDivElement>(null)
 
@@ -190,17 +200,21 @@ export function QuickModePage() {
     setSalesRecorded((n) => n + 1)
     if (kept.length === 0) return // all refused: they are still in the basket, saying why
     const items = `${kept.length} ${kept.length === 1 ? 'item' : 'items'}`
-    recorded(
+    area.remember()
+    // Not the brief stamp of Stock in and Stock out: the sale's card stays until Next sale, for Print.
+    setSession((current) => [
       {
         key: sale.saleId,
         mode: 'sell',
         productId: '',
-        productName: sale.label,
-        summary: `${items} · ${formatMoney(sale.total)} · ${paymentLabel(sale.paymentMethod)}`,
+        productName: `${formatMoney(sale.total)} · ${paymentLabel(sale.paymentMethod)}`,
+        summary: items,
         sale,
+        areaName: area.areaName ?? undefined,
       },
-      kept.every((line) => line.status === 'sent') ? 'synced' : 'recorded',
-    )
+      ...current,
+    ])
+    setSaleCard({ sale, kind: kept.every((line) => line.status === 'sent') ? 'synced' : 'recorded' })
   }
 
   function moveRecorded(moved: Moved) {
@@ -325,6 +339,16 @@ export function QuickModePage() {
 
         {flash ? (
           <StampFlash kind={flash.kind} text={flash.text} next={mode === 'sell' ? 'Next customer…' : 'Next item…'} />
+        ) : mode === 'sell' && saleCard ? (
+          <QuickSaleCard
+            sale={saleCard.sale}
+            kind={saleCard.kind}
+            onPrint={() => printSale(saleCard.sale)}
+            onNext={() => {
+              setSaleCard(null)
+              searchRef.current?.focus()
+            }}
+          />
         ) : mode === 'sell' ? (
           <div className="flex flex-col gap-4">
             <SaleBasketEditor basket={basket} onRecorded={saleRecorded} areaId={area.areaId ?? null} />
@@ -384,7 +408,18 @@ export function QuickModePage() {
           />
         )}
 
-        <SessionList entries={session} onUndone={(key) => setSession((all) => all.map((e) => (e.key === key ? { ...e, undone: true } : e)))} />
+        <SessionList
+          entries={session}
+          onPrint={printSale}
+          onUndone={(key) => {
+            const undoneSale = session.find((e) => e.key === key)?.sale
+            setSession((all) => all.map((e) => (e.key === key ? { ...e, undone: true } : e)))
+            // An undone sale's items come back into the sale, to fix and take again (owner, 2026-11-16).
+            if (undoneSale) basket.restoreSale(undoneSale)
+            if (saleCard?.sale.saleId === key) setSaleCard(null)
+          }}
+        />
+        {printJob && <PrintableReceipt key={printJob.n} sale={printJob.sale} catalogue={basket.catalogue} />}
       </div>
     </div>,
     document.body,
@@ -1056,6 +1091,44 @@ function QuickReason({ value, onChange }: { value: OutReason | null; onChange: (
 
 // -------------------------------------------------------------------------------------- stamp
 
+/**
+ * A sale just paid, quick-mode style (owner, 2026-11-16): the stamp, the amount and how it was paid, what was
+ * in it, and Print - it stays until Next sale, since most cashiers print.
+ */
+function QuickSaleCard({ sale, kind, onPrint, onNext }: { sale: RecordedSale; kind: StampKind; onPrint: () => void; onNext: () => void }) {
+  const kept = sale.lines.filter((line) => line.status !== 'refused')
+  const refused = sale.lines.filter((line) => line.status === 'refused')
+  const names = kept.map((line) => (line.line.quantity > 1 ? `${line.line.product.name} × ${line.line.quantity}` : line.line.product.name))
+  return (
+    <div role="status" className="flex flex-col gap-4 rounded-lg border-2 border-neutral-200 px-4 py-6" data-quick-sale-card>
+      <div className="flex flex-col items-center gap-2 text-center">
+        <div className="scale-125">
+          <Stamp kind={kind} land />
+        </div>
+        <p className="text-2xl font-semibold tabular-nums">
+          {formatMoney(sale.total)} · {paymentLabel(sale.paymentMethod)}
+        </p>
+        <p className="text-sm text-neutral-600">{names.join(', ')}</p>
+        {kind !== 'synced' && <p className="text-xs text-neutral-500">Saved on this phone. It will send when you are online.</p>}
+        {refused.length > 0 && (
+          <p role="alert" className="text-sm text-warning-800">
+            {refused.map((line) => line.line.product.name).join(', ')} not recorded - still in the sale.
+          </p>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <button type="button" onClick={onPrint} className="flex min-h-12 items-center justify-center gap-2 rounded-lg bg-action text-base font-semibold text-white hover:bg-action-hover">
+          <Printer className="h-5 w-5" aria-hidden="true" />
+          Print
+        </button>
+        <button type="button" onClick={onNext} className="min-h-12 rounded-lg border border-neutral-300 bg-white text-base font-semibold text-neutral-900 hover:bg-neutral-50">
+          Next sale
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function StampFlash({ kind, text, next }: { kind: StampKind; text: string; next: string }) {
   return (
     <div role="status" className="flex flex-col items-center gap-4 rounded-lg border-2 border-neutral-200 px-4 py-10 text-center">
@@ -1070,7 +1143,16 @@ function StampFlash({ kind, text, next }: { kind: StampKind; text: string; next:
 
 // ------------------------------------------------------------------------------------ session
 
-function SessionList({ entries, onUndone }: { entries: SessionEntry[]; onUndone: (key: string) => void }) {
+function SessionList({
+  entries,
+  onUndone,
+  onPrint,
+}: {
+  entries: SessionEntry[]
+  onUndone: (key: string) => void
+  /** A sale's receipt, printed again from the list. */
+  onPrint: (sale: RecordedSale) => void
+}) {
   const { ops, recentlySent } = useOutboxState()
   const [error, setError] = useState<string | null>(null)
   if (entries.length === 0) return null
@@ -1153,6 +1235,11 @@ function SessionList({ entries, onUndone }: { entries: SessionEntry[]; onUndone:
             ) : (
               <span className="flex shrink-0 items-center gap-2">
                 <Stamp kind={stampFor(entry)} />
+                {entry.sale && (
+                  <button type="button" onClick={() => onPrint(entry.sale!)} className="h-10 rounded-md px-2 text-sm font-semibold text-primary-700 underline">
+                    Print
+                  </button>
+                )}
                 {entry === latest && (
                   <button type="button" onClick={() => void undo(entry)} className="h-10 rounded-md px-2 text-sm font-semibold text-primary-700 underline">
                     Undo

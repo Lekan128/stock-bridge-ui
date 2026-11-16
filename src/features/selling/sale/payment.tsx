@@ -34,7 +34,7 @@ export function PaymentButtons({
   label: string
 }) {
   return (
-    <div role="group" aria-label={label} className="grid grid-cols-3 gap-2">
+    <div role="group" aria-label={label} className="grid grid-cols-3 gap-1.5">
       {PAYMENT_METHODS.map((method) => {
         const Icon = ICONS[method]
         const isCurrent = current === method
@@ -45,9 +45,9 @@ export function PaymentButtons({
             disabled={busy != null || isCurrent}
             aria-busy={busy === method}
             onClick={() => onPick(method)}
-            className="flex min-h-20 flex-col items-center justify-center gap-1 rounded-xl bg-action px-2 text-base font-semibold text-white hover:bg-action-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:opacity-50"
+            className="flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-action px-2 text-sm font-semibold text-white hover:bg-action-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:opacity-50"
           >
-            <Icon className={`h-7 w-7 ${busy === method ? 'animate-pulse' : ''}`} aria-hidden="true" />
+            <Icon className={`h-4 w-4 ${busy === method ? 'animate-pulse' : ''}`} aria-hidden="true" />
             {PAYMENT_LABELS[method]}
           </button>
         )

@@ -1,21 +1,19 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Minus, Plus, Search, X } from 'lucide-react'
-import { api } from '@/api/client'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
 import { useToast } from '@/components/useToast'
-import { useApiQuery } from '@/data/useApiQuery'
 import { useProductFinder } from '@/features/catalog/useProductFinder'
 import { usePendingStock } from '@/features/outbox/useOutbox'
 import { productsApi } from '@/features/products/api/productsApi'
-import { UnitToggle } from '@/features/products/components/UnitToggle'
 import type { Product } from '@/features/products/types'
-import { formatNumber, stockUnitWord, unitNoun } from '@/features/products/unitCopy'
+import { formatNumber, stockUnitWord } from '@/features/products/unitCopy'
 import { resolveUnitSymbol, toBaseQuantity } from '@/features/products/unitSet'
 import { formatMoney } from '@/features/selling/money'
 import { PaymentButtons, type SalePaymentMethod } from '@/features/selling/sale/payment'
-import { belowUsual, lineAmount, openingUnit, optionOf, priceEach, unitsFor, usualPrice, type SaleLine } from '@/features/selling/sale/saleLine'
+import { SaleProductGrid } from '@/features/selling/sale/SaleProductGrid'
+import { lineAmount, optionOf, priceEach, unitsFor, usualPrice, type SaleLine } from '@/features/selling/sale/saleLine'
 import type { RecordedSale, useSaleBasket } from '@/features/selling/sale/useSaleBasket'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { placeFigure } from '@/features/branches/areas'
@@ -26,7 +24,7 @@ type Basket = ReturnType<typeof useSaleBasket>
 
 export interface SaleBasketEditorProps {
   basket: Basket
-  /** Called once the lines have been recorded (or refused) - the caller says so and offers the receipt. */
+  /** Called once the lines have been recorded (or refused) - the caller shows the receipt. */
   onRecorded: (sale: RecordedSale) => void
   /** A product to start with - the product page's Sell button. Added once. */
   startProduct?: Product | null
@@ -35,20 +33,23 @@ export interface SaleBasketEditorProps {
    * then asks nothing. `null`: no area at this branch. Absent: the basket asks "Which area?" itself.
    */
   areaId?: string | null
-  /** Above the search: the "Paid" line after a sale, on Record a sale. */
+  /** Above the sale: what went wrong with the last one, on Record a sale. */
   banner?: ReactNode
+  /** Record a sale on a wide screen: products on the left, the sale on the right, like a till. */
+  wide?: boolean
 }
 
 /** A keyboard-and-mouse screen, where focusing the search costs nothing; on a phone it would pop the keyboard up. */
 const finePointer = typeof window !== 'undefined' && window.matchMedia?.('(pointer: fine)').matches
 
 /**
- * The basket itself (`SELLING_PRICE_PLAN.md` §6.1; selling till Step 1 and its fixes), shared by Record a
- * sale and quick mode's Sell: tap a picture, scan or search to add; each line carries its own − and +, its
- * price (tap it to change it) and ✕; one tap on Cash, Transfer or Card records it all. Several baskets can
- * be open - "+ New sale" while a customer finds their money. Nothing about cost or profit on it, ever.
+ * The basket itself (`SELLING_PRICE_PLAN.md` §6.1; selling till Step 1, round 3), shared by Record a sale
+ * and quick mode's Sell. Products are small buttons under category chips, and the search narrows those same
+ * buttons; each line is one row (− n +, its total - tap to change the price - and ✕), newest at the top;
+ * one tap on Cash, Transfer or Card records it all. Several baskets can be open ("+ New sale").
+ * Nothing about cost or profit on it, ever.
  */
-export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, banner }: SaleBasketEditorProps) {
+export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, banner, wide = false }: SaleBasketEditorProps) {
   const { user } = useAuth()
   const { showToast } = useToast()
   const online = useOnlineStatus()
@@ -61,19 +62,20 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
   const [makeUsual, setMakeUsual] = useState<Set<string>>(new Set())
   const searchRef = useRef<HTMLInputElement>(null)
 
-  function addProduct(product: Product, fromSearch = true) {
+  function addProduct(product: Product) {
     basket.add(product)
-    setTerm('')
+    // Searched for it: the search clears and stays ready for the next item (owner, 2026-11-16).
+    if (term !== '') {
+      setTerm('')
+      searchRef.current?.focus()
+    }
     setAskUnpriced(false)
-    // A scanner or a keyboard goes on to the next item; on a phone the keyboard goes down to show the basket.
-    if (fromSearch && finePointer) searchRef.current?.focus()
-    else if (fromSearch) searchRef.current?.blur()
   }
-  const finder = useProductFinder(term, (product) => addProduct(product))
+  const finder = useProductFinder(term, addProduct, 30)
   // Where in the branch this sale comes from, at a branch with a choice of areas (V60): the Bar, not the Store.
   const branchHere = useOptionalWorkingBranch()
   const area = useSheetArea(branchHere && !branchHere.isAll ? branchHere.working : null)
-  // Whose figures the search and the lines show: the till's area, else the branch's (sheets plan Part 4).
+  // Whose figures the lines show: the till's area, else the branch's (sheets plan Part 4).
   const place = {
     branchId: branchHere && !branchHere.isAll ? branchHere.working?.id : undefined,
     areaId: areaId !== undefined ? (areaId ?? undefined) : area.areaId,
@@ -84,7 +86,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
     if (!startProduct || started.current) return
     started.current = true
     if (basket.lines.some((line) => line.product.id === startProduct.id)) return
-    addProduct(startProduct, false)
+    basket.add(startProduct)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startProduct])
 
@@ -99,6 +101,8 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
   })
   const typing = term.trim() !== ''
   const waiting = basket.baskets.filter((b) => b.id !== basket.activeId && b.lines.length > 0)
+  // Typing on a phone: the keyboard needs the room, so the sale steps aside; beside the products it stays.
+  const hideSale = typing ? (wide ? 'hidden lg:flex' : 'hidden') : 'flex'
 
   /** One tap on Cash, Transfer or Card records the whole sale, paid that way (selling till Step 1). */
   async function record(paymentMethod: SalePaymentMethod) {
@@ -128,50 +132,9 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
     }
   }
 
-  return (
-    <>
+  const search = (
+    <div className="flex flex-col gap-3 lg:col-start-1">
       {areaId === undefined && area.field}
-
-      {/* Several customers at once: the waiting ones as amber pills with their totals (Step 1 fixes). */}
-      {(waiting.length > 0 || itemCount > 0) && (
-        <div role="group" aria-label="Sales on this phone" className="flex flex-wrap items-center gap-2">
-          {waiting.length > 0 &&
-            basket.baskets.map((b, index) => {
-              const isActive = b.id === basket.activeId
-              if (!isActive && b.lines.length === 0) return null
-              return (
-                <button
-                  key={b.id}
-                  type="button"
-                  aria-pressed={isActive}
-                  onClick={() => basket.switchTo(b.id)}
-                  className={`inline-flex min-h-11 items-center rounded-full border px-3.5 text-sm font-semibold tabular-nums ${
-                    isActive ? 'border-action bg-action text-white' : 'border-warning-300 bg-warning-50 text-warning-900'
-                  }`}
-                >
-                  Sale {index + 1}
-                  {b.lines.length > 0 && ` · ${formatMoney(basket.totalOf(b))}`}
-                </button>
-              )
-            })}
-          {itemCount > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                basket.newSale()
-                setTerm('')
-                setAskUnpriced(false)
-              }}
-              className="inline-flex min-h-11 items-center rounded-full border border-dashed border-primary-400 px-3.5 text-sm font-semibold text-primary-700 hover:bg-primary-50"
-            >
-              + New sale
-            </button>
-          )}
-        </div>
-      )}
-
-      {banner}
-
       <div className="relative">
         <Search className="pointer-events-none absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-neutral-500" aria-hidden="true" />
         <label htmlFor="sale-search" className="sr-only">
@@ -196,33 +159,70 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
           className="h-12 w-full rounded-lg border-2 border-neutral-300 bg-white pr-3 pl-11 text-base text-neutral-900 placeholder:text-neutral-500 focus:border-primary-600 focus:outline-none"
         />
       </div>
+      {typing && finder.answered && finder.results.length === 0 && online && canManageProducts && (
+        // The basket is kept as a draft, so going to add the product loses nothing (Pattern A).
+        <Link to="/app/products/new" className="text-sm font-medium text-primary-600 hover:underline">
+          Add “{finder.search}” as a new product
+        </Link>
+      )}
+      {typing && finder.answered && finder.results.length === 0 && !online && (
+        <p className="text-sm text-neutral-600">Not on this phone. Add it when you are back online.</p>
+      )}
+    </div>
+  )
 
-      {finder.search && (
-        <div className="flex flex-col gap-1">
-          {finder.results.map((product) => (
-            <FoundProduct key={product.id} product={product} place={place} catalogue={basket.catalogue} onPick={(p) => addProduct(p)} />
-          ))}
-          {finder.answered && finder.results.length === 0 && (
-            <p className="px-1 text-sm text-neutral-600">
-              Nothing matches “{finder.search}”.{' '}
-              {online && canManageProducts ? (
-                // The basket is kept as a draft, so going to add the product loses nothing (Pattern A).
-                <Link to="/app/products/new" className="font-medium text-primary-600 hover:underline">
-                  Add it as a new product
-                </Link>
-              ) : !online ? (
-                'Not on this phone. Add it when you are back online.'
-              ) : null}
-            </p>
+  const sale = (
+    <div className={`${hideSale} flex-col gap-2 lg:col-start-2 lg:row-span-2 lg:row-start-1 ${wide ? 'lg:sticky lg:top-4 lg:rounded-lg lg:border lg:border-neutral-200 lg:bg-white lg:p-3' : ''}`}>
+      {(waiting.length > 0 || itemCount > 0 || wide) && (
+        <div className="flex flex-wrap items-center gap-2">
+          {waiting.length > 0 ? (
+            <div role="group" aria-label="Sales on this phone" className="flex flex-wrap items-center gap-1.5">
+              {basket.baskets.map((b, index) => {
+                const isActive = b.id === basket.activeId
+                if (!isActive && b.lines.length === 0) return null
+                return (
+                  <button
+                    key={b.id}
+                    type="button"
+                    aria-pressed={isActive}
+                    onClick={() => basket.switchTo(b.id)}
+                    className={`inline-flex min-h-10 items-center rounded-full border px-3 text-sm font-semibold tabular-nums ${
+                      isActive ? 'border-action bg-action text-white' : 'border-warning-300 bg-warning-50 text-warning-900'
+                    }`}
+                  >
+                    Sale {index + 1}
+                    {b.lines.length > 0 && ` · ${formatMoney(basket.totalOf(b))}`}
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
+            wide && <h2 className="hidden text-base font-semibold text-neutral-900 lg:block">Sale</h2>
+          )}
+          {itemCount > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                basket.newSale()
+                setTerm('')
+                setAskUnpriced(false)
+              }}
+              className="ml-auto inline-flex min-h-10 items-center rounded-full border border-dashed border-primary-400 px-3 text-sm font-semibold text-primary-700 hover:bg-primary-50"
+            >
+              + New sale
+            </button>
           )}
         </div>
       )}
 
-      {itemCount === 0 && !typing && <p className="text-sm text-neutral-600">Tap a product, or scan or search to add it.</p>}
+      {banner}
 
-      {itemCount > 0 && !typing && (
+      {itemCount === 0 ? (
+        <p className="text-sm text-neutral-600">Tap a product, or scan or search to add it.</p>
+      ) : (
         <ul className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white" aria-label="This sale">
-          {basket.lines.map((line) => (
+          {/* Newest first: what was just added sits right under the search (owner, 2026-11-16). */}
+          {[...basket.lines].reverse().map((line) => (
             <BasketLine
               key={line.key}
               line={line}
@@ -255,10 +255,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
         </ul>
       )}
 
-      {!typing && <SaleTiles basket={basket} onPick={(product) => addProduct(product, false)} />}
-
       {itemCount > 0 &&
-        !typing &&
         (noteOpen || basket.note ? (
           <div className="flex flex-col gap-1">
             <label htmlFor="sale-note" className="text-sm font-medium text-neutral-800">
@@ -282,9 +279,12 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
           </button>
         ))}
 
-      {/* While someone types, the pay buttons step aside, so the keyboard never pushes them over the results. */}
-      {itemCount > 0 && !typing && (
-        <div className="sticky bottom-0 -mx-4 flex flex-col gap-2 border-t border-neutral-200 bg-white px-4 pt-2.5 pb-[calc(0.625rem+env(safe-area-inset-bottom))] sm:mx-0 sm:rounded-b-lg">
+      {itemCount > 0 && (
+        <div
+          className={`sticky bottom-0 z-10 -mx-4 flex flex-col gap-1.5 border-t border-neutral-200 bg-white px-4 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] sm:mx-0 sm:rounded-b-lg ${
+            wide ? 'lg:static lg:mx-0 lg:border-0 lg:px-0 lg:pb-0' : ''
+          }`}
+        >
           {askUnpriced && (
             <p role="alert" className="text-sm text-neutral-800">
               {unpriced.length === 1 ? `${unpriced[0].product.name} has no price.` : `${unpriced.length} items have no price.`} Tap “Add
@@ -295,110 +295,38 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
             <p className="text-sm text-neutral-600">
               {itemCount} {itemCount === 1 ? 'item' : 'items'} · collect
             </p>
-            <p className="text-2xl font-semibold text-neutral-900 tabular-nums" aria-live="polite">
+            <p className="text-xl font-semibold text-neutral-900 tabular-nums" aria-live="polite">
               {formatMoney(basket.total)}
             </p>
           </div>
           <PaymentButtons label={`Collect ${formatMoney(basket.total)} by`} busy={recording} onPick={(method) => void record(method)} />
         </div>
       )}
-    </>
+    </div>
   )
-}
 
-// ----------------------------------------------------------------------------------- tiles
-
-const TILE_COLOURS = ['bg-[#b42318]', 'bg-[#7a4b16]', 'bg-[#1d6fb8]', 'bg-[#2f6b2f]', 'bg-[#6b3fa0]', 'bg-[#0f766e]', 'bg-[#9a3412]', 'bg-[#3f3f46]']
-
-function initials(name: string): string {
-  const words = name.replace(/\(.*?\)/g, '').trim().split(/\s+/).filter(Boolean)
-  return (words.length > 1 ? words[0][0] + words[1][0] : (words[0] ?? '?').slice(0, 2)).toUpperCase()
-}
-
-function colourOf(id: string): string {
-  let hash = 0
-  for (const char of id) hash = (hash * 31 + char.charCodeAt(0)) | 0
-  return TILE_COLOURS[Math.abs(hash) % TILE_COLOURS.length]
-}
-
-/**
- * "Tap to add" (Step 1 fixes): the products this company sells most, then its other priced ones - so
- * nobody has to know to search. Kept from the last time it loaded, so it works offline too.
- */
-function SaleTiles({ basket, onPick }: { basket: Basket; onPick: (product: Product) => void }) {
-  const { user } = useAuth()
-  const { data } = useApiQuery<Product[]>({
-    queryKey: ['sale-tiles', user?.type === 'tenant' ? user.id : null],
-    queryFn: () => api.get<Product[]>('/api/sales/tiles', { params: { limit: 12 } }).then((r) => r.data),
-    fallbackError: "Couldn't load the products to tap.",
-    enabled: user?.type === 'tenant',
-  })
-  if (!data || data.length === 0) return null
-  return (
-    <section aria-label="Tap to add" className="flex flex-col gap-2">
-      <h2 className="text-xs font-semibold tracking-wider text-neutral-500 uppercase">Tap to add</h2>
-      <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-        {data.map((product) => {
-          const opening = openingUnit(product, unitsFor(product, basket.catalogue))
-          const price = usualPrice(product, opening)
-          const inBasket = basket.lines.filter((line) => line.product.id === product.id).reduce((sum, line) => sum + line.quantity, 0)
-          return (
-            <li key={product.id}>
-              <button
-                type="button"
-                onClick={() => onPick(product)}
-                aria-label={`Add ${product.name}${inBasket > 0 ? `, ${inBasket} in the sale` : ''}`}
-                className="relative flex w-full flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white text-left hover:border-primary-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 active:scale-[0.98]"
-              >
-                {product.imageUrl ? (
-                  <img src={product.imageUrl} alt="" className="h-14 w-full object-cover" loading="lazy" />
-                ) : (
-                  <span aria-hidden="true" className={`flex h-14 w-full items-center justify-center text-lg font-bold text-white ${colourOf(product.id)}`}>
-                    {initials(product.name)}
-                  </span>
-                )}
-                <span className="flex flex-col px-2 pt-1 pb-1.5">
-                  <span className="line-clamp-2 text-sm leading-tight font-medium text-neutral-900">{product.name}</span>
-                  <span className="text-xs text-neutral-600 tabular-nums">{price != null ? formatMoney(price) : 'No price'}</span>
-                </span>
-                {inBasket > 0 && (
-                  <span aria-hidden="true" className="absolute top-1 right-1 min-w-6 rounded-full bg-action px-1.5 text-center text-xs leading-6 font-bold text-white tabular-nums">
-                    {formatNumber(inBasket)}
-                  </span>
-                )}
-              </button>
-            </li>
-          )
-        })}
-      </ul>
-    </section>
+  const products = (
+    <div className="lg:col-start-1">
+      <SaleProductGrid
+        basket={basket}
+        search={finder.search}
+        searchResults={finder.results}
+        searchAnswered={finder.answered}
+        onPick={addProduct}
+      />
+    </div>
   )
-}
 
-// ------------------------------------------------------------------------------- search row
-
-function FoundProduct({ product, place, catalogue, onPick }: { product: Product; place: Place; catalogue: ReturnType<typeof useSaleBasket>['catalogue']; onPick: (product: Product) => void }) {
-  const here = placeFigure(product, place).quantity
-  const options = unitsFor(product, catalogue)
-  const opening = options.find((option) => !option.isStockUnit && option.code === product.unitPriceEnteredUnit) ?? options.find((o) => o.isStockUnit)
-  const price = opening ? usualPrice(product, opening) : null
-  const unit = resolveUnitSymbol(product.unitOfMeasure, catalogue)
   return (
-    <button
-      type="button"
-      onClick={() => onPick(product)}
-      className="flex min-h-14 w-full items-center justify-between gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-2.5 text-left hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+    <div
+      className={`flex flex-col gap-4 ${
+        wide ? 'lg:grid lg:grid-cols-[minmax(0,1.4fr)_minmax(22rem,1fr)] lg:grid-rows-[auto_1fr] lg:items-start lg:gap-x-6 lg:gap-y-4' : ''
+      }`}
     >
-      <span className="min-w-0">
-        <span className="block truncate text-base font-medium text-neutral-900">{product.name}</span>
-        <span className="block text-sm text-neutral-500 tabular-nums">
-          {formatNumber(here)} {stockUnitWord(unit, here)} in stock
-        </span>
-      </span>
-      <span className="shrink-0 text-right text-base font-semibold tabular-nums text-neutral-900">
-        {price != null && opening ? `${formatMoney(price)} / ${opening.isStockUnit ? unit : unitNoun(opening)}` : <span className="text-sm font-normal text-neutral-500">No price</span>}
-      </span>
-    </button>
+      {search}
+      {sale}
+      {products}
+    </div>
   )
 }
 
@@ -421,16 +349,21 @@ interface BasketLineProps {
   onRemove: () => void
 }
 
+function money(value: number): string {
+  return String(Math.round(value * 100) / 100)
+}
+
 /**
- * One line, everything in it (owner, 2026-11-16): − and + for how many, the price - tap it to change it, in
- * the same spot - and ✕. Nothing to open.
+ * One line, one row (owner, 2026-11-16): the name with its price each, − n +, the line's total - tap it to
+ * change the price, for one or for the whole line, in place - and ✕. A product sold in packs says which
+ * ("bottle ▾") and can switch.
  */
 function BasketLine({ line, place, catalogue, canMakeUsual, makeUsual, onMakeUsual, onChange, onRemove }: BasketLineProps) {
   const options = unitsFor(line.product, catalogue)
   const option = optionOf(line, options)
   const each = priceEach(line, option)
   const amount = lineAmount(line, option, options)
-  const usual = belowUsual(line, option) ?? (line.priceTyped != null ? usualPrice(line.product, option) : null)
+  const usual = usualPrice(line.product, option)
   const pending = usePendingStock(line.product.id, place.areaId)
   const onRecord = placeFigure(line.product, place).quantity + pending.delta
   const base = toBaseQuantity(line.quantity, option)
@@ -439,105 +372,136 @@ function BasketLine({ line, place, catalogue, canMakeUsual, makeUsual, onMakeUsu
   // The box can be emptied to type a new number; a blank or 0 snaps back to the line's quantity.
   const [qtyText, setQtyText] = useState<string | null>(null)
   const name = line.product.name
-  const showUsual = usual != null && each != null && Math.abs(usual - each) >= 0.005
+  const changed = usual != null && each != null && Math.abs(usual - each) >= 0.005
+  const unitWord = option.isStockUnit ? null : option.label.toLowerCase()
 
   return (
-    <li className="flex flex-col gap-1.5 px-3 py-2.5">
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="min-w-0 truncate text-base font-medium text-neutral-900">{name}</span>
-        <span className="shrink-0 text-base font-semibold tabular-nums text-neutral-900">{amount != null ? formatMoney(amount) : ''}</span>
-      </div>
-      <div className="flex flex-wrap items-center gap-1.5">
-        <button
-          type="button"
-          aria-label={`Fewer ${name}`}
-          disabled={line.quantity <= 1}
-          onClick={() => {
-            setQtyText(null)
-            onChange({ quantity: line.quantity - 1 })
-          }}
-          className="flex h-11 w-11 items-center justify-center rounded-md border border-neutral-300 bg-white disabled:opacity-40"
-        >
-          <Minus className="h-4 w-4" aria-hidden="true" />
-        </button>
-        <label htmlFor={`sale-qty-${line.key}`} className="sr-only">
-          How many {name}
-        </label>
-        <input
-          id={`sale-qty-${line.key}`}
-          inputMode="numeric"
-          value={qtyText ?? String(line.quantity)}
-          onChange={(event) => {
-            setQtyText(event.target.value)
-            const value = Math.floor(Number(event.target.value))
-            if (event.target.value.trim() !== '' && Number.isFinite(value) && value >= 1) onChange({ quantity: value })
-          }}
-          onBlur={() => setQtyText(null)}
-          className="h-11 w-12 rounded-md border border-neutral-300 bg-white text-center text-base tabular-nums"
-        />
-        <button
-          type="button"
-          aria-label={`More ${name}`}
-          onClick={() => {
-            setQtyText(null)
-            onChange({ quantity: line.quantity + 1 })
-          }}
-          className="flex h-11 w-11 items-center justify-center rounded-md border border-neutral-300 bg-white"
-        >
-          <Plus className="h-4 w-4" aria-hidden="true" />
-        </button>
-        {options.length > 1 && (
-          <UnitToggle
-            value={option.label}
-            options={options}
-            onChange={(next) => onChange({ unitLabel: next.label, priceTyped: null, totalTyped: null })}
-            label="Counted in"
+    <li className="flex min-w-0 flex-col gap-1.5 px-2.5 py-2">
+      <div className="flex items-center gap-1.5">
+        <div className="min-w-[5rem] flex-1">
+          <p className="truncate text-sm font-medium text-neutral-900">{name}</p>
+          <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-neutral-500 tabular-nums">
+            {options.length > 1 && (
+              <>
+                <label htmlFor={`sale-unit-${line.key}`} className="sr-only">
+                  Unit for {name}
+                </label>
+                <select
+                  id={`sale-unit-${line.key}`}
+                  value={option.label}
+                  onChange={(event) => onChange({ unitLabel: event.target.value, priceTyped: null, totalTyped: null })}
+                  className="h-7 max-w-[9rem] rounded border border-neutral-300 bg-white px-1 text-xs font-medium text-neutral-800"
+                >
+                  {options.map((choice) => (
+                    <option key={choice.label} value={choice.label}>
+                      {choice.label}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
+            <span>
+              {each != null ? `${formatMoney(each)} ${unitWord ? `a ${unitWord}` : 'each'}` : 'No price'}
+              {changed && usual != null && ` · usual ${formatMoney(usual)}`}
+            </span>
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center">
+          <button
+            type="button"
+            aria-label={`Fewer ${name}`}
+            disabled={line.quantity <= 1}
+            onClick={() => {
+              setQtyText(null)
+              onChange({ quantity: line.quantity - 1 })
+            }}
+            className="flex h-11 w-10 items-center justify-center rounded-l-md border border-neutral-300 bg-white disabled:opacity-40"
+          >
+            <Minus className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <label htmlFor={`sale-qty-${line.key}`} className="sr-only">
+            How many {name}
+          </label>
+          <input
+            id={`sale-qty-${line.key}`}
+            inputMode="numeric"
+            value={qtyText ?? String(line.quantity)}
+            onChange={(event) => {
+              setQtyText(event.target.value)
+              const value = Math.floor(Number(event.target.value))
+              if (event.target.value.trim() !== '' && Number.isFinite(value) && value >= 1) onChange({ quantity: value })
+            }}
+            onBlur={() => setQtyText(null)}
+            className="h-11 w-10 border-y border-neutral-300 bg-white text-center text-base tabular-nums"
           />
-        )}
-
-        <span className="ml-1 flex min-w-0 flex-1 items-center gap-1.5 text-sm text-neutral-600 tabular-nums">
-          <span aria-hidden="true">×</span>
-          {editingPrice ? (
-            <>
-              <label htmlFor={`sale-price-${line.key}`} className="sr-only">
-                Price each (₦) for {name}
-              </label>
-              <input
-                id={`sale-price-${line.key}`}
-                autoFocus
-                inputMode="decimal"
-                value={line.priceTyped ?? (usualPrice(line.product, option) != null ? String(usualPrice(line.product, option)) : '')}
-                onChange={(event) => onChange({ priceTyped: event.target.value, totalTyped: null })}
-                onBlur={() => setEditingPrice(false)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') setEditingPrice(false)
-                }}
-                className="h-10 w-24 rounded-md border-2 border-primary-600 bg-white px-2 text-base font-semibold text-neutral-900 tabular-nums"
-              />
-            </>
-          ) : (
-            <button
-              type="button"
-              aria-label={each != null ? `Change price of ${name}, ${formatMoney(each)} each` : `Add a price for ${name}`}
-              onClick={() => setEditingPrice(true)}
-              className="-my-2 inline-flex min-h-11 items-center font-semibold text-primary-700 underline decoration-dashed decoration-2 underline-offset-4"
-            >
-              {each != null ? formatMoney(each) : 'Add price'}
-            </button>
-          )}
-          {showUsual && <span className="text-xs text-neutral-500">usual {formatMoney(usual)}</span>}
-        </span>
-
+          <button
+            type="button"
+            aria-label={`More ${name}`}
+            onClick={() => {
+              setQtyText(null)
+              onChange({ quantity: line.quantity + 1 })
+            }}
+            className="flex h-11 w-10 items-center justify-center rounded-r-md border border-neutral-300 bg-white"
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+        <button
+          type="button"
+          aria-expanded={editingPrice}
+          aria-label={amount != null ? `Change price of ${name}, ${formatMoney(amount)}` : `Add a price for ${name}`}
+          onClick={() => setEditingPrice((open) => !open)}
+          className="min-h-11 min-w-[4.5rem] shrink-0 text-right text-sm font-semibold text-primary-700 tabular-nums underline decoration-dashed decoration-2 underline-offset-4"
+        >
+          {amount != null ? formatMoney(amount) : 'Add price'}
+        </button>
         <button
           type="button"
           aria-label={`Remove ${name}`}
           onClick={onRemove}
-          className="flex h-11 w-11 items-center justify-center rounded-md border border-neutral-300 bg-white text-neutral-600 hover:text-danger-700"
+          className="flex h-11 w-9 shrink-0 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 hover:text-danger-700"
         >
           <X className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
-      {canMakeUsual && line.priceTyped && (
+
+      {editingPrice && (
+        <div className="flex min-w-0 items-end gap-2">
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <label htmlFor={`sale-each-${line.key}`} className="text-xs font-medium text-neutral-600">
+              Each (₦)
+            </label>
+            <input
+              id={`sale-each-${line.key}`}
+              autoFocus
+              inputMode="decimal"
+              value={line.priceTyped ?? (line.totalTyped == null && usual != null ? money(usual) : each != null ? money(each) : '')}
+              onChange={(event) => onChange({ priceTyped: event.target.value, totalTyped: null })}
+              className="h-10 w-full min-w-0 rounded-md border-2 border-neutral-300 bg-white px-2 text-base font-semibold tabular-nums focus:border-primary-600 focus:outline-none"
+            />
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <label htmlFor={`sale-total-${line.key}`} className="text-xs font-medium text-neutral-600">
+              Total (₦)
+            </label>
+            <input
+              id={`sale-total-${line.key}`}
+              inputMode="decimal"
+              value={line.totalTyped ?? (amount != null ? money(amount) : '')}
+              onChange={(event) => onChange({ totalTyped: event.target.value, priceTyped: null })}
+              className="h-10 w-full min-w-0 rounded-md border-2 border-neutral-300 bg-white px-2 text-base font-semibold tabular-nums focus:border-primary-600 focus:outline-none"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setEditingPrice(false)}
+            className="inline-flex min-h-10 items-center rounded-md px-2 text-sm font-semibold text-primary-700 hover:bg-primary-50"
+          >
+            Done
+          </button>
+        </div>
+      )}
+      {editingPrice && canMakeUsual && (line.priceTyped || line.totalTyped) && (
         <label className="flex items-center gap-2 text-sm text-neutral-700">
           <input
             type="checkbox"
