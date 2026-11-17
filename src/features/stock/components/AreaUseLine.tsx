@@ -17,6 +17,17 @@ interface AreaUseIngredient {
   usedOnTop?: number
   usedOnTopCost?: number
   left: number
+  /** What was sold that used it, most first (two at most), and how many more. */
+  soldItems?: { name: string; quantity: number }[]
+  moreSoldItems?: number
+}
+
+/** "(4 Jollof rice & chicken, 2 Fried rice)" - where "Sales used" came from. */
+function soldText(line: AreaUseIngredient): string {
+  const items = line.soldItems ?? []
+  if (items.length === 0) return ''
+  const named = items.map((item) => `${formatNumber(item.quantity)} ${item.name}`).join(', ')
+  return ` (${named}${line.moreSoldItems ? ` and ${line.moreSoldItems} more` : ''})`
 }
 
 interface AreaUse {
@@ -62,13 +73,14 @@ export function AreaUseLine({ branchId, areaId, range, rangeLabel }: { branchId:
   if (!use || use.ingredients.length === 0) return null
   const period = PERIOD_WORDS[range.preset] ?? rangeLabel
   const title = `${use.areaName ?? 'This area'} ${period}`
+  // Said the way it happened (owner, 2026-11-17): "Sales used", and what the count found against it.
   const summary = use.counted
     ? use.usedOnTopCost != null
       ? use.usedOnTopCost > 0
-        ? `${formatMoney(use.usedOnTopCost)} used on top of the plates`
-        : 'Matched the plates'
+        ? `Count found ${formatMoney(use.usedOnTopCost)} more used than sales`
+        : 'Count matched sales'
       : 'Counted · some ingredients have no cost'
-    : `Plates took ${use.platesTookCost != null ? `${formatMoney(use.platesTookCost)} of ingredients` : 'their ingredients'} · not counted yet`
+    : `Sales used ${use.platesTookCost != null ? `${formatMoney(use.platesTookCost)} of ingredients` : 'its ingredients'} · not counted yet`
 
   return (
     <section aria-label={title} className="overflow-hidden rounded-lg border border-neutral-200 bg-white" data-area-use>
@@ -101,7 +113,10 @@ export function AreaUseLine({ branchId, areaId, range, rangeLabel }: { branchId:
                 </div>
                 <div className="flex flex-wrap gap-x-3 text-xs text-neutral-500">
                   <span>In {amount(line.cameIn, line.stockUnit)}</span>
-                  <span>Plates took {amount(line.platesTook, line.stockUnit)}</span>
+                  <span>
+                    Sales used {amount(line.platesTook, line.stockUnit)}
+                    {soldText(line)}
+                  </span>
                   <span>
                     {line.counted ? 'Left' : 'Should be left'} {amount(line.left, line.stockUnit)}
                   </span>
@@ -116,8 +131,8 @@ export function AreaUseLine({ branchId, areaId, range, rangeLabel }: { branchId:
                 <tr>
                   <th scope="col" className="px-4 py-2 font-medium">Ingredient</th>
                   <th scope="col" className="px-4 py-2 text-right font-medium">Came in</th>
-                  <th scope="col" className="px-4 py-2 text-right font-medium">Plates sold took</th>
-                  <th scope="col" className="px-4 py-2 text-right font-medium">Counts found used on top</th>
+                  <th scope="col" className="px-4 py-2 text-right font-medium">Sales used</th>
+                  <th scope="col" className="px-4 py-2 text-right font-medium">Count found</th>
                   <th scope="col" className="px-4 py-2 text-right font-medium">Left now</th>
                 </tr>
               </thead>
@@ -128,7 +143,11 @@ export function AreaUseLine({ branchId, areaId, range, rangeLabel }: { branchId:
                     <td className="px-4 py-2.5 text-right">{amount(line.cameIn, line.stockUnit)}</td>
                     <td className="px-4 py-2.5 text-right">
                       {amount(line.platesTook, line.stockUnit)}
-                      {line.platesTookCost != null && <span className="block text-xs text-neutral-500">{formatMoney(line.platesTookCost)}</span>}
+                      <span className="block text-xs text-neutral-500">
+                        {[line.platesTookCost != null ? formatMoney(line.platesTookCost) : null, soldText(line).trim().replace(/^\(|\)$/g, '') || null]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </span>
                     </td>
                     <td className="px-4 py-2.5 text-right">
                       <OnTop line={line} withCost />
@@ -144,8 +163,8 @@ export function AreaUseLine({ branchId, areaId, range, rangeLabel }: { branchId:
           </div>
           <p className="border-t border-neutral-100 bg-neutral-50 px-4 py-2 text-xs text-neutral-600">
             {use.counted
-              ? 'Used on top is what a count found gone beyond what the plates took, at cost.'
-              : `Count the ${use.areaName ?? 'area'} to see what was used on top of the plates.`}
+              ? '"More used" is what a count found gone beyond what sales used, at cost.'
+              : `Count the ${use.areaName ?? 'area'} to see whether it used more than sales did.`}
           </p>
         </div>
       )}
@@ -155,10 +174,12 @@ export function AreaUseLine({ branchId, areaId, range, rangeLabel }: { branchId:
 
 function OnTop({ line, withCost = false }: { line: AreaUseIngredient; withCost?: boolean }) {
   if (!line.counted || line.usedOnTop == null) return <span className="text-xs font-normal text-neutral-500">Not counted yet</span>
-  if (line.usedOnTop <= 0) return <span className="font-medium text-accent-700">Matched</span>
+  if (line.usedOnTop === 0) return <span className="font-medium text-accent-700">Matched sales</span>
+  // The count found more there than sales left: said plainly, not as a gain.
+  if (line.usedOnTop < 0) return <span className="font-medium text-neutral-700">{amount(-line.usedOnTop, line.stockUnit)} more than expected</span>
   return (
     <span className="font-semibold text-warning-700">
-      {amount(line.usedOnTop, line.stockUnit)} on top
+      {amount(line.usedOnTop, line.stockUnit)} more used
       {line.usedOnTopCost != null && (withCost ? <span className="block text-xs font-normal">{formatMoney(line.usedOnTopCost)}</span> : ` · ${formatMoney(line.usedOnTopCost)}`)}
     </span>
   )
