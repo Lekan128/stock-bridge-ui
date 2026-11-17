@@ -453,7 +453,27 @@ function BasketLine({ line, place, catalogue, canMakeUsual, makeUsual, onMakeUsu
     <li className={`flex min-w-0 flex-col gap-1.5 px-3 py-2.5 ${editingPrice ? 'bg-neutral-50' : ''}`}>
       <div className="flex items-baseline justify-between gap-3">
         <p className="min-w-0 truncate text-base font-medium text-neutral-900">{name}</p>
-        <p className="shrink-0 text-base font-semibold text-neutral-900 tabular-nums">{amount != null ? formatMoney(amount) : ''}</p>
+        {/* The line's total opens the price too, with Total ready to type - it's the number tapped (owner, 2026-11-17). */}
+        {amount != null ? (
+          <button
+            type="button"
+            aria-label={`Change the total for ${name}`}
+            aria-expanded={editingPrice}
+            onClick={() => {
+              setEditingPrice(true)
+              window.setTimeout(() => {
+                const box = document.getElementById(`sale-total-${line.key}`) as HTMLInputElement | null
+                box?.focus()
+                box?.select()
+              }, 0)
+            }}
+            className="shrink-0 rounded-sm text-base font-semibold text-neutral-900 tabular-nums underline decoration-neutral-300 decoration-dashed underline-offset-4 hover:decoration-neutral-500"
+          >
+            {formatMoney(amount)}
+          </button>
+        ) : (
+          <span className="shrink-0" />
+        )}
       </div>
       <div className="flex min-w-0 items-center gap-2">
         <div className="flex shrink-0 items-center rounded-full bg-neutral-100">
