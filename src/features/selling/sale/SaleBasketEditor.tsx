@@ -383,6 +383,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
         searchResults={finder.results}
         searchAnswered={finder.answered}
         onPick={addProduct}
+        areaId={place.areaId}
       />
     </div>
   )
@@ -445,7 +446,8 @@ function BasketLine({ line, place, catalogue, canMakeUsual, makeUsual, onMakeUsu
   const [qtyText, setQtyText] = useState<string | null>(null)
   const name = line.product.name
   const changed = usual != null && each != null && Math.abs(usual - each) >= 0.005
-  const unitWord = option.isStockUnit ? null : option.label.toLowerCase()
+  // "crate", not "crate of 12 pieces": the line's price must fit beside its ✕ (walk-through, 2026-11-17).
+  const unitWord = option.isStockUnit ? null : option.label.split(' ')[0].toLowerCase()
 
   return (
     <li className={`flex min-w-0 flex-col gap-1.5 px-3 py-2.5 ${editingPrice ? 'bg-neutral-50' : ''}`}>

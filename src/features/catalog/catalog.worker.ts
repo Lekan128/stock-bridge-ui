@@ -90,6 +90,8 @@ function asSeen(row: StoredRow, q: CatalogQuery): StoredRow {
 
 /** The row as the areas chosen in the top bar hold it (Part 3.6); unchanged for the whole branch. */
 function inAreas(row: StoredRow, q: CatalogQuery): StoredRow {
+  // A made-here item (V90) is held by no area and sold from any: never "not this area's" (walk-through, 2026-11-17).
+  if (row.madeHere) return row
   if (!q.areaIds || q.areaIds.length === 0 || row.areaStock == null) return row
   const figures = row.areaStock.filter((figure) => q.areaIds!.includes(figure.areaId))
   const quantity = figures.reduce((sum, figure) => sum + figure.quantityOnHand, 0)
@@ -100,7 +102,8 @@ function inAreas(row: StoredRow, q: CatalogQuery): StoredRow {
 }
 
 function atBranch(row: StoredRow, q: CatalogQuery): StoredRow {
-  if (row.branchStock == null) return row
+  // A made-here item (V90) has no figure at any branch: never "out" there.
+  if (row.madeHere || row.branchStock == null) return row
   if (q.branchId) {
     const figure = row.branchStock.find((entry) => entry.branchId === q.branchId)
     return figure

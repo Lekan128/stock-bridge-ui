@@ -29,6 +29,7 @@ export function SaleProductGrid({
   searchResults,
   searchAnswered,
   onPick,
+  areaId,
 }: {
   basket: Basket
   /** What is typed in the search, trimmed; empty when nothing is. */
@@ -36,6 +37,8 @@ export function SaleProductGrid({
   searchResults: Product[]
   searchAnswered: boolean
   onPick: (product: Product) => void
+  /** The area the till sells from: only what it holds (and made-here items) are buttons (walk-through, 2026-11-17). */
+  areaId?: string
 }) {
   const { user } = useAuth()
   const canView = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.VIEW_PRODUCTS)
@@ -57,12 +60,22 @@ export function SaleProductGrid({
   const listing = tab !== 'top' && search === ''
   const categoryId = tab === 'all' || tab === 'top' ? '' : tab
   const list = useCatalogList(
-    // Made-here items (V90) are sold too.
-    { search: '', status: 'active', categoryId, stockStatus: 'all', sort: { field: 'name', direction: 'asc' }, madeHere: 'include' },
+    // Made-here items (V90) are sold too; only what has a price is a button - ingredients stay off the till, still
+    // found by search (walk-through, 2026-11-17).
+    {
+      search: '',
+      status: 'active',
+      categoryId,
+      stockStatus: 'all',
+      price: 'has',
+      sort: { field: 'name', direction: 'asc' },
+      madeHere: 'include',
+    },
     onDevice && listing,
+    areaId ? { areaIds: [areaId] } : undefined,
   )
   const server = useProducts(
-    { active: true, categoryId: categoryId || undefined, size: shown, page: 0, sort: 'name,asc' },
+    { active: true, categoryId: categoryId || undefined, hasSellingPrice: true, size: shown, page: 0, sort: 'name,asc' },
     { enabled: !onDevice && listing },
   )
   const { loadRange } = list
