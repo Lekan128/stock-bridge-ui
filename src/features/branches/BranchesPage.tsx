@@ -12,6 +12,7 @@ import { BRANCHES_KEY } from '@/features/branches/BranchProvider'
 import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { AddBranchFlow } from '@/features/branches/AddBranchFlow'
 import { AddAreasSheet } from '@/features/branches/AddAreasSheet'
+import { AddBranchProductsSheet } from '@/features/branches/BranchProductPicker'
 import { BranchAreas } from '@/features/branches/BranchAreas'
 import type { Branch } from '@/features/branches/types'
 
@@ -27,6 +28,7 @@ export function BranchesPage() {
   const queryClient = useQueryClient()
   const [adding, setAdding] = useState(false)
   const [addingAreasTo, setAddingAreasTo] = useState<Branch | null>(null)
+  const [addingProductsTo, setAddingProductsTo] = useState<Branch | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [problem, setProblem] = useState<{ branchId: string; message: string } | null>(null)
@@ -54,7 +56,7 @@ export function BranchesPage() {
           <h1 className="text-xl font-semibold text-neutral-900">Branches</h1>
           <p className="mt-1 text-sm text-neutral-600">
             {isMultiBranch
-              ? 'Stock is counted at each branch. Products, prices and suppliers are shared by all of them.'
+              ? 'Each branch has its own products and counts its own stock. Prices and suppliers are shared by all of them.'
               : 'Your company has one branch. Add another to count stock at each place separately.'}
           </p>
         </div>
@@ -94,6 +96,11 @@ export function BranchesPage() {
                 <Button variant="quiet" onClick={() => setEditing(branch.id)} disabled={!online}>
                   Edit
                 </Button>
+                {branch.active && isMultiBranch && (
+                  <Button variant="quiet" onClick={() => setAddingProductsTo(branch)} disabled={!online}>
+                    Add products
+                  </Button>
+                )}
                 {branch.active && !branch.main && (
                   <Button variant="quiet" loading={busy === branch.id} disabled={!online}
                     onClick={() => void act(branch, () => branchesApi.makeMain(branch.id))}>
@@ -151,6 +158,13 @@ export function BranchesPage() {
       </ul>
       {!online && <p className="text-sm text-neutral-600">Changing branches needs a connection.</p>}
       {addingAreasTo && <AddAreasSheet branch={addingAreasTo} onClose={() => setAddingAreasTo(null)} />}
+      {addingProductsTo && (
+        <AddBranchProductsSheet
+          branchId={addingProductsTo.id}
+          branchName={addingProductsTo.name}
+          onClose={() => setAddingProductsTo(null)}
+        />
+      )}
       {adding && <AddBranchFlow onDone={() => setAdding(false)} />}
       {editingBranch && (
         <BranchEditor

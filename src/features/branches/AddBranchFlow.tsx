@@ -6,6 +6,7 @@ import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import { isAppError } from '@/types/api'
 import { branchesApi } from '@/features/branches/branchesApi'
+import { BranchProductPicker, addProductsToBranch } from '@/features/branches/BranchProductPicker'
 import { BRANCHES_KEY } from '@/features/branches/BranchProvider'
 import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { PERMISSIONS } from '@/auth/permissions'
@@ -14,7 +15,7 @@ import { useUsers } from '@/features/users/hooks/useUsers'
 import { usersApi } from '@/features/users/api/usersApi'
 import type { Branch } from '@/features/branches/types'
 
-type Step = 'existing' | 'name' | 'stock' | 'people' | 'done'
+type Step = 'existing' | 'name' | 'products' | 'choose' | 'stock' | 'people' | 'done'
 
 /**
  * Adding a branch (MULTI_BRANCH_UX_PLAN.md §5.1), one question a step. The second branch also renames the
@@ -41,6 +42,9 @@ export function AddBranchFlow({ onDone }: { onDone: () => void }) {
   const [created, setCreated] = useState<Branch | null>(null)
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
+  // "Which products will Ikeja have?" (owner, 2026-11-17): all of them unless chosen; none adds stock.
+  const [productsChoice, setProductsChoice] = useState<'all' | 'choose' | 'later'>('all')
+  const [chosenProducts, setChosenProducts] = useState<string[]>([])
 
   async function run(action: () => Promise<void>) {
     setBusy(true)
@@ -76,6 +80,41 @@ export function AddBranchFlow({ onDone }: { onDone: () => void }) {
           Add branch
         </Button>
       </>
+    ) : step === 'products' ? (
+      <Button
+        variant="action"
+        loading={busy}
+        onClick={() => {
+          if (productsChoice === 'choose') return setStep('choose')
+          if (productsChoice === 'later' || !created) return setStep('stock')
+          void run(async () => {
+            await addProductsToBranch(created.id, { all: true })
+            setStep('stock')
+          })
+        }}
+      >
+        Next
+      </Button>
+    ) : step === 'choose' ? (
+      <>
+        <Button variant="secondary" onClick={() => setStep('products')}>
+          Back
+        </Button>
+        <Button
+          variant="action"
+          loading={busy}
+          disabled={chosenProducts.length === 0}
+          onClick={() =>
+            created &&
+            void run(async () => {
+              await addProductsToBranch(created.id, { all: false, ids: chosenProducts })
+              setStep('stock')
+            })
+          }
+        >
+          {chosenProducts.length === 0 ? 'Add products' : `Add ${chosenProducts.length} ${chosenProducts.length === 1 ? 'product' : 'products'}`}
+        </Button>
+      </>
     ) : step === 'stock' ? (
       <Button onClick={() => setStep('people')}>Later</Button>
     ) : step === 'people' ? (
@@ -94,7 +133,7 @@ export function AddBranchFlow({ onDone }: { onDone: () => void }) {
     )
 
   return (
-    <Sheet open onClose={onDone} title="Add a branch" size="md" footer={footer}>
+    <Sheet open onClose={onDone} title="Add a branch" size={step === 'choose' ? 'lg' : 'md'} footer={footer}>
       {step === 'existing' && current && (
         <form
           id="add-branch-existing"
@@ -135,7 +174,7 @@ export function AddBranchFlow({ onDone }: { onDone: () => void }) {
               })
               setCreated(branch)
               await refresh()
-              setStep('stock')
+              setStep('products')
             })
           }}
           className="flex flex-col gap-4"
@@ -158,6 +197,56 @@ export function AddBranchFlow({ onDone }: { onDone: () => void }) {
             </button>
           )}
         </form>
+      )}
+
+      {step === 'products' && created && (
+        <fieldset className="flex flex-col gap-3">
+          <legend className="text-base font-semibold text-neutral-900">Which products will {created.name} have?</legend>
+          <p className="text-sm text-neutral-600">
+            {created.name} starts with no stock. The products you add show there at 0 until stock arrives.
+          </p>
+          {(
+            [
+              ['all', 'All products', `Every product you have now. You can take any off later, on the product.`],
+              ['choose', 'Choose products', 'Tick the ones it will have.'],
+              ['later', 'Choose later', `From ${created.name}'s row in Branches, or its Inventory.`],
+            ] as const
+          ).map(([value, label, hint]) => (
+            <label
+              key={value}
+              className={`flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-3 text-sm ${
+                productsChoice === value ? 'border-primary-500 bg-primary-50' : 'border-neutral-200'
+              }`}
+            >
+              <input
+                type="radio"
+                name="branch-products"
+                className="mt-0.5"
+                checked={productsChoice === value}
+                onChange={() => setProductsChoice(value)}
+              />
+              <span>
+                <span className="font-medium text-neutral-900">{label}</span>
+                <span className="block text-neutral-600">{hint}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+      )}
+
+      {step === 'choose' && created && (
+        <BranchProductPicker
+          branchId={created.id}
+          branchName={created.name}
+          selected={chosenProducts}
+          onSelectedChange={setChosenProducts}
+          onAddAll={() =>
+            void run(async () => {
+              await addProductsToBranch(created.id, { all: true })
+              setStep('stock')
+            })
+          }
+        />
       )}
 
       {step === 'stock' && created && (

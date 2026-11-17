@@ -1,3 +1,4 @@
+import { AddBranchProductsSheet } from '@/features/branches/BranchProductPicker'
 import { WaitingSalesLine } from '@/features/selling/sale/WaitingSalesLine'
 import { useRecordsHere } from '@/features/branches/useRecordsHere'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
@@ -915,6 +916,10 @@ function OnDeviceList({
   cardSelection,
   byBranch,
 }: OnDeviceListProps) {
+  // A branch with no products yet (V92): say so, with the way to add some (owner, 2026-11-17).
+  const branch = useOptionalWorkingBranch()
+  const { user } = useAuth()
+  const [addingProducts, setAddingProducts] = useState(false)
   if (!list.ready) return <ProductListSkeleton />
   if (list.catalogSize === 0) {
     return <EmptyProductsState canManageProducts={canManageProducts} onBulkUpload={onBulkUpload} />
@@ -927,6 +932,26 @@ function OnDeviceList({
         <Button variant="secondary" onClick={() => onShowOthers(true)}>
           Show the other {list.elsewhere} {list.elsewhere === 1 ? 'product' : 'products'}
         </Button>
+      </div>
+    )
+  }
+  const here = branch?.isMultiBranch && !branch.isAll ? branch.working : null
+  if (list.total === 0 && here && isDefaultView && !committedSearch && statusFilter === 'active' && list.activeCount > 0) {
+    const mayAdd =
+      user?.type === 'tenant' &&
+      (user.permissions.includes(PERMISSIONS.MANAGE_PRODUCTS) || user.permissions.includes(PERMISSIONS.MANAGE_BRANCHES))
+    return (
+      <div className="flex flex-col items-center gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-10 text-center text-sm text-neutral-600">
+        <p className="font-medium text-neutral-900">No products at {here.name} yet.</p>
+        <p>Add the products {here.name} will have. They show here at 0 until stock arrives.</p>
+        {mayAdd && (
+          <Button variant="action" onClick={() => setAddingProducts(true)}>
+            Add products
+          </Button>
+        )}
+        {addingProducts && (
+          <AddBranchProductsSheet branchId={here.id} branchName={here.name} onClose={() => setAddingProducts(false)} />
+        )}
       </div>
     )
   }
