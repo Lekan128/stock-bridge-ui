@@ -2,13 +2,22 @@ import { ProductUnitsField, unitsDraftFrom, unitsPayload, type UnitsDraft } from
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
 import {
+  EMPTY_MADE_WITH,
+  MadeWithEditor,
+  draftFromMadeWith,
+  madeWithPayload,
+  madeWithProblem,
+  type MadeWithDraft,
+} from '@/features/products/components/MadeWithEditor'
+import { madeWithApi } from '@/features/products/madeWith'
+import {
   ProductBranchesField,
   defaultProductBranches,
   productBranchesText,
   type ProductBranchesValue,
 } from '@/features/products/components/ProductBranchesField'
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Banknote, Bell, ClipboardCheck, Lock, Ruler, Tag, Truck } from 'lucide-react'
+import { ArrowLeft, Banknote, Bell, ChefHat, ClipboardCheck, Lock, Ruler, Tag, Truck } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
@@ -224,8 +233,8 @@ const IDENTITY_FIELDS: { field: keyof ProductFormValues & keyof Product; label: 
  * something to edit here.
  */
 /** The form's sections, in order (owner, 2026-11-10). */
-type StepId = 'basics' | 'units' | 'price' | 'suppliers' | 'alert' | 'review'
-const STEP_IDS: StepId[] = ['basics', 'units', 'price', 'suppliers', 'alert', 'review']
+type StepId = 'basics' | 'units' | 'price' | 'madeWith' | 'suppliers' | 'alert' | 'review'
+const STEP_IDS: StepId[] = ['basics', 'units', 'price', 'madeWith', 'suppliers', 'alert', 'review']
 
 /** Which section each field is in: a problem in it marks that step, and Create opens the first one with one. */
 const FIELD_STEP: Record<string, StepId> = {
@@ -266,7 +275,7 @@ export function ProductFormPage() {
   // One product, one price, every branch (MULTI_BRANCH_UX_PLAN.md §5.14): the form says where a change
   // lands, and the price is read-only for someone who can't change selling prices.
   // Every open branch in the company, not only those this person sees: a price applies at all of them.
-  const { isMultiBranch, openBranches: branchCount, working, isAll, nameOf } = useWorkingBranch()
+  const { isMultiBranch, openBranches: branchCount, working, isAll, nameOf, branches } = useWorkingBranch()
   // Which branches it is for (V92): a new one, the branch being worked at; the line under the name changes it.
   const [productBranches, setProductBranches] = useState<ProductBranchesValue>(() => defaultProductBranches(working, isAll))
   const [branchesTouched, setBranchesTouched] = useState(false)
@@ -288,6 +297,9 @@ export function ProductFormPage() {
   // Made here, not kept in stock (V90, selling till Step 4): chosen at the top when adding; fixed once added.
   const [madeHereChoice, setMadeHereChoice] = useState(false)
   const [roughCost, setRoughCost] = useState('')
+  // "Made with" (V95, Step 5): read with a made-here item being edited, saved right after the product.
+  const [madeWith, setMadeWith] = useState<MadeWithDraft>(EMPTY_MADE_WITH)
+  const [madeWithLoaded, setMadeWithLoaded] = useState(false)
   /** The pack a company's selling price is typed per ("CARTON"), or null for the stock unit (V47). */
   const [priceUnitCode, setPriceUnitCode] = useState<string | null>(null)
   // The product's own units and where its stock-outs start (UNITS_PLAN.md Parts 1-2), beside the form's fields.
@@ -308,6 +320,22 @@ export function ProductFormPage() {
   const { product, loading: loadingProduct, error: productError, refetch: refetchProduct } = useProduct(id, {
     requireFresh: true,
   })
+  useEffect(() => {
+    if (!isEdit || !id || product?.madeHere !== true || madeWithLoaded) return
+    let live = true
+    madeWithApi
+      .get(id)
+      .then((saved) => {
+        if (live) setMadeWith(draftFromMadeWith(saved))
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (live) setMadeWithLoaded(true)
+      })
+    return () => {
+      live = false
+    }
+  }, [isEdit, id, product?.madeHere, madeWithLoaded])
   const queryClient = useQueryClient()
   // Gated on VIEW_VENDORS rather than fetched unconditionally: the picker is optional, and asking
   // for a list the caller is not allowed to read would be a 403 in everyone's network tab.
@@ -966,6 +994,17 @@ export function ProductFormPage() {
         void queryClient.invalidateQueries({ queryKey: queryKeys.products.vendors(saved.id) })
       }
 
+      // "Made with" (V95): after the product, which it belongs to. A refusal leaves the product saved and says so.
+      let madeWithWarning: string | null = null
+      if (madeHere && (isEdit ? madeWithLoaded : madeWith.ingredients.length > 0)) {
+        try {
+          await madeWithApi.set(saved.id, madeWithPayload(madeWith, branches, productBranches))
+          void queryClient.invalidateQueries({ queryKey: ['made-with', saved.id] })
+        } catch (error) {
+          madeWithWarning = isAppError(error) ? error.message : 'its ingredients were not saved.'
+        }
+      }
+
       // Vendors only. ProcurePal's staff set brand on the admin catalogue screen, and an
       // ordinary buying company has no marketplace facets at all — the route would 403 them,
       // which is why the input is not rendered for either.
@@ -977,7 +1016,9 @@ export function ProductFormPage() {
       syncProductIntoCache(queryClient, saved)
       void invalidateInventory(queryClient)
 
-      if (detailsWarning) {
+      if (madeWithWarning) {
+        showToast(`Product saved, but ${madeWithWarning}`, 'error')
+      } else if (detailsWarning) {
         showToast(`Product saved, ${detailsWarning}`, 'error')
       } else if (suppliersWarning) {
         showToast(`Product saved, but ${suppliersWarning}`, 'error')
@@ -1047,6 +1088,14 @@ export function ProductFormPage() {
       setSectionProblem({ step: 'basics', message: 'Choose at least one branch it is for.' })
       setStep('basics')
       return
+    }
+    if (madeHere) {
+      const problem = madeWithProblem(madeWith, branches, productBranches)
+      if (problem) {
+        setSectionProblem({ step: 'madeWith', message: problem })
+        setStep('madeWith')
+        return
+      }
     }
     if (!isEdit && !values.unitOfMeasure && !madeHere) {
       setError('unitOfMeasure', { message: 'Choose what it’s counted in.' })
@@ -1123,6 +1172,10 @@ export function ProductFormPage() {
     if (shownStep === 'basics' && isMultiBranch && !productBranches.all && productBranches.ids.length === 0) {
       return setSectionProblem({ step: 'basics', message: 'Choose at least one branch it is for.' })
     }
+    if (shownStep === 'madeWith') {
+      const problem = madeWithProblem(madeWith, branches, productBranches)
+      if (problem) return setSectionProblem({ step: 'madeWith', message: problem })
+    }
     if (shownStep === 'units' && !isEdit && !getValues('unitOfMeasure')) {
       setError('unitOfMeasure', { message: 'Choose what it’s counted in.' })
       return
@@ -1155,6 +1208,8 @@ export function ProductFormPage() {
       // Made here (V90): no units, suppliers or stock alert - nothing about stock applies.
       ...(madeHere ? [] : [{ id: 'units', label: 'Units', icon: Ruler }]),
       ...(showsSellingPrice ? [{ id: 'price', label: 'Price', icon: Banknote, optional: !requiresSellingPrice }] : []),
+      // Step 5 (V95): what goes into one, and where it's made.
+      ...(madeHere ? [{ id: 'madeWith', label: 'Made with', icon: ChefHat, optional: true }] : []),
       ...(canViewVendors && !madeHere ? [{ id: 'suppliers', label: 'Suppliers', icon: Truck, optional: true }] : []),
       ...(madeHere ? [] : [{ id: 'alert', label: 'Stock alert', icon: Bell, optional: true }]),
       ...(isEdit ? [] : [{ id: 'review', label: 'Review', icon: ClipboardCheck }]),
@@ -1200,6 +1255,19 @@ export function ProductFormPage() {
         .filter(Boolean)
         .join(' · '),
     },
+    ...(madeHere
+      ? [
+          {
+            step: 'madeWith' as StepId,
+            title: 'Made with',
+            text:
+              madeWith.ingredients.length === 0
+                ? 'None'
+                : `${madeWith.ingredients.map((line) => line.name).join(', ')}${madeWith.madeIn ? ` · made in ${madeWith.madeIn}` : ''}`,
+            empty: madeWith.ingredients.length === 0,
+          },
+        ]
+      : []),
     ...(showsSellingPrice
       ? [
           {
@@ -1847,7 +1915,7 @@ export function ProductFormPage() {
         )}
 
         {/* A made-here item's rough cost to make one (V90): profit shows until a recipe works it out. */}
-        {madeHere && (
+        {madeHere && madeWith.ingredients.length === 0 && (
           <TextField
             id="estimatedCost"
             label="Rough cost to make one (₦, optional)"
@@ -1858,6 +1926,32 @@ export function ProductFormPage() {
           />
         )}
         </FormSection>
+        )}
+
+        {/* -------------------------------------------------------------- Made with (Step 5, V95) */}
+        {madeHere && (
+          <FormSection
+            id="madeWith"
+            current={shownStep}
+            title="Made with"
+            description="What goes into one, and where it's made. Selling it takes these out of that area. Optional."
+          >
+            <MadeWithEditor
+              value={madeWith}
+              onChange={(value) => {
+                setMadeWith(value)
+                if (sectionProblem?.step === 'madeWith') setSectionProblem(null)
+              }}
+              forBranches={productBranches}
+              price={watch('unitPrice')?.trim() ? Number(watch('unitPrice')) : null}
+              itemId={id}
+            />
+            {sectionProblem?.step === 'madeWith' && (
+              <p role="alert" className="mt-3 text-sm text-danger-700">
+                {sectionProblem.message}
+              </p>
+            )}
+          </FormSection>
         )}
 
         {/* -------------------------------------------------------------- Suppliers */}

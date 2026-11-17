@@ -496,6 +496,8 @@ await check('made here (Step 4): the owner turns it on; a made-here item is adde
   await page.getByLabel(/^Selling price/).fill('6500')
   await page.getByLabel('Rough cost to make one (₦, optional)').fill('2800')
   await page.screenshot({ path: SHOTS + '6a-made-here-price.png' })
+  // Step 5: Made with comes next, and is optional.
+  await page.getByRole('button', { name: /^Next: Made with/ }).click()
   await page.getByRole('button', { name: /^Next: Review/ }).click()
   await page.getByRole('button', { name: 'Create product' }).click()
   await page.getByText('Made here: sold, not kept in stock.').waitFor()

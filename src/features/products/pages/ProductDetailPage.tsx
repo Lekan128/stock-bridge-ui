@@ -2,6 +2,8 @@ import { useRecordsHere } from '@/features/branches/useRecordsHere'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { productBranchesText } from '@/features/products/components/ProductBranchesField'
+import { madeWithApi, type MadeWith } from '@/features/products/madeWith'
+import { useApiQuery } from '@/data/useApiQuery'
 import { carryBranchStock, scopeProduct, scopeToAreas } from '@/features/branches/scopeProduct'
 import { useWorkArea } from '@/features/branches/workArea'
 import { OtherBranchesList } from '@/features/branches/OtherBranchesList'
@@ -71,6 +73,13 @@ export function ProductDetailPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = parseDetailTab(searchParams.get('tab'))
   const { product: wholeProduct, setProduct, loading, error, showingSaved, updatedAt, refetch: refetchProduct } = useProduct(id)
+  // A made-here item's "Made with" (V95, Step 5).
+  const madeWith = useApiQuery<MadeWith>({
+    queryKey: ['made-with', id],
+    queryFn: () => madeWithApi.get(id!),
+    fallbackError: "Couldn't load what it's made with.",
+    enabled: !!id && wholeProduct?.madeHere === true,
+  })
   // At a branch, the page reads that branch's figure (MULTI_BRANCH_UX_PLAN.md §5.9); the whole product,
   // with every branch's figure, stays for the "At other branches" list.
   const { working, isMultiBranch, recordable, nameOf } = useWorkingBranch()
@@ -245,7 +254,11 @@ export function ProductDetailPage() {
   ) : null
 
   if (product.madeHere) {
-    const profit = product.unitPrice != null && product.estimatedCost != null ? product.unitPrice - product.estimatedCost : null
+    const recipe = madeWith.data
+    const hasRecipe = (recipe?.ingredients.length ?? 0) > 0
+    // With ingredients, the cost is theirs at cost price; without, the rough cost typed in.
+    const makeCost = hasRecipe ? (recipe?.costToMake ?? null) : (product.estimatedCost ?? null)
+    const profit = product.unitPrice != null && makeCost != null ? product.unitPrice - makeCost : null
     return (
       <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
         <div className="flex items-center gap-2">
@@ -269,14 +282,24 @@ export function ProductDetailPage() {
             ...(showsSellingPrice
               ? [
                   [
-                    'Rough cost to make one',
-                    product.estimatedCost != null
-                      ? `${formatMoney(product.estimatedCost)}${
+                    hasRecipe ? 'Costs to make' : 'Rough cost to make one',
+                    makeCost != null
+                      ? `${formatMoney(makeCost)}${
                           profit != null && product.unitPrice
                             ? ` · profit ${formatMoney(profit)} each (${Math.round((profit / product.unitPrice) * 100)}%)`
                             : ''
                         }`
-                      : 'Not set',
+                      : hasRecipe
+                        ? 'An ingredient has no cost price yet'
+                        : 'Not set',
+                  ],
+                ]
+              : []),
+            ...(hasRecipe && recipe?.madeIn
+              ? [
+                  [
+                    'Made in',
+                    [recipe.madeIn, ...recipe.branches.filter((at) => at.chosenForBranch && at.areaName).map((at) => `${at.areaName} at ${at.branchName}`)].join(' · '),
                   ],
                 ]
               : []),
@@ -287,6 +310,32 @@ export function ProductDetailPage() {
             </div>
           ))}
         </dl>
+        {hasRecipe && recipe && (
+          <section aria-labelledby="made-with-title" className="flex flex-col gap-2">
+            <h2 id="made-with-title" className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+              Made with, for one
+            </h2>
+            <dl className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
+              {recipe.ingredients.map((line) => {
+                const option = line.unitOptions.find((candidate) => line.unit != null && candidate.code === line.unit) ??
+                  line.unitOptions.find((candidate) => candidate.isStockUnit)
+                return (
+                  <div key={line.productId} className="flex items-baseline justify-between gap-3 px-4 py-3">
+                    <dt className="text-sm text-neutral-600">
+                      <Link to={`/app/products/${line.productId}`} className="hover:underline">
+                        {line.name}
+                      </Link>
+                    </dt>
+                    <dd className="text-right text-sm font-medium text-neutral-900 tabular-nums">
+                      {+line.quantity} {option?.label ?? ''}
+                      {line.cost != null ? ` · ${formatMoney(line.cost)}` : ''}
+                    </dd>
+                  </div>
+                )
+              })}
+            </dl>
+          </section>
+        )}
         {recordsSales && <SoldThisMonth productId={product.id} stockUnit="PIECE" />}
         <div className="grid grid-cols-2 gap-3">
           {recordsSales && !notForHere && (
