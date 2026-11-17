@@ -253,6 +253,17 @@ export function ProductDetailPage() {
     </p>
   ) : null
 
+  // Just added (owner, 2026-11-17): the form is not behind this page, so the next one is a tap from here.
+  const justCreated = (location.state as { created?: boolean } | null)?.created === true
+  const createdNote = justCreated ? (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-accent-200 bg-accent-50 px-3 py-2 text-sm">
+      <span className="font-medium text-accent-700">Added.</span>
+      <Link to="/app/products/new" className="font-semibold text-primary-700 hover:underline">
+        Add another product
+      </Link>
+    </div>
+  ) : null
+
   if (product.madeHere) {
     const recipe = madeWith.data
     const hasRecipe = (recipe?.ingredients.length ?? 0) > 0
@@ -273,6 +284,7 @@ export function ProductDetailPage() {
           <h1 className="min-w-0 truncate text-2xl font-semibold text-neutral-900">{product.name}</h1>
         </div>
         <p className="-mt-2 text-sm text-neutral-600">Made here: sold, not kept in stock.</p>
+        {createdNote}
         {notForHereNote}
         <dl className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
           {[
@@ -504,6 +516,7 @@ export function ProductDetailPage() {
         sellingPrice={showsSellingPrice ? sellingPriceText(product, stockUnitText, packOption) : null}
         where={where}
       />
+      {createdNote}
       {notForHereNote}
       {/* Where in the branch it is, and moving it between areas (STOCK_AREAS_PART_2.md). */}
       {hasAreas(working) && (

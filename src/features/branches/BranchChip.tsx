@@ -88,11 +88,11 @@ export function BranchChip() {
   )
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative min-w-0 max-w-[9rem] sm:max-w-[12rem]" ref={ref}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className={`flex max-w-[12rem] items-center gap-1.5 rounded-md border px-2 py-1 text-sm text-neutral-800 hover:bg-neutral-50 ${
+        className={`flex max-w-full items-center gap-1.5 rounded-md border px-2 py-1 text-sm text-neutral-800 hover:bg-neutral-50 ${
           open ? 'border-primary-200 bg-primary-100' : 'border-neutral-200 bg-white'
         }`}
         aria-haspopup="menu"

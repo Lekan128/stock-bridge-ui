@@ -157,6 +157,13 @@ export function MadeWithEditor({ value, onChange, forBranches, price, itemId }: 
   const { branches } = useWorkingBranch()
   const { options: catalogue } = useUnitOfMeasureOptions()
   const [adding, setAdding] = useState(false)
+  // A phone: the search moves to the top of the screen when opened, so what's typed and what it finds sit above
+  // the keyboard - nothing to scroll to see them (owner, 2026-11-17).
+  const searchBox = useRef<HTMLLabelElement>(null)
+  const toTop = () => {
+    if (window.matchMedia('(min-width: 1024px)').matches) return
+    window.setTimeout(() => searchBox.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 250)
+  }
   const [term, setTerm] = useState('')
 
   const areaNames = useMemo(() => {
@@ -361,11 +368,12 @@ export function MadeWithEditor({ value, onChange, forBranches, price, itemId }: 
 
           {adding ? (
             <div className="flex flex-col gap-2">
-              <label className="relative block">
+              <label ref={searchBox} className="relative block scroll-mt-3">
                 <span className="sr-only">Search for an ingredient</span>
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" aria-hidden="true" />
                 <input
                   autoFocus
+                  onFocus={toTop}
                   type="search"
                   value={term}
                   onChange={(event) => setTerm(event.target.value)}
@@ -408,6 +416,8 @@ export function MadeWithEditor({ value, onChange, forBranches, price, itemId }: 
               <button type="button" onClick={() => setAdding(false)} className="self-start text-sm font-medium text-neutral-600 hover:underline">
                 Done adding
               </button>
+              {/* Room under the search on a phone, so it can move to the top of the screen above the keyboard. */}
+              <div aria-hidden="true" className="h-[55vh] lg:hidden" />
             </div>
           ) : (
             <button

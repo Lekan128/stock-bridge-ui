@@ -41,11 +41,11 @@ export function AreaChip() {
   }
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative min-w-0 max-w-[7rem] sm:max-w-[10rem]" ref={ref}>
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className={`flex max-w-[10rem] items-center gap-1.5 rounded-md border px-2 py-1 text-sm ${
+        className={`flex max-w-full items-center gap-1.5 rounded-md border px-2 py-1 text-sm ${
           open ? 'border-primary-200 bg-primary-100 text-neutral-800' : 'border-neutral-200 bg-white text-neutral-800 hover:bg-neutral-50'
         }`}
         aria-haspopup="menu"
@@ -53,8 +53,9 @@ export function AreaChip() {
         aria-label={`Area: ${label}. Change area`}
         data-area-chip
       >
-        <LayoutGrid className="hidden h-4 w-4 shrink-0 text-neutral-500 sm:block" aria-hidden />
-        <span className="truncate">{label}</span>
+        {/* A phone, no area chosen: the grid alone, so the branch's name fits beside it (owner, 2026-11-17). */}
+        <LayoutGrid className={`h-4 w-4 shrink-0 text-neutral-500 ${work.area ? 'hidden sm:block' : ''}`} aria-hidden />
+        <span className={`truncate ${work.area ? '' : 'hidden sm:inline'}`}>{label}</span>
         <ChevronDown className="h-4 w-4 shrink-0 text-neutral-500" aria-hidden />
       </button>
       {open && (

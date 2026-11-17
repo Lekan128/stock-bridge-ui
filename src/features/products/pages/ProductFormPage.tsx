@@ -258,6 +258,12 @@ interface ProductDraft {
   values: ProductFormValues
   containsText: string
   skuUnlocked: boolean
+  /** Kept in stock or Made here, and a made-here item's own answers (owner, 2026-11-17). Absent on older drafts. */
+  madeHere?: boolean
+  roughCost?: string
+  madeWith?: MadeWithDraft
+  /** Which branches it is for (V92). */
+  branches?: ProductBranchesValue
 }
 
 export function ProductFormPage() {
@@ -576,6 +582,13 @@ export function ProductFormPage() {
     reset(saved.values)
     setContainsText(saved.containsText)
     setSkuUnlocked(saved.skuUnlocked)
+    setMadeHereChoice(saved.madeHere === true)
+    setRoughCost(saved.roughCost ?? '')
+    setMadeWith(saved.madeWith ?? EMPTY_MADE_WITH)
+    if (saved.branches) {
+      setBranchesTouched(true)
+      setProductBranches(saved.branches)
+    }
     setRestoredDraft(true)
     setOfferedDraft(null)
   }
@@ -604,9 +617,17 @@ export function ProductFormPage() {
     if (isEdit || initialDraft === undefined || offeredDraft || !typedSomething.current) return
     const values = getValues()
     if (!values.name?.trim() && !containsText.trim()) return
-    saveDraftNow({ values, containsText, skuUnlocked })
+    saveDraftNow({
+      values,
+      containsText,
+      skuUnlocked,
+      madeHere: madeHereChoice,
+      roughCost,
+      madeWith,
+      ...(branchesTouched ? { branches: productBranches } : {}),
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formVersion, containsText, skuUnlocked, initialDraft, offeredDraft])
+  }, [formVersion, containsText, skuUnlocked, initialDraft, offeredDraft, madeHereChoice, roughCost, madeWith, productBranches])
 
   function discardDraft() {
     void draft.clear()
@@ -616,6 +637,10 @@ export function ProductFormPage() {
     reset({ ...productFormDefaults(), unitOfMeasure: 'PIECE', name: location.state?.name ?? '' })
     setContainsText('')
     setSkuUnlocked(false)
+    setMadeHereChoice(false)
+    setRoughCost('')
+    setMadeWith(EMPTY_MADE_WITH)
+    setBranchesTouched(false)
   }
 
   const [containsError, setContainsError] = useState<string | null>(null)
@@ -905,8 +930,10 @@ export function ProductFormPage() {
     setFormError(null)
     setSectionProblem(null)
     // The product's own units go with the rest (UNITS_PLAN.md Part 1); one still being typed is said here.
+    // A made-here item: whatever was typed under "Kept in stock" (units, suppliers) is neither checked nor sent - the
+    // two kinds never mix (owner, 2026-11-17).
     const unitFields = unitsPayload(units, { stockUnitCode: watchedStockUnitCode ?? '', packOption: livePackOption })
-    if ('problem' in unitFields) {
+    if (!madeHere && 'problem' in unitFields) {
       setSectionProblem({ step: 'units', message: unitFields.problem })
       setStep('units')
       return
@@ -917,7 +944,7 @@ export function ProductFormPage() {
       // unchanged and still carries stock units, so the conversion happens on this side of the
       // request rather than becoming a new field on it.
       const lowStockThreshold = toStockUnits(values.lowStockThreshold)
-      const links = supplierLinks(supplierDrafts, livePackOption)
+      const links = madeHere ? { links: [] } : supplierLinks(supplierDrafts, livePackOption)
       if ('problem' in links) {
         setSectionProblem({ step: 'suppliers', message: links.problem })
         setStep('suppliers')
@@ -970,7 +997,7 @@ export function ProductFormPage() {
                 ...toProductPayload(values),
                 ...companyPriceFields(values),
                 ...branchFields,
-                ...(unitFields.measures.length > 0 ? unitFields : {}),
+                ...('measures' in unitFields && unitFields.measures.length > 0 ? unitFields : {}),
                 lowStockThreshold,
                 // Its suppliers, several at once, and the stock on the shelf now - one atomic write (2026-11-10).
                 ...(links.links.length > 0 ? { suppliers: links.links } : {}),
@@ -1040,7 +1067,10 @@ export function ProductFormPage() {
       }
       // A draft that was only offered belongs to a different product: it stays for later.
       if (!isEdit && !offeredDraft) await draft.finish()
-      navigate(`/app/products/${saved.id}`)
+      // The form isn't kept behind the product (owner, 2026-11-17): Back from the product goes where they came from -
+      // Inventory - and a new product's page offers "Add another" instead.
+      if (isEdit && (window.history.state?.idx ?? 0) > 0) navigate(-1)
+      else navigate(`/app/products/${saved.id}`, { replace: true, state: isEdit ? undefined : { created: true } })
     } catch (err) {
       setPendingValues(null)
       if (!isAppError(err)) {
@@ -1407,6 +1437,7 @@ export function ProductFormPage() {
                 role="radio"
                 aria-checked={madeHereChoice === value}
                 onClick={() => {
+                  typedSomething.current = true
                   setMadeHereChoice(value)
                   setStep('basics')
                 }}
@@ -1922,7 +1953,10 @@ export function ProductFormPage() {
             inputMode="decimal"
             hint="So the Sales page can show profit. Leave it empty if you don’t know."
             value={roughCost}
-            onChange={(event) => setRoughCost(event.target.value)}
+            onChange={(event) => {
+              typedSomething.current = true
+              setRoughCost(event.target.value)
+            }}
           />
         )}
         </FormSection>
@@ -1939,6 +1973,7 @@ export function ProductFormPage() {
             <MadeWithEditor
               value={madeWith}
               onChange={(value) => {
+                typedSomething.current = true
                 setMadeWith(value)
                 if (sectionProblem?.step === 'madeWith') setSectionProblem(null)
               }}
