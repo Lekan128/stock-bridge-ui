@@ -24,6 +24,8 @@ export interface CatalogList {
   activeCount: number
   /** In an area view: products the chosen areas have never had, left out of the list (Part 3.6). */
   elsewhere: number
+  /** Categories with something under the other filters; undefined until the first answer. */
+  categoryIds: string[] | undefined
   /** The first answer for these filters has arrived. */
   ready: boolean
   /** The row at a position in the filtered, sorted list, or undefined until it is loaded. */
@@ -120,6 +122,7 @@ export function useCatalogList(asked: CatalogFilters, enabled: boolean, scope?: 
     catalogSize: summary?.catalogSize ?? 0,
     activeCount: summary?.activeCount ?? 0,
     elsewhere: summary?.elsewhere ?? 0,
+    categoryIds: summary?.categoryIds,
     ready: summary != null,
     rowAt,
     loadRange,

@@ -17,6 +17,7 @@ import { formatNumber } from '@/features/products/unitCopy'
 import { LowAtBranches } from '@/features/branches/LowAtBranches'
 import { AreaBreakdown } from '@/features/branches/AreaBreakdown'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
+import { productBranchesText } from '@/features/products/components/ProductBranchesField'
 import { listPriceText } from '@/features/selling/priceText'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { resolveUnitSymbol } from '@/features/products/unitSet'
@@ -269,7 +270,11 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
                               product.packagingSize,
                             )}${product.hasMultiplePacks ? ' (default)' : ''}`
                           : null
-                      const line = [product.categoryName, pack].filter(Boolean).join(' · ')
+                      const forLine =
+                        branch?.isMultiBranch && branch.isAll && product.forAllBranches === false
+                          ? productBranchesText({ all: false, ids: product.forBranchIds ?? [] }, branch.nameOf)
+                          : null
+                      const line = [product.categoryName, pack, forLine].filter(Boolean).join(' · ')
                       return line ? <p className="truncate text-xs text-neutral-500">{line}</p> : null
                     })()}
                   </div>

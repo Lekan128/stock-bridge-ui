@@ -358,6 +358,8 @@ export function toCatalogRow(product: Product): CatalogRow {
     // Same rule as the server's StockStatus.of; the feed's own value replaces this moments later.
     stockStatus: product.madeHere ? 'OK' : quantity <= 0 ? 'OUT' : threshold != null && quantity <= threshold ? 'LOW' : 'OK',
     madeHere: product.madeHere === true,
+    forAllBranches: product.forAllBranches,
+    forBranchIds: product.forBranchIds,
   }
 }
 
@@ -396,5 +398,7 @@ export function toProduct(row: CatalogRow): Product {
     countIn: row.countIn ?? undefined,
     counts: row.counts ?? undefined,
     madeHere: row.madeHere === true,
+    forAllBranches: row.forAllBranches,
+    forBranchIds: row.forBranchIds,
   }
 }

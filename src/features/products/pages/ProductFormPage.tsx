@@ -1,6 +1,12 @@
 import { ProductUnitsField, unitsDraftFrom, unitsPayload, type UnitsDraft } from '@/features/products/components/ProductUnitsField'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
+import {
+  ProductBranchesField,
+  defaultProductBranches,
+  productBranchesText,
+  type ProductBranchesValue,
+} from '@/features/products/components/ProductBranchesField'
 import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Banknote, Bell, ClipboardCheck, Lock, Ruler, Tag, Truck } from 'lucide-react'
 import { useForm } from 'react-hook-form'
@@ -260,7 +266,18 @@ export function ProductFormPage() {
   // One product, one price, every branch (MULTI_BRANCH_UX_PLAN.md §5.14): the form says where a change
   // lands, and the price is read-only for someone who can't change selling prices.
   // Every open branch in the company, not only those this person sees: a price applies at all of them.
-  const { isMultiBranch, openBranches: branchCount } = useWorkingBranch()
+  const { isMultiBranch, openBranches: branchCount, working, isAll, nameOf } = useWorkingBranch()
+  // Which branches it is for (V92): a new one, the branch being worked at; the line under the name changes it.
+  const [productBranches, setProductBranches] = useState<ProductBranchesValue>(() => defaultProductBranches(working, isAll))
+  const [branchesTouched, setBranchesTouched] = useState(false)
+  useEffect(() => {
+    if (!isEdit && !branchesTouched) setProductBranches(defaultProductBranches(working, isAll))
+  }, [isEdit, branchesTouched, working, isAll])
+  const branchFields = isMultiBranch
+    ? productBranches.all
+      ? { allBranches: true }
+      : { branchIds: productBranches.ids }
+    : {}
   const canChangePrices = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.CHANGE_SELLING_PRICES)
   const priceHint = !canChangePrices
     ? 'Prices are set by people who can change selling prices.'
@@ -438,6 +455,7 @@ export function ProductFormPage() {
           : `${product.packagingSize} ${seededUnit}`,
     )
     setRoughCost(product.estimatedCost != null ? String(product.estimatedCost) : '')
+    setProductBranches({ all: product.forAllBranches !== false, ids: product.forBranchIds ?? [] })
     reset({
       name: product.name,
       sku: product.sku,
@@ -892,6 +910,7 @@ export function ProductFormPage() {
                     ? { clearEstimatedCost: true }
                     : { estimatedCost: Number(roughCost) }
                   : {}),
+                ...branchFields,
                 removeImage: removeImage || undefined,
               },
               imageFile,
@@ -914,6 +933,7 @@ export function ProductFormPage() {
                   lowStockThreshold: undefined,
                   madeHere: true,
                   ...(roughCost.trim() !== '' && Number.isFinite(Number(roughCost)) ? { estimatedCost: Number(roughCost) } : {}),
+                  ...branchFields,
                 },
                 imageFile,
               )
@@ -921,6 +941,7 @@ export function ProductFormPage() {
               {
                 ...toProductPayload(values),
                 ...companyPriceFields(values),
+                ...branchFields,
                 ...(unitFields.measures.length > 0 ? unitFields : {}),
                 lowStockThreshold,
                 // Its suppliers, several at once, and the stock on the shelf now - one atomic write (2026-11-10).
@@ -1022,6 +1043,11 @@ export function ProductFormPage() {
    * own `UnitPriceRequiredException`, which is why the message matches it exactly.
    */
   async function onSubmit(values: ProductFormValues) {
+    if (isMultiBranch && !productBranches.all && productBranches.ids.length === 0) {
+      setSectionProblem({ step: 'basics', message: 'Choose at least one branch it is for.' })
+      setStep('basics')
+      return
+    }
     if (!isEdit && !values.unitOfMeasure && !madeHere) {
       setError('unitOfMeasure', { message: 'Choose what it’s counted in.' })
       setStep('units')
@@ -1094,6 +1120,9 @@ export function ProductFormPage() {
   async function next() {
     const ok = await trigger(fieldsOf(shownStep))
     if (!ok) return
+    if (shownStep === 'basics' && isMultiBranch && !productBranches.all && productBranches.ids.length === 0) {
+      return setSectionProblem({ step: 'basics', message: 'Choose at least one branch it is for.' })
+    }
     if (shownStep === 'units' && !isEdit && !getValues('unitOfMeasure')) {
       setError('unitOfMeasure', { message: 'Choose what it’s counted in.' })
       return
@@ -1150,7 +1179,11 @@ export function ProductFormPage() {
     {
       step: 'basics',
       title: 'Basics',
-      text: [reviewValues.name?.trim() || 'No name yet', categoryOptions.find((category) => category.id === reviewValues.categoryId)?.name]
+      text: [
+        reviewValues.name?.trim() || 'No name yet',
+        categoryOptions.find((category) => category.id === reviewValues.categoryId)?.name,
+        isMultiBranch ? `for ${productBranchesText(productBranches, nameOf)}` : null,
+      ]
         .filter(Boolean)
         .join(' · '),
     },
@@ -1294,7 +1327,8 @@ export function ProductFormPage() {
       {/* "Kept in stock" or "Made here" (V90, selling till Step 4): the same form, the steps that apply. */}
       {!isEdit && sellsMadeHere && (
         <div className="flex max-w-xl flex-col gap-1.5">
-          <div role="radiogroup" aria-label="What is it?" className="grid grid-cols-2 gap-1 rounded-lg border border-neutral-200 bg-white p-1">
+          {/* Small, like the Inventory tabs - noticeable, not a slab (owner, 2026-11-17). */}
+          <div role="radiogroup" aria-label="What is it?" className="inline-flex w-fit items-center gap-0.5 rounded-full border border-neutral-300 bg-white p-0.5">
             {([
               [false, 'Kept in stock'],
               [true, 'Made here'],
@@ -1308,15 +1342,15 @@ export function ProductFormPage() {
                   setMadeHereChoice(value)
                   setStep('basics')
                 }}
-                className={`min-h-11 rounded-md text-sm font-semibold ${
-                  madeHereChoice === value ? 'bg-neutral-900 text-white' : 'text-neutral-700 hover:bg-neutral-50'
+                className={`min-h-9 rounded-full px-4 text-sm font-semibold ${
+                  madeHereChoice === value ? 'bg-primary-50 text-primary-800 ring-1 ring-primary-300' : 'text-neutral-600 hover:text-neutral-900'
                 }`}
               >
                 {label}
               </button>
             ))}
           </div>
-          <p className="text-sm text-neutral-600">
+          <p className="text-xs text-neutral-500">
             {madeHereChoice
               ? 'You make or prepare it when someone buys it: a meal, a cocktail, a service. It isn’t counted as stock.'
               : 'You buy it and count it: drinks, rice, oil, napkins.'}
@@ -1465,6 +1499,14 @@ export function ProductFormPage() {
             {isVendor && <p className="mt-1.5 text-xs text-neutral-500">Only your team sees this. Changing it does not affect your listing.</p>}
           </div>
         )}
+        <ProductBranchesField
+          value={productBranches}
+          onChange={(value) => {
+            setBranchesTouched(true)
+            setProductBranches(value)
+            if (sectionProblem?.step === 'basics') setSectionProblem(null)
+          }}
+        />
         </FormSection>
 
         {/* ------------------------------------------------- How you count and pack this product */}

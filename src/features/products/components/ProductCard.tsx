@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import { useForBranchesLine } from '@/features/products/components/ProductBranchesField'
 import { useNotHere } from '@/features/branches/workArea'
 import { Minus, Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -51,7 +52,8 @@ export function ProductCard({ product, incoming = 0, quickActions, selection }: 
   const { showsSellingPrice } = useSellingPolicy()
   // The selling price leads the line where products have one (SELLING_PRICE_PLAN.md §6.5).
   const price = showsSellingPrice ? listPriceText(product, unitOfMeasureOptions) : null
-  const subtitle = [price, product.categoryName, pack].filter(Boolean).join(' · ') || product.sku
+  const forLine = useForBranchesLine(product)
+  const subtitle = [price, product.categoryName, pack, forLine].filter(Boolean).join(' · ') || product.sku
   const press = useRef<{ timer: number; x: number; y: number } | null>(null)
   const longPressed = useRef(false)
   const selecting = selection?.active ?? false

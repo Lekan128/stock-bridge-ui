@@ -1,3 +1,4 @@
+import { viewingBranchId } from '@/features/branches/viewingBranch'
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/api/client'
 import { PERMISSIONS } from '@/auth/permissions'
@@ -48,8 +49,9 @@ export function SaleProductGrid({
 
   const { categories } = useCompanyCategories(canView)
   const top = useApiQuery<Product[]>({
-    queryKey: ['sale-tiles', user?.type === 'tenant' ? user.id : null],
-    queryFn: () => api.get<Product[]>('/api/sales/tiles', { params: { limit: 18 } }).then((r) => r.data),
+    // Only products for the branch being worked at (V92).
+    queryKey: ['sale-tiles', user?.type === 'tenant' ? user.id : null, viewingBranchId() ?? 'all'],
+    queryFn: () => api.get<Product[]>('/api/sales/tiles', { params: { limit: 18, branchId: viewingBranchId() } }).then((r) => r.data),
     fallbackError: "Couldn't load your top sellers.",
     enabled: user?.type === 'tenant',
   })
@@ -101,7 +103,13 @@ export function SaleProductGrid({
   const chips: { value: Tab; label: string }[] = [
     { value: 'all', label: 'All' },
     { value: 'top', label: 'Top sellers' },
-    ...categories.filter((category) => category.productCount > 0).map((category) => ({ value: category.id, label: category.name })),
+    // Only categories with something to sell at this till (owner, 2026-11-17): not Ingredients, not another
+    // branch's or area's. The server's count where the phone has no copy yet.
+    ...categories
+      .filter((category) =>
+        onDevice && list.categoryIds ? list.categoryIds.includes(category.id) : category.productCount > 0,
+      )
+      .map((category) => ({ value: category.id, label: category.name })),
   ]
 
   return (

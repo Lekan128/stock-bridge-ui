@@ -1,6 +1,7 @@
 import { useRecordsHere } from '@/features/branches/useRecordsHere'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
+import { productBranchesText } from '@/features/products/components/ProductBranchesField'
 import { carryBranchStock, scopeProduct, scopeToAreas } from '@/features/branches/scopeProduct'
 import { useWorkArea } from '@/features/branches/workArea'
 import { OtherBranchesList } from '@/features/branches/OtherBranchesList'
@@ -72,7 +73,7 @@ export function ProductDetailPage() {
   const { product: wholeProduct, setProduct, loading, error, showingSaved, updatedAt, refetch: refetchProduct } = useProduct(id)
   // At a branch, the page reads that branch's figure (MULTI_BRANCH_UX_PLAN.md §5.9); the whole product,
   // with every branch's figure, stays for the "At other branches" list.
-  const { working, isMultiBranch, recordable } = useWorkingBranch()
+  const { working, isMultiBranch, recordable, nameOf } = useWorkingBranch()
   // As the branch holds it, then as the areas chosen in the top bar hold it (Part 3.6).
   const work = useWorkArea(working)
   const viewAreas = work.viewAreaIds
@@ -228,6 +229,21 @@ export function ProductDetailPage() {
   }
 
   // Made here (V90, selling till Step 4): no stock, deliveries or suppliers - its price, its rough cost, what sold.
+  // Which branches it is for (V92).
+  const forText = productBranchesText(
+    { all: product.forAllBranches !== false, ids: product.forBranchIds ?? [] },
+    nameOf,
+  )
+  // Not for the branch being worked at: said so, and nothing is sold, counted or taken out here (the server
+  // refuses those). Stock in stays - stock arriving here makes it for here.
+  const notForHere =
+    isMultiBranch && working != null && product.forAllBranches === false && !(product.forBranchIds ?? []).includes(working.id)
+  const notForHereNote = notForHere ? (
+    <p role="status" className="rounded-lg border border-warning-200 bg-warning-50 px-3 py-2 text-sm text-warning-800">
+      For {forText} only, so it doesn't show at {working?.name}.
+    </p>
+  ) : null
+
   if (product.madeHere) {
     const profit = product.unitPrice != null && product.estimatedCost != null ? product.unitPrice - product.estimatedCost : null
     return (
@@ -244,10 +260,12 @@ export function ProductDetailPage() {
           <h1 className="min-w-0 truncate text-2xl font-semibold text-neutral-900">{product.name}</h1>
         </div>
         <p className="-mt-2 text-sm text-neutral-600">Made here: sold, not kept in stock.</p>
+        {notForHereNote}
         <dl className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
           {[
             ['Price', product.unitPrice != null ? formatMoney(product.unitPrice) : 'No price yet'],
             ['Category', product.categoryName ?? 'None'],
+            ...(isMultiBranch ? [['For', forText]] : []),
             ...(showsSellingPrice
               ? [
                   [
@@ -271,7 +289,7 @@ export function ProductDetailPage() {
         </dl>
         {recordsSales && <SoldThisMonth productId={product.id} stockUnit="PIECE" />}
         <div className="grid grid-cols-2 gap-3">
-          {recordsSales && (
+          {recordsSales && !notForHere && (
             <Button variant="action" onClick={() => navigate(`/app/sell?product=${product.id}`)}>
               Sell
             </Button>
@@ -313,7 +331,7 @@ export function ProductDetailPage() {
   // Stock in / out / count: inside the hero from a laptop up, in a bar pinned to the bottom on a phone.
   // Sell (§6.1) opens Record a sale with this product as the first line. It is the screen's action
   // when the product has a price - a priced product is one that is sold - and Stock in steps back.
-  const canSell = recordsSales && canStockOut
+  const canSell = recordsSales && canStockOut && !notForHere
   const sellLeads = canSell && product.unitPrice != null
   const stockButtons =
     canStockIn || canStockOut || (canManageInventory && recordsHere) ? (
@@ -330,13 +348,13 @@ export function ProductDetailPage() {
             Stock in
           </Button>
         )}
-        {canStockOut && (
+        {canStockOut && !notForHere && (
           <Button variant="secondary" onClick={() => stockActions.open('out', product)}>
             <Minus className="h-4 w-4" aria-hidden="true" />
             Stock out
           </Button>
         )}
-        {canManageInventory && recordsHere && (
+        {canManageInventory && recordsHere && !notForHere && (
           <Button variant="secondary" onClick={() => stockActions.open('count', product)}>
             Count
           </Button>
@@ -437,6 +455,7 @@ export function ProductDetailPage() {
         sellingPrice={showsSellingPrice ? sellingPriceText(product, stockUnitText, packOption) : null}
         where={where}
       />
+      {notForHereNote}
       {/* Where in the branch it is, and moving it between areas (STOCK_AREAS_PART_2.md). */}
       {hasAreas(working) && (
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
@@ -587,6 +606,16 @@ export function ProductDetailPage() {
                   View {UNIT_COPY.SUPPLIERS.toLowerCase()}
                 </Link>
               </DetailRow>
+              {isMultiBranch && (
+                <DetailRow label="For">
+                  <span className="font-medium text-neutral-900">{forText}</span>
+                  {canManageProducts && (
+                    <Link to={`/app/products/${product.id}/edit`} className="ml-2 text-sm font-medium text-primary-700 hover:underline">
+                      Change
+                    </Link>
+                  )}
+                </DetailRow>
+              )}
               <DetailRow label="Description" wide>
                 <span className="text-neutral-700">{product.description || 'No description provided.'}</span>
               </DetailRow>

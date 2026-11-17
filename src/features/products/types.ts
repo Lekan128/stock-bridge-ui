@@ -141,6 +141,9 @@ export interface Product {
   madeHere?: boolean
   /** A made-here item's rough cost to make one, until a recipe works it out. */
   estimatedCost?: number | null
+  /** Which branches it is for (API V92): every branch, or these. */
+  forAllBranches?: boolean
+  forBranchIds?: string[]
   warnings?: string[] | null
   /**
    * True when `packagingUnit`/`packagingSize` above are the DEFAULT among more than one distinct
@@ -251,6 +254,9 @@ export interface ProductFormPayload {
   madeHere?: boolean
   /** A made-here item's rough cost to make one. */
   estimatedCost?: number
+  /** Which branches it is for (V92): these, or every branch with `allBranches`. */
+  branchIds?: string[]
+  allBranches?: boolean
   name: string
   sku: string
   description?: string

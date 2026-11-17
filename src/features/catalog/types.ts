@@ -49,6 +49,9 @@ export interface CatalogRow {
   counts?: { areaId: string; at: string; countedAs?: { unit: string; quantity: number }[] }[] | null
   /** Made here, not kept in stock (V90). Absent on rows synced before it: false. */
   madeHere?: boolean
+  /** Which branches it is for (V92): every branch, or these. Absent on rows synced before it: shown everywhere. */
+  forAllBranches?: boolean
+  forBranchIds?: string[]
 }
 
 export interface SnapshotPage {
@@ -128,6 +131,8 @@ export interface CatalogQueryResult {
   incoming: { units: number; productCount: number }
   catalogSize: number
   activeCount: number
+  /** The categories with something matching every other filter - a chip per category that would show anything. */
+  categoryIds?: string[]
 }
 
 /** What the worker has stored about the sync itself. */
