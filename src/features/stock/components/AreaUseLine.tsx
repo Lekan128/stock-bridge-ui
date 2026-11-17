@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ChevronDown } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useApiQuery } from '@/data/useApiQuery'
 import { toApiDateTime, type DateRange } from '@/components/analytics/dateRange'
@@ -82,6 +83,15 @@ export function AreaUseLine({ branchId, areaId, range, rangeLabel }: { branchId:
       : 'Counted · some ingredients have no cost'
     : `Sales used ${use.platesTookCost != null ? `${formatMoney(use.platesTookCost)} of ingredients` : 'its ingredients'} · not counted yet`
 
+  // A phone has less room (owner, 2026-11-17: "the words are getting too much"): the same, in fewer words.
+  const shortSummary = use.counted
+    ? use.usedOnTopCost != null
+      ? use.usedOnTopCost > 0
+        ? `${formatMoney(use.usedOnTopCost)} more used than sales`
+        : 'Count matched sales'
+      : 'Counted'
+    : `Sales used ${use.platesTookCost != null ? formatMoney(use.platesTookCost) : 'ingredients'} · not counted`
+
   return (
     <section aria-label={title} className="overflow-hidden rounded-lg border border-neutral-200 bg-white" data-area-use>
       <button
@@ -91,9 +101,12 @@ export function AreaUseLine({ branchId, areaId, range, rangeLabel }: { branchId:
         className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-neutral-50"
       >
         <span className="min-w-0 text-sm">
-          <span className="font-semibold text-neutral-900">{title}</span>
-          <span className="text-neutral-500"> · </span>
-          <span className={use.counted && (use.usedOnTopCost ?? 0) > 0 ? 'font-medium text-warning-700' : 'text-neutral-600'}>{summary}</span>
+          <span className="block font-semibold text-neutral-900 md:inline">{title}</span>
+          <span className="hidden text-neutral-500 md:inline"> · </span>
+          <span className={`block md:inline ${use.counted && (use.usedOnTopCost ?? 0) > 0 ? 'font-medium text-warning-700' : 'text-neutral-600'}`}>
+            <span className="md:hidden">{shortSummary}</span>
+            <span className="hidden md:inline">{summary}</span>
+          </span>
         </span>
         <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-sm font-semibold text-primary-700">
           {open ? 'Hide' : 'See'}
@@ -103,27 +116,40 @@ export function AreaUseLine({ branchId, areaId, range, rangeLabel }: { branchId:
 
       {open && (
         <div className="border-t border-neutral-200">
-          {/* A phone: each ingredient's figures under its name. */}
-          <ul className="divide-y divide-neutral-100 md:hidden">
-            {use.ingredients.map((line) => (
-              <li key={line.productId} className="flex flex-col gap-0.5 px-4 py-2.5 text-sm tabular-nums">
-                <div className="flex items-baseline justify-between gap-3 font-medium text-neutral-900">
-                  <span className="min-w-0 truncate">{line.name}</span>
-                  <OnTop line={line} />
-                </div>
-                <div className="flex flex-wrap gap-x-3 text-xs text-neutral-500">
-                  <span>In {amount(line.cameIn, line.stockUnit)}</span>
-                  <span>
-                    Sales used {amount(line.platesTook, line.stockUnit)}
-                    {soldText(line)}
-                  </span>
-                  <span>
-                    {line.counted ? 'Left' : 'Should be left'} {amount(line.left, line.stockUnit)}
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
+          {/* A phone: a small grid - the column names once, figures only. Tapping an ingredient opens it; its own
+              movements say what was sold. */}
+          <table className="w-full text-sm tabular-nums md:hidden">
+            <thead className="text-xs text-neutral-500">
+              <tr>
+                <th scope="col" className="px-4 py-2 text-left font-medium">
+                  <span className="sr-only">Ingredient</span>
+                </th>
+                <th scope="col" className="px-2 py-2 text-right font-medium">In</th>
+                <th scope="col" className="px-2 py-2 text-right font-medium">Sales used</th>
+                {use.counted && <th scope="col" className="px-2 py-2 text-right font-medium">Count</th>}
+                <th scope="col" className="py-2 pl-2 pr-4 text-right font-medium">Left</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-100">
+              {use.ingredients.map((line) => (
+                <tr key={line.productId}>
+                  <th scope="row" className="max-w-[7rem] truncate px-4 py-2 text-left font-medium text-neutral-900">
+                    <Link to={`/app/products/${line.productId}`} className="hover:underline">
+                      {line.name}
+                    </Link>
+                  </th>
+                  <td className="whitespace-nowrap px-2 py-2 text-right text-neutral-700">{amount(line.cameIn, line.stockUnit)}</td>
+                  <td className="whitespace-nowrap px-2 py-2 text-right text-neutral-700">{amount(line.platesTook, line.stockUnit)}</td>
+                  {use.counted && (
+                    <td className="whitespace-nowrap px-2 py-2 text-right">
+                      <CountCell line={line} />
+                    </td>
+                  )}
+                  <td className="whitespace-nowrap py-2 pl-2 pr-4 text-right text-neutral-900">{amount(line.left, line.stockUnit)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
           {/* A laptop: one table. */}
           <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-sm tabular-nums">
@@ -162,14 +188,27 @@ export function AreaUseLine({ branchId, areaId, range, rangeLabel }: { branchId:
             </table>
           </div>
           <p className="border-t border-neutral-100 bg-neutral-50 px-4 py-2 text-xs text-neutral-600">
-            {use.counted
-              ? '"More used" is what a count found gone beyond what sales used, at cost.'
-              : `Count the ${use.areaName ?? 'area'} to see whether it used more than sales did.`}
+            <span className="md:hidden">
+              {use.counted ? 'Count: what a count found used beyond sales.' : `Count the ${use.areaName ?? 'area'} to compare.`}
+            </span>
+            <span className="hidden md:inline">
+              {use.counted
+                ? '"More used" is what a count found gone beyond what sales used, at cost.'
+                : `Count the ${use.areaName ?? 'area'} to see whether it used more than sales did.`}
+            </span>
           </p>
         </div>
       )}
     </section>
   )
+}
+
+/** A phone's Count cell: "+0.5 kg" more used, ✓ matched, "−0.3 kg" more than expected, "—" not counted. */
+function CountCell({ line }: { line: AreaUseIngredient }) {
+  if (!line.counted || line.usedOnTop == null) return <span className="text-neutral-400">—</span>
+  if (line.usedOnTop === 0) return <span className="font-semibold text-accent-700" aria-label="Matched sales">✓</span>
+  if (line.usedOnTop < 0) return <span className="text-neutral-700">−{amount(-line.usedOnTop, line.stockUnit)}</span>
+  return <span className="font-semibold text-warning-700">+{amount(line.usedOnTop, line.stockUnit)}</span>
 }
 
 function OnTop({ line, withCost = false }: { line: AreaUseIngredient; withCost?: boolean }) {
