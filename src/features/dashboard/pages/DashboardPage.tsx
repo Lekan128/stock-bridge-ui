@@ -9,6 +9,7 @@ import { BranchTable } from '@/features/branches/BranchTable'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { StockHealth } from '@/features/dashboard/components/StockHealth'
 import { SalesTodayFigure } from '@/features/selling/sales/SalesTodayFigure'
+import { WaitingSalesLine } from '@/features/selling/sale/WaitingSalesLine'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { SetupChecklist } from '@/features/onboarding/SetupChecklist'
 import { VendorDashboardPage } from '@/features/vendor/pages/VendorDashboardPage'
@@ -82,6 +83,9 @@ function BuyerToday({
       </div>
 
       <SetupChecklist />
+
+      {/* Baskets left open on this phone (selling till Step 1 fixes). */}
+      {recordsSales && permissions.includes('STOCK_OUT') && <WaitingSalesLine />}
 
       {/* "All branches" (MULTI_BRANCH_UX_PLAN.md §5.8): the branch table replaces today's figures - one
           row per branch, then the company. Pick a branch and this is the single-branch dashboard again. */}

@@ -1,4 +1,8 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { PERMISSIONS } from '@/auth/permissions'
+import { CancelStateBox } from '@/features/selling/sale/CancelSale'
+import { PaymentChip } from '@/features/selling/sale/payment'
 import { useAuth } from '@/auth/useAuth'
 import { Button } from '@/components/Button'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -11,9 +15,6 @@ import { salesReportApi } from '@/features/selling/sales/salesReportApi'
 import type { SaleDetail, SaleLineDetail } from '@/features/selling/sales/types'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
-
-/** Undo is the server's for two minutes (D8); offered a little less, so it never fails at the edge. */
-const UNDO_FOR_MS = 110_000
 
 export interface SaleDetailSheetProps {
   saleId: string | null
@@ -34,6 +35,7 @@ export interface SaleDetailSheetProps {
 export function SaleDetailSheet({ saleId, onClose, onChanged }: SaleDetailSheetProps) {
   const { showToast } = useToast()
   const { user } = useAuth()
+  const navigate = useNavigate()
   const online = useOnlineStatus()
   const [sale, setSale] = useState<SaleDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -74,14 +76,8 @@ export function SaleDetailSheet({ saleId, onClose, onChanged }: SaleDetailSheetP
   }
 
   const live = sale ? sale.lines.filter((line) => !line.cancelled) : []
-  // Undo is the recorder's own, while fresh (the server's rule): anyone else - an owner checking a
-  // cashier's sale - goes straight to Cancel, which is recorded with their name.
-  const canUndo =
-    sale != null &&
-    live.length > 0 &&
-    user?.type === 'tenant' &&
-    sale.recordedByUserId === user.id &&
-    Date.now() - new Date(sale.occurredAt).getTime() < UNDO_FOR_MS
+  // One line of a sale: for someone who can cancel sales (V89). A whole sale is cancelled from its receipt, with a reason.
+  const canCancelSales = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.CANCEL_SALES)
   const when = sale
     ? new Date(sale.occurredAt).toLocaleString(undefined, { hour: 'numeric', minute: '2-digit', day: 'numeric', month: 'short' })
     : ''
@@ -94,55 +90,32 @@ export function SaleDetailSheet({ saleId, onClose, onChanged }: SaleDetailSheetP
         size="md"
         title="Sale"
         footer={
-          sale && live.length > 0 ? (
-            <>
-              {/* One way to take a sale back at a time: Undo while it is fresh (as if it never
-                  happened), Cancel after that (recorded, with who). Side by side they read as the
-                  same button. */}
-              {canUndo && (
-                <Button
-                  variant="secondary"
-                  disabled={!online || busy != null}
-                  loading={busy === 'undo'}
-                  onClick={() =>
-                    void run(
-                      'undo',
-                      async () => {
-                        const answer = await salesReportApi.undo(sale.saleId)
-                        const refused = answer.lines.filter((line) => !line.undone)
-                        if (refused.length) throw new Error(refused.map((line) => `${line.productName}: ${line.reason}`).join(' '))
-                        onClose()
-                        return null
-                      },
-                      'Sale undone. Nothing of it is recorded.',
-                    )
-                  }
-                >
-                  Undo sale
-                </Button>
-              )}
-              {/* Quiet, not a red slab: this sheet is mostly for reading a sale, and the confirm that
-                  follows is where the weight belongs. */}
-              {!canUndo && (
-                <Button
-                  variant="secondary"
-                  disabled={!online || busy != null}
-                  onClick={() => setConfirmCancel('all')}
-                  className="text-danger-700! hover:text-danger-800!"
-                >
-                  Cancel sale
-                </Button>
-              )}
-            </>
+          sale ? (
+            // Print, share or cancel (with a reason) from the sale's own receipt (selling till Steps 2-3).
+            <Button variant="action" onClick={() => navigate(`/app/sales/${sale.saleId}`)}>
+              Receipt
+            </Button>
           ) : undefined
         }
       >
         {!sale && !error && <p className="text-sm text-neutral-500">Loading…</p>}
         {sale && (
           <div className="flex flex-col gap-4">
-            <p className="text-sm text-neutral-600">
-              {when}
-              {sale.recordedByName && ` · recorded by ${sale.recordedByName}`}
+            <CancelStateBox
+              sale={sale}
+              canAnswer={user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.CANCEL_SALES)}
+              onAnswered={(next, approved) => {
+                setSale(next)
+                showToast(approved ? 'Sale cancelled. The stock is back.' : 'Kept. The sale stands.', 'success')
+                onChanged()
+              }}
+            />
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-neutral-600">
+              <span>
+                {when}
+                {sale.recordedByName && ` · recorded by ${sale.recordedByName}`}
+              </span>
+              <PaymentChip method={sale.paymentMethod} />
             </p>
             <ul className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
               {sale.lines.map((line) => (
@@ -179,7 +152,7 @@ export function SaleDetailSheet({ saleId, onClose, onChanged }: SaleDetailSheetP
                           Add price
                         </button>
                       )}
-                      {live.length > 1 && !canUndo && (
+                      {live.length > 1 && canCancelSales && (
                         <button
                           type="button"
                           disabled={!online || busy != null}

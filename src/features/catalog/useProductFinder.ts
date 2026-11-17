@@ -12,12 +12,13 @@ import type { Product } from '@/features/products/types'
  * before the search has answered - so an early Enter waits (up to 3 s) for the answer to the term
  * it was pressed on, then picks the exact code, or the only match.
  */
-export function useProductFinder(term: string, onPick: (product: Product) => void, limit = 8) {
+/** `includeMadeHere`: selling finds made-here items too (V90); stock screens never do. */
+export function useProductFinder(term: string, onPick: (product: Product) => void, limit = 8, includeMadeHere = false) {
   const catalog = useCatalogState()
   const onDevice = catalog.phase === 'ready'
   const search = term.trim()
   const list = useCatalogList(
-    { search, status: 'active', categoryId: '', stockStatus: 'all', sort: { field: 'name', direction: 'asc' } },
+    { search, status: 'active', categoryId: '', stockStatus: 'all', sort: { field: 'name', direction: 'asc' }, madeHere: includeMadeHere ? 'include' : undefined },
     onDevice && search !== '',
   )
   const server = useProducts(

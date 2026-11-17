@@ -16,7 +16,9 @@ import { formatNumber, stockUnitWord } from '@/features/products/unitCopy'
 import { formatMoney } from '@/features/selling/money'
 import { SaleDetailSheet } from '@/features/selling/sales/SaleDetailSheet'
 import { salesReportApi } from '@/features/selling/sales/salesReportApi'
-import type { SalesFilter, SalesGrouping, SalesReport, SalesReportRow, SalesTotals } from '@/features/selling/sales/types'
+import { CANCEL_REASON_LABELS } from '@/features/selling/sale/cancelReasons'
+import { PaymentChip, type SalePaymentMethod } from '@/features/selling/sale/payment'
+import type { PaymentTotals, SalesFilter, SalesGrouping, SalesReport, SalesReportRow, SalesTotals } from '@/features/selling/sales/types'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { downloadBlob } from '@/utils/downloadBlob'
 
@@ -155,6 +157,7 @@ export function SalesPage() {
               </>
             )}
           </p>
+          {totals.byPayment && totals.saleCount > 0 && <PaymentTotalsRow paid={totals.byPayment} />}
           {left > 0 && (
             <p className="text-sm text-neutral-600">
               Profit leaves out {formatNumber(left)} {left === 1 ? 'sale' : 'sales'}:{' '}
@@ -312,6 +315,11 @@ function SaleRow({
     ? new Date(row.occurredAt).toLocaleString(undefined, withDate ? { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' } : { hour: 'numeric', minute: '2-digit' })
     : ''
   const notes = [
+    // Selling till Step 3: who cancelled it and why - "sell, keep the cash, cancel" is what this list is for.
+    allCancelled && row.cancelReason && CANCEL_REASON_LABELS[row.cancelReason],
+    allCancelled && row.cancelledByName && `by ${row.cancelledByName}`,
+    allCancelled && row.cancelRequestedByName && row.cancelRequestedByName !== row.cancelledByName && `asked by ${row.cancelRequestedByName}`,
+    row.cancelState === 'REQUESTED' && 'asked to cancel',
     t.unpricedLineCount > 0 && t.unpricedLineCount < t.lineCount && `${t.unpricedLineCount} without a price`,
     t.cancelledLineCount > 0 && !allCancelled && `${t.cancelledLineCount} cancelled`,
     t.belowUsualPriceLineCount > 0 && 'below usual price',
@@ -332,8 +340,11 @@ function SaleRow({
             {notes.length > 0 && <span className="text-warning-700"> · {notes.join(' · ')}</span>}
           </span>
         </span>
-        <span className={`shrink-0 text-base font-semibold tabular-nums ${allCancelled ? 'text-neutral-500 line-through' : 'text-neutral-900'}`}>
-          {allCancelled ? 'Cancelled' : t.unpricedLineCount === t.lineCount ? <span className="text-sm font-medium text-warning-700">No price</span> : formatMoney(t.salesAmount)}
+        <span className="flex shrink-0 flex-col items-end gap-1">
+          <span className={`text-base font-semibold tabular-nums ${allCancelled ? 'text-neutral-500 line-through' : 'text-neutral-900'}`}>
+            {allCancelled ? 'Cancelled' : t.unpricedLineCount === t.lineCount ? <span className="text-sm font-medium text-warning-700">No price</span> : formatMoney(t.salesAmount)}
+          </span>
+          {!allCancelled && <PaymentChip method={row.paymentMethod} />}
         </span>
       </button>
     </li>
@@ -420,6 +431,41 @@ function BreakdownTable({ report, tab }: { report: SalesReport; tab: SalesGroupi
 }
 
 /** "₦3,700 profit (11.3%)", or nothing when no line has both a price and a cost. */
+/**
+ * Cash, Transfer and Card for the range, each a picture, an amount and how many sales (selling till
+ * Step 1). Sales from before payments were recorded are said underneath, never counted as cash.
+ */
+function PaymentTotalsRow({ paid }: { paid: PaymentTotals }) {
+  const boxes: { method: SalePaymentMethod; amount: number; sales: number }[] = [
+    { method: 'CASH', amount: paid.cashAmount, sales: paid.cashSales },
+    { method: 'TRANSFER', amount: paid.transferAmount, sales: paid.transferSales },
+    { method: 'CARD', amount: paid.cardAmount, sales: paid.cardSales },
+  ]
+  return (
+    <div className="mt-2 flex flex-col gap-1">
+      <ul className="grid grid-cols-3 gap-2" aria-label="By how they paid">
+        {boxes.map((box) => (
+          <li key={box.method} className="flex min-w-0 flex-col items-start gap-1 rounded-lg border border-neutral-200 bg-white px-3 py-2">
+            <PaymentChip method={box.method} />
+            <span className="text-base font-semibold tabular-nums text-neutral-900" data-payment-total={box.method}>
+              {formatMoney(box.amount)}
+            </span>
+            <span className="text-xs text-neutral-500 tabular-nums">
+              {formatNumber(box.sales)} {box.sales === 1 ? 'sale' : 'sales'}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {paid.notRecordedSales > 0 && (
+        <p className="text-xs text-neutral-500 tabular-nums">
+          {formatMoney(paid.notRecordedAmount)} from {formatNumber(paid.notRecordedSales)}{' '}
+          {paid.notRecordedSales === 1 ? 'sale' : 'sales'} recorded before payments were kept.
+        </p>
+      )}
+    </div>
+  )
+}
+
 function profitText(totals: SalesTotals): string | null {
   if ((totals.profitKnownSalesAmount ?? 0) <= 0 || totals.grossProfit == null) return null
   return `${formatMoney(totals.grossProfit)} profit${totals.margin != null ? ` (${percent(totals.margin)})` : ''}`

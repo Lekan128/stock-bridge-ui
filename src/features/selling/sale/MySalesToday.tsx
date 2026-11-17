@@ -1,9 +1,11 @@
 import { useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/auth/useAuth'
 import { useApiQuery } from '@/data/useApiQuery'
 import { useOutboxState } from '@/features/outbox/useOutbox'
 import { formatMoney } from '@/features/selling/money'
+import { PaymentChip } from '@/features/selling/sale/payment'
 import type { MySalesTotals } from '@/features/selling/types'
 
 /**
@@ -35,13 +37,34 @@ export function MySalesToday({ refreshKey }: { refreshKey: number }) {
 
   return (
     <p className="text-sm text-neutral-600 tabular-nums" aria-live="polite">
-      Your sales today:{' '}
+      {/* Opens the list, to print again, share or cancel one (selling till Step 3). */}
+      <Link to="/app/sell/today" className="font-medium text-primary-700 hover:underline">
+        Your sales today
+      </Link>
+      :{' '}
       <span className="font-semibold text-neutral-900">
         {data ? `${data.saleCount.toLocaleString()} · ${formatMoney(data.salesAmount)}` : '…'}
       </span>
       {waiting > 0 && ` · ${waiting} waiting to send`}
       {showingSaved && updatedAt != null &&
         ` (as of ${new Date(updatedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })})`}
+      {/* What the drawer should hold, and what came in other ways (selling till Step 1). */}
+      {data?.byPayment && data.saleCount > 0 && (
+        <span className="mt-1 flex flex-wrap gap-1.5">
+          {(
+            [
+              ['CASH', data.byPayment.cashAmount],
+              ['TRANSFER', data.byPayment.transferAmount],
+              ['CARD', data.byPayment.cardAmount],
+            ] as const
+          ).map(([method, amount]) => (
+            <span key={method} className="inline-flex items-center gap-1">
+              <PaymentChip method={method} />
+              <span className="font-medium text-neutral-900">{formatMoney(amount)}</span>
+            </span>
+          ))}
+        </span>
+      )}
     </p>
   )
 }

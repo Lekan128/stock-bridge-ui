@@ -9,6 +9,9 @@ export const sellingApi = {
   update: (payload: UpdateSellingSettingsPayload) =>
     api.put<SellingSettings>('/api/company/selling', payload).then((r) => r.data),
 
+  /** "Sell things you make" (selling till Step 4): needs selling on to turn on. */
+  updateMadeHere: (on: boolean) => api.put<SellingSettings>('/api/company/selling/made-here', { on }).then((r) => r.data),
+
   legacyPrices: (page: number, size = 50) =>
     api
       .get<PageResponse<LegacyPriceRow>>('/api/company/selling/legacy-prices', { params: { page, size } })

@@ -154,6 +154,16 @@ const RecordSalePage = lazy(() =>
     default: m.RecordSalePage,
   })),
 )
+const SaleRecordPage = lazy(() =>
+  import('@/features/selling/sale/SaleRecordPage').then((m) => ({
+    default: m.SaleRecordPage,
+  })),
+)
+const MySalesTodayPage = lazy(() =>
+  import('@/features/selling/sale/MySalesTodayPage').then((m) => ({
+    default: m.MySalesTodayPage,
+  })),
+)
 const SalesPage = lazy(() =>
   import('@/features/selling/sales/SalesPage').then((m) => ({
     default: m.SalesPage,
@@ -730,10 +740,27 @@ export function AppRoutes() {
             }
           />
           <Route
+            path="sell/today"
+            element={
+              <RequirePermission permission={PERMISSIONS.STOCK_OUT}>
+                <MySalesTodayPage />
+              </RequirePermission>
+            }
+          />
+          <Route
             path="sales"
             element={
               <RequirePermission permission={PERMISSIONS.VIEW_ANALYTICS}>
                 <SalesPage />
+              </RequirePermission>
+            }
+          />
+          {/* One sale's receipt (selling till Steps 2-3): its cashier, a manager answering "asks to cancel", the owner. */}
+          <Route
+            path="sales/:saleId"
+            element={
+              <RequirePermission anyOf={[PERMISSIONS.STOCK_OUT, PERMISSIONS.CANCEL_SALES, PERMISSIONS.VIEW_ANALYTICS]}>
+                <SaleRecordPage />
               </RequirePermission>
             }
           />

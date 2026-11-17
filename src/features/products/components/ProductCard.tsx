@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import { useForBranchesLine } from '@/features/products/components/ProductBranchesField'
 import { useNotHere } from '@/features/branches/workArea'
 import { Minus, Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -51,11 +52,13 @@ export function ProductCard({ product, incoming = 0, quickActions, selection }: 
   const { showsSellingPrice } = useSellingPolicy()
   // The selling price leads the line where products have one (SELLING_PRICE_PLAN.md §6.5).
   const price = showsSellingPrice ? listPriceText(product, unitOfMeasureOptions) : null
-  const subtitle = [price, product.categoryName, pack].filter(Boolean).join(' · ') || product.sku
+  const forLine = useForBranchesLine(product)
+  const subtitle = [price, product.categoryName, pack, forLine].filter(Boolean).join(' · ') || product.sku
   const press = useRef<{ timer: number; x: number; y: number } | null>(null)
   const longPressed = useRef(false)
   const selecting = selection?.active ?? false
-  const showQuick = !selecting && quickActions != null && (quickActions.canStockIn || quickActions.canStockOut)
+  // No stock in or out for a made-here item (V90).
+  const showQuick = !selecting && !product.madeHere && quickActions != null && (quickActions.canStockIn || quickActions.canStockOut)
 
   function cancelPress() {
     if (press.current) window.clearTimeout(press.current.timer)
@@ -132,6 +135,11 @@ export function ProductCard({ product, incoming = 0, quickActions, selection }: 
           {/* "usable" is spelled out rather than implied — this is the line someone reads before
               deciding whether they can fulfil an order today, and "12 on hand · +20 incoming" must
               never be misread as 32. The figure is the same component as the table's (B2). */}
+          {/* Made here (V90): no stock to show. */}
+          {product.madeHere ? (
+            <span className="text-sm text-neutral-500">Made here</span>
+          ) : (
+          <>
           <div className="flex flex-col gap-1">
             <StockFigure quantity={product.quantityOnHand} unit={unit} pack={packLine} productId={product.id} label="usable" />
             <AreaBreakdown product={product} unitLabel={unit} compact />
@@ -153,6 +161,8 @@ export function ProductCard({ product, incoming = 0, quickActions, selection }: 
           />
           <LowAtBranches product={product} />
           <IncomingStockBadge quantity={incoming} />
+          </>
+          )}
         </div>
       </div>
       {showQuick && (

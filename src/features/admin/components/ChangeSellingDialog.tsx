@@ -11,6 +11,8 @@ export interface ChangeSellingDialogProps {
   error: string | null
   onCancel: () => void
   onConfirm: (reason: string) => void
+  /** The same dialog for \"Sell things you make\" (V90). */
+  madeHere?: boolean
 }
 
 const MAX_REASON = 500
@@ -21,13 +23,14 @@ const MAX_REASON = 500
  * under them, and "ProcurePal support turned on selling for you: asked on the phone" is what keeps
  * that from looking like a fault.
  */
-export function ChangeSellingDialog({ open, clientName, sellsStock, submitting, error, onCancel, onConfirm }: ChangeSellingDialogProps) {
+export function ChangeSellingDialog({ open, clientName, sellsStock, submitting, error, onCancel, onConfirm, madeHere = false }: ChangeSellingDialogProps) {
   const [reason, setReason] = useState('')
   useEffect(() => {
     if (open) setReason('')
   }, [open])
   const trimmed = reason.trim()
-  const verb = sellsStock ? 'Turn off selling' : 'Turn on selling'
+  // `madeHere`: the same dialog for "Sell things you make" (V90); `sellsStock` is then whether that is on.
+  const verb = madeHere ? (sellsStock ? 'Turn off things they make' : 'Turn on things they make') : sellsStock ? 'Turn off selling' : 'Turn on selling'
 
   return (
     <Modal
@@ -51,7 +54,11 @@ export function ChangeSellingDialog({ open, clientName, sellsStock, submitting, 
       }
     >
       <p className="text-sm text-neutral-600">
-        {sellsStock
+        {madeHere
+          ? sellsStock
+            ? 'Things they make will be hidden from their products and their till. Nothing is deleted.'
+            : 'They will be able to add things they make and sell, like meals or services, that are not kept in stock.'
+          : sellsStock
           ? 'Their selling prices, sales screens and reports will be hidden. Nothing is deleted - turning it back on brings everything back.'
           : 'They will be able to give products a selling price, record sales and see their sales and profit.'}{' '}
         The owner gets a notice in the app with your reason.

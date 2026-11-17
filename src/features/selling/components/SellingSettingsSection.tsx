@@ -108,6 +108,21 @@ export function SellingSettingsSection() {
         )}
       </div>
 
+      {/* "Sell things you make" (selling till Step 4): beside selling, only while it is on. */}
+      {on && (
+        <MadeHereSwitch
+          on={settings.sellsMadeHere === true}
+          changedLine={
+            settings.madeHereChangedAt && settings.madeHereChangedByName
+              ? `${settings.sellsMadeHere ? 'Turned on' : 'Turned off'} by ${settings.madeHereChangedByName}, ${formatDate(settings.madeHereChangedAt)}`
+              : null
+          }
+          canChange={canChange}
+          online={online}
+          onChanged={(updated) => setData(updated)}
+        />
+      )}
+
       {!canChange && <p className="text-xs text-neutral-500">Ask your owner to change this.</p>}
       {canChange && !online && <p className="text-xs text-neutral-500">Changing this needs a connection.</p>}
       {error && (
@@ -163,5 +178,71 @@ export function SellingSettingsSection() {
         />
       )}
     </section>
+  )
+}
+
+/**
+ * "Sell things you make" (V90): meals, drinks you mix, services - sold, but not kept in stock. Off until turned
+ * on; turning it off hides them, deleting nothing.
+ */
+function MadeHereSwitch({
+  on,
+  changedLine,
+  canChange,
+  online,
+  onChanged,
+}: {
+  on: boolean
+  changedLine: string | null
+  canChange: boolean
+  online: boolean
+  onChanged: (settings: import('@/features/selling/types').SellingSettings) => void
+}) {
+  const { showToast } = useToast()
+  const [saving, setSaving] = useState(false)
+  async function change(next: boolean) {
+    setSaving(true)
+    try {
+      onChanged(await sellingApi.updateMadeHere(next))
+      showToast(next ? 'You can now add things you make.' : 'Things you make are hidden. Nothing is deleted.', 'success')
+    } catch (err) {
+      showToast(isAppError(err) ? err.message : "Couldn't change that. Try again.", 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+  return (
+    <div className="flex items-start justify-between gap-4 border-t border-neutral-100 pt-4">
+      <div className="min-w-0">
+        <p id="sell-made-here-label" className="text-sm font-medium text-neutral-900">
+          Sell things you make
+        </p>
+        <p id="sell-made-here-help" className="mt-0.5 max-w-prose text-sm text-neutral-500">
+          Meals, drinks you mix, services. Things you sell but don't keep in stock.
+        </p>
+        {changedLine && <p className="mt-1 text-xs text-neutral-500">{changedLine}</p>}
+      </div>
+      {canChange ? (
+        <button
+          type="button"
+          role="switch"
+          aria-checked={on}
+          aria-labelledby="sell-made-here-label"
+          aria-describedby="sell-made-here-help"
+          disabled={saving || !online}
+          onClick={() => void change(!on)}
+          className={`relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:outline-none ${
+            on ? 'bg-accent-600' : 'bg-neutral-300'
+          } ${saving || !online ? 'cursor-not-allowed opacity-50' : ''}`}
+        >
+          <span
+            aria-hidden="true"
+            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${on ? 'translate-x-6' : 'translate-x-1'}`}
+          />
+        </button>
+      ) : (
+        <span className="shrink-0 text-sm font-medium text-neutral-700">{on ? 'On' : 'Off'}</span>
+      )}
+    </div>
   )
 }

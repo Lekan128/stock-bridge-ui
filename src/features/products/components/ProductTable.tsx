@@ -17,6 +17,7 @@ import { formatNumber } from '@/features/products/unitCopy'
 import { LowAtBranches } from '@/features/branches/LowAtBranches'
 import { AreaBreakdown } from '@/features/branches/AreaBreakdown'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
+import { productBranchesText } from '@/features/products/components/ProductBranchesField'
 import { listPriceText } from '@/features/selling/priceText'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { resolveUnitSymbol } from '@/features/products/unitSet'
@@ -269,7 +270,11 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
                               product.packagingSize,
                             )}${product.hasMultiplePacks ? ' (default)' : ''}`
                           : null
-                      const line = [product.categoryName, pack].filter(Boolean).join(' · ')
+                      const forLine =
+                        branch?.isMultiBranch && branch.isAll && product.forAllBranches === false
+                          ? productBranchesText({ all: false, ids: product.forBranchIds ?? [] }, branch.nameOf)
+                          : null
+                      const line = [product.categoryName, pack, forLine].filter(Boolean).join(' · ')
                       return line ? <p className="truncate text-xs text-neutral-500">{line}</p> : null
                     })()}
                   </div>
@@ -282,6 +287,10 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
                 </td>
               )}
               <td className="border-b border-neutral-100 px-4 py-2.5 text-right">
+                {/* Made here (V90): no stock to show. */}
+                {product.madeHere ? (
+                  <span className="text-sm text-neutral-500">Made here</span>
+                ) : (
                 <div className="flex flex-col items-end gap-1">
                   {/* The figure, its unit and pack, and anything waiting on this phone — one
                       component everywhere (B2). Zero is greyed, never bolded. */}
@@ -318,6 +327,7 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
                   {/* On its own line, never summed into the figure above. */}
                   {incoming > 0 && <IncomingStockBadge quantity={incoming} />}
                 </div>
+                )}
               </td>
               {showByBranch && allBranches && (
                 <td className="border-b border-neutral-100 px-4 py-2.5 align-top">
@@ -351,12 +361,12 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
                 // row-wide link so a click records stock instead of opening the product.
                 <td className="relative z-10 border-b border-neutral-100 px-2 py-2.5">
                   <div className="flex justify-end gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100">
-                    {quickActions.canStockIn && (
+                    {quickActions.canStockIn && !product.madeHere && (
                       <QuickButton label={`Stock in ${product.name}`} onClick={() => quickActions.onAction('in', product)}>
                         <Plus className="h-4 w-4" aria-hidden="true" />
                       </QuickButton>
                     )}
-                    {quickActions.canStockOut && (
+                    {quickActions.canStockOut && !product.madeHere && (
                       <QuickButton label={`Stock out ${product.name}`} onClick={() => quickActions.onAction('out', product)}>
                         <Minus className="h-4 w-4" aria-hidden="true" />
                       </QuickButton>

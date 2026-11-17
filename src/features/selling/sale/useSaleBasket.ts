@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/api/client'
+import { deleteDraft, loadDraft } from '@/features/drafts/draftStore'
 import { useDraft } from '@/features/drafts/useDraft'
 import { discardOp, getOutboxState, isInFlight, submitStockWrite } from '@/features/outbox/outboxStore'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
@@ -7,6 +8,7 @@ import type { Product } from '@/features/products/types'
 import { formatEnteredAndBase } from '@/features/products/unitCopy'
 import { stockUnitLabel, toBaseQuantity } from '@/features/products/unitSet'
 import { formatMoney } from '@/features/selling/money'
+import type { SalePaymentMethod } from '@/features/selling/sale/paymentMethod'
 import { lineAmount, openingUnit, optionOf, unitsFor, type SaleLine } from '@/features/selling/sale/saleLine'
 import { isAppError } from '@/types/api'
 
@@ -29,46 +31,89 @@ export interface RecordedSale {
   lines: RecordedLine[]
   /** What the recorded lines came to - refused lines and unpriced ones are not in it. */
   total: number
+  /** How the customer paid (selling till Step 1). */
+  paymentMethod: SalePaymentMethod
+  /** When it was recorded on this phone (ms) - the receipt's time. */
+  recordedAt: number
 }
 
-interface BasketDraft {
+/** One customer's basket. Several can be open at once: one being served, others waiting to pay. */
+export interface Basket {
+  id: string
   lines: SaleLine[]
   note: string
 }
 
-const DRAFT_KEY = 'sale:new'
+interface BasketsDraft {
+  activeId: string
+  baskets: Basket[]
+}
+
+/** Every open basket on this phone, under one draft (Step 1 fixes). Before, one basket under `sale:new`. */
+export const BASKETS_DRAFT_KEY = 'sale:baskets'
+const OLD_DRAFT_KEY = 'sale:new'
+
+function emptyBasket(): Basket {
+  return { id: crypto.randomUUID(), lines: [], note: '' }
+}
 
 /**
- * A sale being put together and recorded (`SELLING_PRICE_PLAN.md` §6.1, §4.4).
+ * The sales being put together at the counter (`SELLING_PRICE_PLAN.md` §6.1, §4.4; selling till Step 1).
  *
- * Kept as a draft on the phone the whole time, so a closed app or a flat battery keeps the
- * customer's items. Recorded LINE BY LINE through the ordinary stock-out - each line keeps the
- * outbox, Idempotency-Key, Undo and conflict handling stock-outs already have - all under one sale
- * id made here, so an offline sale is one sale before it reaches the server. A line refused now
- * (oversold) does not stop the others: the money for them was taken.
+ * Several baskets can be open - "+ New sale" while the first customer is still finding their money - and
+ * every one is kept as a draft on the phone, so a closed app or a flat battery keeps each customer's items.
+ * A sale is recorded LINE BY LINE through the ordinary stock-out - each line keeps the outbox,
+ * Idempotency-Key, Undo and conflict handling stock-outs already have - all under one sale id made here,
+ * so an offline sale is one sale before it reaches the server. A line refused now (oversold) does not stop
+ * the others: the money for them was taken.
  */
 export function useSaleBasket() {
   const { options: catalogue } = useUnitOfMeasureOptions()
-  const draft = useDraft<BasketDraft>(DRAFT_KEY)
-  const [lines, setLines] = useState<SaleLine[]>([])
-  const [note, setNote] = useState('')
+  const draft = useDraft<BasketsDraft>(BASKETS_DRAFT_KEY)
+  const [baskets, setBaskets] = useState<Basket[]>(() => [emptyBasket()])
+  const [activeId, setActiveId] = useState<string>(() => baskets[0].id)
   const restored = useRef(false)
 
   useEffect(() => {
     if (restored.current || draft.initial === undefined) return
     restored.current = true
-    if (draft.initial?.value?.lines?.length) {
-      setLines(draft.initial.value.lines)
-      setNote(draft.initial.value.note ?? '')
+    const saved = draft.initial?.value
+    if (saved?.baskets?.some((basket) => basket.lines.length > 0)) {
+      const kept = saved.baskets.filter((basket) => basket.lines.length > 0 || basket.id === saved.activeId)
+      setBaskets(kept)
+      setActiveId(kept.some((basket) => basket.id === saved.activeId) ? saved.activeId : kept[0].id)
+      return
     }
+    // A basket kept before several could be open: it becomes the first one.
+    void loadDraft<{ lines?: SaleLine[]; note?: string }>(OLD_DRAFT_KEY).then((old) => {
+      if (!old?.value?.lines?.length) return
+      const basket = { id: crypto.randomUUID(), lines: old.value.lines, note: old.value.note ?? '' }
+      setBaskets([basket])
+      setActiveId(basket.id)
+      void deleteDraft(OLD_DRAFT_KEY)
+    })
   }, [draft.initial])
 
   useEffect(() => {
     if (!restored.current) return
-    if (lines.length === 0 && note === '') void draft.clear()
-    else draft.save({ lines, note })
+    if (baskets.every((basket) => basket.lines.length === 0 && basket.note === '')) void draft.clear()
+    else draft.save({ activeId, baskets })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lines, note])
+  }, [baskets, activeId])
+
+  const active = baskets.find((basket) => basket.id === activeId) ?? baskets[0]
+  const lines = active.lines
+  const note = active.note
+
+  function changeActive(change: (basket: Basket) => Basket) {
+    setBaskets((all) => all.map((basket) => (basket.id === active.id ? change(basket) : basket)))
+  }
+  function setLines(change: (lines: SaleLine[]) => SaleLine[]) {
+    changeActive((basket) => ({ ...basket, lines: change(basket.lines) }))
+  }
+  function setNote(value: string) {
+    changeActive((basket) => ({ ...basket, note: value }))
+  }
 
   /** Adds one of the product - or one more, if it is already in the basket in the unit it opens in. */
   function add(product: Product): string {
@@ -98,14 +143,47 @@ export function useSaleBasket() {
     setLines((all) => (all.some((existing) => existing.key === line.key) ? all : [...all, line]))
   }
 
-  const total = lines.reduce((sum, line) => {
-    const options = unitsFor(line.product, catalogue)
-    return sum + (lineAmount(line, optionOf(line, options), options) ?? 0)
-  }, 0)
+  /** Undo sale: its lines come back into the basket being served, or a fresh one beside it if that has items. */
+  function restoreSale(sale: RecordedSale) {
+    const back = sale.lines.filter((r) => r.status !== 'refused').map((r) => ({ ...r.line, key: crypto.randomUUID() }))
+    if (back.length === 0) return
+    if (active.lines.length === 0) {
+      setLines(() => back)
+      return
+    }
+    const basket = { id: crypto.randomUUID(), lines: back, note: '' }
+    setBaskets((all) => [...all, basket])
+    setActiveId(basket.id)
+  }
+
+  /** "+ New sale": a fresh basket, the one being served waiting beside it. Nothing to do if this one is empty. */
+  function newSale() {
+    if (active.lines.length === 0) return
+    const basket = emptyBasket()
+    setBaskets((all) => [...all.filter((b) => b.lines.length > 0 || b.note !== ''), basket])
+    setActiveId(basket.id)
+  }
+
+  /** Go back to a waiting basket. An empty one left behind goes away. */
+  function switchTo(id: string) {
+    if (id === active.id) return
+    setBaskets((all) => all.filter((basket) => basket.id === id || basket.lines.length > 0 || basket.note !== ''))
+    setActiveId(id)
+  }
+
+  function totalOf(basket: Basket): number {
+    return basket.lines.reduce((sum, line) => {
+      const options = unitsFor(line.product, catalogue)
+      return sum + (lineAmount(line, optionOf(line, options), options) ?? 0)
+    }, 0)
+  }
+  const total = totalOf(active)
 
   /** Records every line under one new sale id, in order; returns how each one stands. */
   /** `areaId`: where in the branch the sale comes from (V60), chosen on the screen; absent without a choice. */
-  async function record(areaId?: string): Promise<RecordedSale> {
+  /** `paymentMethod`: how the customer paid - it rides on every line; the server keeps the first to arrive. */
+  async function record(areaId: string | undefined, paymentMethod: SalePaymentMethod): Promise<RecordedSale> {
+    const basketId = active.id
     const saleId = crypto.randomUUID()
     const time = new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
     const label = `${time} sale (${lines.length} ${lines.length === 1 ? 'item' : 'items'})`
@@ -134,6 +212,7 @@ export function useSaleBasket() {
             ...(amount != null ? { lineTotal: amount } : {}),
             note: note.trim() || undefined,
             areaId,
+            paymentMethod,
           },
           baseDelta: -base,
         })
@@ -155,12 +234,43 @@ export function useSaleBasket() {
     const total = recorded.filter((r) => r.status !== 'refused').reduce((sum, r) => sum + (r.amount ?? 0), 0)
     // Recorded lines leave the basket; a refused one stays, so it can be fixed and recorded.
     const refused = new Map(recorded.filter((r) => r.status === 'refused').map((r) => [r.line.key, r.message]))
-    setLines((all) => all.filter((line) => refused.has(line.key)).map((line) => ({ ...line, problem: refused.get(line.key) })))
-    if (refused.size === 0) setNote('')
-    return { saleId, label, lines: recorded, total }
+    if (refused.size > 0) {
+      setBaskets((all) =>
+        all.map((basket) =>
+          basket.id === basketId
+            ? { ...basket, lines: basket.lines.filter((l) => refused.has(l.key)).map((l) => ({ ...l, problem: refused.get(l.key) })) }
+            : basket,
+        ),
+      )
+    } else {
+      // Paid: that basket goes, and an empty one is ready for the next customer. Waiting ones stay.
+      const next = emptyBasket()
+      setBaskets((all) => [...all.filter((basket) => basket.id !== basketId), next])
+      setActiveId(next.id)
+    }
+    return { saleId, label, lines: recorded, total, paymentMethod, recordedAt: Date.now() }
   }
 
-  return { lines, note, setNote, add, update, remove, restore, total, record, catalogue, draftSavedAt: draft.savedAt }
+  return {
+    lines,
+    note,
+    setNote,
+    add,
+    update,
+    remove,
+    restore,
+    restoreSale,
+    total,
+    record,
+    catalogue,
+    draftSavedAt: draft.savedAt,
+    /** Every open basket, in the order started; the one being served is `activeId`. */
+    baskets,
+    activeId: active.id,
+    totalOf,
+    newSale,
+    switchTo,
+  }
 }
 
 /**

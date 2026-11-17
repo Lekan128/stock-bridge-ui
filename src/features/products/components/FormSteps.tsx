@@ -1,4 +1,4 @@
-import type { ComponentType } from 'react'
+import { useEffect, useRef, type ComponentType } from 'react'
 import { Check } from 'lucide-react'
 
 export interface FormStep {
@@ -39,10 +39,22 @@ export function FormSteps({
   numbered: boolean
   label: string
 }) {
+  // A phone: the step you're on is always in view - Next to Review scrolls the row to it (owner, 2026-11-17).
+  const row = useRef<HTMLOListElement>(null)
+  useEffect(() => {
+    const list = row.current
+    const pill = list?.querySelector<HTMLElement>('[aria-current="step"], [aria-current="page"]')
+    if (!list || !pill) return
+    const left = pill.getBoundingClientRect().left - list.getBoundingClientRect().left + list.scrollLeft
+    if (left < list.scrollLeft || left + pill.offsetWidth > list.scrollLeft + list.clientWidth) {
+      list.scrollTo({ left: Math.max(0, left - 16), behavior: 'smooth' })
+    }
+  }, [current])
+
   return (
     <nav aria-label={label}>
       {/* A phone: one row across the top, scrolled sideways if it must; every label shown, since it's tapped. */}
-      <ol className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 lg:hidden">
+      <ol ref={row} className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 lg:hidden">
         {steps.map((step, index) => {
           const isCurrent = step.id === current
           return (

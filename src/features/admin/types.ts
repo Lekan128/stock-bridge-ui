@@ -23,6 +23,8 @@ export interface SuperAdminClientSummary {
   createdAt: string
   /** Sells from its stock (API V45). Absent from an API older than the field: read as false. */
   sellsStock?: boolean
+  /** "Sell things you make" (API V90). */
+  sellsMadeHere?: boolean
   /** The shared demo company prospects try (API V86). Absent from an older API: read as false. */
   demo?: boolean
 }
@@ -373,6 +375,8 @@ export interface ClientListParams {
   active?: boolean
   /** Companies with selling from stock on (true) or off (false). */
   sellsStock?: boolean
+  /** "Sell things you make" (API V90). */
+  sellsMadeHere?: boolean
   page?: number
   size?: number
 }

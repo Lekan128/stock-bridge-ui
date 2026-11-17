@@ -1,3 +1,5 @@
+import type { SalePaymentMethod } from '@/features/selling/sale/payment'
+
 /**
  * The Sales report (`GET /api/analytics/sales`) and one sale (`GET /api/sales/{id}`) - plan §4.7,
  * §6.11. Money is in naira. The API omits null fields, so every nullable one is optional here and is
@@ -26,6 +28,20 @@ export interface SalesTotals {
   cancelledLineCount: number
   belowUsualPriceLineCount: number
   belowCostLineCount: number
+  /** What came in by each way of paying (API V88). Absent from an API older than selling till Step 1. */
+  byPayment?: PaymentTotals
+}
+
+/** The sales amount split by how the customer paid; "not recorded" is a sale from before payments. */
+export interface PaymentTotals {
+  cashAmount: number
+  cashSales: number
+  transferAmount: number
+  transferSales: number
+  cardAmount: number
+  cardSales: number
+  notRecordedAmount: number
+  notRecordedSales: number
 }
 
 export interface SalesReportRow {
@@ -42,6 +58,13 @@ export interface SalesReportRow {
   detail?: string
   /** Sale rows at a multi-branch company: where it was recorded. */
   branch?: string
+  /** Sale rows: how the customer paid; absent for a sale from before payments were recorded. */
+  paymentMethod?: SalePaymentMethod
+  /** Sale rows: where cancelling it has got to (API V89). */
+  cancelState?: SaleCancelState
+  cancelReason?: SaleCancelReason
+  cancelledByName?: string
+  cancelRequestedByName?: string
   totals: SalesTotals
 }
 
@@ -62,7 +85,7 @@ export interface SalesReportParams {
   productId?: string
 }
 
-export type CostBasis = 'FIFO' | 'AVERAGE' | 'UNKNOWN'
+export type CostBasis = 'FIFO' | 'AVERAGE' | 'UNKNOWN' | 'ESTIMATE'
 
 export interface SaleLineDetail {
   movementId: string
@@ -96,4 +119,20 @@ export interface SaleDetail {
   lineCount: number
   cancelledLineCount: number
   unpricedLineCount: number
+  /** How the customer paid; absent for a sale from before payments were recorded. */
+  paymentMethod?: SalePaymentMethod
+  /** Where it was sold, at a company with several branches. */
+  branchName?: string
+  /** Cancelling (API V89): asked and waiting, declined (the sale stands), or the whole sale cancelled. */
+  cancelState?: SaleCancelState
+  cancelReason?: SaleCancelReason
+  cancelNote?: string
+  cancelRequestedByName?: string
+  cancelRequestedAt?: string
+  /** Who cancelled it, or declined the request. */
+  cancelDecidedByName?: string
+  cancelDecidedAt?: string
 }
+
+export type SaleCancelState = 'REQUESTED' | 'DECLINED' | 'CANCELLED'
+export type SaleCancelReason = 'WRONG_ITEM' | 'WRONG_AMOUNT' | 'CHANGED_MIND' | 'OTHER'

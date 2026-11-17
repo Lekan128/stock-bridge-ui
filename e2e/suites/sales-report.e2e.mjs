@@ -189,28 +189,27 @@ await check('"Fix these" lists the unpriced sale; adding its price lifts the tot
   await page.getByText(`4 sales · ${naira(2150)} profit`).waitFor()
 })
 
-await check('a sale just recorded offers its recorder Undo only - not Undo and Cancel side by side', async () => {
+await check('a sale opens with its lines, each cancellable on its own, and its receipt (selling till Step 3)', async () => {
   const list = page.getByRole('list', { name: 'Sales' })
   await list.locator('li').filter({ hasText: 'Rice (sr), Soap (sr)' }).click()
   const sheet = page.getByRole('dialog').first()
-  await sheet.getByRole('button', { name: 'Undo sale' }).waitFor()
-  assert((await sheet.getByRole('button', { name: 'Cancel sale' }).count()) === 0, 'Cancel beside Undo')
+  await sheet.getByRole('button', { name: 'Cancel this line' }).first().waitFor()
+  await sheet.getByRole('button', { name: 'Receipt' }).waitFor()
   await page.keyboard.press('Escape')
 })
 
-await check('Cancel sale puts it back: struck through, with who, and off the total', async () => {
+await check('Cancel sale from its receipt, with a reason: kept on record and off the total', async () => {
   const list = page.getByRole('list', { name: 'Sales' })
   // Sale 4 is the only rice-only sale.
   await list.locator('li').filter({ hasText: /^Rice \(sr\)/ }).filter({ hasNotText: 'Soap' }).first().click()
-  const sheet = page.getByRole('dialog').first()
-  await sheet.getByRole('button', { name: 'Cancel sale' }).click()
-  await page.getByRole('dialog', { name: 'Cancel this sale?' }).getByRole('button', { name: 'Cancel sale' }).click()
-  await page.getByText('Sale cancelled.').waitFor()
-  await page.getByText(/Cancelled by /).first().waitFor()
+  await page.getByRole('dialog').first().getByRole('button', { name: 'Receipt' }).click()
+  await page.getByRole('button', { name: 'Cancel sale' }).first().click()
+  await page.getByRole('radio', { name: 'Wrong item' }).click()
+  await page.getByRole('region', { name: 'Cancel this sale' }).getByRole('button', { name: 'Cancel sale' }).click()
+  await page.getByText(/Sale cancelled/).first().waitFor()
   await page.screenshot({ path: SHOTS + '3-cancelled.png' })
-  await page.keyboard.press('Escape')
+  await page.goto(`${UI}/app/sales`)
   await total().getByText(naira(6450)).waitFor()
-  await list.getByText('Cancelled', { exact: true }).waitFor()
   const report = (await api(`/api/sales/${s4}`, { token: shop.token })).json
   assert(report.cancelledLineCount === 1, `ledger: ${JSON.stringify(report).slice(0, 200)}`)
 })
@@ -235,7 +234,8 @@ await check('Movements: stock out is split into sales and other stock out at cos
   await page.getByRole('heading', { name: 'Stock movements' }).waitFor()
   // This page shows kobo ("₦6,450.00"), as all its figures do.
   await page.getByText(/₦6,450\.00 sales · ₦200\.00 other stock out/).waitFor()
-  await page.getByText('₦6,650.00').first().waitFor()
+  // On screen: a phone's small block of figures is in the page too, hidden at this width.
+  await page.getByText('₦6,650.00').filter({ visible: true }).first().waitFor()
   await page.getByText(/fixes to sales/).waitFor()
 })
 
