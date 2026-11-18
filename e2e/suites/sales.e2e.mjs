@@ -131,11 +131,11 @@ const basket = () => page.getByRole('list', { name: 'This sale' })
 const line = (product) => basket().locator('li').filter({ hasText: product.name })
 /** One tap on how the customer paid (selling till Step 1), checking the amount the buttons collect. */
 async function pay(method, amount) {
-  await page.getByRole('group', { name: `Collect ${amount} by` }).getByRole('button', { name: method, exact: true }).click()
+  await page.getByRole('group', { name: `Paid with, ${amount}` }).getByRole('button', { name: method, exact: true }).click()
 }
 /** The same, whatever the amount. */
 async function payAny(method) {
-  await page.getByRole('group', { name: /^Collect .* by$/ }).getByRole('button', { name: method, exact: true }).click()
+  await page.getByRole('group', { name: /^Paid with, / }).getByRole('button', { name: method, exact: true }).click()
 }
 /** Types like a barcode scanner: the SKU in a burst, then Enter. */
 async function scan(product) {
@@ -167,7 +167,7 @@ await check('a scanner runs a basket: scanning again adds one; a changed price s
   await line(soap).getByRole('button', { name: /^Change price of Soap/ }).click()
   await line(soap).getByLabel('Each (₦)').fill('300')
   await line(soap).getByText('usual ₦350').waitFor()
-  await page.getByText('2 items · collect').waitFor()
+  await page.getByText('2 items', { exact: true }).filter({ visible: true }).first().waitFor()
   await page.getByRole('group', { name: 'Paid with, ₦4,300' }).waitFor()
   await page.keyboard.press('Escape')
   await page.screenshot({ path: SHOTS + '1-basket.png' })
@@ -257,14 +257,14 @@ await check('the basket is kept on the phone: a reload brings the customer\'s it
 await check('typing in the search hides the pay buttons; picking an item brings them back', async () => {
   await page.getByRole('list', { name: 'Tap to add' }).getByRole('button', { name: `Add ${sugar.name}` }).click()
   await line(sugar).waitFor()
-  await page.getByRole('group', { name: /^Collect .* by$/ }).waitFor()
+  await page.getByRole('group', { name: /^Paid with, / }).waitFor()
   // The search narrows the same buttons (owner, 2026-11-16).
   await search().fill('salt')
-  await page.getByRole('group', { name: /^Collect .* by$/ }).waitFor({ state: 'hidden' })
+  await page.getByRole('group', { name: /^Paid with, / }).waitFor({ state: 'hidden' })
   await page.getByRole('list', { name: 'Tap to add' }).getByRole('button', { name: `Add ${salt.name}` }).waitFor()
   assert((await page.getByRole('list', { name: 'Tap to add' }).getByRole('button', { name: `Add ${sugar.name}`, exact: false }).count()) === 0, 'search did not narrow the buttons')
   await search().fill('')
-  await page.getByRole('group', { name: /^Collect .* by$/ }).waitFor()
+  await page.getByRole('group', { name: /^Paid with, / }).waitFor()
 })
 
 await check('"+ New sale" keeps the first customer waiting as a pill; both are kept and paid separately', async () => {
