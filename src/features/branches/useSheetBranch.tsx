@@ -150,7 +150,7 @@ export function useSheetBranch(): SheetBranch {
  * The "Which area?" part, for a sheet recording at `branch` (STOCK_AREAS_PART_1.md). Also used on its own
  * by quick mode and the sale basket, which always record at the phone's branch.
  */
-export function useSheetArea(branch: Branch | null): {
+export function useSheetArea(branch: Branch | null, waiting?: Record<string, number>): {
   titleSuffix: string
   field: ReactNode
   areaId: string | undefined
@@ -204,6 +204,7 @@ export function useSheetArea(branch: Branch | null): {
           options={areas}
           chosen={current.id}
           onChoose={(id) => setChosen({ branchId: branch.id, areaId: id })}
+          waiting={waiting}
         />
       ) : (
         <select

@@ -86,7 +86,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
   }
   // Where in the branch this sale comes from, at a branch with a choice of areas (V60): the Bar, not the Store.
   const branchHere = useOptionalWorkingBranch()
-  const area = useSheetArea(branchHere && !branchHere.isAll ? branchHere.working : null)
+  const area = useSheetArea(branchHere && !branchHere.isAll ? branchHere.working : null, basket.waitingByArea)
   // Step 12: the transfer accounts of the branch selling (a one-branch company's only branch).
   const workingBranch = branchHere && !branchHere.isAll ? (branchHere.working ?? branchHere.branches[0] ?? null) : null
   const accounts = workingBranch?.paymentAccounts ?? []
@@ -103,6 +103,9 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
     branchId: branchHere && !branchHere.isAll ? branchHere.working?.id : undefined,
     areaId: areaId !== undefined ? (areaId ?? undefined) : area.areaId,
   }
+  // A sale stays with its area: switching areas shows that area's sales; this one waits (owner, 2026-11-18).
+  const { showArea } = basket
+  useEffect(() => showArea(place.areaId), [showArea, place.areaId])
   // The search finds what "All" shows: this area's priced products (owner, 2026-11-18).
   const finder = useProductFinder(term, addProduct, 30, true, { areaId: place.areaId })
 
@@ -220,7 +223,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
               type="button"
               aria-pressed={isActive}
               onClick={() => basket.switchTo(b.id)}
-              className={`inline-flex min-h-10 items-center rounded-lg border px-3 text-sm font-semibold tabular-nums ${
+              className={`inline-flex min-h-10 shrink-0 items-center rounded-lg border px-2.5 text-sm font-semibold whitespace-nowrap tabular-nums ${
                 isActive ? 'border-action bg-action text-white' : 'border-warning-300 bg-warning-50 text-warning-900'
               }`}
             >
@@ -237,7 +240,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
             setTerm('')
             setAskUnpriced(false)
           }}
-          className="inline-flex min-h-10 items-center rounded-lg px-3 text-sm font-semibold text-primary-700 hover:bg-primary-50"
+          className="inline-flex min-h-10 shrink-0 items-center rounded-lg px-2.5 text-sm font-semibold whitespace-nowrap text-primary-700 hover:bg-primary-50"
         >
           + New sale
         </button>
@@ -258,11 +261,8 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
           <ArrowLeft className="h-5 w-5" aria-hidden="true" />
         </button>
       )}
-      <h1 className="text-lg font-semibold text-neutral-900">Record a sale</h1>
-      <div role="group" aria-label="Sales on this phone" className="ml-4 flex min-w-0 items-center gap-1.5 overflow-x-auto">
-        {tabs}
-      </div>
-      {topRight && <div className="ml-2 shrink-0">{topRight}</div>}
+      <h1 className="text-lg font-semibold whitespace-nowrap text-neutral-900">Record a sale</h1>
+      {topRight && <div className="ml-4 shrink-0 whitespace-nowrap">{topRight}</div>}
     </div>,
     topbarSlot,
   )
@@ -319,12 +319,16 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
           price” on {unpriced.length === 1 ? 'it' : 'them'}, or tap how they paid again to record without one.
         </p>
       )}
-      <div className="flex items-baseline justify-between gap-3">
+      <div className={`items-baseline justify-between gap-3 ${itemCount === 0 ? 'hidden' : 'flex'}`}>
         <p className="text-sm text-neutral-600">
           <span className={W ? 'lg:hidden' : ''}>
             {itemCount} {itemCount === 1 ? 'item' : 'items'}
           </span>
-          {W && <span className="hidden lg:inline">Total</span>}
+          {W && (
+            <span className="hidden lg:inline">
+              Total · {itemCount} {itemCount === 1 ? 'item' : 'items'}
+            </span>
+          )}
         </p>
         <p className={`text-xl font-semibold text-neutral-900 tabular-nums ${W ? 'lg:text-3xl' : ''}`} aria-live="polite">
           {formatMoney(basket.total)}
@@ -364,27 +368,21 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
         W ? 'lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:flex lg:min-h-0 lg:gap-0 lg:border-l lg:border-neutral-200 lg:bg-white' : ''
       }`}
     >
-      {/* On a phone: the waiting sales and "+ New sale" sit above the lines. On a wide screen they are in the top bar. */}
-      {cancelling ? (
-        <div className={W ? 'lg:hidden' : ''}>{cancelQuestion}</div>
-      ) : (
-        (waiting.length > 0 || itemCount > 0) && (
-          <div role="group" aria-label="Sales on this phone" className={`flex flex-wrap items-center justify-end gap-1.5 ${W ? 'lg:hidden' : ''}`}>
-            {itemCount > 0 && <span className="mr-auto">{cancelLink}</span>}
+      {/* The sales on this phone and "+ New sale", in one line above the lines - on a wide screen at the top of the
+          sale panel, not the app's top bar, which they crowded (owner, 2026-11-18). */}
+      {(waiting.length > 0 || itemCount > 0) && (
+        <div role="group" aria-label="Sales on this phone" className={`flex min-w-0 items-center justify-end gap-1.5 overflow-x-auto ${W ? 'lg:hidden' : ''}`}>
+          {tabs}
+        </div>
+      )}
+      {W && (
+        <div className="hidden min-h-14 items-center gap-1.5 px-4 pt-3 pb-1 lg:flex">
+          <h2 className={waiting.length > 0 ? 'sr-only' : 'text-base font-semibold text-neutral-900'}>
+            {waiting.length > 0 ? `Sale ${basket.baskets.findIndex((b) => b.id === basket.activeId) + 1}` : 'Sale'}
+          </h2>
+          <div role="group" aria-label="Sales on this computer" className="flex min-w-0 flex-1 items-center justify-end gap-1.5 overflow-x-auto">
             {tabs}
           </div>
-        )
-      )}
-      {W && cancelling && <div className="hidden px-4 pt-3 pb-1 lg:block">{cancelQuestion}</div>}
-      {W && !cancelling && (
-        <div className="hidden items-baseline justify-between gap-3 px-4 pt-3 pb-1 lg:flex">
-          <h2 className="text-base font-semibold text-neutral-900">{waiting.length > 0 ? `Sale ${basket.baskets.findIndex((b) => b.id === basket.activeId) + 1}` : 'Sale'}</h2>
-          {itemCount > 0 && (
-            <span className="ml-auto text-sm text-neutral-500">
-              {itemCount} {itemCount === 1 ? 'item' : 'items'}
-            </span>
-          )}
-          {itemCount > 0 && cancelLink}
         </div>
       )}
 
@@ -404,7 +402,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
           </>
         ) : (
           <ul
-            className={`flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white ${W ? 'lg:rounded-none lg:border-0' : ''}`}
+            className={`flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white ${W ? 'lg:-mx-3 lg:rounded-none lg:border-0' : ''}`}
             aria-label="This sale"
           >
             {/* Newest first: what was just added sits right under the search (owner, 2026-11-16). */}
@@ -441,8 +439,8 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
           </ul>
         )}
 
-        {itemCount > 0 &&
-          (noteOpen || basket.note ? (
+        {itemCount > 0 && cancelling && <div className="mt-2">{cancelQuestion}</div>}
+        {itemCount > 0 && !cancelling && (noteOpen || basket.note) && (
             <div className="mt-2 flex flex-col gap-1">
               <label htmlFor="sale-note" className="text-sm font-medium text-neutral-800">
                 Note (optional)
@@ -455,15 +453,22 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
                 className="h-11 rounded-md border border-neutral-300 bg-white px-3 text-base"
               />
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setNoteOpen(true)}
-              className="inline-flex min-h-11 items-center self-start rounded-sm text-sm font-medium text-primary-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-            >
-              Add a note
-            </button>
-          ))}
+        )}
+        {/* "Add a note" and "Cancel sale" share the row under the lines (owner, 2026-11-18): out of the way of the sales. */}
+        {itemCount > 0 && !cancelling && (
+          <div className="flex items-center justify-between gap-3">
+            {!(noteOpen || basket.note) && (
+              <button
+                type="button"
+                onClick={() => setNoteOpen(true)}
+                className="inline-flex min-h-11 items-center rounded-sm text-sm font-medium text-primary-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              >
+                Add a note
+              </button>
+            )}
+            <span className="-mr-2 ml-auto">{cancelLink}</span>
+          </div>
+        )}
       </div>
 
       {(itemCount > 0 || W) && footer}
@@ -544,9 +549,10 @@ function BasketLine({ line, place, catalogue, canMakeUsual, makeUsual, onMakeUsu
   // "crate", not "crate of 12 pieces": the line's price must fit beside its ✕ (walk-through, 2026-11-17).
   const unitWord = option.isStockUnit ? null : option.label.split(' ')[0].toLowerCase()
 
-  // With a unit menu the row has no room for the price too: it goes on its own line under it, never under the ✕
-  // (owner, 2026-11-18: Coke's price ran into its ✕).
-  const hasUnits = options.length > 1
+  // The price each, on its own line under the row (never beside a unit menu or under the ✕, owner 2026-11-18) - and
+  // only when it says something the total doesn't: more than one, a changed price, or no price yet. One at the usual
+  // price is just its total, which opens the price too.
+  const showEach = each == null || changed || line.quantity !== 1
   const priceButton = (
           <button
             type="button"
@@ -648,7 +654,6 @@ function BasketLine({ line, place, catalogue, canMakeUsual, makeUsual, onMakeUsu
             </select>
           </>
         )}
-{!hasUnits && priceButton}
         <button
           type="button"
           aria-label={`Remove ${name}`}
@@ -658,7 +663,7 @@ function BasketLine({ line, place, catalogue, canMakeUsual, makeUsual, onMakeUsu
           <X className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
-      {hasUnits && <div className="-mt-1 pl-1">{priceButton}</div>}
+      {showEach && <div className="-mt-1 pl-1">{priceButton}</div>}
 
       {editingPrice && (
         <div className="flex min-w-0 items-end gap-2">

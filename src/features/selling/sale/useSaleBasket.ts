@@ -44,6 +44,11 @@ export interface Basket {
   id: string
   lines: SaleLine[]
   note: string
+  /**
+   * The area it's sold from (owner, 2026-11-18): a sale stays with its area. Switching from the Bar to the Kitchen
+   * leaves the Bar's sale waiting there and shows the Kitchen's. Unset until the till knows its area.
+   */
+  areaId?: string
 }
 
 interface BasketsDraft {
@@ -75,6 +80,9 @@ export function useSaleBasket() {
   const [baskets, setBaskets] = useState<Basket[]>(() => [emptyBasket()])
   const [activeId, setActiveId] = useState<string>(() => baskets[0].id)
   const restored = useRef(false)
+  // The area the till is selling from; undefined at a branch without areas (every sale shows).
+  const [areaKey, setAreaKey] = useState<string | undefined>(undefined)
+  const here = (basket: Basket) => areaKey === undefined || basket.areaId === undefined || basket.areaId === areaKey
 
   useEffect(() => {
     if (restored.current || draft.initial === undefined) return
@@ -102,6 +110,26 @@ export function useSaleBasket() {
     else draft.save({ activeId, baskets })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baskets, activeId])
+
+  // The till shows only its area's sales: a sale without an area joins this one; another area's sale waits there,
+  // and this area's latest waiting sale - or a fresh one - comes up (owner, 2026-11-18).
+  useEffect(() => {
+    if (areaKey === undefined) return
+    if (baskets.some((basket) => basket.areaId === undefined)) {
+      setBaskets((all) => all.map((basket) => (basket.areaId === undefined ? { ...basket, areaId: areaKey } : basket)))
+      return
+    }
+    if (baskets.find((basket) => basket.id === activeId)?.areaId === areaKey) return
+    const mine = baskets.filter((basket) => basket.areaId === areaKey && (basket.lines.length > 0 || basket.note !== ''))
+    if (mine.length > 0) {
+      setActiveId(mine[mine.length - 1].id)
+      return
+    }
+    const fresh = emptyBasket()
+    fresh.areaId = areaKey
+    setBaskets((all) => [...all.filter((basket) => basket.lines.length > 0 || basket.note !== ''), fresh])
+    setActiveId(fresh.id)
+  }, [areaKey, baskets, activeId])
 
   const active = baskets.find((basket) => basket.id === activeId) ?? baskets[0]
   const lines = active.lines
@@ -172,7 +200,7 @@ export function useSaleBasket() {
    */
   function cancelSale() {
     const others = baskets.filter((basket) => basket.id !== active.id && (basket.lines.length > 0 || basket.note !== ''))
-    const next = others[0] ?? emptyBasket()
+    const next = others.filter(here)[0] ?? emptyBasket()
     setBaskets(others.length > 0 ? others : [next])
     setActiveId(next.id)
   }
@@ -279,12 +307,19 @@ export function useSaleBasket() {
     catalogue,
     draftSavedAt: draft.savedAt,
     /** Every open basket, in the order started; the one being served is `activeId`. */
-    baskets,
+    baskets: baskets.filter(here),
     activeId: active.id,
     totalOf,
     newSale,
     cancelSale,
     switchTo,
+    /** The till's area: its sales show, the others wait. */
+    showArea: setAreaKey,
+    /** Sales waiting in each other area - the area chips say so. */
+    waitingByArea: baskets.reduce<Record<string, number>>((count, basket) => {
+      if (basket.areaId && basket.areaId !== areaKey && basket.lines.length > 0) count[basket.areaId] = (count[basket.areaId] ?? 0) + 1
+      return count
+    }, {}),
   }
 }
 

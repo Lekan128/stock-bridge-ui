@@ -163,8 +163,8 @@ await check('a scanner runs a basket: scanning again adds one; a changed price s
   await eventually(() => line(rice).getByLabel(`How many ${rice.name}`).inputValue(), (v) => v === '2')
   await scan(soap)
   await line(soap).waitFor()
-  // Sell soap for less: tap its price, in the line.
-  await line(soap).getByRole('button', { name: /^Change price of Soap/ }).click()
+  // Sell soap for less: one at the usual price shows only its total - tap it to change the price, in the line.
+  await line(soap).getByRole('button', { name: /^Change the total for Soap/ }).click()
   await line(soap).getByLabel('Each (₦)').fill('300')
   await line(soap).getByText('usual ₦350').waitFor()
   await page.getByText('2 items', { exact: true }).filter({ visible: true }).first().waitFor()
@@ -389,14 +389,14 @@ await check('money is exact: 24 pieces of a ₦5,000 carton record as ₦5,000, 
   await page.goto(`${UI}/app/sell`)
   await page.getByRole('heading', { name: 'Record a sale', level: 1 }).waitFor()
   await scan(peak)
-  await line(peak).getByRole('button', { name: /^Change price of Peak \(sa\), ₦5,000/ }).waitFor()
+  await line(peak).getByRole('button', { name: /^Change the total for Peak \(sa\)/ }).getByText('₦5,000').waitFor()
   // Sold by the piece instead: the small unit choice in the line.
   const select = line(peak).getByLabel(`Unit for ${peak.name}`)
   await select.selectOption(await select.evaluate((el) => [...el.options].find((o) => /piece/i.test(o.text))?.value))
   await page.getByLabel('How many Peak (sa)').fill('24')
   await line(peak).getByText('₦5,000', { exact: true }).first().waitFor()
   await scan(rice)
-  await line(rice).getByRole('button', { name: /^Change price of Rice/ }).click()
+  await line(rice).getByRole('button', { name: /^Change the total for Rice/ }).click()
   await line(rice).getByLabel('Each (₦)').fill('1,500')
   await line(rice).getByText('₦1,500', { exact: true }).first().waitFor()
   await pay('Cash', '₦6,500')
