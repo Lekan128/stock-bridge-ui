@@ -496,6 +496,24 @@ function BasketLine({ line, place, catalogue, canMakeUsual, makeUsual, onMakeUsu
   // "crate", not "crate of 12 pieces": the line's price must fit beside its ✕ (walk-through, 2026-11-17).
   const unitWord = option.isStockUnit ? null : option.label.split(' ')[0].toLowerCase()
 
+  // With a unit menu the row has no room for the price too: it goes on its own line under it, never under the ✕
+  // (owner, 2026-11-18: Coke's price ran into its ✕).
+  const hasUnits = options.length > 1
+  const priceButton = (
+          <button
+            type="button"
+            aria-expanded={editingPrice}
+            aria-label={amount != null ? `Change price of ${name}, ${formatMoney(amount)}` : `Add a price for ${name}`}
+            onClick={() => setEditingPrice((open) => !open)}
+            className={`-my-1 inline-flex min-h-11 min-w-0 items-center rounded px-1 text-left text-sm leading-tight tabular-nums hover:underline hover:underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 lg:min-h-9 ${
+              each == null ? 'font-semibold text-primary-700' : changed ? 'text-warning-800' : 'text-neutral-600'
+            }`}
+          >
+            <span>
+              {each != null ? `${formatMoney(each)} ${unitWord ? `a ${unitWord}` : 'each'}${changed && usual != null ? ` · usual ${formatMoney(usual)}` : ''}` : 'Add price'}
+            </span>
+          </button>
+  )
   return (
     <li className={`flex min-w-0 flex-col gap-1.5 px-3 py-2.5 ${editingPrice ? 'bg-neutral-50' : ''}`}>
       <div className="flex items-baseline justify-between gap-3">
@@ -582,17 +600,7 @@ function BasketLine({ line, place, catalogue, canMakeUsual, makeUsual, onMakeUsu
             </select>
           </>
         )}
-        <button
-          type="button"
-          aria-expanded={editingPrice}
-          aria-label={amount != null ? `Change price of ${name}, ${formatMoney(amount)}` : `Add a price for ${name}`}
-          onClick={() => setEditingPrice((open) => !open)}
-          className={`-my-1 inline-flex min-h-11 min-w-0 items-center rounded px-1 text-left text-sm leading-tight tabular-nums hover:underline hover:underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 lg:min-h-9 ${
-            each == null ? 'font-semibold text-primary-700' : changed ? 'text-warning-800' : 'text-neutral-600'
-          }`}
-        >
-          {each != null ? `${formatMoney(each)} ${unitWord ? `a ${unitWord}` : 'each'}${changed && usual != null ? ` · usual ${formatMoney(usual)}` : ''}` : 'Add price'}
-        </button>
+{!hasUnits && priceButton}
         <button
           type="button"
           aria-label={`Remove ${name}`}
@@ -602,6 +610,7 @@ function BasketLine({ line, place, catalogue, canMakeUsual, makeUsual, onMakeUsu
           <X className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
+      {hasUnits && <div className="-mt-1 pl-1">{priceButton}</div>}
 
       {editingPrice && (
         <div className="flex min-w-0 items-end gap-2">

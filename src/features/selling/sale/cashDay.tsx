@@ -169,11 +169,7 @@ export function DrawerLine({ till, placeName }: { till: TillState; placeName?: s
     )
   }
   if (till.closedToday) {
-    return (
-      <p className="text-xs text-neutral-500" data-drawer-line>
-        {till.closedToday.areaName ?? placeName ?? 'Your'} drawer closed at {time(till.closedToday.closedAt!)}. A cash sale opens it again.
-      </p>
-    )
+    return <ClosedDrawerLine drawer={till.closedToday} placeName={placeName} />
   }
   return null
 }
@@ -206,6 +202,36 @@ export function DrawersLeftOpen({ branchIds }: { branchIds: string[] }) {
       <Link to="/app/sell/close" className="shrink-0 font-semibold text-primary-700 hover:underline">
         Close it
       </Link>
+    </div>
+  )
+}
+
+/** A drawer closed earlier today: when, and "Open it again" - starting from what was counted. A cash sale opens it too. */
+function ClosedDrawerLine({ drawer, placeName }: { drawer: Drawer; placeName?: string }) {
+  const queryClient = useQueryClient()
+  const [busy, setBusy] = useState(false)
+  const time = new Date(drawer.closedAt!).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  return (
+    <div className="flex flex-col gap-1" data-drawer-line>
+      <p className="text-xs text-neutral-500">
+        {drawer.areaName ?? placeName ?? 'Your'} drawer closed at {time}
+      </p>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true)
+          try {
+            await cashDayApi.start(drawer.branchId, drawer.areaId, drawer.counted ?? 0)
+            await queryClient.invalidateQueries({ queryKey: ['cash-till'] })
+          } finally {
+            setBusy(false)
+          }
+        }}
+        className="inline-flex min-h-10 items-center gap-1.5 self-start text-sm font-semibold text-primary-700 hover:underline disabled:opacity-50"
+      >
+        Open it again
+      </button>
     </div>
   )
 }
