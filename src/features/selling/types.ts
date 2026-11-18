@@ -25,6 +25,8 @@ export interface SellingSettings {
   countsCash?: boolean
   countsCashChangedAt?: string
   countsCashChangedByName?: string
+  /** How long after a close a drawer can be opened again (V98): 1-24 hours, 4 to start. */
+  cashReopenHours?: number
 }
 
 export interface UpdateSellingSettingsPayload {

@@ -207,7 +207,7 @@ export function DrawersLeftOpen({ branchIds }: { branchIds: string[] }) {
 }
 
 /**
- * A drawer closed in the last 6 hours: when, "Open it again" (from what was counted) and "See the close". A sale of any
+ * A drawer closed within the owner's hours (Company > Selling, 4 to start): when, "Open it again" (from what was counted) and "See the close". A sale of any
  * kind in that time opens it too; after it, the till asks to Start the day with a fresh count (owner, 2026-11-18).
  */
 function ClosedDrawerLine({ drawer, placeName }: { drawer: Drawer; placeName?: string }) {

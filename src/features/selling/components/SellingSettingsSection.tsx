@@ -143,6 +143,9 @@ export function SellingSettingsSection() {
           onChanged={(updated) => setData(updated)}
         />
       )}
+      {on && settings.countsCash && (
+        <ReopenHours hours={settings.cashReopenHours ?? 4} canChange={canChange} online={online} onChanged={(updated) => setData(updated)} />
+      )}
 
       {!canChange && <p className="text-xs text-neutral-500">Ask your owner to change this.</p>}
       {canChange && !online && <p className="text-xs text-neutral-500">Changing this needs a connection.</p>}
@@ -275,6 +278,70 @@ function MadeHereSwitch({
         </button>
       ) : (
         <span className="shrink-0 text-sm font-medium text-neutral-700">{on ? 'On' : 'Off'}</span>
+      )}
+    </div>
+  )
+}
+
+const REOPEN_CHOICES = [1, 2, 3, 4, 6, 8, 12, 24]
+
+/**
+ * How long after a close a drawer can be opened again (V98; owner, 2026-11-18). Within it, the till offers "Open it
+ * again" and a sale reopens the drawer from what was counted; after it, the cashier starts a new day with a fresh count.
+ */
+function ReopenHours({
+  hours,
+  canChange,
+  online,
+  onChanged,
+}: {
+  hours: number
+  canChange: boolean
+  online: boolean
+  onChanged: (settings: import('@/features/selling/types').SellingSettings) => void
+}) {
+  const { showToast } = useToast()
+  const [saving, setSaving] = useState(false)
+  const choices = REOPEN_CHOICES.includes(hours) ? REOPEN_CHOICES : [...REOPEN_CHOICES, hours].sort((a, b) => a - b)
+  async function change(next: number) {
+    setSaving(true)
+    try {
+      onChanged(await sellingApi.updateCashReopenHours(next))
+      showToast(`A closed drawer can be opened again for ${next} ${next === 1 ? 'hour' : 'hours'}.`, 'success')
+    } catch (err) {
+      showToast(isAppError(err) ? err.message : "Couldn't change that. Try again.", 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+  const words = (value: number) => `${value} ${value === 1 ? 'hour' : 'hours'}`
+  return (
+    <div className="flex items-start justify-between gap-4 pl-4">
+      <div className="min-w-0">
+        <label htmlFor="cash-reopen-hours" className="text-sm font-medium text-neutral-900">
+          Open a closed drawer again within
+        </label>
+        <p id="cash-reopen-hours-help" className="mt-0.5 max-w-prose text-sm text-neutral-500">
+          After this, it&apos;s a new day: the cashier counts the drawer to start.
+        </p>
+      </div>
+      {canChange ? (
+        <select
+          id="cash-reopen-hours"
+          aria-describedby="cash-reopen-hours-help"
+          value={hours}
+          disabled={saving || !online}
+          onChange={(event) => void change(Number(event.target.value))}
+          className="h-9 shrink-0 rounded-md border border-neutral-300 bg-white px-2 text-sm text-neutral-900 disabled:opacity-50"
+        >
+          {choices.map((value) => (
+            <option key={value} value={value}>
+              {words(value)}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <span className="shrink-0 text-sm font-medium text-neutral-700">{words(hours)}</span>
       )}
     </div>
   )
