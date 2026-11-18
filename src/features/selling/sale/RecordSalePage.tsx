@@ -84,7 +84,7 @@ export function RecordSalePage() {
   if (!recordsSales) {
     return (
       <div className="mx-auto flex max-w-xl flex-col gap-3 py-8">
-        <h1 className="text-2xl font-semibold text-neutral-900">Record a sale</h1>
+        <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Record a sale</h1>
         <p className="text-sm text-neutral-600">Selling isn't on for your company, so sales aren't recorded here yet.</p>
         <Link to="/app/company" className="text-sm font-medium text-primary-600 hover:underline">
           Selling settings
@@ -110,7 +110,7 @@ export function RecordSalePage() {
         >
           <ArrowLeft className="h-5 w-5" aria-hidden="true" />
         </button>
-        <h1 className="text-2xl font-semibold text-neutral-900">{showReceipt ? 'Receipt' : 'Record a sale'}</h1>
+        <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">{showReceipt ? 'Receipt' : 'Record a sale'}</h1>
         {!showReceipt && <span className="ml-auto">{mySales}</span>}
       </div>
 

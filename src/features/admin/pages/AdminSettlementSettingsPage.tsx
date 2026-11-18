@@ -118,7 +118,7 @@ export function AdminSettlementSettingsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold text-neutral-900">Settlement settings</h1>
+        <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Settlement settings</h1>
         <p className="text-sm text-neutral-500">
           How long a vendor&rsquo;s money is held after a buyer confirms receipt, before it can be
           paid out.

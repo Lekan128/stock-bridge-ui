@@ -53,7 +53,7 @@ export function DesignSpikePage() {
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-10">
       <header className="flex flex-col gap-2">
         <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">B1 · Type and colour spike</p>
-        <h1 className="text-2xl font-semibold text-neutral-900">Choose a typeface, on your own stock</h1>
+        <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Choose a typeface, on your own stock</h1>
         <p className="max-w-2xl text-sm text-neutral-600">
           The choice below applies to the whole workspace until you reset it, so open{' '}
           <Link to="/app/products" className="font-medium text-primary-700 underline underline-offset-2">

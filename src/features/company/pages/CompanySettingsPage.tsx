@@ -36,7 +36,7 @@ export function CompanySettingsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">Company settings</h1>
+          <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Company settings</h1>
           <p className="text-sm text-neutral-500">
             {canEdit
               ? "Your company's details as Procurepaddy holds them."

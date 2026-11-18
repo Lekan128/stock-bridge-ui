@@ -87,7 +87,7 @@ function BuyerToday({
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold text-neutral-900">Dashboard</h1>
+        <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Dashboard</h1>
         <p className="text-sm text-neutral-500">{today}</p>
       </div>
 

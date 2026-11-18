@@ -83,7 +83,6 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
     }
     setAskUnpriced(false)
   }
-  const finder = useProductFinder(term, addProduct, 30, true)
   // Where in the branch this sale comes from, at a branch with a choice of areas (V60): the Bar, not the Store.
   const branchHere = useOptionalWorkingBranch()
   const area = useSheetArea(branchHere && !branchHere.isAll ? branchHere.working : null)
@@ -103,6 +102,8 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
     branchId: branchHere && !branchHere.isAll ? branchHere.working?.id : undefined,
     areaId: areaId !== undefined ? (areaId ?? undefined) : area.areaId,
   }
+  // The search finds what "All" shows: this area's priced products (owner, 2026-11-18).
+  const finder = useProductFinder(term, addProduct, 30, true, { areaId: place.areaId })
 
   const started = useRef(false)
   useEffect(() => {

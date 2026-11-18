@@ -72,7 +72,7 @@ export function UserListPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold text-neutral-900">Users</h1>
+        <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Users</h1>
         <Button onClick={() => setModal({ type: 'add' })}>
           <UserPlus className="h-4 w-4" />
           Add User

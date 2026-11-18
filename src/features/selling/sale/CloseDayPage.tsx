@@ -85,7 +85,7 @@ export function CloseDayPage() {
     const short = result.difference != null && result.difference < 0
     return (
       <div className="mx-auto flex w-full max-w-md flex-col gap-4" data-day-closed>
-        <h1 className="text-2xl font-semibold text-neutral-900">{place} closed</h1>
+        <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">{place} closed</h1>
         <div className="flex items-center justify-between rounded-lg bg-accent-50 px-4 py-3 font-semibold text-accent-700 tabular-nums">
           <span className="inline-flex items-center gap-2">
             <Check className="h-5 w-5" aria-hidden="true" />
@@ -161,7 +161,7 @@ export function CloseDayPage() {
       >
         <div className="flex items-center gap-2">
           {back}
-          <h1 className="text-2xl font-semibold text-neutral-900">{current.again ? `Count the ${place} again` : `Close the ${place}`}</h1>
+          <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">{current.again ? `Count the ${place} again` : `Close the ${place}`}</h1>
         </div>
         <div>
           <label htmlFor="close-count" className="mb-1.5 block text-base font-semibold text-neutral-900">
@@ -195,7 +195,7 @@ export function CloseDayPage() {
     <div className="mx-auto flex w-full max-w-md flex-col gap-4">
       <div className="flex items-center gap-2">
         {back}
-        <h1 className="text-2xl font-semibold text-neutral-900">Close the day</h1>
+        <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Close the day</h1>
       </div>
       {drawers.error && <p role="alert" className="text-sm text-danger-700">{drawers.error}</p>}
       {drawers.data && list.length === 0 && <p className="text-sm text-neutral-600">No drawer is open here today.</p>}

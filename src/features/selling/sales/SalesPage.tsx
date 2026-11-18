@@ -119,7 +119,7 @@ export function SalesPage() {
   if (!recordsSales) {
     return (
       <div className="mx-auto flex max-w-xl flex-col gap-3 py-8">
-        <h1 className="text-2xl font-semibold text-neutral-900">Sales</h1>
+        <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Sales</h1>
         <p className="text-sm text-neutral-600">Your company doesn't record sales, so there is nothing to show here.</p>
         <Link to="/app/company" className="text-sm font-medium text-primary-600 hover:underline">
           Selling settings
@@ -135,7 +135,7 @@ export function SalesPage() {
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">Sales</h1>
+          <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Sales</h1>
           <p className="mt-1 text-sm text-neutral-500">{formatDateRange(range.from, range.to)}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

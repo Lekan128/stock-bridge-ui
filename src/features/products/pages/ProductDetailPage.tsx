@@ -281,7 +281,7 @@ export function ProductDetailPage() {
           >
             <ArrowLeft className="h-5 w-5" aria-hidden="true" />
           </button>
-          <h1 className="min-w-0 truncate text-2xl font-semibold text-neutral-900">{product.name}</h1>
+          <h1 className="min-w-0 truncate text-xl font-semibold text-neutral-900 lg:text-2xl">{product.name}</h1>
         </div>
         <p className="-mt-2 text-sm text-neutral-600">Made here: sold, not kept in stock.</p>
         {createdNote}

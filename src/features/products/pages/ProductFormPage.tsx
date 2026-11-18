@@ -1382,11 +1382,11 @@ export function ProductFormPage() {
         {isEdit ? (
           <div className="min-w-0">
             <p className="text-sm font-medium text-neutral-500">Edit product</p>
-            <h1 className="truncate text-2xl font-semibold text-neutral-900">{product?.name ?? 'Product'}</h1>
+            <h1 className="truncate text-xl font-semibold text-neutral-900 lg:text-2xl">{product?.name ?? 'Product'}</h1>
           </div>
         ) : (
           <div>
-            <h1 className="text-2xl font-semibold text-neutral-900">Add product</h1>
+            <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Add product</h1>
             {/* What must be filled, said once (owner, 2026-11-10); the fields say "Required" themselves. */}
             <p className="text-sm text-neutral-600">Only what says Required has to be filled. The rest can wait.</p>
           </div>

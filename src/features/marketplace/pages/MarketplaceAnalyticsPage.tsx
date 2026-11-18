@@ -103,7 +103,7 @@ export function MarketplaceAnalyticsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">ProcurePal sales analytics</h1>
+          <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">ProcurePal sales analytics</h1>
           <p className="text-sm text-neutral-500">
             Revenue, customers and fulfilment for the goods <span className="font-medium">ProcurePal sells</span>.
             Third-party vendors' sales are not counted.

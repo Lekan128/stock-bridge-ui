@@ -80,7 +80,7 @@ export function VendorDetailPage() {
           </button>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-semibold text-neutral-900">{displayName}</h1>
+              <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">{displayName}</h1>
               <VendorKindBadge kind={vendor.kind} />
             </div>
             {renamed && (

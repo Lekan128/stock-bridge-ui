@@ -74,7 +74,7 @@ export function AdminTenantsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold text-neutral-900">Tenants</h1>
+      <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Tenants</h1>
 
       <ClientsToolbar
         search={search}

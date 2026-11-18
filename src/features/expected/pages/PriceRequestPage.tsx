@@ -235,7 +235,7 @@ export function PriceRequestPage() {
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6">
         <div>
           <Breadcrumbs items={[{ label: text.list, to: `${LIST_PATH}?view=RFQ` }, { label: request.rfqNumber }]} />
-          <h1 className="mt-2 text-2xl font-semibold text-neutral-900">{title}</h1>
+          <h1 className="mt-2 text-xl font-semibold text-neutral-900 lg:text-2xl">{title}</h1>
           <p className="mt-1 text-sm text-neutral-600">{what}</p>
           {open && request.replyBy && (
             <ReplyByLine

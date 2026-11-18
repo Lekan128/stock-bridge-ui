@@ -57,7 +57,7 @@ export function AdminSellingHealthPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">Selling health</h1>
+          <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Selling health</h1>
           <p className="mt-1 max-w-2xl text-sm text-neutral-600">
             The figures the selling rollout is judged on (plan §9). Counter speed - a three-item sale in under 10 seconds - is timed
             in the field test, not here.

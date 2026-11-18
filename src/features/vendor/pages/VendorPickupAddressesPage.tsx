@@ -90,7 +90,7 @@ export function VendorPickupAddressesPage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">Pickup addresses</h1>
+          <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Pickup addresses</h1>
           <p className="mt-0.5 text-sm text-neutral-500">
             Where your goods are collected from. Your default is the one used for new orders.
           </p>

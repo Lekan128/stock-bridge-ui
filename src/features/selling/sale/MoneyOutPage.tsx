@@ -59,7 +59,7 @@ export function MoneyOutPage() {
         <button type="button" onClick={() => navigate(-1)} aria-label="Back" className="rounded-md p-1.5 text-neutral-600 hover:bg-neutral-100">
           <ArrowLeft className="h-5 w-5" aria-hidden="true" />
         </button>
-        <h1 className="text-2xl font-semibold text-neutral-900">Take money out</h1>
+        <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Take money out</h1>
       </div>
       <div>
         <label htmlFor="money-out-amount" className="mb-1.5 block text-sm font-medium text-neutral-700">

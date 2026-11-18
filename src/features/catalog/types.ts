@@ -100,6 +100,8 @@ export interface CatalogQuery {
   areaIds?: string[]
   /** In an area view, list the products those areas have never had as well ("Show them"). */
   showOthers?: boolean
+  /** Never list another area's product, even when searched for: the till sells only from its area (owner, 2026-11-18). */
+  onlyHere?: boolean
   /**
    * A count of one area (STOCK_SHEETS_AND_AREA_COUNT_PLAN.md Part 5): only the rows that area has counted since
    * `since` (`counted: true`, "Counted today"), or only those it hasn't (`false`, "To count").
