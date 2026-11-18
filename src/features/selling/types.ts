@@ -21,6 +21,10 @@ export interface SellingSettings {
   sellsMadeHere?: boolean
   madeHereChangedAt?: string
   madeHereChangedByName?: string
+  /** "Count cash at open and close" (API V97, Step 13). */
+  countsCash?: boolean
+  countsCashChangedAt?: string
+  countsCashChangedByName?: string
 }
 
 export interface UpdateSellingSettingsPayload {

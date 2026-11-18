@@ -151,7 +151,7 @@ await page.waitForFunction(() => navigator.serviceWorker.controller?.state === '
 await check('Record a sale is the Inventory\'s action once selling is on, and opens an empty basket', async () => {
   await page.getByRole('button', { name: 'Record a sale' }).first().click()
   await page.getByRole('heading', { name: 'Record a sale', level: 1 }).waitFor()
-  await page.getByText('Tap a product, or scan or search to add it.').waitFor()
+  await page.getByRole('list', { name: 'Tap to add' }).waitFor()
   await page.getByRole('list', { name: 'Tap to add' }).getByRole('button', { name: `Add ${rice.name}` }).waitFor()
   await axeClean(page, 'empty basket')
 })
@@ -210,7 +210,7 @@ await check('a wrong tap is fixed with "Change how they paid", in place, and the
   await page.locator('[data-receipt="synced"]').getByText('Transfer', { exact: true }).waitFor()
   await eventually(async () => (await api(`/api/sales/${firstSaleId}`, { token })).json.paymentMethod, (m) => m === 'TRANSFER')
   await page.getByRole('button', { name: 'Next sale' }).click()
-  await page.getByText('Tap a product, or scan or search to add it.').waitFor()
+  await page.getByRole('list', { name: 'Tap to add' }).waitFor()
   await page.locator('[data-sale-paid]').getByText('₦4,300 · Transfer').waitFor()
 })
 
@@ -232,7 +232,7 @@ await check('Cancel sale, in its first two minutes, with a reason: kept on recor
 })
 
 await check('an unpriced item asks once before the sale is recorded without its price', async () => {
-  await page.getByText('Tap a product, or scan or search to add it.').waitFor()
+  await page.getByRole('list', { name: 'Tap to add' }).waitFor()
   await scan(oil)
   await line(oil).getByText('Add price').waitFor()
   await payAny('Card')

@@ -21,6 +21,8 @@ import { placeFigure } from '@/features/branches/areas'
 import { useSheetArea } from '@/features/branches/useSheetBranch'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { TransferAccountChooser } from '@/features/selling/sale/TransferAccounts'
+import { DrawerLine, StartDayBar, useCashTill } from '@/features/selling/sale/cashDay'
+import { useQueryClient } from '@tanstack/react-query'
 
 type Basket = ReturnType<typeof useSaleBasket>
 
@@ -89,6 +91,13 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
   const workingBranch = branchHere && !branchHere.isAll ? (branchHere.working ?? branchHere.branches[0] ?? null) : null
   const accounts = workingBranch?.paymentAccounts ?? []
   const [choosingAccount, setChoosingAccount] = useState(false)
+  const queryClient = useQueryClient()
+  // Step 13: the drawer this till sells into, while "Count cash at open and close" is on (nothing of it otherwise).
+  const drawerAreaId = areaId !== undefined ? (areaId ?? undefined) : area.areaId
+  const drawerPlace = workingBranch?.areas?.find((candidate) => candidate.id === drawerAreaId)?.name
+  const cashTill = useCashTill(workingBranch?.id, drawerAreaId)
+  const drawer = cashTill.data?.countsCash ? cashTill.data : null
+  const needsStart = drawer != null && !drawer.open && !drawer.closedToday
   // Whose figures the lines show: the till's area, else the branch's (sheets plan Part 4).
   const place = {
     branchId: branchHere && !branchHere.isAll ? branchHere.working?.id : undefined,
@@ -141,6 +150,8 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
     setMakeUsual(new Set())
     setNoteOpen(false)
     onRecorded(sale)
+    // A cash sale can reopen a drawer closed earlier today (Step 13).
+    if (drawer) void queryClient.invalidateQueries({ queryKey: ['cash-till'] })
     // "Make this the usual price", for lines that were recorded - a product edit, so online only.
     for (const line of usualToSet) {
       if (!sale.lines.some((r) => r.line.key === line.key && r.status !== 'refused')) continue
@@ -218,6 +229,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
   const search = (
     <div className={`flex flex-col gap-3 ${W ? 'lg:col-start-1 lg:row-start-1 lg:bg-neutral-50 lg:px-4 lg:pt-4' : ''}`}>
       {areaId === undefined && area.field}
+      {needsStart && workingBranch && <StartDayBar branchId={workingBranch.id} areaId={drawerAreaId} placeName={drawerPlace} />}
       <div className="relative">
         <Search className="pointer-events-none absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-neutral-500" aria-hidden="true" />
         <label htmlFor="sale-search" className="sr-only">
@@ -277,6 +289,9 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
           {formatMoney(basket.total)}
         </p>
       </div>
+      {itemCount === 0 && drawer && (drawer.open || drawer.closedToday) ? (
+        <DrawerLine till={drawer} placeName={drawerPlace} />
+      ) : (
       <div className={itemCount === 0 ? 'pointer-events-none opacity-35' : ''} aria-hidden={itemCount === 0 || undefined}>
         {/* Tapping one records it as paid that way (owner, 2026-11-18: a first-time cashier might not know) - said in one
             small line, not a step, so a phone and quick mode keep their room. */}
@@ -298,6 +313,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
           </>
         )}
       </div>
+      )}
     </div>
   )
 
@@ -329,7 +345,8 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
       <div className={W ? 'lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:px-4' : ''}>
         {itemCount === 0 ? (
           <>
-            <p className={`text-sm text-neutral-600 ${W ? 'lg:hidden' : ''}`}>Tap a product, or scan or search to add it.</p>
+            {/* The drawer between customers (Step 13); nothing at all otherwise - no "tap a product" line (owner, 2026-11-18). */}
+            {drawer && <div className={W ? 'lg:hidden' : ''}><DrawerLine till={drawer} placeName={drawerPlace} /></div>}
             {W && (
               <div className="hidden h-full flex-col items-center justify-center gap-1 py-16 text-center lg:flex">
                 <p className="text-sm font-semibold text-neutral-600">No items yet</p>

@@ -1,3 +1,5 @@
+import { CloseDayPage } from '@/features/selling/sale/CloseDayPage'
+import { MoneyOutPage } from '@/features/selling/sale/MoneyOutPage'
 import { Suspense, lazy } from 'react'
 import { BranchesPage } from '@/features/branches/BranchesPage'
 import { BranchPage } from '@/features/branches/BranchPage'
@@ -745,6 +747,23 @@ export function AppRoutes() {
             element={
               <RequirePermission permission={PERMISSIONS.STOCK_OUT}>
                 <MySalesTodayPage />
+              </RequirePermission>
+            }
+          />
+          {/* Step 13: close the day, and money taken out of a drawer. */}
+          <Route
+            path="sell/close"
+            element={
+              <RequirePermission permission={PERMISSIONS.STOCK_OUT}>
+                <CloseDayPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="sell/money-out"
+            element={
+              <RequirePermission permission={PERMISSIONS.STOCK_OUT}>
+                <MoneyOutPage />
               </RequirePermission>
             }
           />

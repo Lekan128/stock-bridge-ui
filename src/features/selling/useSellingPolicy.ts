@@ -10,6 +10,8 @@ export interface SellingPolicy {
   recordsSales: boolean
   /** It also sells things it makes, not kept in stock (V90, selling till Step 4): the "Made here" switch, tab and items. */
   sellsMadeHere: boolean
+  /** Step 13: cashiers start and close their drawers. Off: nothing of it shows anywhere. */
+  countsCash: boolean
   /**
    * Whether the switch has been read yet. A screen that exists only for selling waits for this
    * rather than saying "selling isn't on" for the moment before it knows.
@@ -40,6 +42,7 @@ export function useSellingPolicy(): SellingPolicy {
     requiresSellingPrice: isSeller,
     recordsSales: sellsStock,
     sellsMadeHere: sellsStock && data?.sellsMadeHere === true,
+    countsCash: sellsStock && data?.countsCash === true,
     // A failed first read counts as known: the screen then says selling is off, rather than staying blank.
     loaded: data !== undefined || error != null,
   }

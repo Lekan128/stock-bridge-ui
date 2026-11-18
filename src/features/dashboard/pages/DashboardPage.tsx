@@ -1,3 +1,4 @@
+import { DrawersLeftOpen } from '@/features/selling/sale/cashDay'
 import { useRecordsHere } from '@/features/branches/useRecordsHere'
 import { Lock } from 'lucide-react'
 import { PERMISSIONS } from '@/auth/permissions'
@@ -75,6 +76,14 @@ function BuyerToday({
   const recordsHere = useRecordsHere()
   const ownersView = canViewAnalytics && (branch?.isMultiBranch ?? false) && (branch?.isAll ?? false)
 
+  const branchHere = useOptionalWorkingBranch()
+  const branchIdsForDrawers = branchHere
+    ? branchHere.isAll
+      ? branchHere.branches.filter((branch) => branch.active).map((branch) => branch.id)
+      : branchHere.working
+        ? [branchHere.working.id]
+        : branchHere.branches.slice(0, 1).map((branch) => branch.id)
+    : []
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -83,6 +92,8 @@ function BuyerToday({
       </div>
 
       <SetupChecklist />
+      {/* Step 13: a drawer left open from before today, once, for whoever sees sales. */}
+      {canViewAnalytics && recordsSales && branchIdsForDrawers.length > 0 && <DrawersLeftOpen branchIds={branchIdsForDrawers} />}
 
       {/* Baskets left open on this phone (selling till Step 1 fixes). */}
       {recordsSales && permissions.includes('STOCK_OUT') && <WaitingSalesLine />}
