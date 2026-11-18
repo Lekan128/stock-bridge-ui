@@ -1,4 +1,14 @@
 /** One branch as the signed-in person sees it — `GET /api/branches` (MULTI_BRANCH_UX_PLAN.md §4). */
+/** An account a branch's customers pay into by transfer (API V96, selling till Step 12). */
+export interface PaymentAccount {
+  id: string
+  branchId: string
+  bankName: string
+  accountName?: string
+  accountNumber: string
+  active: boolean
+}
+
 export interface Branch {
   id: string
   name: string
@@ -21,6 +31,8 @@ export interface Branch {
    * change (the list is read again).
    */
   areas?: Area[]
+  /** Its switched-on transfer accounts (V96); absent from an older API. */
+  paymentAccounts?: PaymentAccount[]
 }
 
 /** One place inside a branch where stock is kept or used: Store, Kitchen, Bar. */

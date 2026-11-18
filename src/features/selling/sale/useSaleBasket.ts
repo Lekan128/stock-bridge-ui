@@ -33,6 +33,8 @@ export interface RecordedSale {
   total: number
   /** How the customer paid (selling till Step 1). */
   paymentMethod: SalePaymentMethod
+  /** The account a transfer came into (Step 12). Kept off the receipt. */
+  paymentAccountId?: string
   /** When it was recorded on this phone (ms) - the receipt's time. */
   recordedAt: number
 }
@@ -182,7 +184,7 @@ export function useSaleBasket() {
   /** Records every line under one new sale id, in order; returns how each one stands. */
   /** `areaId`: where in the branch the sale comes from (V60), chosen on the screen; absent without a choice. */
   /** `paymentMethod`: how the customer paid - it rides on every line; the server keeps the first to arrive. */
-  async function record(areaId: string | undefined, paymentMethod: SalePaymentMethod): Promise<RecordedSale> {
+  async function record(areaId: string | undefined, paymentMethod: SalePaymentMethod, paymentAccountId?: string): Promise<RecordedSale> {
     const basketId = active.id
     const saleId = crypto.randomUUID()
     const time = new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
@@ -213,6 +215,7 @@ export function useSaleBasket() {
             note: note.trim() || undefined,
             areaId,
             paymentMethod,
+            ...(paymentAccountId ? { paymentAccountId } : {}),
           },
           baseDelta: -base,
         })
@@ -248,7 +251,7 @@ export function useSaleBasket() {
       setBaskets((all) => [...all.filter((basket) => basket.id !== basketId), next])
       setActiveId(next.id)
     }
-    return { saleId, label, lines: recorded, total, paymentMethod, recordedAt: Date.now() }
+    return { saleId, label, lines: recorded, total, paymentMethod, paymentAccountId, recordedAt: Date.now() }
   }
 
   return {

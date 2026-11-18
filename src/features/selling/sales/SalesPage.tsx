@@ -1,3 +1,4 @@
+import { useWorkArea } from '@/features/branches/workArea'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Download } from 'lucide-react'
@@ -68,17 +69,22 @@ export function SalesPage() {
   const from = toApiDateTime(range.from)
   const to = toApiDateTime(range.to)
   const params = { from, to, groupBy: tab, filter }
+  // The branch and area being looked at are part of what's asked: before they were in the key, a page opened before
+  // the branch was known kept showing every branch's sales (found 2026-11-18).
+  const branchHere = useOptionalWorkingBranch()
+  const work = useWorkArea(branchHere && !branchHere.isAll ? branchHere.working : null)
+  const place = [branchHere?.isAll ? 'all' : (branchHere?.working?.id ?? null), work.area?.id ?? null]
   // The unfiltered report too: its totals are the headline and the chips' counts. While no filter is
   // on, it is the same request (and the same cache entry) as the one on screen.
   const base = useApiQuery<SalesReport>({
-    queryKey: ['sales-report', from, to, tab, null],
+    queryKey: ['sales-report', from, to, tab, null, ...place],
     queryFn: () => salesReportApi.report({ from, to, groupBy: tab }),
     fallbackError: "Couldn't load your sales.",
     enabled: recordsSales,
     keepPrevious: true,
   })
   const shown = useApiQuery<SalesReport>({
-    queryKey: ['sales-report', from, to, tab, filter],
+    queryKey: ['sales-report', from, to, tab, filter, ...place],
     queryFn: () => salesReportApi.report(params),
     fallbackError: "Couldn't load your sales.",
     enabled: recordsSales && filter != null,
@@ -344,7 +350,12 @@ function SaleRow({
           <span className={`text-base font-semibold tabular-nums ${allCancelled ? 'text-neutral-500 line-through' : 'text-neutral-900'}`}>
             {allCancelled ? 'Cancelled' : t.unpricedLineCount === t.lineCount ? <span className="text-sm font-medium text-warning-700">No price</span> : formatMoney(t.salesAmount)}
           </span>
-          {!allCancelled && <PaymentChip method={row.paymentMethod} />}
+          {!allCancelled && (
+            <span className="flex items-center gap-1">
+              <PaymentChip method={row.paymentMethod} />
+              {row.paymentAccountName && <span className="text-xs text-neutral-500">{row.paymentAccountName}</span>}
+            </span>
+          )}
         </span>
       </button>
     </li>
@@ -456,6 +467,19 @@ function PaymentTotalsRow({ paid }: { paid: PaymentTotals }) {
           </li>
         ))}
       </ul>
+      {/* Step 12: the transfers split by account, to match against each bank's own record. */}
+      {(paid.transferAccounts?.length ?? 0) > 0 && (
+        <p className="text-xs text-neutral-600 tabular-nums" data-transfer-accounts>
+          Transfers:{' '}
+          {paid.transferAccounts!.map((account) => `${account.bankName} ${formatMoney(account.amount)}`).join(' · ')}
+          {(() => {
+            // Transfers from before accounts were listed (or with none named): said, so the parts add up.
+            const named = paid.transferAccounts!.reduce((sum, account) => sum + account.amount, 0)
+            const rest = Math.round((paid.transferAmount - named) * 100) / 100
+            return rest > 0 ? ` · ${formatMoney(rest)} no account named` : ''
+          })()}
+        </p>
+      )}
       {paid.notRecordedSales > 0 && (
         <p className="text-xs text-neutral-500 tabular-nums">
           {formatMoney(paid.notRecordedAmount)} from {formatNumber(paid.notRecordedSales)}{' '}

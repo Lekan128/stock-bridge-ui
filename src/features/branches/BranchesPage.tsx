@@ -1,3 +1,4 @@
+import { PaymentAccountsSheet } from '@/features/branches/PaymentAccountsSheet'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
@@ -29,6 +30,7 @@ export function BranchesPage() {
   const [adding, setAdding] = useState(false)
   const [addingAreasTo, setAddingAreasTo] = useState<Branch | null>(null)
   const [addingProductsTo, setAddingProductsTo] = useState<Branch | null>(null)
+  const [accountsOf, setAccountsOf] = useState<Branch | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [problem, setProblem] = useState<{ branchId: string; message: string } | null>(null)
@@ -101,6 +103,12 @@ export function BranchesPage() {
                     Add products
                   </Button>
                 )}
+                {/* Step 12: where its customers pay by transfer. */}
+                {branch.active && (
+                  <Button variant="quiet" onClick={() => setAccountsOf(branch)} disabled={!online}>
+                    Accounts{branch.paymentAccounts?.length ? ` · ${branch.paymentAccounts.length}` : ''}
+                  </Button>
+                )}
                 {branch.active && !branch.main && (
                   <Button variant="quiet" loading={busy === branch.id} disabled={!online}
                     onClick={() => void act(branch, () => branchesApi.makeMain(branch.id))}>
@@ -158,6 +166,7 @@ export function BranchesPage() {
       </ul>
       {!online && <p className="text-sm text-neutral-600">Changing branches needs a connection.</p>}
       {addingAreasTo && <AddAreasSheet branch={addingAreasTo} onClose={() => setAddingAreasTo(null)} />}
+      {accountsOf && <PaymentAccountsSheet branch={accountsOf} onClose={() => setAccountsOf(null)} />}
       {addingProductsTo && (
         <AddBranchProductsSheet
           branchId={addingProductsTo.id}

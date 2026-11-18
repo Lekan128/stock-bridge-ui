@@ -116,6 +116,7 @@ export function SaleDetailSheet({ saleId, onClose, onChanged }: SaleDetailSheetP
                 {sale.recordedByName && ` · recorded by ${sale.recordedByName}`}
               </span>
               <PaymentChip method={sale.paymentMethod} />
+              {sale.paymentAccountName && <span className="text-sm text-neutral-600">to {sale.paymentAccountName}</span>}
             </p>
             <ul className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
               {sale.lines.map((line) => (

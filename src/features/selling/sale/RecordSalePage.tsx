@@ -1,3 +1,4 @@
+import { TransferAccountChooser } from '@/features/selling/sale/TransferAccounts'
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Check } from 'lucide-react'
@@ -216,10 +217,22 @@ function ReceiptView({
     branch?.isMultiBranch ? branch.nameOf(branch.working?.id) : undefined,
   )
 
-  async function changePayment(method: SalePaymentMethod) {
+  // Step 12: changed to a transfer, it names its account like a new sale does.
+  const branchHere = useOptionalWorkingBranch()
+  const saleBranch = branchHere && !branchHere.isAll ? (branchHere.working ?? branchHere.branches[0] ?? null) : null
+  const accounts = saleBranch?.paymentAccounts ?? []
+  const [choosingAccount, setChoosingAccount] = useState(false)
+
+  async function changePayment(method: SalePaymentMethod, accountId?: string) {
+    if (method === 'TRANSFER' && accountId === undefined && accounts.length > 0) {
+      if (accounts.length === 1) return changePayment('TRANSFER', accounts[0].id)
+      setChoosingAccount(true)
+      return
+    }
+    setChoosingAccount(false)
     setChangingTo(method)
     try {
-      await api.put(`/api/sales/${sale.saleId}/payment`, { paymentMethod: method })
+      await api.put(`/api/sales/${sale.saleId}/payment`, { paymentMethod: method, ...(accountId ? { paymentAccountId: accountId } : {}) })
       onPaymentChanged(method)
       setChanging(false)
       showToast(`Changed to ${paymentLabel(method)}.`, 'success')
@@ -252,7 +265,18 @@ function ReceiptView({
       {changing ? (
         <div className="flex flex-col gap-2">
           <p className="text-sm font-medium text-neutral-900">How did they pay?</p>
-          <PaymentButtons label="How they paid" current={sale.paymentMethod} busy={changingTo} onPick={(method) => void changePayment(method)} />
+          {choosingAccount && saleBranch ? (
+            <TransferAccountChooser
+              branchId={saleBranch.id}
+              accounts={accounts}
+              amount={sale.total}
+              busy={changingTo === 'TRANSFER'}
+              onPick={(account) => void changePayment('TRANSFER', account.id)}
+              onBack={() => setChoosingAccount(false)}
+            />
+          ) : (
+            <PaymentButtons label="How they paid" current={sale.paymentMethod} busy={changingTo} onPick={(method) => void changePayment(method)} />
+          )}
           <button type="button" onClick={() => setChanging(false)} className="inline-flex min-h-11 items-center self-start text-sm font-medium text-primary-600 hover:underline">
             Keep {paymentLabel(sale.paymentMethod)}
           </button>

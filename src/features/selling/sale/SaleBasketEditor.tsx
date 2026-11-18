@@ -20,6 +20,7 @@ import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { placeFigure } from '@/features/branches/areas'
 import { useSheetArea } from '@/features/branches/useSheetBranch'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
+import { TransferAccountChooser } from '@/features/selling/sale/TransferAccounts'
 
 type Basket = ReturnType<typeof useSaleBasket>
 
@@ -84,6 +85,10 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
   // Where in the branch this sale comes from, at a branch with a choice of areas (V60): the Bar, not the Store.
   const branchHere = useOptionalWorkingBranch()
   const area = useSheetArea(branchHere && !branchHere.isAll ? branchHere.working : null)
+  // Step 12: the transfer accounts of the branch selling (a one-branch company's only branch).
+  const workingBranch = branchHere && !branchHere.isAll ? (branchHere.working ?? branchHere.branches[0] ?? null) : null
+  const accounts = workingBranch?.paymentAccounts ?? []
+  const [choosingAccount, setChoosingAccount] = useState(false)
   // Whose figures the lines show: the till's area, else the branch's (sheets plan Part 4).
   const place = {
     branchId: branchHere && !branchHere.isAll ? branchHere.working?.id : undefined,
@@ -114,15 +119,22 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
   const hideSale = typing ? (wide ? 'hidden lg:flex' : 'hidden') : 'flex'
 
   /** One tap on Cash, Transfer or Card records the whole sale, paid that way (selling till Step 1). */
-  async function record(paymentMethod: SalePaymentMethod) {
+  async function record(paymentMethod: SalePaymentMethod, accountId?: string) {
     if (unpriced.length > 0 && !askUnpriced) {
       setAskUnpriced(true)
       return
     }
+    // Step 12: a transfer names its account - the only one, or, with two or more, the one the cashier picks.
+    if (paymentMethod === 'TRANSFER' && accountId === undefined && accounts.length > 0) {
+      if (accounts.length === 1) return record('TRANSFER', accounts[0].id)
+      setChoosingAccount(true)
+      return
+    }
+    setChoosingAccount(false)
     setRecording(paymentMethod)
     setAskUnpriced(false)
     const usualToSet = basket.lines.filter((line) => makeUsual.has(line.key))
-    const sale = await basket.record(areaId !== undefined ? (areaId ?? undefined) : area.areaId, paymentMethod)
+    const sale = await basket.record(areaId !== undefined ? (areaId ?? undefined) : area.areaId, paymentMethod, accountId)
     // The screen chose the area (quick mode): it remembers it, not the basket's own question.
     if (areaId === undefined) area.remember()
     setRecording(null)
@@ -268,10 +280,23 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
       <div className={itemCount === 0 ? 'pointer-events-none opacity-35' : ''} aria-hidden={itemCount === 0 || undefined}>
         {/* Tapping one records it as paid that way (owner, 2026-11-18: a first-time cashier might not know) - said in one
             small line, not a step, so a phone and quick mode keep their room. */}
-        <p className="mb-1 text-xs font-medium text-neutral-500" aria-hidden="true">
-          Paid with
-        </p>
-        <PaymentButtons label={`Paid with, ${formatMoney(basket.total)}`} busy={recording} onPick={(method) => void record(method)} />
+        {choosingAccount && workingBranch ? (
+          <TransferAccountChooser
+            branchId={workingBranch.id}
+            accounts={accounts}
+            amount={basket.total}
+            busy={recording === 'TRANSFER'}
+            onPick={(account) => void record('TRANSFER', account.id)}
+            onBack={() => setChoosingAccount(false)}
+          />
+        ) : (
+          <>
+            <p className="mb-1 text-xs font-medium text-neutral-500" aria-hidden="true">
+              Paid with
+            </p>
+            <PaymentButtons label={`Paid with, ${formatMoney(basket.total)}`} busy={recording} onPick={(method) => void record(method)} />
+          </>
+        )}
       </div>
     </div>
   )

@@ -42,6 +42,8 @@ export interface PaymentTotals {
   cardSales: number
   notRecordedAmount: number
   notRecordedSales: number
+  /** Step 12 (API V96): transfers by the account they came into, most first; absent where none was named. */
+  transferAccounts?: { accountId: string; bankName: string; accountNumber: string; amount: number; sales: number }[]
 }
 
 export interface SalesReportRow {
@@ -66,6 +68,8 @@ export interface SalesReportRow {
   cancelledByName?: string
   cancelRequestedByName?: string
   totals: SalesTotals
+  /** Step 12: the account a transfer sale came into. */
+  paymentAccountName?: string
 }
 
 export interface SalesReport {
@@ -123,6 +127,8 @@ export interface SaleDetail {
   paymentMethod?: SalePaymentMethod
   /** Where it was sold, at a company with several branches. */
   branchName?: string
+  /** The account a transfer came into ("GTBank"), Step 12. Never on the receipt. */
+  paymentAccountName?: string
   /** Cancelling (API V89): asked and waiting, declined (the sale stands), or the whole sale cancelled. */
   cancelState?: SaleCancelState
   cancelReason?: SaleCancelReason
