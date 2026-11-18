@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { MoneyInput } from '@/features/selling/MoneyInput'
 import { Link } from 'react-router-dom'
 import { ArrowUp, ClipboardCheck } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
@@ -119,12 +120,12 @@ export function StartDayBar({ branchId, areaId, placeName }: { branchId: string;
           <span className="block font-semibold text-neutral-900">Start the day{placeName ? ` · ${placeName}` : ''}</span>
           <span className="block text-xs text-neutral-600">Cash in your drawer now</span>
         </label>
-        <input
+        <MoneyInput
           id="start-day-cash"
-          inputMode="numeric"
+          whole
           placeholder="₦0"
           value={amount}
-          onChange={(event) => setAmount(event.target.value.replace(/[^0-9]/g, ''))}
+          onValue={setAmount}
           className="h-10 w-28 rounded-md border border-neutral-300 bg-white px-2 text-right text-base font-semibold tabular-nums focus:border-primary-600 focus:outline-none"
         />
         <button

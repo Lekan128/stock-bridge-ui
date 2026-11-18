@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { MoneyInput, moneyText } from '@/features/selling/MoneyInput'
 import { Button } from '@/components/Button'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
@@ -541,9 +542,8 @@ interface BasketLineProps {
   onRemove: () => void
 }
 
-function money(value: number): string {
-  return String(Math.round(value * 100) / 100)
-}
+// An amount box's figure, with its commas: "1,500", "133.33".
+const money = moneyText
 
 /**
  * One line, one row (owner, 2026-11-16): the name with its price each, − n +, the line's total - tap it to
@@ -691,12 +691,11 @@ function BasketLine({ line, place, catalogue, canMakeUsual, makeUsual, onMakeUsu
             <label htmlFor={`sale-each-${line.key}`} className="text-xs font-medium text-neutral-600">
               Each (₦)
             </label>
-            <input
+            <MoneyInput
               id={`sale-each-${line.key}`}
               autoFocus
-              inputMode="decimal"
               value={line.priceTyped ?? (line.totalTyped == null && usual != null ? money(usual) : each != null ? money(each) : '')}
-              onChange={(event) => onChange({ priceTyped: event.target.value, totalTyped: null })}
+              onValue={(text) => onChange({ priceTyped: text, totalTyped: null })}
               className="h-10 w-full min-w-0 rounded-md border-2 border-neutral-300 bg-white px-2 text-base font-semibold tabular-nums focus:border-primary-600 focus:outline-none"
             />
           </div>
@@ -704,11 +703,10 @@ function BasketLine({ line, place, catalogue, canMakeUsual, makeUsual, onMakeUsu
             <label htmlFor={`sale-total-${line.key}`} className="text-xs font-medium text-neutral-600">
               Total (₦)
             </label>
-            <input
+            <MoneyInput
               id={`sale-total-${line.key}`}
-              inputMode="decimal"
               value={line.totalTyped ?? (amount != null ? money(amount) : '')}
-              onChange={(event) => onChange({ totalTyped: event.target.value, priceTyped: null })}
+              onValue={(text) => onChange({ totalTyped: text, priceTyped: null })}
               className="h-10 w-full min-w-0 rounded-md border-2 border-neutral-300 bg-white px-2 text-base font-semibold tabular-nums focus:border-primary-600 focus:outline-none"
             />
           </div>

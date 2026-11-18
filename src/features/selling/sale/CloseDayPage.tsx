@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { MoneyInput } from '@/features/selling/MoneyInput'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Check } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
@@ -85,7 +86,17 @@ export function CloseDayPage() {
     const short = result.difference != null && result.difference < 0
     return (
       <div className="mx-auto flex w-full max-w-md flex-col gap-4" data-day-closed>
-        <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">{place} closed</h1>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => (list.length > 1 ? setResult(null) : navigate('/app/sell'))}
+            aria-label={list.length > 1 ? 'Back to the drawers' : 'Back to the till'}
+            className="rounded-md p-1.5 text-neutral-600 hover:bg-neutral-100"
+          >
+            <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+          </button>
+          <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">{place} closed</h1>
+        </div>
         <div className="flex items-center justify-between rounded-lg bg-accent-50 px-4 py-3 font-semibold text-accent-700 tabular-nums">
           <span className="inline-flex items-center gap-2">
             <Check className="h-5 w-5" aria-hidden="true" />
@@ -167,13 +178,13 @@ export function CloseDayPage() {
           <label htmlFor="close-count" className="mb-1.5 block text-base font-semibold text-neutral-900">
             Count the cash in the {place} drawer
           </label>
-          <input
+          <MoneyInput
             id="close-count"
-            inputMode="numeric"
+            whole
             autoFocus
             placeholder="₦0"
             value={amount}
-            onChange={(event) => setAmount(event.target.value.replace(/[^0-9]/g, ''))}
+            onValue={setAmount}
             className="h-14 w-full rounded-md border-2 border-neutral-300 px-3 text-2xl font-semibold tabular-nums focus:border-primary-600 focus:outline-none"
           />
           <p className="mt-1.5 text-sm text-neutral-500">Count the notes and coins in it now. Only what's in this drawer.</p>

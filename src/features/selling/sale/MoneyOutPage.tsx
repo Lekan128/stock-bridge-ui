@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { MoneyInput } from '@/features/selling/MoneyInput'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Building2, Fuel, MoreHorizontal, User } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
@@ -65,13 +66,13 @@ export function MoneyOutPage() {
         <label htmlFor="money-out-amount" className="mb-1.5 block text-sm font-medium text-neutral-700">
           How much
         </label>
-        <input
+        <MoneyInput
           id="money-out-amount"
-          inputMode="numeric"
+          whole
           autoFocus
           placeholder="₦0"
           value={amount}
-          onChange={(event) => setAmount(event.target.value.replace(/[^0-9]/g, ''))}
+          onValue={setAmount}
           className="h-12 w-full rounded-md border-2 border-neutral-300 px-3 text-xl font-semibold tabular-nums focus:border-primary-600 focus:outline-none"
         />
       </div>
