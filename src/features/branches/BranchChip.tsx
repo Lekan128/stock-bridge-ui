@@ -165,12 +165,23 @@ export function BranchChip() {
               All branches
             </button>
           )}
+          {/* The branch you're at, straight to its settings (owner, 2026-11-18: no list in between); every branch below. */}
+          {managesBranches && working && !isAll && (
+          <Link
+            to={`/app/company/branches/${working.id}`}
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className={`${itemClassName} shrink-0 border-t border-neutral-100 text-primary-700`}
+          >
+            {working.name} settings
+          </Link>
+          )}
           {managesBranches && (
           <Link
             to="/app/company/branches"
             role="menuitem"
             onClick={() => setOpen(false)}
-            className={`${itemClassName} shrink-0 border-t border-neutral-100 text-primary-700`}
+            className={`${itemClassName} shrink-0 ${working && !isAll ? '' : 'border-t border-neutral-100'} text-primary-700`}
           >
             Manage branches
           </Link>

@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/Button'
-import { Sheet } from '@/components/Sheet'
 import { TextField } from '@/components/TextField'
 import { useApiQuery } from '@/data/useApiQuery'
 import { isAppError } from '@/types/api'
@@ -16,7 +15,7 @@ const accountsKey = (branchId: string) => ['payment-accounts', branchId]
  * switched on, Transfer at the till asks which one the money came into. An old account is switched off, never
  * deleted - its sales keep it. Account numbers never go on a receipt.
  */
-export function PaymentAccountsSheet({ branch, onClose }: { branch: Branch; onClose: () => void }) {
+export function PaymentAccountsPanel({ branch }: { branch: Branch }) {
   const queryClient = useQueryClient()
   const accounts = useApiQuery<PaymentAccount[]>({
     queryKey: accountsKey(branch.id),
@@ -51,8 +50,7 @@ export function PaymentAccountsSheet({ branch, onClose }: { branch: Branch; onCl
   const on = list.filter((account) => account.active).length
 
   return (
-    <Sheet open onClose={onClose} title={`${branch.name} accounts`} size="md">
-      <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-5">
         <p className="text-sm text-neutral-600">
           Where customers at {branch.name} pay by transfer.{' '}
           {on > 1 ? 'Transfer at the till asks which one the money came into.' : on === 1 ? 'Transfers are recorded to it.' : ''}
@@ -126,7 +124,6 @@ export function PaymentAccountsSheet({ branch, onClose }: { branch: Branch; onCl
             {problem}
           </p>
         )}
-      </div>
-    </Sheet>
+    </div>
   )
 }

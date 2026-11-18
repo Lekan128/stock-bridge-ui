@@ -1,5 +1,6 @@
 import { Suspense, lazy } from 'react'
 import { BranchesPage } from '@/features/branches/BranchesPage'
+import { BranchPage } from '@/features/branches/BranchPage'
 import { RecordingBranchGate } from '@/features/branches/RecordingBranchGate'
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
@@ -1135,6 +1136,14 @@ export function AppRoutes() {
             element={
               <RequirePermission permission={PERMISSIONS.MANAGE_BRANCHES}>
                 <BranchesPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="company/branches/:branchId"
+            element={
+              <RequirePermission permission={PERMISSIONS.MANAGE_BRANCHES}>
+                <BranchPage />
               </RequirePermission>
             }
           />
