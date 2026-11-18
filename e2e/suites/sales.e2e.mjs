@@ -168,7 +168,7 @@ await check('a scanner runs a basket: scanning again adds one; a changed price s
   await line(soap).getByLabel('Each (₦)').fill('300')
   await line(soap).getByText('usual ₦350').waitFor()
   await page.getByText('2 items · collect').waitFor()
-  await page.getByRole('group', { name: 'Collect ₦4,300 by' }).waitFor()
+  await page.getByRole('group', { name: 'Paid with, ₦4,300' }).waitFor()
   await page.keyboard.press('Escape')
   await page.screenshot({ path: SHOTS + '1-basket.png' })
   // Nothing about what the stock cost, ever: the customer can see this screen.
@@ -415,7 +415,7 @@ await check('a line\'s total can be typed instead of the price each; the price e
   await line(salt).getByRole('button', { name: /^Change price of Salt/ }).click()
   await line(salt).getByLabel('Total (₦)').fill('400')
   await eventually(() => line(salt).getByLabel('Each (₦)').inputValue(), (v) => v === '133.33')
-  await page.getByRole('group', { name: 'Collect ₦400 by' }).waitFor()
+  await page.getByRole('group', { name: 'Paid with, ₦400' }).waitFor()
   await page.screenshot({ path: SHOTS + '5a-line-total.png' })
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.waitForTimeout(300)

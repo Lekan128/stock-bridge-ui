@@ -94,7 +94,12 @@ export function RecordSalePage() {
 
   return (
     // A till on a wide screen: the whole window, its own top bar (AppLayout drops the page padding here).
-    <div className={`mx-auto flex w-full flex-col gap-4 ${showReceipt ? 'max-w-2xl lg:p-6' : 'max-w-2xl lg:h-full lg:max-w-none lg:gap-0'}`}>
+    // The receipt scrolls on its own: the till's window doesn't (owner, 2026-11-18: it couldn't scroll on a laptop).
+    <div
+      className={`mx-auto flex w-full flex-col gap-4 ${
+        showReceipt ? 'max-w-2xl lg:h-full lg:max-w-5xl lg:overflow-y-auto lg:p-6' : 'max-w-2xl lg:h-full lg:max-w-none lg:gap-0'
+      }`}
+    >
       <div className={`flex items-center gap-2 ${showReceipt ? '' : 'lg:hidden'}`}>
         <button
           type="button"
@@ -226,7 +231,9 @@ function ReceiptView({
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col gap-4">
+    // A laptop: the receipt on the left, what to do with it on the right - not a phone's column in the middle.
+    <div className="mx-auto flex w-full max-w-md flex-col gap-4 lg:grid lg:max-w-none lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:items-start lg:gap-8">
+      <div className="flex flex-col gap-4">
       {sale.lines.some((line) => line.status === 'refused') && (
         <div role="alert" className="rounded-lg border border-warning-200 bg-warning-50 px-4 py-3 text-sm text-warning-900">
           {sale.lines
@@ -240,6 +247,8 @@ function ReceiptView({
         </div>
       )}
       <SaleReceiptCard receipt={receipt} />
+      </div>
+      <div className="flex flex-col gap-4">
       {changing ? (
         <div className="flex flex-col gap-2">
           <p className="text-sm font-medium text-neutral-900">How did they pay?</p>
@@ -259,7 +268,7 @@ function ReceiptView({
               Asked to cancel. Waiting for a manager.
             </p>
           ) : (
-            <div className="flex flex-wrap items-start justify-center gap-x-6">
+            <div className="flex flex-wrap items-start justify-center gap-x-6 lg:justify-start">
               {fresh && sent && (
                 <button type="button" onClick={() => setChanging(true)} className="inline-flex min-h-11 items-center text-sm font-semibold text-primary-700 hover:underline">
                   Change how they paid
@@ -284,6 +293,7 @@ function ReceiptView({
           )}
         </>
       )}
+      </div>
     </div>
   )
 }

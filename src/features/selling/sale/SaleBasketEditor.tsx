@@ -257,7 +257,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
       <div className="flex items-baseline justify-between gap-3">
         <p className="text-sm text-neutral-600">
           <span className={W ? 'lg:hidden' : ''}>
-            {itemCount} {itemCount === 1 ? 'item' : 'items'} · collect
+            {itemCount} {itemCount === 1 ? 'item' : 'items'}
           </span>
           {W && <span className="hidden lg:inline">Total</span>}
         </p>
@@ -266,7 +266,12 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
         </p>
       </div>
       <div className={itemCount === 0 ? 'pointer-events-none opacity-35' : ''} aria-hidden={itemCount === 0 || undefined}>
-        <PaymentButtons label={`Collect ${formatMoney(basket.total)} by`} busy={recording} onPick={(method) => void record(method)} />
+        {/* Tapping one records it as paid that way (owner, 2026-11-18: a first-time cashier might not know) - said in one
+            small line, not a step, so a phone and quick mode keep their room. */}
+        <p className="mb-1 text-xs font-medium text-neutral-500" aria-hidden="true">
+          Paid with
+        </p>
+        <PaymentButtons label={`Paid with, ${formatMoney(basket.total)}`} busy={recording} onPick={(method) => void record(method)} />
       </div>
     </div>
   )
