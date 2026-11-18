@@ -166,6 +166,17 @@ export function useSaleBasket() {
     setActiveId(basket.id)
   }
 
+  /**
+   * Cancel the sale being put together (owner, 2026-11-18; confirmed on the screen first). Nothing was recorded, so
+   * nothing is kept: the basket goes, and the next waiting sale - or a fresh empty one - takes its place.
+   */
+  function cancelSale() {
+    const others = baskets.filter((basket) => basket.id !== active.id && (basket.lines.length > 0 || basket.note !== ''))
+    const next = others[0] ?? emptyBasket()
+    setBaskets(others.length > 0 ? others : [next])
+    setActiveId(next.id)
+  }
+
   /** Go back to a waiting basket. An empty one left behind goes away. */
   function switchTo(id: string) {
     if (id === active.id) return
@@ -272,6 +283,7 @@ export function useSaleBasket() {
     activeId: active.id,
     totalOf,
     newSale,
+    cancelSale,
     switchTo,
   }
 }

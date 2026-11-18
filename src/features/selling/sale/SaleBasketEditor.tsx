@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Button } from '@/components/Button'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Minus, Plus, Search, X } from 'lucide-react'
@@ -119,6 +120,9 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
   }, [])
 
   const itemCount = basket.lines.length
+  // "Cancel sale": asked in place, never a popup; a different sale on screen forgets the question.
+  const [cancelling, setCancelling] = useState(false)
+  useEffect(() => setCancelling(false), [basket.activeId])
   const unpriced = basket.lines.filter((line) => {
     const options = unitsFor(line.product, basket.catalogue)
     return lineAmount(line, optionOf(line, options), options) == null
@@ -168,6 +172,42 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
   // On a wide screen (Record a sale, owner 2026-11-16): a till. A bar across the top with the sales on this
   // phone; products fill the left; the sale runs the full height of the right edge, total and pay at the bottom.
   const W = wide
+  const cancelLink = (
+    <button
+      type="button"
+      onClick={() => setCancelling(true)}
+      className="inline-flex min-h-10 items-center rounded-lg px-2 text-sm font-medium text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
+    >
+      Cancel sale
+    </button>
+  )
+  const cancelQuestion = (
+    <div role="group" aria-label="Cancel this sale?" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-danger-200 bg-danger-50 px-3 py-2">
+      <p className="text-sm">
+        <span className="font-semibold text-danger-800">Cancel this sale?</span>{' '}
+        <span className="text-neutral-700 tabular-nums">
+          {itemCount} {itemCount === 1 ? 'item' : 'items'} · {formatMoney(basket.total)}
+        </span>
+      </p>
+      <div className="flex gap-2">
+        <Button variant="secondary" autoFocus onClick={() => setCancelling(false)}>
+          Keep it
+        </Button>
+        <Button
+          variant="danger"
+          onClick={() => {
+            basket.cancelSale()
+            setTerm('')
+            setAskUnpriced(false)
+            setCancelling(false)
+            showToast('Sale cancelled.', 'success')
+          }}
+        >
+          Yes, cancel
+        </Button>
+      </div>
+    </div>
+  )
   const tabs = (
     <>
       {waiting.length > 0 &&
@@ -325,19 +365,26 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
       }`}
     >
       {/* On a phone: the waiting sales and "+ New sale" sit above the lines. On a wide screen they are in the top bar. */}
-      {(waiting.length > 0 || itemCount > 0) && (
-        <div role="group" aria-label="Sales on this phone" className={`flex flex-wrap items-center justify-end gap-1.5 ${W ? 'lg:hidden' : ''}`}>
-          {tabs}
-        </div>
+      {cancelling ? (
+        <div className={W ? 'lg:hidden' : ''}>{cancelQuestion}</div>
+      ) : (
+        (waiting.length > 0 || itemCount > 0) && (
+          <div role="group" aria-label="Sales on this phone" className={`flex flex-wrap items-center justify-end gap-1.5 ${W ? 'lg:hidden' : ''}`}>
+            {itemCount > 0 && <span className="mr-auto">{cancelLink}</span>}
+            {tabs}
+          </div>
+        )
       )}
-      {W && (
-        <div className="hidden items-baseline justify-between px-4 pt-3 pb-1 lg:flex">
+      {W && cancelling && <div className="hidden px-4 pt-3 pb-1 lg:block">{cancelQuestion}</div>}
+      {W && !cancelling && (
+        <div className="hidden items-baseline justify-between gap-3 px-4 pt-3 pb-1 lg:flex">
           <h2 className="text-base font-semibold text-neutral-900">{waiting.length > 0 ? `Sale ${basket.baskets.findIndex((b) => b.id === basket.activeId) + 1}` : 'Sale'}</h2>
           {itemCount > 0 && (
-            <span className="text-sm text-neutral-500">
+            <span className="ml-auto text-sm text-neutral-500">
               {itemCount} {itemCount === 1 ? 'item' : 'items'}
             </span>
           )}
+          {itemCount > 0 && cancelLink}
         </div>
       )}
 

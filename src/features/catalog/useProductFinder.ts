@@ -14,8 +14,8 @@ import type { Product } from '@/features/products/types'
  */
 /**
  * `includeMadeHere`: selling finds made-here items too (V90); stock screens never do.
- * `sell`: the till's search finds what its "All" shows (owner, 2026-11-18) - the area being sold from, and only
- * priced products. An exact code or barcode still finds an unpriced one, so a scanned item can be priced at the till.
+ * `sell`: the till's search (owner, 2026-11-18) - only the area being sold from, priced products first and then the
+ * ones with no price yet (marked so, and priced on the sale line). Those never sit on the till's grid.
  */
 export function useProductFinder(
   term: string,
@@ -44,16 +44,17 @@ export function useProductFinder(
   const selling = sell != null
   const results: Product[] = useMemo(() => {
     if (!search) return []
-    const sellable = (product: Product) => !selling || product.unitPrice != null || product.sku.toLowerCase() === search.toLowerCase()
+    const pricedFirst = (rows: Product[]) =>
+      selling ? [...rows.filter((row) => row.unitPrice != null), ...rows.filter((row) => row.unitPrice == null)] : rows
     if (onDevice) {
       const rows: Product[] = []
       for (let i = 0; i < Math.min(limit, list.total); i++) {
         const row = list.rowAt(i)
-        if (row && sellable(row)) rows.push(row)
+        if (row) rows.push(row)
       }
-      return rows
+      return pricedFirst(rows)
     }
-    return (server.data?.content ?? []).filter(sellable)
+    return pricedFirst(server.data?.content ?? [])
   }, [search, onDevice, list, server.data, limit, selling])
 
   const [enterOn, setEnterOn] = useState<string | null>(null)
