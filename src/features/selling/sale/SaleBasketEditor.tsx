@@ -126,6 +126,11 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
   // "Cancel sale": asked in place, never a popup; a different sale on screen forgets the question.
   const [cancelling, setCancelling] = useState(false)
   useEffect(() => setCancelling(false), [basket.activeId])
+  // The sale being served is always in sight in the row of sales, however many are waiting.
+  useEffect(() => {
+    document.querySelectorAll('[data-sale-tab-active]').forEach((tab) => tab.scrollIntoView?.({ block: 'nearest', inline: 'nearest' }))
+    // Its label grows as items go in, so look again then too.
+  }, [basket.activeId, basket.baskets.length, itemCount, basket.total])
   const unpriced = basket.lines.filter((line) => {
     const options = unitsFor(line.product, basket.catalogue)
     return lineAmount(line, optionOf(line, options), options) == null
@@ -211,7 +216,12 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
       </div>
     </div>
   )
-  const tabs = (
+  // A mouse wheel scrolls the row of sales sideways - only a trackpad could, before.
+  const wheelSideways = (event: React.WheelEvent<HTMLDivElement>) => {
+    const row = event.currentTarget
+    if (row.scrollWidth > row.clientWidth && Math.abs(event.deltaY) > Math.abs(event.deltaX)) row.scrollLeft += event.deltaY
+  }
+  const saleTabs = (
     <>
       {waiting.length > 0 &&
         basket.baskets.map((b, index) => {
@@ -222,6 +232,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
               key={b.id}
               type="button"
               aria-pressed={isActive}
+              data-sale-tab-active={isActive || undefined}
               onClick={() => basket.switchTo(b.id)}
               className={`inline-flex min-h-10 shrink-0 items-center rounded-lg border px-2.5 text-sm font-semibold whitespace-nowrap tabular-nums ${
                 isActive ? 'border-action bg-action text-white' : 'border-warning-300 bg-warning-50 text-warning-900'
@@ -232,6 +243,10 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
             </button>
           )
         })}
+    </>
+  )
+  const newSaleButton = (
+    <>
       {itemCount > 0 && (
         <button
           type="button"
@@ -371,8 +386,12 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
       {/* The sales on this phone and "+ New sale", in one line above the lines - on a wide screen at the top of the
           sale panel, not the app's top bar, which they crowded (owner, 2026-11-18). */}
       {(waiting.length > 0 || itemCount > 0) && (
-        <div role="group" aria-label="Sales on this phone" className={`flex min-w-0 items-center justify-end gap-1.5 overflow-x-auto ${W ? 'lg:hidden' : ''}`}>
-          {tabs}
+        <div className={`flex min-w-0 items-center justify-end gap-1.5 ${W ? 'lg:hidden' : ''}`}>
+          {/* The sales scroll sideways (left-aligned: right-aligned overflow can't be scrolled to); + New sale stays put. */}
+          <div role="group" aria-label="Sales on this phone" onWheel={wheelSideways} className="flex min-w-0 items-center gap-1.5 overflow-x-auto">
+            {saleTabs}
+          </div>
+          {newSaleButton}
         </div>
       )}
       {W && (
@@ -380,9 +399,10 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
           <h2 className={waiting.length > 0 ? 'sr-only' : 'text-base font-semibold text-neutral-900'}>
             {waiting.length > 0 ? `Sale ${basket.baskets.findIndex((b) => b.id === basket.activeId) + 1}` : 'Sale'}
           </h2>
-          <div role="group" aria-label="Sales on this computer" className="flex min-w-0 flex-1 items-center justify-end gap-1.5 overflow-x-auto">
-            {tabs}
+          <div role="group" aria-label="Sales on this computer" onWheel={wheelSideways} className="flex min-w-0 items-center gap-1.5 overflow-x-auto">
+            {saleTabs}
           </div>
+          <span className="ml-auto shrink-0">{newSaleButton}</span>
         </div>
       )}
 
