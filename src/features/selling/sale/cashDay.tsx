@@ -206,7 +206,10 @@ export function DrawersLeftOpen({ branchIds }: { branchIds: string[] }) {
   )
 }
 
-/** A drawer closed earlier today: when, and "Open it again" - starting from what was counted. A cash sale opens it too. */
+/**
+ * A drawer closed in the last 6 hours: when, "Open it again" (from what was counted) and "See the close". A sale of any
+ * kind in that time opens it too; after it, the till asks to Start the day with a fresh count (owner, 2026-11-18).
+ */
 function ClosedDrawerLine({ drawer, placeName }: { drawer: Drawer; placeName?: string }) {
   const queryClient = useQueryClient()
   const [busy, setBusy] = useState(false)
@@ -216,22 +219,28 @@ function ClosedDrawerLine({ drawer, placeName }: { drawer: Drawer; placeName?: s
       <p className="text-xs text-neutral-500">
         {drawer.areaName ?? placeName ?? 'Your'} drawer closed at {time}
       </p>
-      <button
-        type="button"
-        disabled={busy}
-        onClick={async () => {
-          setBusy(true)
-          try {
-            await cashDayApi.start(drawer.branchId, drawer.areaId, drawer.counted ?? 0)
-            await queryClient.invalidateQueries({ queryKey: ['cash-till'] })
-          } finally {
-            setBusy(false)
-          }
-        }}
-        className="inline-flex min-h-10 items-center gap-1.5 self-start text-sm font-semibold text-primary-700 hover:underline disabled:opacity-50"
-      >
-        Open it again
-      </button>
+      <div className="flex items-center justify-between gap-3">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true)
+            try {
+              await cashDayApi.start(drawer.branchId, drawer.areaId, drawer.counted ?? 0)
+              await queryClient.invalidateQueries({ queryKey: ['cash-till'] })
+            } finally {
+              setBusy(false)
+            }
+          }}
+          className="inline-flex min-h-10 items-center gap-1.5 text-sm font-semibold text-primary-700 hover:underline disabled:opacity-50"
+        >
+          Open it again
+        </button>
+        <Link to="/app/sell/close" className="inline-flex min-h-10 items-center gap-1.5 text-sm font-medium text-neutral-700 hover:underline">
+          <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
+          See the close
+        </Link>
+      </div>
     </div>
   )
 }

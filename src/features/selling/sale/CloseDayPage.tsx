@@ -33,7 +33,15 @@ export function CloseDayPage() {
     fallbackError: "Couldn't load the drawers.",
     enabled: !!branch,
   })
-  const list = (drawers.data ?? []).filter(mine)
+  // One row per drawer: a drawer opened again after a close is the same drawer - show only its latest state.
+  const list = Object.values(
+    (drawers.data ?? []).filter(mine).reduce<Record<string, Drawer>>((latest, drawer) => {
+      const key = drawer.areaId ?? 'branch'
+      const kept = latest[key]
+      if (!kept || (kept.closed && (!drawer.closed || (drawer.closedAt ?? '') > (kept.closedAt ?? '')))) latest[key] = drawer
+      return latest
+    }, {}),
+  )
   const [counting, setCounting] = useState<{ drawer: Drawer; again: boolean } | null>(null)
   const [result, setResult] = useState<CloseResult | null>(null)
   const [amount, setAmount] = useState('')
@@ -211,7 +219,9 @@ export function CloseDayPage() {
                   )}
                 </span>
                 {drawer.closed ? (
-                  <span className="shrink-0 rounded-md bg-accent-50 px-2 py-0.5 text-xs font-semibold text-accent-700">Closed</span>
+                  <Button variant="secondary" onClick={() => void cashDayApi.get(drawer.id).then(setResult)}>
+                    See
+                  </Button>
                 ) : (
                   <Button variant="secondary" onClick={() => setCounting({ drawer, again: false })}>
                     Count
