@@ -1,7 +1,7 @@
 import { useWorkArea } from '@/features/branches/workArea'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Download } from 'lucide-react'
+import { ChevronDown, Download } from 'lucide-react'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
@@ -163,13 +163,9 @@ export function SalesPage() {
               </>
             )}
           </p>
-          {totals.byPayment && totals.saleCount > 0 && <PaymentTotalsRow paid={totals.byPayment} />}
           {/* Step 10 (V100): charges and taxes, apart from the food and drinks - taxes to pay over, service to share. */}
-          {totals.charges && totals.charges.length > 0 && (
-            <p className="text-sm text-neutral-600 tabular-nums" data-sales-charges>
-              {totals.charges.map((charge) => `${charge.included ? 'In prices: ' : ''}${charge.name} ${formatMoney(charge.amount)}`).join(' · ')}
-            </p>
-          )}
+          {totals.charges && totals.charges.length > 0 && <ChargesLine totals={totals} />}
+          {totals.byPayment && totals.saleCount > 0 && <PaymentTotalsRow paid={totals.byPayment} />}
           {left > 0 && (
             <p className="text-sm text-neutral-600">
               Profit leaves out {formatNumber(left)} {left === 1 ? 'sale' : 'sales'}:{' '}
@@ -354,7 +350,8 @@ function SaleRow({
         </span>
         <span className="flex shrink-0 flex-col items-end gap-1">
           <span className={`text-base font-semibold tabular-nums ${allCancelled ? 'text-neutral-500 line-through' : 'text-neutral-900'}`}>
-            {allCancelled ? 'Cancelled' : t.unpricedLineCount === t.lineCount ? <span className="text-sm font-medium text-warning-700">No price</span> : formatMoney(t.salesAmount)}
+            {/* What the customer paid: charges added on top included (V100). */}
+            {allCancelled ? 'Cancelled' : t.unpricedLineCount === t.lineCount ? <span className="text-sm font-medium text-warning-700">No price</span> : formatMoney(t.salesAmount + (row.chargesOnTop ?? 0))}
           </span>
           {!allCancelled && (
             <span className="flex items-center gap-1">
@@ -452,6 +449,41 @@ function BreakdownTable({ report, tab }: { report: SalesReport; tab: SalesGroupi
  * Cash, Transfer and Card for the range, each a picture, an amount and how many sales (selling till
  * Step 1). Sales from before payments were recorded are said underneath, never counted as cash.
  */
+/**
+ * "+ ₦29,626 charges and taxes", opening to each one and what came in all told (owner, 2026-11-19). The big figure stays
+ * the food and drinks - what profit is on; taxes aren't the business's money.
+ */
+function ChargesLine({ totals }: { totals: SalesTotals }) {
+  const [open, setOpen] = useState(false)
+  const charges = totals.charges ?? []
+  const onTop = charges.filter((charge) => !charge.included).reduce((sum, charge) => sum + charge.amount, 0)
+  const inPrices = charges.filter((charge) => charge.included).reduce((sum, charge) => sum + charge.amount, 0)
+  return (
+    <div className="flex flex-col items-start gap-1" data-sales-charges>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((was) => !was)}
+        className="-my-1.5 inline-flex min-h-9 items-center gap-1 rounded-sm text-sm font-medium text-neutral-800 tabular-nums hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+      >
+        {onTop > 0 ? `+ ${formatMoney(onTop)} charges and taxes` : `${formatMoney(inPrices)} of it is charges and taxes`}
+        <ChevronDown className={`h-4 w-4 text-neutral-500 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
+      </button>
+      {open && (
+        <ul className="flex flex-col gap-0.5 text-sm text-neutral-600 tabular-nums">
+          {charges.map((charge) => (
+            <li key={`${charge.name}-${charge.included}`}>
+              {charge.name} {formatMoney(charge.amount)}
+              {charge.included && <span className="text-neutral-500"> · in your prices</span>}
+            </li>
+          ))}
+          {onTop > 0 && <li className="font-medium text-neutral-800">{formatMoney(totals.salesAmount + onTop)} came in</li>}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 function PaymentTotalsRow({ paid }: { paid: PaymentTotals }) {
   const boxes: { method: SalePaymentMethod; amount: number; sales: number }[] = [
     { method: 'CASH', amount: paid.cashAmount, sales: paid.cashSales },

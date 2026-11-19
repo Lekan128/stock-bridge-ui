@@ -28,9 +28,12 @@ export interface SalesTotals {
   cancelledLineCount: number
   belowUsualPriceLineCount: number
   belowCostLineCount: number
-  /** What came in by each way of paying (API V88). Absent from an API older than selling till Step 1. */
+  /**
+   * What came in by each way of paying (API V88): the money itself, charges on top included and a split bill part by
+   * part, when the whole of each sale is in view; the food and drinks when narrowed to a product or an area.
+   */
   byPayment?: PaymentTotals
-  /** Charges and taxes on these sales, kept apart from the food and drinks (V100). */
+  /** Charges and taxes on these sales, kept apart from the food and drinks (V100); only when the whole of each sale is in view. */
   charges?: { name: string; included: boolean; amount: number }[]
 }
 
@@ -72,6 +75,8 @@ export interface SalesReportRow {
   totals: SalesTotals
   /** Step 12: the account a transfer sale came into. */
   paymentAccountName?: string
+  /** Sale rows (V100): charges and taxes added on top - the customer paid the total plus this. */
+  chargesOnTop?: number
 }
 
 export interface SalesReport {
