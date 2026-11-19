@@ -41,6 +41,11 @@ export function useTillMode(branch: Branch | null): [TillMode | null, (mode: Til
   return [hasTables ? mode : null, choose]
 }
 
+/** "Ada" from "Ada Obi"; "ivy-full" from an email used as a name - short enough for a table card. */
+function firstName(name: string): string {
+  return name.trim().split(/\s+/)[0].split('@')[0]
+}
+
 /** "Tables · 3 open | Counter": only at a branch with tables. */
 export function TillModeSwitch({ mode, onChange, open }: { mode: TillMode; onChange: (mode: TillMode) => void; open?: number }) {
   return (
@@ -105,39 +110,47 @@ export function TablesView({ branch, header }: { branch: Branch; header: ReactNo
       {header}
       {!online && <p className="text-sm text-neutral-600">Tables need a connection, so every phone sees the same bills. Counter works offline.</p>}
       {bills.error && <p role="alert" className="text-sm text-danger-700">{bills.error}</p>}
-      <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))]" aria-label="Tables">
+      {/* Every card the same size (owner, 2026-11-19): rows as tall as the fullest card, each line on its own row. */}
+      <ul className="grid auto-rows-fr grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))]" aria-label="Tables">
         {(branch.tables ?? []).map((table) => {
           const bill = byTable.get(table.id)
           // V103: one mark per table, however many areas - blue to go and get, green when everything sent is served.
           const ready = bill?.ready ?? []
           const served = !!bill?.allServed && ready.length === 0
           return (
-            <li key={table.id}>
+            <li key={table.id} className="min-w-0">
               <button
                 type="button"
                 onClick={() => navigate(nav.bill(`table=${table.id}`))}
-                className={`flex min-h-16 w-full flex-col justify-between rounded-lg border px-2.5 py-2 text-left tabular-nums ${
+                className={`flex h-full min-h-16 w-full min-w-0 flex-col gap-0.5 rounded-lg border px-2.5 py-2 text-left tabular-nums ${
                   bill
                     ? `${served ? 'border-accent-300 bg-accent-50' : 'border-warning-300 bg-warning-50'} ${(bill.paid ?? 0) > 0 ? 'border-dashed' : ''}`
                     : 'border-neutral-200 bg-white hover:border-primary-600'
                 }`}
                 data-table-state={bill ? (ready.length > 0 ? 'ready' : served ? 'served' : 'open') : 'free'}
               >
-                <span className="text-sm font-semibold text-neutral-900">{table.name}</span>
+                <span className="truncate text-sm font-semibold text-neutral-900" title={table.name}>
+                  {table.name}
+                </span>
                 {bill && (
-                  <span className={`text-xs leading-tight ${served ? 'text-accent-800' : 'text-warning-900'}`}>
+                  <>
                     {/* Part paid (Step 11): what's left; otherwise what it comes to so far. */}
-                    {(bill.paid ?? 0) > 0 ? `${formatMoney(bill.left ?? 0)} left` : formatMoney(bill.toPay ?? bill.total)} · {openFor(bill.openedAt)}
-                    {bill.openedByName ? ` · ${bill.openedByName.split(' ')[0]}` : ''}
-                  </span>
+                    <span className={`whitespace-nowrap text-sm font-semibold ${served ? 'text-accent-800' : 'text-warning-900'}`}>
+                      {(bill.paid ?? 0) > 0 ? `${formatMoney(bill.left ?? 0)} left` : formatMoney(bill.toPay ?? bill.total)}
+                    </span>
+                    <span className={`truncate text-xs ${served ? 'text-accent-800' : 'text-warning-800'}`}>
+                      {openFor(bill.openedAt)}
+                      {bill.openedByName ? ` · ${firstName(bill.openedByName)}` : ''}
+                    </span>
+                  </>
                 )}
                 {ready.length > 0 && (
-                  <span className="mt-1 self-start whitespace-nowrap rounded-full border border-primary-600 bg-primary-50 px-2 text-[11px] font-bold text-primary-700">
+                  <span className="mt-auto self-start whitespace-nowrap rounded-full border border-primary-600 bg-primary-50 px-2 text-[11px] font-bold text-primary-700">
                     {ready.length === 1 ? `${ready[0]} ready` : `${ready.length} ready`}
                   </span>
                 )}
                 {served && (
-                  <span className="mt-1 self-start whitespace-nowrap rounded-full border border-accent-300 bg-white px-2 text-[11px] font-bold text-accent-800">
+                  <span className="mt-auto self-start whitespace-nowrap rounded-full border border-accent-300 bg-white px-2 text-[11px] font-bold text-accent-800">
                     All served
                   </span>
                 )}
@@ -155,11 +168,13 @@ export function TablesView({ branch, header }: { branch: Branch; header: ReactNo
                 <button
                   type="button"
                   onClick={() => navigate(nav.bill(`id=${bill.id}`))}
-                  className="flex min-h-14 w-full flex-col justify-between rounded-lg border border-warning-300 bg-warning-50 px-2.5 py-2 text-left tabular-nums"
+                  className="flex min-h-14 w-full min-w-0 flex-col gap-0.5 rounded-lg border border-warning-300 bg-warning-50 px-2.5 py-2 text-left tabular-nums"
                 >
                   <span className="truncate text-sm font-semibold text-neutral-900">{bill.label}</span>
-                  <span className="text-xs text-warning-900">
-                    {formatMoney(bill.total)} · {openFor(bill.openedAt)}
+                  <span className="whitespace-nowrap text-sm font-semibold text-warning-900">{formatMoney(bill.toPay ?? bill.total)}</span>
+                  <span className="truncate text-xs text-warning-800">
+                    {openFor(bill.openedAt)}
+                    {bill.openedByName ? ` · ${firstName(bill.openedByName)}` : ''}
                   </span>
                 </button>
               </li>
