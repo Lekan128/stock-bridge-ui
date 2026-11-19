@@ -656,9 +656,12 @@ function SentRow({
   onCancel: () => void
   onTakeOff: (kind: 'NOT_MADE' | 'SENT_BACK', note: string) => Promise<void>
 }) {
-  const [kind, setKind] = useState<'NOT_MADE' | 'SENT_BACK'>('NOT_MADE')
-  const [note, setNote] = useState('')
+  // Two questions, apart (owner, 2026-11-19): can it go back into stock, and why it came off. Nothing is picked for them.
+  const [kind, setKind] = useState<'NOT_MADE' | 'SENT_BACK' | null>(null)
+  const [reason, setReason] = useState<string | null>(null)
+  const [other, setOther] = useState('')
   const [busy, setBusy] = useState(false)
+  const why = reason === 'Other' ? other.trim() : reason
   const quantity = Number(line.enteredQuantity ?? line.quantity)
   const off = line.takenOff != null
   const extra: ReactNode[] = []
@@ -666,7 +669,7 @@ function SentRow({
   if (off)
     extra.push(
       <span key="off" className="text-danger-700">
-        Taken off · {line.takenOff === 'NOT_MADE' ? 'not made' : 'sent back'}
+        Taken off · {line.takenOff === 'NOT_MADE' ? (line.madeHere ? 'not made' : 'back to stock') : line.madeHere ? 'already made' : 'opened'}
         {line.takenOffNote ? ` · ${line.takenOffNote}` : ''}
       </span>,
     )
@@ -697,52 +700,84 @@ function SentRow({
       {extra.length > 0 && <div className="flex flex-wrap gap-2 text-xs">{extra}</div>}
       {asking && (
         <form
-          className="mt-1 flex flex-col gap-2 rounded-lg border border-danger-200 bg-danger-50 p-2.5"
+          className="mt-1 flex flex-col gap-3 rounded-lg border border-danger-200 bg-danger-50 p-2.5"
           onSubmit={async (event) => {
             event.preventDefault()
-            if (!note.trim()) return
+            if (!kind || !why) return
             setBusy(true)
-            await onTakeOff(kind, note.trim())
+            await onTakeOff(kind, why)
             setBusy(false)
           }}
         >
           <p className="text-sm font-semibold text-danger-800">Take {line.productName} off?</p>
-          <div role="radiogroup" aria-label="Was it made?" className="flex flex-col gap-1.5">
-            {(
-              [
-                ['NOT_MADE', 'Not made yet', 'Stock goes back.'],
-                ['SENT_BACK', 'Made, sent back', 'Stock stays used. It isn’t charged.'],
-              ] as const
-            ).map(([value, title, help]) => (
-              <button
-                key={value}
-                type="button"
-                role="radio"
-                aria-checked={kind === value}
-                onClick={() => setKind(value)}
-                className={`rounded-md border bg-white px-2.5 py-1.5 text-left text-sm ${kind === value ? 'border-2 border-primary-600' : 'border-neutral-200'}`}
-              >
-                <span className="font-semibold text-neutral-900">{title}</span>
-                <span className="block text-xs text-neutral-500">{help}</span>
-              </button>
-            ))}
-          </div>
-          <label htmlFor={`why-${line.movementId}`} className="sr-only">
-            Why
-          </label>
-          <input
-            id={`why-${line.movementId}`}
-            value={note}
-            maxLength={200}
-            onChange={(event) => setNote(event.target.value)}
-            placeholder="Why? (a few words)"
-            className="h-10 rounded-md border border-neutral-300 bg-white px-2 text-sm"
-          />
+          <fieldset className="flex flex-col gap-1.5">
+            <legend className="mb-1 text-xs font-semibold text-neutral-700">Can it go back?</legend>
+            <div role="radiogroup" aria-label="Can it go back?" className="grid grid-cols-2 gap-1.5">
+              {(
+                line.madeHere
+                  ? ([
+                      ['NOT_MADE', 'Not made yet', 'Nothing was used'],
+                      ['SENT_BACK', 'Already made', 'What it took stays used'],
+                    ] as const)
+                  : ([
+                      ['NOT_MADE', 'Not opened', `Back to ${line.areaName ? `the ${line.areaName}` : 'stock'}`],
+                      ['SENT_BACK', 'Opened or spoilt', "Can't go back"],
+                    ] as const)
+              ).map(([value, title, help]) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={kind === value}
+                  onClick={() => setKind(value)}
+                  className={`rounded-md border bg-white px-2.5 py-1.5 text-left text-sm ${kind === value ? 'border-2 border-primary-600' : 'border-neutral-200'}`}
+                >
+                  <span className="font-semibold text-neutral-900">{title}</span>
+                  <span className="block text-xs text-neutral-500">{help}</span>
+                </button>
+              ))}
+            </div>
+          </fieldset>
+          <fieldset className="flex flex-col gap-1.5">
+            <legend className="mb-1 text-xs font-semibold text-neutral-700">Why?</legend>
+            <div role="radiogroup" aria-label="Why?" className="flex flex-wrap gap-1.5">
+              {['Changed their mind', 'Wrong item', 'Took too long', "Didn't like it", 'Other'].map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  role="radio"
+                  aria-checked={reason === option}
+                  onClick={() => setReason(option)}
+                  className={`min-h-9 rounded-full border px-3 text-sm ${
+                    reason === option ? 'border-primary-600 bg-primary-600 font-semibold text-white' : 'border-neutral-300 bg-white text-neutral-800'
+                  }`}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+            {reason === 'Other' && (
+              <>
+                <label htmlFor={`why-${line.movementId}`} className="sr-only">
+                  What happened
+                </label>
+                <input
+                  id={`why-${line.movementId}`}
+                  autoFocus
+                  value={other}
+                  maxLength={200}
+                  onChange={(event) => setOther(event.target.value)}
+                  placeholder="What happened, in a few words"
+                  className="h-10 rounded-md border border-neutral-300 bg-white px-2 text-sm"
+                />
+              </>
+            )}
+          </fieldset>
           <div className="flex gap-2">
             <Button type="button" variant="secondary" onClick={onCancel}>
               Keep it
             </Button>
-            <Button type="submit" variant="danger" loading={busy} disabled={!note.trim()}>
+            <Button type="submit" variant="danger" loading={busy} disabled={!kind || !why}>
               Take it off
             </Button>
           </div>

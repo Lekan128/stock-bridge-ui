@@ -27,6 +27,8 @@ export interface SentLine {
   productId: string
   productName: string
   categoryId?: string
+  /** Made here (a dish, a mixed drink) rather than kept in stock - how "can it go back?" is asked. */
+  madeHere?: boolean
   quantity: number
   enteredUnit?: string
   enteredQuantity?: number
