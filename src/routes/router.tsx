@@ -1,3 +1,4 @@
+import { BillPage } from '@/features/selling/bills/BillPage'
 import { CloseDayPage } from '@/features/selling/sale/CloseDayPage'
 import { MoneyOutPage } from '@/features/selling/sale/MoneyOutPage'
 import { Suspense, lazy } from 'react'
@@ -747,6 +748,15 @@ export function AppRoutes() {
             element={
               <RequirePermission permission={PERMISSIONS.STOCK_OUT}>
                 <MySalesTodayPage />
+              </RequirePermission>
+            }
+          />
+          {/* Stage C (V99): a table's bill - Record a sale's till, kept open. */}
+          <Route
+            path="sell/bill"
+            element={
+              <RequirePermission permission={PERMISSIONS.STOCK_OUT}>
+                <BillPage />
               </RequirePermission>
             }
           />

@@ -17,12 +17,13 @@ export function SaleReceiptCard({ receipt }: { receipt: ReceiptData }) {
     >
       <p className="text-center text-base font-semibold text-neutral-900">{receipt.business}</p>
       <p className="text-center text-xs text-neutral-500">
-        {receipt.branch && `${receipt.branch} · `}No. {receipt.number} · {receipt.when}
+        {receipt.branch && `${receipt.branch} · `}
+        {receipt.billFor && `${receipt.billFor} · `}No. {receipt.number} · {receipt.when}
       </p>
       <dl className={`mt-1 flex flex-col border-y border-dashed border-neutral-300 py-2 ${receipt.cancelled ? 'text-neutral-500 line-through' : ''}`}>
         {receipt.rows.map((row) => (
-          <div key={row.key} className="flex justify-between gap-3 py-0.5 text-sm">
-            <dt className="min-w-0 text-neutral-800">{row.label}</dt>
+          <div key={row.key} className={`flex justify-between gap-3 py-0.5 text-sm ${row.side ? 'pl-4' : ''}`}>
+            <dt className={`min-w-0 ${row.side ? 'text-neutral-600' : 'text-neutral-800'}`}>{row.label}</dt>
             <dd className="shrink-0 text-neutral-900">{row.amount != null ? formatMoney(row.amount) : 'No price'}</dd>
           </div>
         ))}
@@ -49,12 +50,13 @@ export function PrintableReceipt({ receipt }: { receipt: ReceiptData }) {
     <div className="sale-print" aria-hidden="true">
       <div style={{ textAlign: 'center', fontWeight: 700, textTransform: 'uppercase' }}>{receipt.business}</div>
       {receipt.branch && <div style={{ textAlign: 'center' }}>{receipt.branch}</div>}
+      {receipt.billFor && <div style={{ textAlign: 'center', fontWeight: 700 }}>{receipt.billFor}</div>}
       <div style={{ textAlign: 'center' }}>
         No. {receipt.number} · {receipt.when}
       </div>
       <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }} />
       {receipt.rows.map((row) => (
-        <div key={row.key} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+        <div key={row.key} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, paddingLeft: row.side ? 12 : 0 }}>
           <span>{row.label}</span>
           <span>{row.amount != null ? formatMoney(row.amount) : '-'}</span>
         </div>

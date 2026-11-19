@@ -27,6 +27,8 @@ export interface SellingSettings {
   countsCashChangedByName?: string
   /** How long after a close a drawer can be opened again (V98): 1-24 hours, 4 to start. */
   cashReopenHours?: number
+  /** V99: categories whose products are sides - the till asks which meal each goes with. */
+  sideCategoryIds?: string[]
 }
 
 export interface UpdateSellingSettingsPayload {

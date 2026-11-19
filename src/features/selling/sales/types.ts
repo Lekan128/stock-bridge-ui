@@ -111,6 +111,12 @@ export interface SaleLineDetail {
   occurredAt: string
   /** The product's stock unit code ("PIECE", "KG") - what `quantity` counts. */
   unitOfMeasure?: string
+  /** A table bill's side (V99): the line of the meal it goes with. */
+  withLineId?: string
+  /** A table bill line's note for the kitchen. */
+  note?: string
+  /** Taken off a table's bill: NOT_MADE (stock back) or SENT_BACK (used, not charged). */
+  takenOff?: 'NOT_MADE' | 'SENT_BACK'
 }
 
 export interface SaleDetail {
@@ -138,6 +144,8 @@ export interface SaleDetail {
   /** Who cancelled it, or declined the request. */
   cancelDecidedByName?: string
   cancelDecidedAt?: string
+  /** A table's bill (V99): "Table 5", "VIP", or the name it was opened for. */
+  billFor?: string
 }
 
 export type SaleCancelState = 'REQUESTED' | 'DECLINED' | 'CANCELLED'

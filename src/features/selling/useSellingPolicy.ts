@@ -17,6 +17,7 @@ export interface SellingPolicy {
    * rather than saying "selling isn't on" for the moment before it knows.
    */
   loaded: boolean
+  sideCategoryIds: string[]
 }
 
 /**
@@ -43,6 +44,8 @@ export function useSellingPolicy(): SellingPolicy {
     recordsSales: sellsStock,
     sellsMadeHere: sellsStock && data?.sellsMadeHere === true,
     countsCash: sellsStock && data?.countsCash === true,
+    // V99: the categories whose products are sides on a table's bill.
+    sideCategoryIds: data?.sideCategoryIds ?? [],
     // A failed first read counts as known: the screen then says selling is off, rather than staying blank.
     loaded: data !== undefined || error != null,
   }

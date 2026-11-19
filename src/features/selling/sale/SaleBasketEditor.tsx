@@ -534,6 +534,10 @@ interface Place {
 interface BasketLineProps {
   line: SaleLine
   place: Place
+  /** A side on a table's bill (V99): set in under its meal. */
+  side?: boolean
+  /** Under the line, on a table's bill: which meal a side goes with, the note for the kitchen. */
+  below?: ReactNode
   catalogue: ReturnType<typeof useSaleBasket>['catalogue']
   canMakeUsual: boolean
   makeUsual: boolean
@@ -550,7 +554,7 @@ const money = moneyText
  * change the price, for one or for the whole line, in place - and ✕. A product sold in packs says which
  * ("bottle ▾") and can switch.
  */
-function BasketLine({ line, place, catalogue, canMakeUsual, makeUsual, onMakeUsual, onChange, onRemove }: BasketLineProps) {
+export function BasketLine({ line, place, side, below, catalogue, canMakeUsual, makeUsual, onMakeUsual, onChange, onRemove }: BasketLineProps) {
   const options = unitsFor(line.product, catalogue)
   const option = optionOf(line, options)
   const each = priceEach(line, option)
@@ -589,7 +593,7 @@ function BasketLine({ line, place, catalogue, canMakeUsual, makeUsual, onMakeUsu
           </button>
   )
   return (
-    <li className={`flex min-w-0 flex-col gap-1.5 px-3 py-2.5 ${editingPrice ? 'bg-neutral-50' : ''}`}>
+    <li className={`flex min-w-0 flex-col gap-1.5 px-3 py-2.5 ${editingPrice ? 'bg-neutral-50' : ''} ${side ? 'border-l-2 border-neutral-200 bg-neutral-50/60 pl-6' : ''}`}>
       <div className="flex items-baseline justify-between gap-3">
         <p className="min-w-0 truncate text-base font-medium text-neutral-900">{name}</p>
         {/* The line's total opens the price too, with Total ready to type - it's the number tapped (owner, 2026-11-17). */}
@@ -740,6 +744,7 @@ function BasketLine({ line, place, catalogue, canMakeUsual, makeUsual, onMakeUsu
           Only {formatNumber(onRecord)} {stockUnitWord(resolveUnitSymbol(line.product.unitOfMeasure, catalogue), onRecord)} in stock
         </p>
       )}
+      {below}
     </li>
   )
 }

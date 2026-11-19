@@ -31,6 +31,7 @@ export function SaleProductGrid({
   searchAnswered,
   onPick,
   areaId,
+  wholeBranch,
 }: {
   basket: Basket
   /** What is typed in the search, trimmed; empty when nothing is. */
@@ -40,6 +41,8 @@ export function SaleProductGrid({
   onPick: (product: Product) => void
   /** The area the till sells from: only what it holds (and made-here items) are buttons (walk-through, 2026-11-17). */
   areaId?: string
+  /** A table's bill (V99): everything the branch sells, whichever area makes or keeps it. */
+  wholeBranch?: boolean
 }) {
   const { user } = useAuth()
   const canView = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.VIEW_PRODUCTS)
@@ -74,7 +77,7 @@ export function SaleProductGrid({
       madeHere: 'include',
     },
     onDevice && listing,
-    areaId ? { areaIds: [areaId] } : undefined,
+    wholeBranch ? { areaIds: [] } : areaId ? { areaIds: [areaId] } : undefined,
   )
   const server = useProducts(
     { active: true, categoryId: categoryId || undefined, hasSellingPrice: true, size: shown, page: 0, sort: 'name,asc' },

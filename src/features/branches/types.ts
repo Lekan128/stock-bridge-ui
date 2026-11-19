@@ -33,6 +33,17 @@ export interface Branch {
   areas?: Area[]
   /** Its switched-on transfer accounts (V96); absent from an older API. */
   paymentAccounts?: PaymentAccount[]
+  /** Its switched-on tables (V99), in the owner's order; empty without table service. */
+  tables?: BranchTable[]
+}
+
+/** A table at a branch (V99, selling till Step 7). */
+export interface BranchTable {
+  id: string
+  branchId: string
+  name: string
+  sortOrder: number
+  active: boolean
 }
 
 /** One place inside a branch where stock is kept or used: Store, Kitchen, Bar. */

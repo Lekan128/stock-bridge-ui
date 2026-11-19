@@ -16,7 +16,10 @@ export interface ReceiptData {
   branch?: string
   number: string
   when: string
-  rows: { key: string; label: string; amount: number | null }[]
+  /** `side`: a side on a table's bill, printed under its meal (V99). */
+  rows: { key: string; label: string; amount: number | null; side?: boolean }[]
+  /** A table's bill: "Table 5", "VIP", or the name it was opened for. */
+  billFor?: string
   total: number
   paymentMethod?: SalePaymentMethod | null
   /** Still on this phone, not yet on the server. */
@@ -60,16 +63,34 @@ export function receiptFromRecorded(sale: RecordedSale, catalogue: UnitOfMeasure
 
 export function receiptFromDetail(sale: SaleDetail, business: string): ReceiptData {
   const live = sale.lines.filter((line) => !line.cancelled)
+  const shown = live.length > 0 ? live : sale.lines
+  // A table's bill (V99): each side right under the meal it goes with.
+  const sidesOf = new Map<string, typeof shown>()
+  for (const line of shown) {
+    if (line.withLineId && shown.some((meal) => meal.movementId === line.withLineId)) {
+      sidesOf.set(line.withLineId, [...(sidesOf.get(line.withLineId) ?? []), line])
+    }
+  }
+  const ordered = shown
+    .filter((line) => !(line.withLineId && shown.some((meal) => meal.movementId === line.withLineId)))
+    .flatMap((line) => [line, ...(sidesOf.get(line.movementId) ?? [])])
   return {
     saleId: sale.saleId,
     business,
     branch: sale.branchName,
+    billFor: sale.billFor,
     number: receiptNumber(sale.saleId),
     when: whenText(sale.occurredAt),
-    rows: (live.length > 0 ? live : sale.lines).map((line) => {
+    rows: ordered.map((line) => {
       const quantity = line.enteredQuantity ?? line.quantity
       const unit = line.enteredUnit && line.enteredUnit !== line.unitOfMeasure ? ` ${line.enteredUnit.toLowerCase()}` : ''
-      return { key: line.movementId, label: `${line.productName} × ${formatNumber(quantity)}${unit}`, amount: line.saleAmount ?? null }
+      const side = line.withLineId != null && sidesOf.get(line.withLineId)?.includes(line) === true
+      return {
+        key: line.movementId,
+        label: `${side ? '+ ' : ''}${line.productName} × ${formatNumber(quantity)}${unit}`,
+        amount: line.saleAmount ?? null,
+        side,
+      }
     }),
     total: sale.total,
     paymentMethod: sale.paymentMethod,
@@ -82,6 +103,7 @@ export function receiptText(receipt: ReceiptData): string {
   return [
     receipt.business,
     ...(receipt.branch ? [receipt.branch] : []),
+    ...(receipt.billFor ? [receipt.billFor] : []),
     `Receipt No. ${receipt.number}`,
     receipt.when,
     '',

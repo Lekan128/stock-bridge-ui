@@ -36,7 +36,8 @@ export function AppLayout() {
   // takes the whole window on a large screen. Opening the menu there doesn't change it everywhere else.
   // Only below a full laptop width (a tablet, a small laptop) does the menu shrink by itself (owner, 2026-11-16).
   const roomy = useMediaQuery('(min-width: 1280px)')
-  const onTill = useLocation().pathname === '/app/sell'
+  // ...and a table's bill (V99) is the same till.
+  const onTill = ['/app/sell', '/app/sell/bill'].includes(useLocation().pathname)
   const till = onTill && !roomy
   const [tillMenuOpen, setTillMenuOpen] = useState(false)
 

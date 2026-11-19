@@ -1,4 +1,5 @@
 import { TransferAccountChooser } from '@/features/selling/sale/TransferAccounts'
+import { TablesView, TillModeSwitch, useOpenBills, useTillMode } from '@/features/selling/bills/TablesView'
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Check } from 'lucide-react'
@@ -54,6 +55,13 @@ export function RecordSalePage() {
     return () => window.clearTimeout(timer)
   }, [last])
 
+  // Stage C (V99): at a branch with tables, Record a sale opens on Tables; Counter is today's till.
+  const branchHere = useOptionalWorkingBranch()
+  const tillBranch = branchHere && !branchHere.isAll ? (branchHere.working ?? branchHere.branches[0] ?? null) : null
+  const [mode, setMode] = useTillMode(tillBranch)
+  const openBills = useOpenBills(mode ? tillBranch?.id : undefined)
+  const modeSwitch = mode && <TillModeSwitch mode={mode} onChange={setMode} open={openBills.data?.length} />
+
   const kept = last ? last.lines.filter((line) => line.status !== 'refused') : []
   const refused = last ? last.lines.filter((line) => line.status === 'refused') : []
 
@@ -81,6 +89,28 @@ export function RecordSalePage() {
   )
 
   if (!loaded) return null
+  if (recordsSales && mode === 'tables' && tillBranch && !showReceipt) {
+    return (
+      <TablesView
+        branch={tillBranch}
+        header={
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <button
+              type="button"
+              onClick={goBack}
+              aria-label="Back"
+              className="rounded-md p-1.5 text-neutral-600 hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none"
+            >
+              <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+            </button>
+            <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Record a sale</h1>
+            <span className="ml-auto">{mySales}</span>
+            <div className="w-full sm:order-none sm:w-auto">{modeSwitch}</div>
+          </div>
+        }
+      />
+    )
+  }
   if (!recordsSales) {
     return (
       <div className="mx-auto flex max-w-xl flex-col gap-3 py-8">
@@ -113,6 +143,7 @@ export function RecordSalePage() {
         <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">{showReceipt ? 'Receipt' : 'Record a sale'}</h1>
         {!showReceipt && <span className="ml-auto">{mySales}</span>}
       </div>
+      {!showReceipt && modeSwitch && <div className="lg:hidden">{modeSwitch}</div>}
 
       {showReceipt && last ? (
         <ReceiptView
@@ -138,7 +169,12 @@ export function RecordSalePage() {
           <SaleBasketEditor
             wide
             onBack={goBack}
-            topRight={mySales}
+            topRight={
+              <span className="flex items-center gap-4">
+                {modeSwitch}
+                {mySales}
+              </span>
+            }
             basket={basket}
             startProduct={startProduct}
             onRecorded={recorded}

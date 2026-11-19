@@ -22,7 +22,7 @@ export function useProductFinder(
   onPick: (product: Product) => void,
   limit = 8,
   includeMadeHere = false,
-  sell?: { areaId?: string },
+  sell?: { areaId?: string; wholeBranch?: boolean },
 ) {
   const catalog = useCatalogState()
   const onDevice = catalog.phase === 'ready'
@@ -30,7 +30,7 @@ export function useProductFinder(
   const list = useCatalogList(
     { search, status: 'active', categoryId: '', stockStatus: 'all', sort: { field: 'name', direction: 'asc' }, madeHere: includeMadeHere ? 'include' : undefined, onlyHere: sell != null || undefined },
     onDevice && search !== '',
-    sell?.areaId ? { areaIds: [sell.areaId] } : undefined,
+    sell?.wholeBranch ? { areaIds: [] } : sell?.areaId ? { areaIds: [sell.areaId] } : undefined,
   )
   const server = useProducts(
     { search: search || undefined, active: true, size: limit, page: 0, sort: 'name,asc' },

@@ -74,9 +74,9 @@ function emptyBasket(): Basket {
  * so an offline sale is one sale before it reaches the server. A line refused now (oversold) does not stop
  * the others: the money for them was taken.
  */
-export function useSaleBasket() {
+export function useSaleBasket(draftKey: string = BASKETS_DRAFT_KEY) {
   const { options: catalogue } = useUnitOfMeasureOptions()
-  const draft = useDraft<BasketsDraft>(BASKETS_DRAFT_KEY)
+  const draft = useDraft<BasketsDraft>(draftKey)
   const [baskets, setBaskets] = useState<Basket[]>(() => [emptyBasket()])
   const [activeId, setActiveId] = useState<string>(() => baskets[0].id)
   const restored = useRef(false)
@@ -145,18 +145,39 @@ export function useSaleBasket() {
     changeActive((basket) => ({ ...basket, note: value }))
   }
 
-  /** Adds one of the product - or one more, if it is already in the basket in the unit it opens in. */
-  function add(product: Product): string {
+  /**
+   * Adds one of the product - or one more, if it is already in the basket in the unit it opens in. A side on a table's
+   * bill (V99) counts up only beside the same meal; given `withKey`, it goes with that meal.
+   */
+  function add(product: Product, withKey?: string): string {
     const options = unitsFor(product, catalogue)
     const unit = openingUnit(product, options)
-    const existing = lines.find((line) => line.product.id === product.id && line.unitLabel === unit.label)
+    const existing = lines.find(
+      (line) => line.product.id === product.id && line.unitLabel === unit.label && line.withKey === withKey && !line.note,
+    )
     if (existing) {
       setLines((all) => all.map((line) => (line.key === existing.key ? { ...line, quantity: line.quantity + 1 } : line)))
       return existing.key
     }
     const key = crypto.randomUUID()
-    setLines((all) => [...all, { key, product, unitLabel: unit.label, quantity: 1, priceTyped: null, totalTyped: null }])
+    setLines((all) => [...all, { key, product, unitLabel: unit.label, quantity: 1, priceTyped: null, totalTyped: null, withKey }])
     return key
+  }
+
+  /**
+   * One of a line of several becomes a line of its own (V99): a side goes with one of the two Jollof, so that one is
+   * now its own plate. Returns the new line's key.
+   */
+  function splitOne(key: string): string {
+    const original = lines.find((line) => line.key === key)
+    if (!original || original.quantity < 2) return key
+    const fresh = crypto.randomUUID()
+    setLines((all) =>
+      all.flatMap((line) =>
+        line.key === key ? [{ ...line, quantity: line.quantity - 1 }, { ...line, key: fresh, quantity: 1, note: undefined }] : [line],
+      ),
+    )
+    return fresh
   }
 
   function update(key: string, patch: Partial<SaleLine>) {
@@ -293,6 +314,65 @@ export function useSaleBasket() {
     return { saleId, label, lines: recorded, total, paymentMethod, paymentAccountId, recordedAt: Date.now() }
   }
 
+  /**
+   * Sends the new lines to a table's bill (V99, Step 7): each line an ordinary sale line under the bill's id, from the area
+   * that makes or keeps it ({@code areaFor}), with no payment - the bill is paid later. Each line carries its key, the
+   * meal it goes with and its note. Sent lines leave the basket; a refused one stays to fix.
+   */
+  async function send(billId: string, label: string, areaFor: (line: SaleLine) => string | undefined): Promise<RecordedLine[]> {
+    const basketId = active.id
+    const sent: RecordedLine[] = []
+    // Meals before their sides, so a side never arrives before the plate it goes with.
+    const ordered = [...lines.filter((line) => !line.withKey), ...lines.filter((line) => line.withKey)]
+    for (const line of ordered) {
+      const options = unitsFor(line.product, catalogue)
+      const option = optionOf(line, options)
+      const amount = lineAmount(line, option, options)
+      const base = toBaseQuantity(line.quantity, option)
+      const quantityText = formatEnteredAndBase(line.quantity, option, base, stockUnitLabel(options))
+      try {
+        const outcome = await submitStockWrite({
+          kind: 'STOCK_OUT',
+          productId: line.product.id,
+          productName: line.product.name,
+          summary: `${quantityText}${amount != null ? ` · ${formatMoney(amount)}` : ''} · ${label}`,
+          payload: {
+            quantity: line.quantity,
+            unit: option.isStockUnit ? undefined : option.code,
+            reason: 'SALE',
+            saleId: billId,
+            ...(amount != null ? { lineTotal: amount } : {}),
+            areaId: areaFor(line),
+            billLine: { lineKey: line.key, withKey: line.withKey, note: line.note?.trim() || undefined },
+          },
+          baseDelta: -base,
+        })
+        sent.push(
+          outcome.status === 'sent'
+            ? { line, amount, status: 'sent', movementId: outcome.response.movement?.id }
+            : { line, amount, status: 'queued', opId: outcome.op.id },
+        )
+      } catch (err) {
+        sent.push({
+          line,
+          amount,
+          status: 'refused',
+          message: isAppError(err) ? err.message : 'Not sent. Try again.',
+          available: isAppError(err) && err.availableQuantity != null ? err.availableQuantity : undefined,
+        })
+      }
+    }
+    const refused = new Map(sent.filter((r) => r.status === 'refused').map((r) => [r.line.key, r.message]))
+    setBaskets((all) =>
+      all.map((basket) =>
+        basket.id === basketId
+          ? { ...basket, lines: basket.lines.filter((l) => refused.has(l.key)).map((l) => ({ ...l, problem: refused.get(l.key) })) }
+          : basket,
+      ),
+    )
+    return sent
+  }
+
   return {
     lines,
     note,
@@ -304,6 +384,8 @@ export function useSaleBasket() {
     restoreSale,
     total,
     record,
+    send,
+    splitOne,
     catalogue,
     draftSavedAt: draft.savedAt,
     /** Every open basket, in the order started; the one being served is `activeId`. */

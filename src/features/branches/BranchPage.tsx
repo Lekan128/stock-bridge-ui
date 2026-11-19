@@ -1,3 +1,4 @@
+import { BranchSellingPanel } from '@/features/selling/bills/BranchSellingPanel'
 import { useState } from 'react'
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
@@ -20,8 +21,8 @@ import { BranchAreas } from '@/features/branches/BranchAreas'
 import { PaymentAccountsPanel } from '@/features/branches/PaymentAccountsPanel'
 import { BranchEditor } from '@/features/branches/BranchesPage'
 
-type Tab = 'areas' | 'accounts' | 'products'
-const TABS: Tab[] = ['areas', 'accounts', 'products']
+type Tab = 'areas' | 'accounts' | 'products' | 'selling'
+const TABS: Tab[] = ['areas', 'accounts', 'products', 'selling']
 
 /**
  * One branch's own page (owner, 2026-11-18: the Branches list was "one big list"): its figures, then Areas, Accounts
@@ -79,6 +80,7 @@ export function BranchPage() {
     areas: `Areas${areaCount > 1 ? ` · ${areaCount}` : ''}`,
     accounts: `Accounts${accountCount ? ` · ${accountCount}` : ''}`,
     products: `Products${products.data ? ` · ${formatNumber(products.data.totalElements)}` : ''}`,
+    selling: 'Selling',
   }
 
   return (
@@ -199,6 +201,8 @@ export function BranchPage() {
           )}
 
           {tab === 'accounts' && <PaymentAccountsPanel branch={branch} />}
+          {/* Stage C (V99): its tables; charges and taxes join them in Step 10. */}
+          {tab === 'selling' && <BranchSellingPanel branch={branch} />}
 
           {tab === 'products' && (
             <div className="flex flex-col gap-3">

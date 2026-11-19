@@ -632,6 +632,10 @@ export interface StockOutPayload {
    * every line of a basket; the server keeps the first to arrive.
    */
   paymentMethod?: 'CASH' | 'TRANSFER' | 'CARD'
+  /** Step 12 (V96): the account a transfer came into. */
+  paymentAccountId?: string
+  /** A line sent to a table's bill (V99): its key, the meal a side goes with, its note for the kitchen. */
+  billLine?: { lineKey: string; withKey?: string; note?: string }
 }
 
 // `ProductVendor` / `ProductVendorPriceTier` (GET /api/products/{productId}/vendors) live in
