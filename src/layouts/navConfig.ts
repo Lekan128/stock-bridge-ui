@@ -61,8 +61,8 @@ export interface NavItem {
    * own flag; the permission still applies on top.
    */
   recordsSalesOnly?: boolean
-  /** Only where a branch has tables (V99): the kitchen and bar Tickets. */
-  tablesOnly?: boolean
+  /** Only where a branch has kitchen and bar tickets on (V103): Tickets. */
+  ticketsOnly?: boolean
   /** Only once the company has two branches (MULTI_BRANCH_UX_PLAN.md rule 1): Transfers. */
   multiBranchOnly?: boolean
   /** Any one of these, where a screen serves several jobs (Transfers: receiving and sending). */
@@ -123,14 +123,14 @@ export const NAV_GROUPS: NavGroup[] = [
         requiredPermission: PERMISSIONS.VIEW_ANALYTICS,
         recordsSalesOnly: true,
       },
-      // Step 8 (V102): kitchen and bar tickets - where a branch serves tables. VIEW_PRODUCTS, as the kitchen has it.
+      // Step 8 (V102, V103): kitchen and bar tickets - where a branch has them on. VIEW_PRODUCTS, as the kitchen has it.
       {
         path: '/app/tickets',
         label: 'Tickets',
         icon: ChefHat,
         requiredPermission: PERMISSIONS.VIEW_PRODUCTS,
         recordsSalesOnly: true,
-        tablesOnly: true,
+        ticketsOnly: true,
       },
       // MANAGE_INVENTORY, not VIEW_PRODUCTS: this screen shows cost prices and suppliers on every
       // row, which browsing the catalog does not. Matches the API's own gate on the endpoint.

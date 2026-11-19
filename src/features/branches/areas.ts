@@ -124,6 +124,9 @@ export const AREA_KINDS: Record<AreaKind, { title: string; short: string; means:
 /** The answers to "When stock is moved here" (Part 4), as Edit asks it and as a card says it. */
 export const ARRIVING = { NOW: 'It arrives straight away', CONFIRM: 'Someone here confirms it' } as const
 
+/** Whether things are sold from an area (V103; owner, 2026-11-19): asked like the other two. */
+export const SELLING = { YES: 'Things are sold from here', NO: 'Nothing is sold from here' } as const
+
 /** The three answers, in the order they're offered. */
 export const AREA_KIND_ORDER: AreaKind[] = ['STORED', 'WORKED', 'USED_UP']
 

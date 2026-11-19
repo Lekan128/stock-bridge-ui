@@ -88,7 +88,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
   }
   // Where in the branch this sale comes from, at a branch with a choice of areas (V60): the Bar, not the Store.
   const branchHere = useOptionalWorkingBranch()
-  const area = useSheetArea(branchHere && !branchHere.isAll ? branchHere.working : null, basket.waitingByArea)
+  const area = useSheetArea(branchHere && !branchHere.isAll ? branchHere.working : null, basket.waitingByArea, true)
   // Step 12: the transfer accounts of the branch selling (a one-branch company's only branch).
   const workingBranch = branchHere && !branchHere.isAll ? (branchHere.working ?? branchHere.branches[0] ?? null) : null
   const accounts = workingBranch?.paymentAccounts ?? []

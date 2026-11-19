@@ -52,7 +52,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onCloseMobile
   const { recordsSales } = useSellingPolicy()
   const workingBranch = useOptionalWorkingBranch()
   const isMultiBranch = workingBranch?.isMultiBranch ?? false
-  const hasTables = (workingBranch?.branches ?? []).some((branch) => (branch.tables?.length ?? 0) > 0)
+  const hasTickets = (workingBranch?.branches ?? []).some((branch) => branch.ticketsOn)
 
   // Two independent kinds of filter, and they are not interchangeable.
   //
@@ -73,7 +73,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onCloseMobile
         .filter((item) => !item.hideFromPlatformOwner || !isPlatformOwner)
         .filter((item) => !item.recordsSalesOnly || recordsSales)
         .filter((item) => !item.multiBranchOnly || isMultiBranch)
-        .filter((item) => !item.tablesOnly || hasTables)
+        .filter((item) => !item.ticketsOnly || hasTickets)
         .filter((item) => !item.anyOfPermissions || item.anyOfPermissions.some((code) => permissions.includes(code)))
         .filter((item) => !item.requiredPermission || permissions.includes(item.requiredPermission)),
     }))

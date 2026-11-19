@@ -28,6 +28,7 @@ export function AreaEditSheet({ area, withAreas, onClose }: { area: Area; withAr
   const [name, setName] = useState(area.name)
   const [kind, setKind] = useState<AreaKind>(kindOf(area))
   const [confirms, setConfirms] = useState(area.confirms ?? false)
+  const [sells, setSells] = useState(area.sells !== false)
   const [busy, setBusy] = useState<'save' | 'close' | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
 
@@ -50,7 +51,8 @@ export function AreaEditSheet({ area, withAreas, onClose }: { area: Area; withAr
     const renamed = name.trim() !== area.name
     const changedKind = kind !== kindOf(area)
     const changedConfirms = confirms !== (area.confirms ?? false)
-    if (!renamed && !changedKind && !changedConfirms) {
+    const changedSells = sells !== (area.sells !== false)
+    if (!renamed && !changedKind && !changedConfirms && !changedSells) {
       onClose()
       return
     }
@@ -61,6 +63,7 @@ export function AreaEditSheet({ area, withAreas, onClose }: { area: Area; withAr
           ...(renamed ? { name: name.trim() } : {}),
           ...(changedKind ? kindFlags(kind) : {}),
           ...(changedConfirms ? { confirms } : {}),
+          ...(changedSells ? { sells } : {}),
         }),
       `${name.trim()} saved`,
     )
@@ -100,6 +103,8 @@ export function AreaEditSheet({ area, withAreas, onClose }: { area: Area; withAr
             confirms={confirms}
             onKind={setKind}
             onConfirms={setConfirms}
+            sells={sells}
+            onSells={setSells}
             disabled={busy != null}
             delivery={area.delivery}
           />

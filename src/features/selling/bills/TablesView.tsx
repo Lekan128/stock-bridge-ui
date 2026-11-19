@@ -63,7 +63,7 @@ export function useOpenBills(branchId: string | undefined) {
     queryFn: () => billsApi.open(branchId!),
     fallbackError: "Couldn't load the open bills.",
     enabled: !!branchId && online,
-    refetchInterval: 20_000,
+    refetchInterval: 10_000,
   })
 }
 
@@ -94,21 +94,37 @@ export function TablesView({ branch, header }: { branch: Branch; header: ReactNo
       <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))]" aria-label="Tables">
         {(branch.tables ?? []).map((table) => {
           const bill = byTable.get(table.id)
+          // V103: one mark per table, however many areas - blue to go and get, green when everything sent is served.
+          const ready = bill?.ready ?? []
+          const served = !!bill?.allServed && ready.length === 0
           return (
             <li key={table.id}>
               <button
                 type="button"
                 onClick={() => navigate(`/app/sell/bill?table=${table.id}`)}
                 className={`flex min-h-16 w-full flex-col justify-between rounded-lg border px-2.5 py-2 text-left tabular-nums ${
-                  bill ? `border-warning-300 bg-warning-50 ${(bill.paid ?? 0) > 0 ? 'border-dashed' : ''}` : 'border-neutral-200 bg-white hover:border-primary-600'
+                  bill
+                    ? `${served ? 'border-accent-300 bg-accent-50' : 'border-warning-300 bg-warning-50'} ${(bill.paid ?? 0) > 0 ? 'border-dashed' : ''}`
+                    : 'border-neutral-200 bg-white hover:border-primary-600'
                 }`}
+                data-table-state={bill ? (ready.length > 0 ? 'ready' : served ? 'served' : 'open') : 'free'}
               >
                 <span className="text-sm font-semibold text-neutral-900">{table.name}</span>
                 {bill && (
-                  <span className="text-xs leading-tight text-warning-900">
+                  <span className={`text-xs leading-tight ${served ? 'text-accent-800' : 'text-warning-900'}`}>
                     {/* Part paid (Step 11): what's left; otherwise what it comes to so far. */}
                     {(bill.paid ?? 0) > 0 ? `${formatMoney(bill.left ?? 0)} left` : formatMoney(bill.toPay ?? bill.total)} · {openFor(bill.openedAt)}
                     {bill.openedByName ? ` · ${bill.openedByName.split(' ')[0]}` : ''}
+                  </span>
+                )}
+                {ready.length > 0 && (
+                  <span className="mt-1 self-start whitespace-nowrap rounded-full border border-primary-600 bg-primary-50 px-2 text-[11px] font-bold text-primary-700">
+                    {ready.length === 1 ? `${ready[0]} ready` : `${ready.length} ready`}
+                  </span>
+                )}
+                {served && (
+                  <span className="mt-1 self-start whitespace-nowrap rounded-full border border-accent-300 bg-white px-2 text-[11px] font-bold text-accent-800">
+                    All served
                   </span>
                 )}
               </button>

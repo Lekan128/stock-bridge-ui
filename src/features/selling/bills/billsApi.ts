@@ -22,6 +22,21 @@ export interface BillSummary {
   /** Paid so far, in parts (V101), and what's left. */
   paid?: number
   left?: number
+  /** V103, where tickets are on: the areas with something ready to take, and whether everything sent was served. */
+  ready?: string[]
+  allServed?: boolean
+}
+
+/** One area's part of a send (V103): where it has got to. */
+export interface SendStatus {
+  ticketId: string
+  areaId: string
+  areaName: string
+  sentAt: string
+  readyAt?: string
+  servedAt?: string
+  servedByName?: string
+  movementIds: string[]
 }
 
 /** One part of a bill's payment. */
@@ -70,6 +85,8 @@ export interface Bill {
   charges?: import('@/features/selling/charges').SaleCharge[]
   /** The parts paid so far. */
   payments?: BillPayment[]
+  /** Each area's part of each send, where tickets are on (V103). */
+  sends?: SendStatus[]
 }
 
 export const billsApi = {
@@ -85,6 +102,9 @@ export const billsApi = {
   pay: (id: string, method: SalePaymentMethod, accountId?: string, areaId?: string, amount?: number) =>
     api.post<PayResult>(`/api/bills/${id}/pay`, { method, accountId, areaId, amount }).then((r) => r.data),
   close: (id: string) => api.post<BillSummary>(`/api/bills/${id}/close`).then((r) => r.data),
+  /** Served (V103): this area's part of a send reached the table; answers with the bill. */
+  served: (ticketId: string) => api.put<Bill>(`/api/tickets/${ticketId}/served`).then((r) => r.data),
+  notServed: (ticketId: string) => api.delete<Bill>(`/api/tickets/${ticketId}/served`).then((r) => r.data),
 }
 
 export const tablesApi = {

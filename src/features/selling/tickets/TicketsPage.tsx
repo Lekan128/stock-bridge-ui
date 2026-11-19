@@ -7,7 +7,7 @@ import { useApiQuery } from '@/data/useApiQuery'
 import { isAppError } from '@/types/api'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { formatNumber } from '@/features/products/unitCopy'
-import { ticketItems, ticketsApi, type Ticket, type TicketArea } from '@/features/selling/tickets/ticketsApi'
+import { dontSend, ticketItems, ticketsApi, type Ticket, type TicketArea } from '@/features/selling/tickets/ticketsApi'
 
 const AREA_KEY = (branchId: string) => `tickets-area:${branchId}`
 const SOUND_KEY = 'tickets-sound'
@@ -30,14 +30,19 @@ function writeStore(key: string, value: string) {
 }
 
 /**
- * Tickets (selling till Step 8, API V102; owner, 2026-11-19): one area's page, left open on a phone or tablet there.
- * What a bill sends to this area comes in as a ticket, with a sound; Print gives the paper copy; Done greys it out
- * (and Not done brings it back). The device stays awake while the page is open.
+ * Tickets (selling till Step 8, API V102-V103; owner, 2026-11-19): one area's page, left open on a phone or tablet
+ * there. What a bill sends to this area comes in as a ticket, with a sound; Print gives the paper copy; Ready moves it
+ * down (Not ready brings it back), and so does a waiter's Served. An item taken off before it was made turns its
+ * ticket red, "Don't send", with a sound, until someone taps OK. The device stays awake while the page is open.
  */
 export function TicketsPage() {
   const branches = useOptionalWorkingBranch()
   const branch =
-    branches?.working ?? branches?.branches.find((b) => (b.tables?.length ?? 0) > 0) ?? branches?.branches[0] ?? null
+    (branches?.working?.ticketsOn ? branches.working : null) ??
+    branches?.branches.find((b) => b.ticketsOn) ??
+    branches?.working ??
+    branches?.branches[0] ??
+    null
   const areas = useApiQuery<TicketArea[]>({
     queryKey: ['ticket-areas', branch?.id ?? null],
     queryFn: () => ticketsApi.areas(branch!.id),
@@ -67,8 +72,8 @@ export function TicketsPage() {
           {!areas.loading && (
             <EmptyState
               icon={ChefHat}
-              title="No area to keep tickets for"
-              description="Tickets come to the areas you work in. Ask the owner to add you to the Kitchen or the Bar."
+              title="No tickets here"
+              description="Tickets come to the areas you work in, where the branch has kitchen and bar tickets on (Branch → Selling)."
             />
           )}
         </>
@@ -86,28 +91,31 @@ function AreaTickets({ area, areas, onArea }: { area: TicketArea; areas: TicketA
     refetchInterval: 5_000,
     refetchOnWindowFocus: true,
   })
-  const waiting = useMemo(() => (tickets.data ?? []).filter((t) => !t.doneAt), [tickets.data])
-  const done = useMemo(() => (tickets.data ?? []).filter((t) => t.doneAt), [tickets.data])
+  const waiting = useMemo(() => (tickets.data ?? []).filter((t) => !t.readyAt || t.changed), [tickets.data])
+  const ready = useMemo(() => (tickets.data ?? []).filter((t) => t.readyAt && !t.changed), [tickets.data])
   const sound = useTicketSound()
   const [printNew, setPrintNew] = useState(() => readStore(PRINT_KEY(area.id)) === '1')
-  const [printing, setPrinting] = useState<Ticket[]>([])
+  const [printing, setPrinting] = useState<{ ticket: Ticket; dontSend?: boolean }[]>([])
   const [busy, setBusy] = useState<string | null>(null)
   useWakeLock()
   useTicker(30_000)
 
-  // A ticket not seen before: a sound, and its paper copy when this device prints new ones by itself.
-  const seen = useRef<Set<string> | null>(null)
+  // A ticket not seen before, or a "Don't send" not seen before: a sound, and its paper copy when this device prints
+  // new ones by itself.
+  const seen = useRef<{ ids: Set<string>; changed: Set<string> } | null>(null)
   useEffect(() => {
     if (!tickets.data) return
     const ids = new Set(tickets.data.map((t) => t.id))
+    const changed = new Set(tickets.data.filter((t) => t.changed).map((t) => t.id))
     if (seen.current) {
-      const fresh = tickets.data.filter((t) => !t.doneAt && !seen.current!.has(t.id))
-      if (fresh.length > 0) {
+      const fresh = tickets.data.filter((t) => !t.readyAt && !seen.current!.ids.has(t.id))
+      const turned = tickets.data.filter((t) => t.changed && !seen.current!.changed.has(t.id))
+      if (fresh.length > 0 || turned.length > 0) {
         sound.play()
-        if (printNew) setPrinting(fresh)
+        if (printNew) setPrinting([...fresh.map((ticket) => ({ ticket })), ...turned.map((ticket) => ({ ticket, dontSend: true }))])
       }
     }
-    seen.current = ids
+    seen.current = { ids, changed }
   }, [tickets.data, printNew, sound])
 
   useEffect(() => {
@@ -123,10 +131,10 @@ function AreaTickets({ area, areas, onArea }: { area: TicketArea; areas: TicketA
     window.print()
   }, [printing])
 
-  async function mark(ticket: Ticket, isDone: boolean) {
+  async function act(ticket: Ticket, action: 'ready' | 'notReady' | 'seen') {
     setBusy(ticket.id)
     try {
-      tickets.setData(isDone ? await ticketsApi.done(ticket.id) : await ticketsApi.notDone(ticket.id))
+      tickets.setData(await ticketsApi[action](ticket.id))
     } catch (error) {
       showToast(isAppError(error) ? error.message : "Couldn't change that. Try again.", 'error')
     } finally {
@@ -192,24 +200,36 @@ function AreaTickets({ area, areas, onArea }: { area: TicketArea; areas: TicketA
       {waiting.length > 0 && (
         <ul className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="Waiting">
           {waiting.map((ticket) => (
-            <TicketCard key={ticket.id} ticket={ticket} busy={busy === ticket.id} onPrint={() => setPrinting([ticket])} onDone={() => void mark(ticket, true)} />
+            <TicketCard
+              key={ticket.id}
+              ticket={ticket}
+              busy={busy === ticket.id}
+              onPrint={() => setPrinting([{ ticket }])}
+              onAct={(action) => void act(ticket, action)}
+            />
           ))}
         </ul>
       )}
-      {done.length > 0 && (
-        <section aria-label="Done" className="flex flex-col gap-2">
-          <h2 className="text-sm font-semibold text-neutral-600">Done</h2>
+      {ready.length > 0 && (
+        <section aria-label="Ready" className="flex flex-col gap-2">
+          <h2 className="text-sm font-semibold text-neutral-600">Ready</h2>
           <ul className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {done.map((ticket) => (
-              <TicketCard key={ticket.id} ticket={ticket} busy={busy === ticket.id} onPrint={() => setPrinting([ticket])} onDone={() => void mark(ticket, false)} />
+            {ready.map((ticket) => (
+              <TicketCard
+                key={ticket.id}
+                ticket={ticket}
+                busy={busy === ticket.id}
+                onPrint={() => setPrinting([{ ticket }])}
+                onAct={(action) => void act(ticket, action)}
+              />
             ))}
           </ul>
         </section>
       )}
 
       <div className="ticket-print" aria-hidden="true">
-        {printing.map((ticket) => (
-          <TicketSlip key={ticket.id} ticket={ticket} area={area.name} />
+        {printing.map(({ ticket, dontSend }) => (
+          <TicketSlip key={`${ticket.id}-${dontSend ? 'off' : 'on'}`} ticket={ticket} area={area.name} dontSendOnly={dontSend} />
         ))}
       </div>
     </>
@@ -219,55 +239,70 @@ function AreaTickets({ area, areas, onArea }: { area: TicketArea; areas: TicketA
 const KIND_HEAD: Record<Ticket['kind'], { className: string; word?: string }> = {
   NEW: { className: 'bg-primary-50 text-neutral-900' },
   ADDED: { className: 'bg-warning-50 text-warning-800', word: 'Added' },
-  DONT_MAKE: { className: 'bg-danger-50 text-danger-700', word: "Don't make" },
 }
 
-function TicketCard({ ticket, busy, onPrint, onDone }: { ticket: Ticket; busy: boolean; onPrint: () => void; onDone: () => void }) {
+function timeOf(iso: string | undefined): string {
+  return iso ? new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : ''
+}
+
+function TicketCard({
+  ticket,
+  busy,
+  onPrint,
+  onAct,
+}: {
+  ticket: Ticket
+  busy: boolean
+  onPrint: () => void
+  onAct: (action: 'ready' | 'notReady' | 'seen') => void
+}) {
   const head = KIND_HEAD[ticket.kind]
-  const isDone = !!ticket.doneAt
-  const strike = ticket.kind !== 'DONT_MAKE'
+  const isReady = !!ticket.readyAt && !ticket.changed
+  const off = dontSend(ticket)
   const minutes = Math.max(0, Math.floor((Date.now() - new Date(ticket.createdAt).getTime()) / 60_000))
   return (
     <li
-      className={`overflow-hidden rounded-lg border bg-white ${isDone ? 'border-neutral-200 opacity-60' : ticket.kind === 'DONT_MAKE' ? 'border-danger-300' : 'border-neutral-200'}`}
-      aria-label={`${ticket.label}${head.word ? `, ${head.word}` : ''}`}
+      className={`overflow-hidden rounded-lg bg-white ${off ? 'border-2 border-danger-600' : 'border border-neutral-200'} ${isReady ? 'opacity-60' : ''}`}
+      aria-label={`${ticket.label}${head.word ? `, ${head.word}` : ''}${off ? `, don't send ${off.names}` : ''}`}
       data-ticket={ticket.kind}
+      data-changed={off ? 'true' : undefined}
     >
       <div className={`flex items-start justify-between gap-3 px-4 py-2.5 ${head.className}`}>
-        <div className="min-w-0">
-          <p className="text-lg font-bold leading-tight">
-            {ticket.label}
-            {head.word && <span className="ml-2 text-sm font-bold uppercase tracking-wide">{head.word}</span>}
-          </p>
-        </div>
+        <p className="min-w-0 text-lg font-bold leading-tight">
+          {ticket.label}
+          {head.word && <span className="ml-2 text-sm font-bold uppercase tracking-wide">{head.word}</span>}
+        </p>
         <p className="shrink-0 text-right text-xs tabular-nums text-neutral-600">
-          {new Date(ticket.createdAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+          {timeOf(ticket.createdAt)}
           {ticket.createdByName && ` · ${ticket.createdByName}`}
-          {!isDone && (
+          {isReady ? (
+            <span className="block font-semibold text-neutral-700">
+              {ticket.servedAt ? `served ${timeOf(ticket.servedAt)}${ticket.servedByName ? ` · ${ticket.servedByName}` : ''}` : `ready ${timeOf(ticket.readyAt)}`}
+            </span>
+          ) : (
             <span className={`block font-semibold ${minutes >= 20 ? 'text-danger-700' : 'text-neutral-700'}`}>
-              {minutes < 1 ? 'just now' : `${minutes} min`}
+              {minutes < 1 ? 'just now' : minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h ${minutes % 60}`}
             </span>
           )}
         </p>
       </div>
       <ul className="divide-y divide-neutral-100">
         {ticketItems(ticket.lines).map((item, index) => {
-          const off = strike && item.takenOff === 'NOT_MADE'
+          const gone = item.takenOff === 'NOT_MADE'
           return (
-            <li key={index} className={`px-4 py-2 ${off ? 'text-danger-700' : 'text-neutral-900'}`}>
+            <li key={index} className={`px-4 py-2 ${gone ? 'text-danger-700' : 'text-neutral-900'}`}>
               <p className="text-base">
-                <span className={`font-bold tabular-nums ${off ? 'line-through' : ''}`}>{formatNumber(item.quantity)}</span>{' '}
-                <span className={off ? 'line-through' : ''}>
+                <span className={`font-bold tabular-nums ${gone ? 'line-through' : ''}`}>{formatNumber(item.quantity)}</span>{' '}
+                <span className={gone ? 'line-through' : ''}>
                   {item.unit ? `${item.unit} ` : ''}
                   {item.withName ? `+ ${item.name}` : item.name}
                 </span>
-                {off && <span className="ml-2 text-xs font-semibold uppercase">taken off</span>}
               </p>
               {item.withName && <p className="pl-6 text-sm text-neutral-600">with the {item.withName}</p>}
               {item.sides.map((side, sideIndex) => {
-                const sideOff = strike && side.takenOff === 'NOT_MADE'
+                const sideGone = side.takenOff === 'NOT_MADE'
                 return (
-                  <p key={sideIndex} className={`pl-6 text-sm ${sideOff ? 'text-danger-700 line-through' : 'text-neutral-800'}`}>
+                  <p key={sideIndex} className={`pl-6 text-sm ${sideGone ? 'text-danger-700 line-through' : 'text-neutral-800'}`}>
                     + {side.quantity !== 1 ? `${formatNumber(side.quantity)} ` : ''}
                     {side.name}
                     {side.note && <span className="font-bold text-warning-800"> · {side.note}</span>}
@@ -279,31 +314,71 @@ function TicketCard({ ticket, busy, onPrint, onDone }: { ticket: Ticket; busy: b
           )
         })}
       </ul>
+      {off && (
+        <div className="flex items-center justify-between gap-3 border-t border-neutral-100 bg-danger-50 px-4 py-2.5" role="alert">
+          <p className="min-w-0 text-sm font-bold text-danger-700">
+            Don&apos;t send {off.names}
+            <span className="block text-xs font-medium">
+              {timeOf(off.at)}
+              {off.by && ` · ${off.by}`}
+            </span>
+          </p>
+          <Button variant="danger" loading={busy} onClick={() => onAct('seen')}>
+            OK
+          </Button>
+        </div>
+      )}
       <div className="flex gap-2 border-t border-neutral-100 px-4 py-2.5">
         <Button variant="secondary" className="flex-1" onClick={onPrint}>
           <Printer className="h-4 w-4" aria-hidden="true" />
           Print
         </Button>
-        {isDone ? (
-          <Button variant="secondary" className="flex-1" loading={busy} onClick={onDone}>
+        {isReady ? (
+          <Button variant="secondary" className="flex-1" loading={busy && !off} onClick={() => onAct('notReady')}>
             <Undo2 className="h-4 w-4" aria-hidden="true" />
-            Not done
+            Not ready
           </Button>
         ) : (
-          <Button variant="action" className="flex-1" loading={busy} onClick={onDone}>
-            <Check className="h-4 w-4" aria-hidden="true" />
-            Done
-          </Button>
+          !ticket.readyAt &&
+          ticket.lines.some((line) => !line.takenOff) && (
+            <Button variant="action" className="flex-1" loading={busy && !off} onClick={() => onAct('ready')}>
+              <Check className="h-4 w-4" aria-hidden="true" />
+              Ready
+            </Button>
+          )
         )}
       </div>
     </li>
   )
 }
 
-/** The paper copy: big table name, the area, when and who; only this area's items, no prices. */
-function TicketSlip({ ticket, area }: { ticket: Ticket; area: string }) {
+/**
+ * The paper copy: big table name, the area, when and who; only this area's items, no prices. {@code dontSendOnly}: the
+ * short slip for a change, since paper can't change - "TABLE 5 · DON'T SEND" and what was taken off.
+ */
+function TicketSlip({ ticket, area, dontSendOnly = false }: { ticket: Ticket; area: string; dontSendOnly?: boolean }) {
   const head = KIND_HEAD[ticket.kind]
-  const strike = ticket.kind !== 'DONT_MAKE'
+  if (dontSendOnly) {
+    const off = ticket.lines.filter((line) => line.takenOff === 'NOT_MADE')
+    const last = off.at(-1)
+    return (
+      <div className="ticket-slip">
+        <p className="ticket-slip-big">{ticket.label.toUpperCase()} · DON&apos;T SEND</p>
+        <p>
+          {area.toUpperCase()} · {timeOf(last?.takenOffAt)}
+          {last?.takenOffByName && ` · ${last.takenOffByName}`}
+        </p>
+        <hr />
+        {off.map((line) => (
+          <p key={line.movementId} className="ticket-slip-big">
+            {formatNumber(line.quantity)} × {line.name}
+          </p>
+        ))}
+        <p className="ticket-slip-in">(on the {timeOf(ticket.createdAt)} ticket)</p>
+        <hr />
+      </div>
+    )
+  }
   return (
     <div className="ticket-slip">
       <p className="ticket-slip-big">
@@ -311,18 +386,18 @@ function TicketSlip({ ticket, area }: { ticket: Ticket; area: string }) {
         {head.word ? ` · ${head.word.toUpperCase()}` : ''}
       </p>
       <p>
-        {area.toUpperCase()} · {new Date(ticket.createdAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+        {area.toUpperCase()} · {timeOf(ticket.createdAt)}
         {ticket.createdByName && ` · ${ticket.createdByName}`}
       </p>
       <hr />
       {ticketItems(ticket.lines).map((item, index) => {
-        const off = strike && item.takenOff === 'NOT_MADE'
+        const gone = item.takenOff === 'NOT_MADE'
         return (
           <div key={index} className="ticket-slip-item">
-            <p className="ticket-slip-big" style={off ? { textDecoration: 'line-through' } : undefined}>
+            <p className="ticket-slip-big" style={gone ? { textDecoration: 'line-through' } : undefined}>
               {formatNumber(item.quantity)} × {item.unit ? `${item.unit} ` : ''}
               {item.withName ? `+ ${item.name}` : item.name}
-              {off ? ' (OFF)' : ''}
+              {gone ? " (DON'T SEND)" : ''}
             </p>
             {item.withName && <p className="ticket-slip-in">with the {item.withName}</p>}
             {item.sides.map((side, sideIndex) => (

@@ -24,7 +24,7 @@ import { TransferAccountChooser } from '@/features/selling/sale/TransferAccounts
 import { lineAmount, optionOf, unitsFor, type SaleLine } from '@/features/selling/sale/saleLine'
 import { useSaleBasket } from '@/features/selling/sale/useSaleBasket'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
-import { billsApi, tableLabel, type Bill, type BillSummary, type SentLine } from '@/features/selling/bills/billsApi'
+import { billsApi, tableLabel, type Bill, type BillSummary, type SendStatus, type SentLine } from '@/features/selling/bills/billsApi'
 
 /** A meal a side can go with: a line on the bill already sent, or a new one. */
 interface Meal {
@@ -73,7 +73,7 @@ export function BillPage() {
   const [draftKey] = useState(() => `bill:${tableId ? `t:${tableId}` : forName ? `n:${forName}` : params.get('id')}`)
   const basket = useSaleBasket(draftKey)
   // The till's own area: where the cash goes when it's paid here (Step 13), and where an item with no home comes from.
-  const tillArea = useSheetArea(branch).areaId
+  const tillArea = useSheetArea(branch, undefined, true).areaId
 
   const openBills = useApiQuery<BillSummary[]>({
     queryKey: ['bills', branch?.id ?? null],
@@ -363,6 +363,7 @@ export function BillPage() {
           <SentLines
             billId={billId!}
             lines={sent}
+            sends={bill.data?.sends ?? []}
             onChanged={(next) => {
               queryClient.setQueryData(['bill', billId], next)
               void queryClient.invalidateQueries({ queryKey: ['bills'] })
@@ -726,51 +727,149 @@ function LineExtras({
 
 // ---------------------------------------------------------------------------------- what was sent
 
-function SentLines({ billId, lines, onChanged }: { billId: string; lines: SentLine[]; onChanged: (bill: Bill) => void }) {
+/** Where an area's part of a send has got to (V103), in the colours Tables uses: amber, blue, green. */
+type SendState = 'waiting' | 'ready' | 'served'
+
+const STATE_LOOK: Record<SendState, { head: string; row: string; dot: string }> = {
+  waiting: { head: 'bg-warning-50 text-warning-800', row: 'bg-warning-50/50', dot: 'bg-warning-600' },
+  ready: { head: 'bg-primary-50 text-primary-700', row: 'bg-primary-50/60', dot: 'bg-primary-600' },
+  served: { head: 'bg-accent-50 text-accent-800', row: 'bg-accent-50/60', dot: 'bg-accent-600' },
+}
+
+function stateOf(send: SendStatus): SendState {
+  return send.servedAt ? 'served' : send.readyAt ? 'ready' : 'waiting'
+}
+
+function clock(iso: string | undefined): string {
+  return iso ? new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : ''
+}
+
+function SentLines({
+  billId,
+  lines,
+  sends,
+  onChanged,
+}: {
+  billId: string
+  lines: SentLine[]
+  /** Each area's part of each send, where tickets are on (V103): sent, ready, served. */
+  sends: SendStatus[]
+  onChanged: (bill: Bill) => void
+}) {
   const { showToast } = useToast()
   const [asking, setAsking] = useState<string | null>(null)
+  const [serving, setServing] = useState<string | null>(null)
+  const sendOf = new Map<string, SendStatus>()
+  for (const send of sends) for (const id of send.movementIds) sendOf.set(id, send)
   // Sent together: one group per send ("Sent 7:41 · Ada"), meals with their sides under them.
   const groups: { key: string; title: string; lines: SentLine[] }[] = []
   for (const line of lines) {
-    const time = new Date(line.sentAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+    const time = clock(line.sentAt)
     const key = `${time}|${line.sentByName ?? ''}`
     const last = groups[groups.length - 1]
     if (last?.key === key) last.lines.push(line)
     else groups.push({ key, title: `Sent ${time}${line.sentByName ? ` · ${line.sentByName}` : ''}`, lines: [line] })
   }
   const keys = new Set(lines.map((line) => line.lineKey))
+
+  async function serve(send: SendStatus, served: boolean) {
+    setServing(send.ticketId)
+    try {
+      onChanged(served ? await billsApi.served(send.ticketId) : await billsApi.notServed(send.ticketId))
+    } catch (error) {
+      showToast(isAppError(error) ? error.message : "Couldn't change that. Try again.", 'error')
+    } finally {
+      setServing(null)
+    }
+  }
+
+  function rows(part: SentLine[], state: SendState | null) {
+    const meals = part.filter((line) => !line.withKey || !part.some((meal) => meal.lineKey === line.withKey))
+    return meals
+      .flatMap((meal) => [meal, ...part.filter((line) => line.withKey === meal.lineKey)])
+      .map((line) => (
+        <SentRow
+          key={line.movementId}
+          line={line}
+          side={!!line.withKey && keys.has(line.withKey)}
+          state={line.takenOff ? null : state}
+          asking={asking === line.movementId}
+          onAsk={() => setAsking(line.movementId)}
+          onCancel={() => setAsking(null)}
+          onTakeOff={async (kind, note) => {
+            try {
+              onChanged(await billsApi.takeOff(billId, line.movementId, kind, note))
+              setAsking(null)
+              showToast(`${line.productName} taken off.`, 'success')
+            } catch (error) {
+              showToast(isAppError(error) ? error.message : "Couldn't take it off. Try again.", 'error')
+            }
+          }}
+        />
+      ))
+  }
+
   return (
     <div className="flex flex-col gap-2">
       {groups.map((group) => {
-        const meals = group.lines.filter((line) => !line.withKey || !group.lines.some((meal) => meal.lineKey === line.withKey))
         const total = group.lines.filter((line) => !line.takenOff).reduce((sum, line) => sum + (line.amount ?? 0), 0)
+        // Each area's part of the send (V103), in the order it was sent; lines from before tickets were on, as they were.
+        const parts: { send: SendStatus | null; lines: SentLine[] }[] = []
+        for (const line of group.lines) {
+          const send = sendOf.get(line.movementId) ?? null
+          const part = parts.find((p) => p.send?.ticketId === send?.ticketId && (send != null || p.send == null))
+          if (part) part.lines.push(line)
+          else parts.push({ send, lines: [line] })
+        }
         return (
           <section key={group.key} className="overflow-hidden rounded-lg border border-neutral-200 bg-white lg:-mx-3 lg:rounded-none lg:border-0">
             <h2 className="flex justify-between bg-neutral-50 px-3 py-1.5 text-xs font-semibold text-neutral-500 tabular-nums">
               <span>{group.title}</span>
               <span>{formatMoney(total)}</span>
             </h2>
-            <ul className="divide-y divide-neutral-100">
-              {meals.flatMap((meal) => [meal, ...group.lines.filter((line) => line.withKey === meal.lineKey)]).map((line) => (
-                <SentRow
-                  key={line.movementId}
-                  line={line}
-                  side={!!line.withKey && keys.has(line.withKey)}
-                  asking={asking === line.movementId}
-                  onAsk={() => setAsking(line.movementId)}
-                  onCancel={() => setAsking(null)}
-                  onTakeOff={async (kind, note) => {
-                    try {
-                      onChanged(await billsApi.takeOff(billId, line.movementId, kind, note))
-                      setAsking(null)
-                      showToast(`${line.productName} taken off.`, 'success')
-                    } catch (error) {
-                      showToast(isAppError(error) ? error.message : "Couldn't take it off. Try again.", 'error')
-                    }
-                  }}
-                />
-              ))}
-            </ul>
+            {parts.map((part, index) => {
+              const send = part.send
+              const live = part.lines.some((line) => !line.takenOff)
+              const state = send && live ? stateOf(send) : null
+              return (
+                <div key={send?.ticketId ?? `plain-${index}`} data-send-state={state ?? undefined}>
+                  {send && state && (
+                    <div className={`flex min-h-10 items-center justify-between gap-2 border-t border-neutral-100 px-3 py-1 text-xs font-semibold ${STATE_LOOK[state].head}`}>
+                      <span className="min-w-0">
+                        {send.areaName} ·{' '}
+                        {state === 'served'
+                          ? `served ${clock(send.servedAt)}${send.servedByName ? ` · ${send.servedByName}` : ''}`
+                          : state === 'ready'
+                            ? `ready ${clock(send.readyAt)}`
+                            : 'sent, not ready yet'}
+                      </span>
+                      {state === 'served' ? (
+                        <button
+                          type="button"
+                          onClick={() => void serve(send, false)}
+                          disabled={serving === send.ticketId}
+                          aria-label={`Not served: ${send.areaName}`}
+                          className="-my-1 inline-flex min-h-9 shrink-0 items-center rounded-md px-2 text-xs font-semibold text-accent-800 hover:bg-accent-100 disabled:opacity-60"
+                        >
+                          ✓ Undo
+                        </button>
+                      ) : (
+                        <Button
+                          variant={state === 'ready' ? 'action' : 'secondary'}
+                          className="-my-1 min-h-9 shrink-0 px-3 text-xs"
+                          loading={serving === send.ticketId}
+                          onClick={() => void serve(send, true)}
+                          aria-label={`Served: ${send.areaName}`}
+                        >
+                          Served
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                  <ul className="divide-y divide-neutral-100">{rows(part.lines, state)}</ul>
+                </div>
+              )
+            })}
           </section>
         )
       })}
@@ -781,6 +880,7 @@ function SentLines({ billId, lines, onChanged }: { billId: string; lines: SentLi
 function SentRow({
   line,
   side,
+  state = null,
   asking,
   onAsk,
   onCancel,
@@ -788,6 +888,8 @@ function SentRow({
 }: {
   line: SentLine
   side: boolean
+  /** Its area's part of the send (V103): the row takes that colour. */
+  state?: SendState | null
   asking: boolean
   onAsk: () => void
   onCancel: () => void
@@ -811,9 +913,12 @@ function SentRow({
       </span>,
     )
   return (
-    <li className={`flex flex-col gap-1 px-3 py-2 ${side ? 'border-l-2 border-neutral-200 bg-neutral-50/60 pl-6' : ''}`}>
+    <li
+      className={`flex flex-col gap-1 px-3 py-2 ${state ? STATE_LOOK[state].row : ''} ${side ? `border-l-2 border-neutral-200 pl-6 ${state ? '' : 'bg-neutral-50/60'}` : ''}`}
+    >
       <div className="flex items-start justify-between gap-2">
-        <span className={`min-w-0 text-sm ${off ? 'text-neutral-400 line-through' : 'text-neutral-600'}`}>
+        <span className={`min-w-0 text-sm ${off ? 'text-neutral-400 line-through' : state ? 'text-neutral-800' : 'text-neutral-600'}`}>
+          {state && <span aria-hidden="true" className={`mr-2 inline-block h-2 w-2 rounded-full align-middle ${STATE_LOOK[state].dot}`} />}
           {side && <span className="text-neutral-400">+ </span>}
           {line.productName}
           {quantity !== 1 && ` × ${formatNumber(quantity)}`}

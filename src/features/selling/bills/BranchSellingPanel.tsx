@@ -10,6 +10,7 @@ import { isAppError } from '@/types/api'
 import { BRANCHES_KEY } from '@/features/branches/BranchProvider'
 import type { Branch, BranchTable } from '@/features/branches/types'
 import { tablesApi } from '@/features/selling/bills/billsApi'
+import { ticketsApi } from '@/features/selling/tickets/ticketsApi'
 
 /** "1 to 10 (4 is Window), VIP" - a branch's tables in one line. */
 function tablesSummary(tables: BranchTable[]): string {
@@ -63,6 +64,7 @@ export function BranchSellingPanel({ branch }: { branch: Branch }) {
         With tables, Record a sale opens on Tables: a bill is kept open for a table and paid later. A shop without tables
         never sees them.
       </p>
+      <TicketsSwitch branch={branch} />
       <ChargesSection branch={branch} />
       <TablesSheet branch={branch} open={editing} tables={list} onClose={() => setEditing(false)} />
     </div>
@@ -216,5 +218,57 @@ function TablesSheet({ branch, open, tables, onClose }: { branch: Branch; open: 
         <p className="text-xs text-neutral-500">A table is switched off, never deleted, so old bills keep their table.</p>
       </div>
     </Sheet>
+  )
+}
+
+/**
+ * Kitchen and bar tickets (V103; owner, 2026-11-19): one switch for the branch, off to start. On, every item sent from a
+ * bill goes as a ticket to where it's made or kept; off, there's no Tickets in the menu and nothing is made.
+ */
+function TicketsSwitch({ branch }: { branch: Branch }) {
+  const queryClient = useQueryClient()
+  const { showToast } = useToast()
+  const [on, setOn] = useState(branch.ticketsOn === true)
+  const [busy, setBusy] = useState(false)
+  async function flip() {
+    setBusy(true)
+    try {
+      const next = (await ticketsApi.setOn(branch.id, !on)).on
+      setOn(next)
+      void queryClient.invalidateQueries({ queryKey: BRANCHES_KEY })
+      showToast(next ? 'Kitchen and bar tickets on.' : 'Kitchen and bar tickets off.', 'success')
+    } catch (error) {
+      showToast(isAppError(error) ? error.message : "Couldn't change that. Try again.", 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-3">
+      <span className="min-w-0">
+        <span id="tickets-switch" className="block font-semibold text-neutral-900">
+          Kitchen and bar tickets
+        </span>
+        <span className="block text-sm text-neutral-500">
+          {on
+            ? 'On: when a waiter sends an order, each item goes as a ticket to where it’s made or kept.'
+            : 'Off: orders aren’t sent as tickets. Turn it on if your kitchen or bar works from tickets.'}
+        </span>
+      </span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        aria-labelledby="tickets-switch"
+        disabled={busy}
+        onClick={() => void flip()}
+        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-60 ${on ? 'bg-accent-600' : 'bg-neutral-300'}`}
+      >
+        <span
+          aria-hidden="true"
+          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${on ? 'translate-x-6' : 'translate-x-1'}`}
+        />
+      </button>
+    </div>
   )
 }

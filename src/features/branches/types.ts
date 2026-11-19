@@ -37,6 +37,8 @@ export interface Branch {
   tables?: BranchTable[]
   /** Its switched-on charges and taxes (V100). */
   charges?: import('@/features/selling/charges').Charge[]
+  /** V103: items sent from a bill go as tickets to where they're made or kept. */
+  ticketsOn?: boolean
 }
 
 /** A table at a branch (V99, selling till Step 7). */
@@ -69,6 +71,8 @@ export interface Area {
   shortIsUsed?: boolean
   /** Moves here wait until someone here confirms what arrived (Part 4). Absent from an older API: no. */
   confirms?: boolean
+  /** Things are sold from here (V103). False for a store room: Record a sale and bills never take from it. Absent: yes. */
+  sells?: boolean
 }
 
 /** A product in one area - the product page's and the sync rows' `areaStock` (V60). */
