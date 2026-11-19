@@ -15,7 +15,7 @@ export type SalesFilter = 'belowUsualPrice' | 'belowCost' | 'cancelled' | 'unpri
 export interface SalesTotals {
   saleCount: number
   lineCount: number
-  /** What every priced line went for. */
+  /** What every priced line went for: the food and drinks, without charges and taxes, even those in the prices. */
   salesAmount: number
   /** What the lines with both a price and a cost went for - profit is only over these. */
   profitKnownSalesAmount?: number
@@ -77,6 +77,8 @@ export interface SalesReportRow {
   paymentAccountName?: string
   /** Sale rows (V100): charges and taxes added on top - the customer paid the total plus this. */
   chargesOnTop?: number
+  /** Sale rows: charges and taxes that were in the prices; the total leaves them out, so the customer paid it plus both. */
+  chargesInPrices?: number
 }
 
 export interface SalesReport {

@@ -351,7 +351,7 @@ function SaleRow({
         <span className="flex shrink-0 flex-col items-end gap-1">
           <span className={`text-base font-semibold tabular-nums ${allCancelled ? 'text-neutral-500 line-through' : 'text-neutral-900'}`}>
             {/* What the customer paid: charges added on top included (V100). */}
-            {allCancelled ? 'Cancelled' : t.unpricedLineCount === t.lineCount ? <span className="text-sm font-medium text-warning-700">No price</span> : formatMoney(t.salesAmount + (row.chargesOnTop ?? 0))}
+            {allCancelled ? 'Cancelled' : t.unpricedLineCount === t.lineCount ? <span className="text-sm font-medium text-warning-700">No price</span> : formatMoney(t.salesAmount + (row.chargesOnTop ?? 0) + (row.chargesInPrices ?? 0))}
           </span>
           {!allCancelled && (
             <span className="flex items-center gap-1">
@@ -450,14 +450,14 @@ function BreakdownTable({ report, tab }: { report: SalesReport; tab: SalesGroupi
  * Step 1). Sales from before payments were recorded are said underneath, never counted as cash.
  */
 /**
- * "+ ₦29,626 charges and taxes", opening to each one and what came in all told (owner, 2026-11-19). The big figure stays
- * the food and drinks - what profit is on; taxes aren't the business's money.
+ * "+ ₦29,626 charges and taxes", opening to each one and what came in all told (owner, 2026-11-19). The big figure and
+ * the profit are the food and drinks only - taxes aren't the business's money - so charges already in the prices come
+ * out of them and sit here with the rest.
  */
 function ChargesLine({ totals }: { totals: SalesTotals }) {
   const [open, setOpen] = useState(false)
   const charges = totals.charges ?? []
-  const onTop = charges.filter((charge) => !charge.included).reduce((sum, charge) => sum + charge.amount, 0)
-  const inPrices = charges.filter((charge) => charge.included).reduce((sum, charge) => sum + charge.amount, 0)
+  const all = charges.reduce((sum, charge) => sum + charge.amount, 0)
   return (
     <div className="flex flex-col items-start gap-1" data-sales-charges>
       <button
@@ -466,7 +466,7 @@ function ChargesLine({ totals }: { totals: SalesTotals }) {
         onClick={() => setOpen((was) => !was)}
         className="-my-1.5 inline-flex min-h-9 items-center gap-1 rounded-sm text-sm font-medium text-neutral-800 tabular-nums hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
       >
-        {onTop > 0 ? `+ ${formatMoney(onTop)} charges and taxes` : `${formatMoney(inPrices)} of it is charges and taxes`}
+        + {formatMoney(all)} charges and taxes
         <ChevronDown className={`h-4 w-4 text-neutral-500 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
       </button>
       {open && (
@@ -477,7 +477,7 @@ function ChargesLine({ totals }: { totals: SalesTotals }) {
               {charge.included && <span className="text-neutral-500"> · in your prices</span>}
             </li>
           ))}
-          {onTop > 0 && <li className="font-medium text-neutral-800">{formatMoney(totals.salesAmount + onTop)} came in</li>}
+          <li className="font-medium text-neutral-800">{formatMoney(totals.salesAmount + all)} came in</li>
         </ul>
       )}
     </div>
