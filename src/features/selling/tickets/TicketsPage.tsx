@@ -5,6 +5,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { useToast } from '@/components/useToast'
 import { useApiQuery } from '@/data/useApiQuery'
 import { isAppError } from '@/types/api'
+import { usePushReceived } from '@/features/push/usePushReceived'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { formatNumber } from '@/features/products/unitCopy'
 import { dontSend, ticketItems, ticketsApi, type Ticket, type TicketArea } from '@/features/selling/tickets/ticketsApi'
@@ -91,6 +92,8 @@ function AreaTickets({ area, areas, onArea }: { area: TicketArea; areas: TicketA
     refetchInterval: 5_000,
     refetchOnWindowFocus: true,
   })
+  // A notification for a new ticket refreshes this screen at once, where the device gets them.
+  usePushReceived('ticket-', tickets.refetch)
   const waiting = useMemo(() => (tickets.data ?? []).filter((t) => !t.readyAt || t.changed), [tickets.data])
   const ready = useMemo(() => (tickets.data ?? []).filter((t) => t.readyAt && !t.changed), [tickets.data])
   const sound = useTicketSound()

@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { usePushReceived } from '@/features/push/usePushReceived'
 import { useNavigate } from 'react-router-dom'
 import { useApiQuery } from '@/data/useApiQuery'
 import type { Branch } from '@/features/branches/types'
@@ -75,6 +76,8 @@ export function TablesView({ branch, header }: { branch: Branch; header: ReactNo
   const navigate = useNavigate()
   const online = useOnlineStatus()
   const bills = useOpenBills(branch.id)
+  // "Table 5 · Kitchen: ready" on this phone: the grid shows it at once.
+  usePushReceived('ticket-ready-', bills.refetch)
   const [, setNow] = useState(Date.now())
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000)
