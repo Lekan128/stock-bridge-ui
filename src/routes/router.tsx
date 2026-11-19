@@ -1,5 +1,6 @@
 import { BillPage } from '@/features/selling/bills/BillPage'
 import { CloseDayPage } from '@/features/selling/sale/CloseDayPage'
+import { TicketsPage } from '@/features/selling/tickets/TicketsPage'
 import { MoneyOutPage } from '@/features/selling/sale/MoneyOutPage'
 import { Suspense, lazy } from 'react'
 import { BranchesPage } from '@/features/branches/BranchesPage'
@@ -757,6 +758,15 @@ export function AppRoutes() {
             element={
               <RequirePermission permission={PERMISSIONS.STOCK_OUT}>
                 <BillPage />
+              </RequirePermission>
+            }
+          />
+          {/* Step 8 (V102): an area's kitchen or bar tickets, on a device there. */}
+          <Route
+            path="tickets"
+            element={
+              <RequirePermission permission={PERMISSIONS.VIEW_PRODUCTS}>
+                <TicketsPage />
               </RequirePermission>
             }
           />

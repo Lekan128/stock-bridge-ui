@@ -635,7 +635,7 @@ export interface StockOutPayload {
   /** Step 12 (V96): the account a transfer came into. */
   paymentAccountId?: string
   /** A line sent to a table's bill (V99): its key, the meal a side goes with, its note for the kitchen. */
-  billLine?: { lineKey: string; withKey?: string; note?: string }
+  billLine?: { lineKey: string; withKey?: string; note?: string; /** One Send: its lines share one ticket per area (V102). */ sendKey?: string }
 }
 
 // `ProductVendor` / `ProductVendorPriceTier` (GET /api/products/{productId}/vendors) live in

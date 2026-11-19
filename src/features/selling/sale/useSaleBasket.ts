@@ -326,6 +326,8 @@ export function useSaleBasket(draftKey: string = BASKETS_DRAFT_KEY) {
   async function send(billId: string, label: string, areaFor: (line: SaleLine) => string | undefined): Promise<RecordedLine[]> {
     const basketId = active.id
     const sent: RecordedLine[] = []
+    // One Send: its lines gather on one ticket per area (Step 8, V102).
+    const sendKey = crypto.randomUUID()
     // Meals before their sides, so a side never arrives before the plate it goes with.
     const ordered = [...lines.filter((line) => !line.withKey), ...lines.filter((line) => line.withKey)]
     for (const line of ordered) {
@@ -347,7 +349,7 @@ export function useSaleBasket(draftKey: string = BASKETS_DRAFT_KEY) {
             saleId: billId,
             ...(amount != null ? { lineTotal: amount } : {}),
             areaId: areaFor(line),
-            billLine: { lineKey: line.key, withKey: line.withKey, note: line.note?.trim() || undefined },
+            billLine: { lineKey: line.key, withKey: line.withKey, note: line.note?.trim() || undefined, sendKey },
           },
           baseDelta: -base,
         })

@@ -207,3 +207,51 @@
     font: 11px/1.45 ui-monospace, Menlo, Consolas, monospace;
   }
 }
+
+/* Kitchen and bar tickets (selling till Step 8, src/features/selling/tickets/TicketsPage.tsx): each on its own
+   receipt-roll slip, big enough to read across a kitchen. */
+.ticket-print {
+  display: none;
+}
+@media print {
+  html[data-page='tickets'] body * {
+    visibility: hidden;
+  }
+  html[data-page='tickets'] .ticket-print,
+  html[data-page='tickets'] .ticket-print * {
+    visibility: visible;
+  }
+  html[data-page='tickets'] .ticket-print {
+    display: block;
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 72mm;
+    padding: 2mm;
+    color: #000;
+    background: #fff;
+    font: 12px/1.45 ui-monospace, Menlo, Consolas, monospace;
+  }
+  html[data-page='tickets'] .ticket-slip {
+    break-after: page;
+    padding-bottom: 6mm;
+  }
+  html[data-page='tickets'] .ticket-slip p {
+    margin: 0;
+  }
+  html[data-page='tickets'] .ticket-slip hr {
+    border: 0;
+    border-top: 1px dashed #000;
+    margin: 2mm 0;
+  }
+  html[data-page='tickets'] .ticket-slip-big {
+    font-size: 16px;
+    font-weight: 700;
+  }
+  html[data-page='tickets'] .ticket-slip-item {
+    margin-bottom: 1.5mm;
+  }
+  html[data-page='tickets'] .ticket-slip-in {
+    padding-left: 5mm;
+    font-size: 13px;
+  }
+}
