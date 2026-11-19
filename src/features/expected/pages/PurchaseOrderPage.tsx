@@ -466,7 +466,7 @@ export function PurchaseOrderPage() {
               <StatusPill status={status} />
               {(order.revision ?? 1) > 1 && <span className="text-xs text-neutral-500">{expectedCopy.page.revised(order.revision ?? 1)}</span>}
             </p>
-            <h1 className="mt-1 text-2xl font-semibold text-neutral-900">{order.vendorName ?? order.title}</h1>
+            <h1 className="mt-1 text-xl font-semibold text-neutral-900 lg:text-2xl">{order.vendorName ?? order.title}</h1>
             {meta.length > 0 && <p className="mt-1 text-sm text-neutral-600">{meta.join(' · ')}</p>}
           </div>
           {menu.length > 0 && <OverflowMenu items={menu} label={text.menuLabel(order.poNumber ?? order.title)} />}

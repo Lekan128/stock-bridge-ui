@@ -12,14 +12,25 @@ import type { Product } from '@/features/products/types'
  * before the search has answered - so an early Enter waits (up to 3 s) for the answer to the term
  * it was pressed on, then picks the exact code, or the only match.
  */
-/** `includeMadeHere`: selling finds made-here items too (V90); stock screens never do. */
-export function useProductFinder(term: string, onPick: (product: Product) => void, limit = 8, includeMadeHere = false) {
+/**
+ * `includeMadeHere`: selling finds made-here items too (V90); stock screens never do.
+ * `sell`: the till's search (owner, 2026-11-18) - only the area being sold from, priced products first and then the
+ * ones with no price yet (marked so, and priced on the sale line). Those never sit on the till's grid.
+ */
+export function useProductFinder(
+  term: string,
+  onPick: (product: Product) => void,
+  limit = 8,
+  includeMadeHere = false,
+  sell?: { areaId?: string; wholeBranch?: boolean },
+) {
   const catalog = useCatalogState()
   const onDevice = catalog.phase === 'ready'
   const search = term.trim()
   const list = useCatalogList(
-    { search, status: 'active', categoryId: '', stockStatus: 'all', sort: { field: 'name', direction: 'asc' }, madeHere: includeMadeHere ? 'include' : undefined },
+    { search, status: 'active', categoryId: '', stockStatus: 'all', sort: { field: 'name', direction: 'asc' }, madeHere: includeMadeHere ? 'include' : undefined, onlyHere: sell != null || undefined },
     onDevice && search !== '',
+    sell?.wholeBranch ? { areaIds: [] } : sell?.areaId ? { areaIds: [sell.areaId] } : undefined,
   )
   const server = useProducts(
     { search: search || undefined, active: true, size: limit, page: 0, sort: 'name,asc' },
@@ -30,18 +41,21 @@ export function useProductFinder(term: string, onPick: (product: Product) => voi
     if (onDevice && search) loadRange(0, limit - 1)
   }, [onDevice, search, loadRange, limit])
 
+  const selling = sell != null
   const results: Product[] = useMemo(() => {
     if (!search) return []
+    const pricedFirst = (rows: Product[]) =>
+      selling ? [...rows.filter((row) => row.unitPrice != null), ...rows.filter((row) => row.unitPrice == null)] : rows
     if (onDevice) {
       const rows: Product[] = []
       for (let i = 0; i < Math.min(limit, list.total); i++) {
         const row = list.rowAt(i)
         if (row) rows.push(row)
       }
-      return rows
+      return pricedFirst(rows)
     }
-    return server.data?.content ?? []
-  }, [search, onDevice, list, server.data, limit])
+    return pricedFirst(server.data?.content ?? [])
+  }, [search, onDevice, list, server.data, limit, selling])
 
   const [enterOn, setEnterOn] = useState<string | null>(null)
   const answered = onDevice ? list.ready : !server.loading

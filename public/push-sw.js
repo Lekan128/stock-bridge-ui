@@ -24,6 +24,9 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     (async () => {
       await self.registration.showNotification(message.title || 'Procurepaddy', options)
+      // An open page that shows this kind of thing (Tickets, Tables) catches up at once instead of at its next check.
+      const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      windows.forEach((client) => client.postMessage({ type: 'pp.push.received', tag: message.tag || '' }))
       if (message.quiet && message.tag) {
         await new Promise((resolve) => setTimeout(resolve, QUIET_FOR_MS))
         const shown = await self.registration.getNotifications({ tag: message.tag })

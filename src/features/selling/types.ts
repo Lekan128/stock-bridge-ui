@@ -21,6 +21,14 @@ export interface SellingSettings {
   sellsMadeHere?: boolean
   madeHereChangedAt?: string
   madeHereChangedByName?: string
+  /** "Count cash at open and close" (API V97, Step 13). */
+  countsCash?: boolean
+  countsCashChangedAt?: string
+  countsCashChangedByName?: string
+  /** How long after a close a drawer can be opened again (V98): 1-24 hours, 4 to start. */
+  cashReopenHours?: number
+  /** V99: categories whose products are sides - the till asks which meal each goes with. */
+  sideCategoryIds?: string[]
 }
 
 export interface UpdateSellingSettingsPayload {

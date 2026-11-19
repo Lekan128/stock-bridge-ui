@@ -163,7 +163,7 @@ export function AskForPricesPage() {
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6">
         <div>
           <Breadcrumbs items={[{ label: text.list, to: LIST_PATH }, { label: text.title }]} />
-          <h1 className="mt-2 text-2xl font-semibold text-neutral-900">{text.title}</h1>
+          <h1 className="mt-2 text-xl font-semibold text-neutral-900 lg:text-2xl">{text.title}</h1>
         </div>
 
         <DraftNote

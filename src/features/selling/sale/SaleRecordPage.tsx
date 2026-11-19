@@ -64,7 +64,7 @@ export function SaleRecordPage() {
         >
           <ArrowLeft className="h-5 w-5" aria-hidden="true" />
         </button>
-        <h1 className="text-2xl font-semibold text-neutral-900">Receipt</h1>
+        <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Receipt</h1>
       </div>
       {error && (
         <p role="alert" className="text-sm text-danger-700">

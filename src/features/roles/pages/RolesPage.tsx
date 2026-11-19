@@ -46,7 +46,7 @@ export function RolesPage() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">Roles & Privileges</h1>
+          <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Roles & Privileges</h1>
           <p className="mt-0.5 text-sm text-neutral-500">
             System roles are fixed. Create a custom role to hand out any other combination of privileges.
           </p>

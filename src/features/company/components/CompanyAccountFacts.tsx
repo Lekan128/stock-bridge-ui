@@ -17,7 +17,7 @@ export function CompanyAccountFacts({ company }: { company: Company }) {
       <div>
         <h2 className="text-base font-semibold text-neutral-900">Account</h2>
         <p className="mt-0.5 text-sm text-neutral-500">
-          Set by ProcurePal. None of this can be changed from here — contact ProcurePal support if
+          Set by Procurepaddy. None of this can be changed from here — contact Procurepaddy support if
           something is wrong.
         </p>
       </div>
@@ -50,7 +50,7 @@ export function CompanyAccountFacts({ company }: { company: Company }) {
       {company.platformOwner && (
         <p className="flex items-start gap-2 rounded-md border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-700">
           <Store className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          <span>This company operates the ProcurePal marketplace.</span>
+          <span>This company operates the Procurepaddy marketplace.</span>
         </p>
       )}
 

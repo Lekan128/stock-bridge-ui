@@ -11,6 +11,9 @@ export const sellingApi = {
 
   /** "Sell things you make" (selling till Step 4): needs selling on to turn on. */
   updateMadeHere: (on: boolean) => api.put<SellingSettings>('/api/company/selling/made-here', { on }).then((r) => r.data),
+  updateCountsCash: (on: boolean) => api.put<SellingSettings>('/api/company/selling/counts-cash', { on }).then((r) => r.data),
+  updateCashReopenHours: (hours: number) =>
+    api.put<SellingSettings>('/api/company/selling/cash-reopen-hours', { hours }).then((r) => r.data),
 
   legacyPrices: (page: number, size = 50) =>
     api

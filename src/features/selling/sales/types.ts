@@ -28,8 +28,13 @@ export interface SalesTotals {
   cancelledLineCount: number
   belowUsualPriceLineCount: number
   belowCostLineCount: number
-  /** What came in by each way of paying (API V88). Absent from an API older than selling till Step 1. */
+  /**
+   * What came in by each way of paying (API V88): the money itself, charges on top included and a split bill part by
+   * part, when the whole of each sale is in view; the food and drinks when narrowed to a product or an area.
+   */
   byPayment?: PaymentTotals
+  /** Charges and taxes on these sales, kept apart from the food and drinks (V100); only when the whole of each sale is in view. */
+  charges?: { name: string; included: boolean; amount: number }[]
 }
 
 /** The sales amount split by how the customer paid; "not recorded" is a sale from before payments. */
@@ -42,6 +47,8 @@ export interface PaymentTotals {
   cardSales: number
   notRecordedAmount: number
   notRecordedSales: number
+  /** Step 12 (API V96): transfers by the account they came into, most first; absent where none was named. */
+  transferAccounts?: { accountId: string; bankName: string; accountNumber: string; amount: number; sales: number }[]
 }
 
 export interface SalesReportRow {
@@ -66,6 +73,10 @@ export interface SalesReportRow {
   cancelledByName?: string
   cancelRequestedByName?: string
   totals: SalesTotals
+  /** Step 12: the account a transfer sale came into. */
+  paymentAccountName?: string
+  /** Sale rows (V100): charges and taxes added on top - the customer paid the total plus this. */
+  chargesOnTop?: number
 }
 
 export interface SalesReport {
@@ -107,6 +118,12 @@ export interface SaleLineDetail {
   occurredAt: string
   /** The product's stock unit code ("PIECE", "KG") - what `quantity` counts. */
   unitOfMeasure?: string
+  /** A table bill's side (V99): the line of the meal it goes with. */
+  withLineId?: string
+  /** A table bill line's note for the kitchen. */
+  note?: string
+  /** Taken off a table's bill: NOT_MADE (stock back) or SENT_BACK (used, not charged). */
+  takenOff?: 'NOT_MADE' | 'SENT_BACK'
 }
 
 export interface SaleDetail {
@@ -123,6 +140,8 @@ export interface SaleDetail {
   paymentMethod?: SalePaymentMethod
   /** Where it was sold, at a company with several branches. */
   branchName?: string
+  /** The account a transfer came into ("GTBank"), Step 12. Never on the receipt. */
+  paymentAccountName?: string
   /** Cancelling (API V89): asked and waiting, declined (the sale stands), or the whole sale cancelled. */
   cancelState?: SaleCancelState
   cancelReason?: SaleCancelReason
@@ -132,6 +151,14 @@ export interface SaleDetail {
   /** Who cancelled it, or declined the request. */
   cancelDecidedByName?: string
   cancelDecidedAt?: string
+  /** A table's bill (V99): "Table 5", "VIP", or the name it was opened for. */
+  billFor?: string
+  /** Its charges and taxes as they stood when it was made (V100), with what each came to. */
+  charges?: import('@/features/selling/charges').SaleCharge[]
+  /** What the customer paid: `total` (the food and drinks) plus every charge added on top. */
+  totalToPay?: number
+  /** A table's bill: each part it was paid in (several when split, V101). */
+  payments?: { method: 'CASH' | 'TRANSFER' | 'CARD'; amount: number }[]
 }
 
 export type SaleCancelState = 'REQUESTED' | 'DECLINED' | 'CANCELLED'

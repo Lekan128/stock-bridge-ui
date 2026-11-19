@@ -36,14 +36,13 @@ export function CompanySettingsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">Company settings</h1>
+          <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Company settings</h1>
           <p className="text-sm text-neutral-500">
             {canEdit
-              ? "Your company's details as ProcurePal holds them."
-              : "Your company's details as ProcurePal holds them. Only an account owner can change them."}
+              ? "Your company's details as Procurepaddy holds them."
+              : "Your company's details as Procurepaddy holds them. Only an account owner can change them."}
           </p>
         </div>
-        {company && <CompanyLogo company={company} canEdit={canEdit} onUpdated={setCompany} />}
       </div>
 
       {canManageBranches && (
@@ -73,9 +72,13 @@ export function CompanySettingsPage() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="flex flex-col gap-6 lg:col-span-2">
             {canEdit ? (
-              <CompanyDetailsForm company={company} onUpdated={setCompany} />
+              <CompanyDetailsForm
+                company={company}
+                onUpdated={setCompany}
+                logo={<CompanyLogo company={company} canEdit={canEdit} onUpdated={setCompany} />}
+              />
             ) : (
-              <CompanyDetailsReadOnly company={company} />
+              <CompanyDetailsReadOnly company={company} logo={company.logoUrl != null ? <CompanyLogo company={company} canEdit={false} onUpdated={setCompany} /> : undefined} />
             )}
             <SellingSettingsSection />
           </div>

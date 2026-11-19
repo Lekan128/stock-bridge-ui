@@ -1,4 +1,14 @@
 /** One branch as the signed-in person sees it — `GET /api/branches` (MULTI_BRANCH_UX_PLAN.md §4). */
+/** An account a branch's customers pay into by transfer (API V96, selling till Step 12). */
+export interface PaymentAccount {
+  id: string
+  branchId: string
+  bankName: string
+  accountName?: string
+  accountNumber: string
+  active: boolean
+}
+
 export interface Branch {
   id: string
   name: string
@@ -21,6 +31,23 @@ export interface Branch {
    * change (the list is read again).
    */
   areas?: Area[]
+  /** Its switched-on transfer accounts (V96); absent from an older API. */
+  paymentAccounts?: PaymentAccount[]
+  /** Its switched-on tables (V99), in the owner's order; empty without table service. */
+  tables?: BranchTable[]
+  /** Its switched-on charges and taxes (V100). */
+  charges?: import('@/features/selling/charges').Charge[]
+  /** V103: items sent from a bill go as tickets to where they're made or kept. */
+  ticketsOn?: boolean
+}
+
+/** A table at a branch (V99, selling till Step 7). */
+export interface BranchTable {
+  id: string
+  branchId: string
+  name: string
+  sortOrder: number
+  active: boolean
 }
 
 /** One place inside a branch where stock is kept or used: Store, Kitchen, Bar. */
@@ -44,6 +71,8 @@ export interface Area {
   shortIsUsed?: boolean
   /** Moves here wait until someone here confirms what arrived (Part 4). Absent from an older API: no. */
   confirms?: boolean
+  /** Things are sold from here (V103). False for a store room: Record a sale and bills never take from it. Absent: yes. */
+  sells?: boolean
 }
 
 /** A product in one area - the product page's and the sync rows' `areaStock` (V60). */

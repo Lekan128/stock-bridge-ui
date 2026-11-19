@@ -1,3 +1,5 @@
+import { TransferAccountChooser } from '@/features/selling/sale/TransferAccounts'
+import { TablesView, TillModeSwitch, useOpenBills, useTillMode } from '@/features/selling/bills/TablesView'
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Check } from 'lucide-react'
@@ -53,6 +55,13 @@ export function RecordSalePage() {
     return () => window.clearTimeout(timer)
   }, [last])
 
+  // Stage C (V99): at a branch with tables, Record a sale opens on Tables; Counter is today's till.
+  const branchHere = useOptionalWorkingBranch()
+  const tillBranch = branchHere && !branchHere.isAll ? (branchHere.working ?? branchHere.branches[0] ?? null) : null
+  const [mode, setMode] = useTillMode(tillBranch)
+  const openBills = useOpenBills(mode ? tillBranch?.id : undefined)
+  const modeSwitch = mode && <TillModeSwitch mode={mode} onChange={setMode} open={openBills.data?.length} />
+
   const kept = last ? last.lines.filter((line) => line.status !== 'refused') : []
   const refused = last ? last.lines.filter((line) => line.status === 'refused') : []
 
@@ -80,10 +89,32 @@ export function RecordSalePage() {
   )
 
   if (!loaded) return null
+  if (recordsSales && mode === 'tables' && tillBranch && !showReceipt) {
+    return (
+      <TablesView
+        branch={tillBranch}
+        header={
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <button
+              type="button"
+              onClick={goBack}
+              aria-label="Back"
+              className="rounded-md p-1.5 text-neutral-600 hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none"
+            >
+              <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+            </button>
+            <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Record a sale</h1>
+            <span className="ml-auto">{mySales}</span>
+            <div className="w-full sm:order-none sm:w-auto">{modeSwitch}</div>
+          </div>
+        }
+      />
+    )
+  }
   if (!recordsSales) {
     return (
       <div className="mx-auto flex max-w-xl flex-col gap-3 py-8">
-        <h1 className="text-2xl font-semibold text-neutral-900">Record a sale</h1>
+        <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Record a sale</h1>
         <p className="text-sm text-neutral-600">Selling isn't on for your company, so sales aren't recorded here yet.</p>
         <Link to="/app/company" className="text-sm font-medium text-primary-600 hover:underline">
           Selling settings
@@ -94,7 +125,12 @@ export function RecordSalePage() {
 
   return (
     // A till on a wide screen: the whole window, its own top bar (AppLayout drops the page padding here).
-    <div className={`mx-auto flex w-full flex-col gap-4 ${showReceipt ? 'max-w-2xl lg:p-6' : 'max-w-2xl lg:h-full lg:max-w-none lg:gap-0'}`}>
+    // The receipt scrolls on its own: the till's window doesn't (owner, 2026-11-18: it couldn't scroll on a laptop).
+    <div
+      className={`mx-auto flex w-full flex-col gap-4 ${
+        showReceipt ? 'max-w-2xl lg:h-full lg:max-w-5xl lg:overflow-y-auto lg:p-6' : 'max-w-2xl lg:h-full lg:max-w-none lg:gap-0'
+      }`}
+    >
       <div className={`flex items-center gap-2 ${showReceipt ? '' : 'lg:hidden'}`}>
         <button
           type="button"
@@ -104,9 +140,10 @@ export function RecordSalePage() {
         >
           <ArrowLeft className="h-5 w-5" aria-hidden="true" />
         </button>
-        <h1 className="text-2xl font-semibold text-neutral-900">{showReceipt ? 'Receipt' : 'Record a sale'}</h1>
+        <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">{showReceipt ? 'Receipt' : 'Record a sale'}</h1>
         {!showReceipt && <span className="ml-auto">{mySales}</span>}
       </div>
+      {!showReceipt && modeSwitch && <div className="lg:hidden">{modeSwitch}</div>}
 
       {showReceipt && last ? (
         <ReceiptView
@@ -132,7 +169,12 @@ export function RecordSalePage() {
           <SaleBasketEditor
             wide
             onBack={goBack}
-            topRight={mySales}
+            topRight={
+              <span className="flex items-center gap-4">
+                {modeSwitch}
+                {mySales}
+              </span>
+            }
             basket={basket}
             startProduct={startProduct}
             onRecorded={recorded}
@@ -211,10 +253,22 @@ function ReceiptView({
     branch?.isMultiBranch ? branch.nameOf(branch.working?.id) : undefined,
   )
 
-  async function changePayment(method: SalePaymentMethod) {
+  // Step 12: changed to a transfer, it names its account like a new sale does.
+  const branchHere = useOptionalWorkingBranch()
+  const saleBranch = branchHere && !branchHere.isAll ? (branchHere.working ?? branchHere.branches[0] ?? null) : null
+  const accounts = saleBranch?.paymentAccounts ?? []
+  const [choosingAccount, setChoosingAccount] = useState(false)
+
+  async function changePayment(method: SalePaymentMethod, accountId?: string) {
+    if (method === 'TRANSFER' && accountId === undefined && accounts.length > 0) {
+      if (accounts.length === 1) return changePayment('TRANSFER', accounts[0].id)
+      setChoosingAccount(true)
+      return
+    }
+    setChoosingAccount(false)
     setChangingTo(method)
     try {
-      await api.put(`/api/sales/${sale.saleId}/payment`, { paymentMethod: method })
+      await api.put(`/api/sales/${sale.saleId}/payment`, { paymentMethod: method, ...(accountId ? { paymentAccountId: accountId } : {}) })
       onPaymentChanged(method)
       setChanging(false)
       showToast(`Changed to ${paymentLabel(method)}.`, 'success')
@@ -226,7 +280,9 @@ function ReceiptView({
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col gap-4">
+    // A laptop: the receipt on the left, what to do with it on the right - not a phone's column in the middle.
+    <div className="mx-auto flex w-full max-w-md flex-col gap-4 lg:grid lg:max-w-none lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:items-start lg:gap-8">
+      <div className="flex flex-col gap-4">
       {sale.lines.some((line) => line.status === 'refused') && (
         <div role="alert" className="rounded-lg border border-warning-200 bg-warning-50 px-4 py-3 text-sm text-warning-900">
           {sale.lines
@@ -240,10 +296,23 @@ function ReceiptView({
         </div>
       )}
       <SaleReceiptCard receipt={receipt} />
+      </div>
+      <div className="flex flex-col gap-4">
       {changing ? (
         <div className="flex flex-col gap-2">
           <p className="text-sm font-medium text-neutral-900">How did they pay?</p>
-          <PaymentButtons label="How they paid" current={sale.paymentMethod} busy={changingTo} onPick={(method) => void changePayment(method)} />
+          {choosingAccount && saleBranch ? (
+            <TransferAccountChooser
+              branchId={saleBranch.id}
+              accounts={accounts}
+              amount={sale.total}
+              busy={changingTo === 'TRANSFER'}
+              onPick={(account) => void changePayment('TRANSFER', account.id)}
+              onBack={() => setChoosingAccount(false)}
+            />
+          ) : (
+            <PaymentButtons label="How they paid" current={sale.paymentMethod} busy={changingTo} onPick={(method) => void changePayment(method)} />
+          )}
           <button type="button" onClick={() => setChanging(false)} className="inline-flex min-h-11 items-center self-start text-sm font-medium text-primary-600 hover:underline">
             Keep {paymentLabel(sale.paymentMethod)}
           </button>
@@ -259,7 +328,7 @@ function ReceiptView({
               Asked to cancel. Waiting for a manager.
             </p>
           ) : (
-            <div className="flex flex-wrap items-start justify-center gap-x-6">
+            <div className="flex flex-wrap items-start justify-center gap-x-6 lg:justify-start">
               {fresh && sent && (
                 <button type="button" onClick={() => setChanging(true)} className="inline-flex min-h-11 items-center text-sm font-semibold text-primary-700 hover:underline">
                   Change how they paid
@@ -284,6 +353,7 @@ function ReceiptView({
           )}
         </>
       )}
+      </div>
     </div>
   )
 }

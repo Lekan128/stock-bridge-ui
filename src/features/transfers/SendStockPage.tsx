@@ -247,7 +247,7 @@ export function SendStockPage() {
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div>
-            <h1 className="text-2xl font-semibold text-neutral-900">Send stock</h1>
+            <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Send stock</h1>
             <p className="mt-1 text-sm text-neutral-600">from {fromName}</p>
           </div>
         </div>

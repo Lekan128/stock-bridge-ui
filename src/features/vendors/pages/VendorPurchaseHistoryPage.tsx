@@ -88,7 +88,7 @@ export function VendorPurchaseHistoryPage() {
         </button>
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold text-neutral-900">Purchase history</h1>
+            <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Purchase history</h1>
             <VendorKindBadge kind={vendor.kind} />
           </div>
           <p className="mt-0.5 text-sm text-neutral-500">

@@ -56,7 +56,7 @@ export function ChangeSellingDialog({ open, clientName, sellsStock, submitting, 
       <p className="text-sm text-neutral-600">
         {madeHere
           ? sellsStock
-            ? 'Things they make will be hidden from their products and their till. Nothing is deleted.'
+            ? 'Things they make will be hidden from their products and from Record a sale. Nothing is deleted.'
             : 'They will be able to add things they make and sell, like meals or services, that are not kept in stock.'
           : sellsStock
           ? 'Their selling prices, sales screens and reports will be hidden. Nothing is deleted - turning it back on brings everything back.'

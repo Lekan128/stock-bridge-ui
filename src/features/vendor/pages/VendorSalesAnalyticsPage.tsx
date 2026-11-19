@@ -71,7 +71,7 @@ export function VendorSalesAnalyticsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">My sales</h1>
+          <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">My sales</h1>
           <p className="text-sm text-neutral-500">What you sold, what you are owed, and what has run out.</p>
         </div>
         <DateRangeControl value={range} onChange={setRange} />

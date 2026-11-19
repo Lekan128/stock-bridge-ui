@@ -69,6 +69,7 @@ export function BranchAreas({
     }
     parts.push(AREA_KINDS[kindOf(area)].short)
     if (area.confirms) parts.push('confirms what arrives')
+    if (area.sells === false) parts.push('not sold from here')
     return parts.join(' · ')
   }
 

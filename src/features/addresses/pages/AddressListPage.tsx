@@ -80,7 +80,7 @@ export function AddressListPage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">Delivery addresses</h1>
+          <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Delivery addresses</h1>
           <p className="mt-0.5 text-sm text-neutral-500">
             Where ProcurePal delivers your orders. Your default is offered first at checkout.
           </p>

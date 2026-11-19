@@ -131,11 +131,11 @@ const basket = () => page.getByRole('list', { name: 'This sale' })
 const line = (product) => basket().locator('li').filter({ hasText: product.name })
 /** One tap on how the customer paid (selling till Step 1), checking the amount the buttons collect. */
 async function pay(method, amount) {
-  await page.getByRole('group', { name: `Collect ${amount} by` }).getByRole('button', { name: method, exact: true }).click()
+  await page.getByRole('group', { name: `Paid with, ${amount}` }).getByRole('button', { name: method, exact: true }).click()
 }
 /** The same, whatever the amount. */
 async function payAny(method) {
-  await page.getByRole('group', { name: /^Collect .* by$/ }).getByRole('button', { name: method, exact: true }).click()
+  await page.getByRole('group', { name: /^Paid with, / }).getByRole('button', { name: method, exact: true }).click()
 }
 /** Types like a barcode scanner: the SKU in a burst, then Enter. */
 async function scan(product) {
@@ -151,7 +151,7 @@ await page.waitForFunction(() => navigator.serviceWorker.controller?.state === '
 await check('Record a sale is the Inventory\'s action once selling is on, and opens an empty basket', async () => {
   await page.getByRole('button', { name: 'Record a sale' }).first().click()
   await page.getByRole('heading', { name: 'Record a sale', level: 1 }).waitFor()
-  await page.getByText('Tap a product, or scan or search to add it.').waitFor()
+  await page.getByRole('list', { name: 'Tap to add' }).waitFor()
   await page.getByRole('list', { name: 'Tap to add' }).getByRole('button', { name: `Add ${rice.name}` }).waitFor()
   await axeClean(page, 'empty basket')
 })
@@ -163,12 +163,12 @@ await check('a scanner runs a basket: scanning again adds one; a changed price s
   await eventually(() => line(rice).getByLabel(`How many ${rice.name}`).inputValue(), (v) => v === '2')
   await scan(soap)
   await line(soap).waitFor()
-  // Sell soap for less: tap its price, in the line.
-  await line(soap).getByRole('button', { name: /^Change price of Soap/ }).click()
+  // Sell soap for less: one at the usual price shows only its total - tap it to change the price, in the line.
+  await line(soap).getByRole('button', { name: /^Change the total for Soap/ }).click()
   await line(soap).getByLabel('Each (₦)').fill('300')
   await line(soap).getByText('usual ₦350').waitFor()
-  await page.getByText('2 items · collect').waitFor()
-  await page.getByRole('group', { name: 'Collect ₦4,300 by' }).waitFor()
+  await page.getByText('3 items', { exact: true }).filter({ visible: true }).first().waitFor()
+  await page.getByRole('group', { name: 'Paid with, ₦4,300' }).waitFor()
   await page.keyboard.press('Escape')
   await page.screenshot({ path: SHOTS + '1-basket.png' })
   // Nothing about what the stock cost, ever: the customer can see this screen.
@@ -210,7 +210,7 @@ await check('a wrong tap is fixed with "Change how they paid", in place, and the
   await page.locator('[data-receipt="synced"]').getByText('Transfer', { exact: true }).waitFor()
   await eventually(async () => (await api(`/api/sales/${firstSaleId}`, { token })).json.paymentMethod, (m) => m === 'TRANSFER')
   await page.getByRole('button', { name: 'Next sale' }).click()
-  await page.getByText('Tap a product, or scan or search to add it.').waitFor()
+  await page.getByRole('list', { name: 'Tap to add' }).waitFor()
   await page.locator('[data-sale-paid]').getByText('₦4,300 · Transfer').waitFor()
 })
 
@@ -232,7 +232,7 @@ await check('Cancel sale, in its first two minutes, with a reason: kept on recor
 })
 
 await check('an unpriced item asks once before the sale is recorded without its price', async () => {
-  await page.getByText('Tap a product, or scan or search to add it.').waitFor()
+  await page.getByRole('list', { name: 'Tap to add' }).waitFor()
   await scan(oil)
   await line(oil).getByText('Add price').waitFor()
   await payAny('Card')
@@ -257,14 +257,14 @@ await check('the basket is kept on the phone: a reload brings the customer\'s it
 await check('typing in the search hides the pay buttons; picking an item brings them back', async () => {
   await page.getByRole('list', { name: 'Tap to add' }).getByRole('button', { name: `Add ${sugar.name}` }).click()
   await line(sugar).waitFor()
-  await page.getByRole('group', { name: /^Collect .* by$/ }).waitFor()
+  await page.getByRole('group', { name: /^Paid with, / }).waitFor()
   // The search narrows the same buttons (owner, 2026-11-16).
   await search().fill('salt')
-  await page.getByRole('group', { name: /^Collect .* by$/ }).waitFor({ state: 'hidden' })
+  await page.getByRole('group', { name: /^Paid with, / }).waitFor({ state: 'hidden' })
   await page.getByRole('list', { name: 'Tap to add' }).getByRole('button', { name: `Add ${salt.name}` }).waitFor()
   assert((await page.getByRole('list', { name: 'Tap to add' }).getByRole('button', { name: `Add ${sugar.name}`, exact: false }).count()) === 0, 'search did not narrow the buttons')
   await search().fill('')
-  await page.getByRole('group', { name: /^Collect .* by$/ }).waitFor()
+  await page.getByRole('group', { name: /^Paid with, / }).waitFor()
 })
 
 await check('"+ New sale" keeps the first customer waiting as a pill; both are kept and paid separately', async () => {
@@ -389,14 +389,14 @@ await check('money is exact: 24 pieces of a ₦5,000 carton record as ₦5,000, 
   await page.goto(`${UI}/app/sell`)
   await page.getByRole('heading', { name: 'Record a sale', level: 1 }).waitFor()
   await scan(peak)
-  await line(peak).getByRole('button', { name: /^Change price of Peak \(sa\), ₦5,000/ }).waitFor()
+  await line(peak).getByRole('button', { name: /^Change the total for Peak \(sa\)/ }).getByText('₦5,000').waitFor()
   // Sold by the piece instead: the small unit choice in the line.
   const select = line(peak).getByLabel(`Unit for ${peak.name}`)
   await select.selectOption(await select.evaluate((el) => [...el.options].find((o) => /piece/i.test(o.text))?.value))
   await page.getByLabel('How many Peak (sa)').fill('24')
   await line(peak).getByText('₦5,000', { exact: true }).first().waitFor()
   await scan(rice)
-  await line(rice).getByRole('button', { name: /^Change price of Rice/ }).click()
+  await line(rice).getByRole('button', { name: /^Change the total for Rice/ }).click()
   await line(rice).getByLabel('Each (₦)').fill('1,500')
   await line(rice).getByText('₦1,500', { exact: true }).first().waitFor()
   await pay('Cash', '₦6,500')
@@ -415,7 +415,7 @@ await check('a line\'s total can be typed instead of the price each; the price e
   await line(salt).getByRole('button', { name: /^Change price of Salt/ }).click()
   await line(salt).getByLabel('Total (₦)').fill('400')
   await eventually(() => line(salt).getByLabel('Each (₦)').inputValue(), (v) => v === '133.33')
-  await page.getByRole('group', { name: 'Collect ₦400 by' }).waitFor()
+  await page.getByRole('group', { name: 'Paid with, ₦400' }).waitFor()
   await page.screenshot({ path: SHOTS + '5a-line-total.png' })
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.waitForTimeout(300)

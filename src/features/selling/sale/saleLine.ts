@@ -20,6 +20,10 @@ export interface SaleLine {
   totalTyped: string | null
   /** Why the server refused this line when the sale was recorded - shown on it until it is changed. */
   problem?: string
+  /** On a table's bill (V99): a side's meal - the key of its line, sent or not. */
+  withKey?: string
+  /** On a table's bill: the note for the kitchen ("No pepper"). */
+  note?: string
 }
 
 export function unitsFor(product: Product, catalogue: UnitOfMeasureOption[]): UnitOption[] {

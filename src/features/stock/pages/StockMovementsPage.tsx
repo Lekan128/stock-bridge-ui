@@ -180,7 +180,7 @@ export function StockMovementsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold text-neutral-900">Stock movements</h1>
+          <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Stock movements</h1>
           <p className="mt-1 max-w-2xl text-sm text-neutral-500">
             Everything you took in and gave out, with what it cost.
             <span className="hidden sm:inline">

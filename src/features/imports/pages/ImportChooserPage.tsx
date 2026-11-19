@@ -48,7 +48,7 @@ export function ImportChooserPage() {
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="text-2xl font-semibold text-neutral-900">{copy.chooser.title}</h1>
+        <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">{copy.chooser.title}</h1>
         <p className="mt-1 text-sm text-neutral-600">{copy.chooser.subtitle}</p>
       </div>
 

@@ -151,7 +151,7 @@ function query(q: CatalogQuery): CatalogQueryResult {
     // Not the chosen areas' product: counted for "N other products", listed only when searched for or shown,
     // and never in the stock chips - it isn't out there, it just isn't theirs.
     if (row._elsewhere) {
-      if (!inCategory) continue
+      if (!inCategory || q.onlyHere) continue
       if (!term && !q.showOthers) {
         elsewhere += 1
         continue

@@ -178,7 +178,7 @@ export function AdminTenantDetailPage() {
           </button>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-semibold text-neutral-900">{client.name}</h1>
+              <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">{client.name}</h1>
               <ClientStatusBadge active={client.active} />
               {client.platformOwner && (
                 <Badge variant="info">

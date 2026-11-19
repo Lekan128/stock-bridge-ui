@@ -1,5 +1,10 @@
+import { BillPage } from '@/features/selling/bills/BillPage'
+import { CloseDayPage } from '@/features/selling/sale/CloseDayPage'
+import { TicketsPage } from '@/features/selling/tickets/TicketsPage'
+import { MoneyOutPage } from '@/features/selling/sale/MoneyOutPage'
 import { Suspense, lazy } from 'react'
 import { BranchesPage } from '@/features/branches/BranchesPage'
+import { BranchPage } from '@/features/branches/BranchPage'
 import { RecordingBranchGate } from '@/features/branches/RecordingBranchGate'
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
@@ -747,6 +752,41 @@ export function AppRoutes() {
               </RequirePermission>
             }
           />
+          {/* Stage C (V99): a table's bill - Record a sale's till, kept open. */}
+          <Route
+            path="sell/bill"
+            element={
+              <RequirePermission permission={PERMISSIONS.STOCK_OUT}>
+                <BillPage />
+              </RequirePermission>
+            }
+          />
+          {/* Step 8 (V102): an area's kitchen or bar tickets, on a device there. */}
+          <Route
+            path="tickets"
+            element={
+              <RequirePermission permission={PERMISSIONS.VIEW_PRODUCTS}>
+                <TicketsPage />
+              </RequirePermission>
+            }
+          />
+          {/* Step 13: close the day, and money taken out of a drawer. */}
+          <Route
+            path="sell/close"
+            element={
+              <RequirePermission permission={PERMISSIONS.STOCK_OUT}>
+                <CloseDayPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="sell/money-out"
+            element={
+              <RequirePermission permission={PERMISSIONS.STOCK_OUT}>
+                <MoneyOutPage />
+              </RequirePermission>
+            }
+          />
           <Route
             path="sales"
             element={
@@ -1135,6 +1175,14 @@ export function AppRoutes() {
             element={
               <RequirePermission permission={PERMISSIONS.MANAGE_BRANCHES}>
                 <BranchesPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="company/branches/:branchId"
+            element={
+              <RequirePermission permission={PERMISSIONS.MANAGE_BRANCHES}>
+                <BranchPage />
               </RequirePermission>
             }
           />

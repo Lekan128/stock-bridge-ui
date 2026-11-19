@@ -69,7 +69,10 @@ export function UserMenu() {
         <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-600 text-xs font-semibold text-white">
           {avatarInitials(user.username, client?.name ?? client?.identifier)}
         </span>
-        <span className="hidden text-sm font-medium text-neutral-700 sm:block">{displayUsername(user.username)}</span>
+        {/* The name only where there's room: on a smaller laptop it wrapped and crowded the bar (owner, 2026-11-18). */}
+        <span className="hidden max-w-[14rem] truncate text-sm font-medium whitespace-nowrap text-neutral-700 xl:block">
+          {displayUsername(user.username)}
+        </span>
         <ChevronDown className="hidden h-4 w-4 text-neutral-500 sm:block" />
       </button>
       {open && (

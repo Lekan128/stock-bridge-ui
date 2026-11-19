@@ -27,6 +27,8 @@ export interface NewArea {
   shortIsUsed?: boolean
   /** Moves to it wait until someone there confirms them (Part 4). */
   confirms?: boolean
+  /** Things are sold from it (V103); absent: they are. */
+  sells?: boolean
 }
 
 /** A branch's areas (STOCK_AREAS_PART_1.md). Shared records, so online only, like branches. */
@@ -55,7 +57,7 @@ export const areasApi = {
     api.post<Area[]>(`/api/branches/${branchId}/areas`, { areas }).then((r) => r.data),
   update: (
     id: string,
-    payload: { name?: string; keepsStock?: boolean; delivery?: boolean; shortIsUsed?: boolean; confirms?: boolean },
+    payload: { name?: string; keepsStock?: boolean; delivery?: boolean; shortIsUsed?: boolean; confirms?: boolean; sells?: boolean },
   ) =>
     api.patch<Area>(`/api/areas/${id}`, payload).then((r) => r.data),
   close: (id: string) => api.post<Area>(`/api/areas/${id}/close`).then((r) => r.data),

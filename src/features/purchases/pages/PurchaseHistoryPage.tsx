@@ -67,7 +67,7 @@ export function PurchaseHistoryPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold text-neutral-900">Purchase history</h1>
+        <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Purchase history</h1>
         <p className="mt-0.5 text-sm text-neutral-500">
           Everything your company has bought — every supplier, every order placed on the
           marketplace, and every delivery you have recorded by hand.

@@ -309,7 +309,7 @@ export function RecordDeliveryPage() {
     <div className="flex min-h-full flex-col">
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">{text.title}</h1>
+          <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">{text.title}</h1>
           <Link
             to={SPREADSHEET_PATH}
             className="mt-1 inline-flex items-center gap-1.5 rounded-sm text-sm font-medium text-primary-700 hover:underline focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none"
@@ -687,7 +687,7 @@ function AfterRecording({ recorded, canSend, onAnother }: { recorded: Recorded; 
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
-      <h1 className="text-2xl font-semibold text-neutral-900">{text.title}</h1>
+      <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">{text.title}</h1>
       <p className="flex items-start gap-2 rounded-md bg-accent-50 px-3 py-2.5 text-sm text-accent-800" role="status">
         <Check className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
         {text.recorded(recorded.what)}

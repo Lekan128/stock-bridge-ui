@@ -1,7 +1,7 @@
-import { AREA_KINDS, AREA_KIND_ORDER, ARRIVING, type AreaKind } from '@/features/branches/areas'
+import { AREA_KINDS, AREA_KIND_ORDER, ARRIVING, SELLING, type AreaKind } from '@/features/branches/areas'
 
 /**
- * The two questions about an area, as one way everywhere (owner, 2026-11-01): Edit asks them, and so does each card
+ * The questions about an area, as one way everywhere (owner, 2026-11-01): Edit asks them, and so does each card
  * when areas are added. What happens there (D-A12), and what happens when stock is moved there (Part 4) - each its
  * own box, only the chosen answer explained under it.
  *
@@ -15,6 +15,8 @@ export function AreaQuestions({
   confirms,
   onKind,
   onConfirms,
+  sells = true,
+  onSells,
   disabled = false,
   delivery = false,
 }: {
@@ -24,6 +26,9 @@ export function AreaQuestions({
   confirms: boolean
   onKind: (kind: AreaKind) => void
   onConfirms: (confirms: boolean) => void
+  /** Things are sold from here (V103). */
+  sells?: boolean
+  onSells?: (sells: boolean) => void
   disabled?: boolean
   delivery?: boolean
 }) {
@@ -66,6 +71,24 @@ export function AreaQuestions({
           },
         ]}
       />
+      {/* V103: a store room nothing is sold from. Record a sale and table bills never take its stock. */}
+      {onSells && (
+        <ChoiceList
+          legend="Is anything sold from here?"
+          name={`${id}-sells`}
+          value={sells ? 'YES' : 'NO'}
+          onChange={(value) => onSells(value === 'YES')}
+          disabled={disabled}
+          options={[
+            { value: 'YES', title: SELLING.YES, means: `Record a sale and table bills can take stock from ${place}.` },
+            {
+              value: 'NO',
+              title: SELLING.NO,
+              means: `Record a sale and table bills never take stock from ${place}. Move it to an area that sells first.`,
+            },
+          ]}
+        />
+      )}
     </>
   )
 }

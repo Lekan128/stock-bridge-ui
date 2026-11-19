@@ -1,4 +1,7 @@
+import { chargeLabel, priceCharges } from '@/features/selling/charges'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { MoneyInput, moneyText } from '@/features/selling/MoneyInput'
+import { Button } from '@/components/Button'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Minus, Plus, Search, X } from 'lucide-react'
@@ -20,6 +23,9 @@ import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { placeFigure } from '@/features/branches/areas'
 import { useSheetArea } from '@/features/branches/useSheetBranch'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
+import { TransferAccountChooser } from '@/features/selling/sale/TransferAccounts'
+import { DrawerLine, StartDayBar, useCashTill } from '@/features/selling/sale/cashDay'
+import { useQueryClient } from '@tanstack/react-query'
 
 type Basket = ReturnType<typeof useSaleBasket>
 
@@ -80,15 +86,34 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
     }
     setAskUnpriced(false)
   }
-  const finder = useProductFinder(term, addProduct, 30, true)
   // Where in the branch this sale comes from, at a branch with a choice of areas (V60): the Bar, not the Store.
   const branchHere = useOptionalWorkingBranch()
-  const area = useSheetArea(branchHere && !branchHere.isAll ? branchHere.working : null)
+  const area = useSheetArea(branchHere && !branchHere.isAll ? branchHere.working : null, basket.waitingByArea, true)
+  // Step 12: the transfer accounts of the branch selling (a one-branch company's only branch).
+  const workingBranch = branchHere && !branchHere.isAll ? (branchHere.working ?? branchHere.branches[0] ?? null) : null
+  const accounts = workingBranch?.paymentAccounts ?? []
+  // Step 10 (V100): the branch's charges on every sale - added on top they're part of what the customer pays.
+  const priced = priceCharges(basket.total, (workingBranch?.charges ?? []).filter((charge) => charge.applies === 'EVERY_SALE'))
+  const onTopCharges = priced.charges.filter((charge) => !charge.included && charge.amount > 0)
+  const toPay = priced.toPay
+  const [choosingAccount, setChoosingAccount] = useState(false)
+  const queryClient = useQueryClient()
+  // Step 13: the drawer this till sells into, while "Count cash at open and close" is on (nothing of it otherwise).
+  const drawerAreaId = areaId !== undefined ? (areaId ?? undefined) : area.areaId
+  const drawerPlace = workingBranch?.areas?.find((candidate) => candidate.id === drawerAreaId)?.name
+  const cashTill = useCashTill(workingBranch?.id, drawerAreaId)
+  const drawer = cashTill.data?.countsCash ? cashTill.data : null
+  const needsStart = drawer != null && !drawer.open && !drawer.closedToday
   // Whose figures the lines show: the till's area, else the branch's (sheets plan Part 4).
   const place = {
     branchId: branchHere && !branchHere.isAll ? branchHere.working?.id : undefined,
     areaId: areaId !== undefined ? (areaId ?? undefined) : area.areaId,
   }
+  // A sale stays with its area: switching areas shows that area's sales; this one waits (owner, 2026-11-18).
+  const { showArea } = basket
+  useEffect(() => showArea(place.areaId), [showArea, place.areaId])
+  // The search finds what "All" shows: this area's priced products (owner, 2026-11-18).
+  const finder = useProductFinder(term, addProduct, 30, true, { areaId: place.areaId })
 
   const started = useRef(false)
   useEffect(() => {
@@ -104,6 +129,17 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
   }, [])
 
   const itemCount = basket.lines.length
+  // What the sale says it holds: two waters are 2 items, as a bill counts them (owner, 2026-11-19).
+  const pieces = basket.lines.reduce((sum, line) => sum + line.quantity, 0)
+  const piecesText = `${formatNumber(pieces)} ${pieces === 1 ? 'item' : 'items'}`
+  // "Cancel sale": asked in place, never a popup; a different sale on screen forgets the question.
+  const [cancelling, setCancelling] = useState(false)
+  useEffect(() => setCancelling(false), [basket.activeId])
+  // The sale being served is always in sight in the row of sales, however many are waiting.
+  useEffect(() => {
+    document.querySelectorAll('[data-sale-tab-active]').forEach((tab) => tab.scrollIntoView?.({ block: 'nearest', inline: 'nearest' }))
+    // Its label grows as items go in, so look again then too.
+  }, [basket.activeId, basket.baskets.length, itemCount, basket.total])
   const unpriced = basket.lines.filter((line) => {
     const options = unitsFor(line.product, basket.catalogue)
     return lineAmount(line, optionOf(line, options), options) == null
@@ -114,21 +150,33 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
   const hideSale = typing ? (wide ? 'hidden lg:flex' : 'hidden') : 'flex'
 
   /** One tap on Cash, Transfer or Card records the whole sale, paid that way (selling till Step 1). */
-  async function record(paymentMethod: SalePaymentMethod) {
+  async function record(paymentMethod: SalePaymentMethod, accountId?: string) {
     if (unpriced.length > 0 && !askUnpriced) {
       setAskUnpriced(true)
       return
     }
+    // Step 12: a transfer names its account - the only one, or, with two or more, the one the cashier picks.
+    if (paymentMethod === 'TRANSFER' && accountId === undefined && accounts.length > 0) {
+      if (accounts.length === 1) return record('TRANSFER', accounts[0].id)
+      setChoosingAccount(true)
+      return
+    }
+    setChoosingAccount(false)
     setRecording(paymentMethod)
     setAskUnpriced(false)
     const usualToSet = basket.lines.filter((line) => makeUsual.has(line.key))
-    const sale = await basket.record(areaId !== undefined ? (areaId ?? undefined) : area.areaId, paymentMethod)
+    const recorded = await basket.record(areaId !== undefined ? (areaId ?? undefined) : area.areaId, paymentMethod, accountId)
+    // Its charges, worked out as the server does, for the receipt straight away.
+    const charged = priceCharges(recorded.total, (workingBranch?.charges ?? []).filter((charge) => charge.applies === 'EVERY_SALE'))
+    const sale = { ...recorded, charges: charged.charges, toPay: charged.toPay }
     // The screen chose the area (quick mode): it remembers it, not the basket's own question.
     if (areaId === undefined) area.remember()
     setRecording(null)
     setMakeUsual(new Set())
     setNoteOpen(false)
     onRecorded(sale)
+    // A cash sale can reopen a drawer closed earlier today (Step 13).
+    if (drawer) void queryClient.invalidateQueries({ queryKey: ['cash-till'] })
     // "Make this the usual price", for lines that were recorded - a product edit, so online only.
     for (const line of usualToSet) {
       if (!sale.lines.some((r) => r.line.key === line.key && r.status !== 'refused')) continue
@@ -144,7 +192,48 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
   // On a wide screen (Record a sale, owner 2026-11-16): a till. A bar across the top with the sales on this
   // phone; products fill the left; the sale runs the full height of the right edge, total and pay at the bottom.
   const W = wide
-  const tabs = (
+  const cancelLink = (
+    <button
+      type="button"
+      onClick={() => setCancelling(true)}
+      className="inline-flex min-h-10 items-center rounded-lg px-2 text-sm font-medium text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
+    >
+      Cancel sale
+    </button>
+  )
+  const cancelQuestion = (
+    <div role="group" aria-label="Cancel this sale?" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-danger-200 bg-danger-50 px-3 py-2">
+      <p className="text-sm">
+        <span className="font-semibold text-danger-800">Cancel this sale?</span>{' '}
+        <span className="text-neutral-700 tabular-nums">
+          {piecesText} · {formatMoney(basket.total)}
+        </span>
+      </p>
+      <div className="flex gap-2">
+        <Button variant="secondary" autoFocus onClick={() => setCancelling(false)}>
+          Keep it
+        </Button>
+        <Button
+          variant="danger"
+          onClick={() => {
+            basket.cancelSale()
+            setTerm('')
+            setAskUnpriced(false)
+            setCancelling(false)
+            showToast('Sale cancelled.', 'success')
+          }}
+        >
+          Yes, cancel
+        </Button>
+      </div>
+    </div>
+  )
+  // A mouse wheel scrolls the row of sales sideways - only a trackpad could, before.
+  const wheelSideways = (event: React.WheelEvent<HTMLDivElement>) => {
+    const row = event.currentTarget
+    if (row.scrollWidth > row.clientWidth && Math.abs(event.deltaY) > Math.abs(event.deltaX)) row.scrollLeft += event.deltaY
+  }
+  const saleTabs = (
     <>
       {waiting.length > 0 &&
         basket.baskets.map((b, index) => {
@@ -155,8 +244,9 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
               key={b.id}
               type="button"
               aria-pressed={isActive}
+              data-sale-tab-active={isActive || undefined}
               onClick={() => basket.switchTo(b.id)}
-              className={`inline-flex min-h-10 items-center rounded-lg border px-3 text-sm font-semibold tabular-nums ${
+              className={`inline-flex min-h-10 shrink-0 items-center rounded-lg border px-2.5 text-sm font-semibold whitespace-nowrap tabular-nums ${
                 isActive ? 'border-action bg-action text-white' : 'border-warning-300 bg-warning-50 text-warning-900'
               }`}
             >
@@ -165,6 +255,10 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
             </button>
           )
         })}
+    </>
+  )
+  const newSaleButton = (
+    <>
       {itemCount > 0 && (
         <button
           type="button"
@@ -173,7 +267,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
             setTerm('')
             setAskUnpriced(false)
           }}
-          className="inline-flex min-h-10 items-center rounded-lg px-3 text-sm font-semibold text-primary-700 hover:bg-primary-50"
+          className="inline-flex min-h-10 shrink-0 items-center rounded-lg px-2.5 text-sm font-semibold whitespace-nowrap text-primary-700 hover:bg-primary-50"
         >
           + New sale
         </button>
@@ -194,11 +288,8 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
           <ArrowLeft className="h-5 w-5" aria-hidden="true" />
         </button>
       )}
-      <h1 className="text-lg font-semibold text-neutral-900">Record a sale</h1>
-      <div role="group" aria-label="Sales on this phone" className="ml-4 flex min-w-0 items-center gap-1.5 overflow-x-auto">
-        {tabs}
-      </div>
-      {topRight && <div className="ml-2 shrink-0">{topRight}</div>}
+      <h1 className="text-lg font-semibold whitespace-nowrap text-neutral-900">Record a sale</h1>
+      {topRight && <div className="ml-4 shrink-0 whitespace-nowrap">{topRight}</div>}
     </div>,
     topbarSlot,
   )
@@ -206,6 +297,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
   const search = (
     <div className={`flex flex-col gap-3 ${W ? 'lg:col-start-1 lg:row-start-1 lg:bg-neutral-50 lg:px-4 lg:pt-4' : ''}`}>
       {areaId === undefined && area.field}
+      {needsStart && workingBranch && <StartDayBar branchId={workingBranch.id} areaId={drawerAreaId} placeName={drawerPlace} />}
       <div className="relative">
         <Search className="pointer-events-none absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-neutral-500" aria-hidden="true" />
         <label htmlFor="sale-search" className="sr-only">
@@ -254,20 +346,45 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
           price” on {unpriced.length === 1 ? 'it' : 'them'}, or tap how they paid again to record without one.
         </p>
       )}
-      <div className="flex items-baseline justify-between gap-3">
+      <div className={`items-baseline justify-between gap-3 ${itemCount === 0 ? 'hidden' : 'flex'}`}>
         <p className="text-sm text-neutral-600">
-          <span className={W ? 'lg:hidden' : ''}>
-            {itemCount} {itemCount === 1 ? 'item' : 'items'} · collect
-          </span>
-          {W && <span className="hidden lg:inline">Total</span>}
+          <span className={W ? 'lg:hidden' : ''}>{piecesText}</span>
+          {W && <span className="hidden lg:inline">Total · {piecesText}</span>}
         </p>
         <p className={`text-xl font-semibold text-neutral-900 tabular-nums ${W ? 'lg:text-3xl' : ''}`} aria-live="polite">
-          {formatMoney(basket.total)}
+          {formatMoney(toPay)}
         </p>
       </div>
+      {itemCount > 0 && onTopCharges.length > 0 && (
+        <p className="-mt-1 text-xs text-neutral-500 tabular-nums">
+          {formatMoney(basket.total)} + {onTopCharges.map((charge) => `${chargeLabel(charge)} ${formatMoney(charge.amount)}`).join(' + ')}
+        </p>
+      )}
+      {itemCount === 0 && drawer && (drawer.open || drawer.closedToday) ? (
+        <DrawerLine till={drawer} placeName={drawerPlace} />
+      ) : (
       <div className={itemCount === 0 ? 'pointer-events-none opacity-35' : ''} aria-hidden={itemCount === 0 || undefined}>
-        <PaymentButtons label={`Collect ${formatMoney(basket.total)} by`} busy={recording} onPick={(method) => void record(method)} />
+        {/* Tapping one records it as paid that way (owner, 2026-11-18: a first-time cashier might not know) - said in one
+            small line, not a step, so a phone and quick mode keep their room. */}
+        {choosingAccount && workingBranch ? (
+          <TransferAccountChooser
+            branchId={workingBranch.id}
+            accounts={accounts}
+            amount={toPay}
+            busy={recording === 'TRANSFER'}
+            onPick={(account) => void record('TRANSFER', account.id)}
+            onBack={() => setChoosingAccount(false)}
+          />
+        ) : (
+          <>
+            <p className="mb-1 text-xs font-medium text-neutral-500" aria-hidden="true">
+              Paid with
+            </p>
+            <PaymentButtons label={`Paid with, ${formatMoney(toPay)}`} busy={recording} onPick={(method) => void record(method)} />
+          </>
+        )}
       </div>
+      )}
     </div>
   )
 
@@ -277,20 +394,26 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
         W ? 'lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:flex lg:min-h-0 lg:gap-0 lg:border-l lg:border-neutral-200 lg:bg-white' : ''
       }`}
     >
-      {/* On a phone: the waiting sales and "+ New sale" sit above the lines. On a wide screen they are in the top bar. */}
+      {/* The sales on this phone and "+ New sale", in one line above the lines - on a wide screen at the top of the
+          sale panel, not the app's top bar, which they crowded (owner, 2026-11-18). */}
       {(waiting.length > 0 || itemCount > 0) && (
-        <div role="group" aria-label="Sales on this phone" className={`flex flex-wrap items-center justify-end gap-1.5 ${W ? 'lg:hidden' : ''}`}>
-          {tabs}
+        <div className={`flex min-w-0 items-center justify-end gap-1.5 ${W ? 'lg:hidden' : ''}`}>
+          {/* The sales scroll sideways (left-aligned: right-aligned overflow can't be scrolled to); + New sale stays put. */}
+          <div role="group" aria-label="Sales on this phone" onWheel={wheelSideways} className="flex min-w-0 items-center gap-1.5 overflow-x-auto">
+            {saleTabs}
+          </div>
+          {newSaleButton}
         </div>
       )}
       {W && (
-        <div className="hidden items-baseline justify-between px-4 pt-3 pb-1 lg:flex">
-          <h2 className="text-base font-semibold text-neutral-900">{waiting.length > 0 ? `Sale ${basket.baskets.findIndex((b) => b.id === basket.activeId) + 1}` : 'Sale'}</h2>
-          {itemCount > 0 && (
-            <span className="text-sm text-neutral-500">
-              {itemCount} {itemCount === 1 ? 'item' : 'items'}
-            </span>
-          )}
+        <div className="hidden min-h-14 items-center gap-1.5 px-4 pt-3 pb-1 lg:flex">
+          <h2 className={waiting.length > 0 ? 'sr-only' : 'text-base font-semibold text-neutral-900'}>
+            {waiting.length > 0 ? `Sale ${basket.baskets.findIndex((b) => b.id === basket.activeId) + 1}` : 'Sale'}
+          </h2>
+          <div role="group" aria-label="Sales on this computer" onWheel={wheelSideways} className="flex min-w-0 items-center gap-1.5 overflow-x-auto">
+            {saleTabs}
+          </div>
+          <span className="ml-auto shrink-0">{newSaleButton}</span>
         </div>
       )}
 
@@ -299,7 +422,8 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
       <div className={W ? 'lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:px-4' : ''}>
         {itemCount === 0 ? (
           <>
-            <p className={`text-sm text-neutral-600 ${W ? 'lg:hidden' : ''}`}>Tap a product, or scan or search to add it.</p>
+            {/* The drawer between customers (Step 13); nothing at all otherwise - no "tap a product" line (owner, 2026-11-18). */}
+            {drawer && <div className={W ? 'lg:hidden' : ''}><DrawerLine till={drawer} placeName={drawerPlace} /></div>}
             {W && (
               <div className="hidden h-full flex-col items-center justify-center gap-1 py-16 text-center lg:flex">
                 <p className="text-sm font-semibold text-neutral-600">No items yet</p>
@@ -309,7 +433,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
           </>
         ) : (
           <ul
-            className={`flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white ${W ? 'lg:rounded-none lg:border-0' : ''}`}
+            className={`flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white ${W ? 'lg:-mx-3 lg:rounded-none lg:border-0' : ''}`}
             aria-label="This sale"
           >
             {/* Newest first: what was just added sits right under the search (owner, 2026-11-16). */}
@@ -346,8 +470,8 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
           </ul>
         )}
 
-        {itemCount > 0 &&
-          (noteOpen || basket.note ? (
+        {itemCount > 0 && cancelling && <div className="mt-2">{cancelQuestion}</div>}
+        {itemCount > 0 && !cancelling && (noteOpen || basket.note) && (
             <div className="mt-2 flex flex-col gap-1">
               <label htmlFor="sale-note" className="text-sm font-medium text-neutral-800">
                 Note (optional)
@@ -360,15 +484,22 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
                 className="h-11 rounded-md border border-neutral-300 bg-white px-3 text-base"
               />
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setNoteOpen(true)}
-              className="inline-flex min-h-11 items-center self-start rounded-sm text-sm font-medium text-primary-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-            >
-              Add a note
-            </button>
-          ))}
+        )}
+        {/* "Add a note" and "Cancel sale" share the row under the lines (owner, 2026-11-18): out of the way of the sales. */}
+        {itemCount > 0 && !cancelling && (
+          <div className="flex items-center justify-between gap-3">
+            {!(noteOpen || basket.note) && (
+              <button
+                type="button"
+                onClick={() => setNoteOpen(true)}
+                className="inline-flex min-h-11 items-center rounded-sm text-sm font-medium text-primary-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              >
+                Add a note
+              </button>
+            )}
+            <span className="-mr-2 ml-auto">{cancelLink}</span>
+          </div>
+        )}
       </div>
 
       {(itemCount > 0 || W) && footer}
@@ -413,6 +544,10 @@ interface Place {
 interface BasketLineProps {
   line: SaleLine
   place: Place
+  /** A side on a table's bill (V99): set in under its meal. */
+  side?: boolean
+  /** Under the line, on a table's bill: which meal a side goes with, the note for the kitchen. */
+  below?: ReactNode
   catalogue: ReturnType<typeof useSaleBasket>['catalogue']
   canMakeUsual: boolean
   makeUsual: boolean
@@ -421,16 +556,15 @@ interface BasketLineProps {
   onRemove: () => void
 }
 
-function money(value: number): string {
-  return String(Math.round(value * 100) / 100)
-}
+// An amount box's figure, with its commas: "1,500", "133.33".
+const money = moneyText
 
 /**
  * One line, one row (owner, 2026-11-16): the name with its price each, − n +, the line's total - tap it to
  * change the price, for one or for the whole line, in place - and ✕. A product sold in packs says which
  * ("bottle ▾") and can switch.
  */
-function BasketLine({ line, place, catalogue, canMakeUsual, makeUsual, onMakeUsual, onChange, onRemove }: BasketLineProps) {
+export function BasketLine({ line, place, side, below, catalogue, canMakeUsual, makeUsual, onMakeUsual, onChange, onRemove }: BasketLineProps) {
   const options = unitsFor(line.product, catalogue)
   const option = optionOf(line, options)
   const each = priceEach(line, option)
@@ -449,8 +583,27 @@ function BasketLine({ line, place, catalogue, canMakeUsual, makeUsual, onMakeUsu
   // "crate", not "crate of 12 pieces": the line's price must fit beside its ✕ (walk-through, 2026-11-17).
   const unitWord = option.isStockUnit ? null : option.label.split(' ')[0].toLowerCase()
 
+  // The price each, on its own line under the row (never beside a unit menu or under the ✕, owner 2026-11-18) - and
+  // only when it says something the total doesn't: more than one, a changed price, or no price yet. One at the usual
+  // price is just its total, which opens the price too.
+  const showEach = each == null || changed || line.quantity !== 1
+  const priceButton = (
+          <button
+            type="button"
+            aria-expanded={editingPrice}
+            aria-label={amount != null ? `Change price of ${name}, ${formatMoney(amount)}` : `Add a price for ${name}`}
+            onClick={() => setEditingPrice((open) => !open)}
+            className={`-my-1 inline-flex min-h-11 min-w-0 items-center rounded px-1 text-left text-sm leading-tight tabular-nums hover:underline hover:underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 lg:min-h-9 ${
+              each == null ? 'font-semibold text-primary-700' : changed ? 'text-warning-800' : 'text-neutral-600'
+            }`}
+          >
+            <span>
+              {each != null ? `${formatMoney(each)} ${unitWord ? `a ${unitWord}` : 'each'}${changed && usual != null ? ` · usual ${formatMoney(usual)}` : ''}` : 'Add price'}
+            </span>
+          </button>
+  )
   return (
-    <li className={`flex min-w-0 flex-col gap-1.5 px-3 py-2.5 ${editingPrice ? 'bg-neutral-50' : ''}`}>
+    <li className={`flex min-w-0 flex-col gap-1.5 px-3 py-2.5 ${editingPrice ? 'bg-neutral-50' : ''} ${side ? 'border-l-2 border-neutral-200 bg-neutral-50/60 pl-6' : ''}`}>
       <div className="flex items-baseline justify-between gap-3">
         <p className="min-w-0 truncate text-base font-medium text-neutral-900">{name}</p>
         {/* The line's total opens the price too, with Total ready to type - it's the number tapped (owner, 2026-11-17). */}
@@ -537,17 +690,6 @@ function BasketLine({ line, place, catalogue, canMakeUsual, makeUsual, onMakeUsu
         )}
         <button
           type="button"
-          aria-expanded={editingPrice}
-          aria-label={amount != null ? `Change price of ${name}, ${formatMoney(amount)}` : `Add a price for ${name}`}
-          onClick={() => setEditingPrice((open) => !open)}
-          className={`-my-1 inline-flex min-h-11 min-w-0 items-center rounded px-1 text-left text-sm leading-tight tabular-nums hover:underline hover:underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 lg:min-h-9 ${
-            each == null ? 'font-semibold text-primary-700' : changed ? 'text-warning-800' : 'text-neutral-600'
-          }`}
-        >
-          {each != null ? `${formatMoney(each)} ${unitWord ? `a ${unitWord}` : 'each'}${changed && usual != null ? ` · usual ${formatMoney(usual)}` : ''}` : 'Add price'}
-        </button>
-        <button
-          type="button"
           aria-label={`Remove ${name}`}
           onClick={onRemove}
           className="ml-auto flex h-11 w-9 shrink-0 items-center justify-center rounded-md text-neutral-400 hover:bg-neutral-100 hover:text-danger-700 lg:h-9"
@@ -555,6 +697,7 @@ function BasketLine({ line, place, catalogue, canMakeUsual, makeUsual, onMakeUsu
           <X className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
+      {showEach && <div className="-mt-1 pl-1">{priceButton}</div>}
 
       {editingPrice && (
         <div className="flex min-w-0 items-end gap-2">
@@ -562,12 +705,11 @@ function BasketLine({ line, place, catalogue, canMakeUsual, makeUsual, onMakeUsu
             <label htmlFor={`sale-each-${line.key}`} className="text-xs font-medium text-neutral-600">
               Each (₦)
             </label>
-            <input
+            <MoneyInput
               id={`sale-each-${line.key}`}
               autoFocus
-              inputMode="decimal"
               value={line.priceTyped ?? (line.totalTyped == null && usual != null ? money(usual) : each != null ? money(each) : '')}
-              onChange={(event) => onChange({ priceTyped: event.target.value, totalTyped: null })}
+              onValue={(text) => onChange({ priceTyped: text, totalTyped: null })}
               className="h-10 w-full min-w-0 rounded-md border-2 border-neutral-300 bg-white px-2 text-base font-semibold tabular-nums focus:border-primary-600 focus:outline-none"
             />
           </div>
@@ -575,11 +717,10 @@ function BasketLine({ line, place, catalogue, canMakeUsual, makeUsual, onMakeUsu
             <label htmlFor={`sale-total-${line.key}`} className="text-xs font-medium text-neutral-600">
               Total (₦)
             </label>
-            <input
+            <MoneyInput
               id={`sale-total-${line.key}`}
-              inputMode="decimal"
               value={line.totalTyped ?? (amount != null ? money(amount) : '')}
-              onChange={(event) => onChange({ totalTyped: event.target.value, priceTyped: null })}
+              onValue={(text) => onChange({ totalTyped: text, priceTyped: null })}
               className="h-10 w-full min-w-0 rounded-md border-2 border-neutral-300 bg-white px-2 text-base font-semibold tabular-nums focus:border-primary-600 focus:outline-none"
             />
           </div>
@@ -613,6 +754,7 @@ function BasketLine({ line, place, catalogue, canMakeUsual, makeUsual, onMakeUsu
           Only {formatNumber(onRecord)} {stockUnitWord(resolveUnitSymbol(line.product.unitOfMeasure, catalogue), onRecord)} in stock
         </p>
       )}
+      {below}
     </li>
   )
 }

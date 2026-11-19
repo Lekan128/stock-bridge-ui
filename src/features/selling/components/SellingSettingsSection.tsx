@@ -123,6 +123,30 @@ export function SellingSettingsSection() {
         />
       )}
 
+      {/* "Count cash at open and close" (selling till Step 13): off by default; with it off nothing of it shows. */}
+      {on && (
+        <MadeHereSwitch
+          id="counts-cash"
+          label="Count cash at open and close"
+          help="Cashiers start each drawer with the cash in it and close it by counting. Cash only: transfers and POS go straight to your accounts."
+          save={sellingApi.updateCountsCash}
+          onText="Cashiers will start and close their drawers."
+          offText="Drawers are no longer counted."
+          on={settings.countsCash === true}
+          changedLine={
+            settings.countsCashChangedAt && settings.countsCashChangedByName
+              ? `${settings.countsCash ? 'Turned on' : 'Turned off'} by ${settings.countsCashChangedByName}, ${formatDate(settings.countsCashChangedAt)}`
+              : null
+          }
+          canChange={canChange}
+          online={online}
+          onChanged={(updated) => setData(updated)}
+        />
+      )}
+      {on && settings.countsCash && (
+        <ReopenHours hours={settings.cashReopenHours ?? 4} canChange={canChange} online={online} onChanged={(updated) => setData(updated)} />
+      )}
+
       {!canChange && <p className="text-xs text-neutral-500">Ask your owner to change this.</p>}
       {canChange && !online && <p className="text-xs text-neutral-500">Changing this needs a connection.</p>}
       {error && (
@@ -191,20 +215,32 @@ function MadeHereSwitch({
   canChange,
   online,
   onChanged,
+  id = 'sell-made-here',
+  label = 'Sell things you make',
+  help = "Meals, drinks you mix, services. Things you sell but don't keep in stock.",
+  save = sellingApi.updateMadeHere,
+  onText = 'You can now add things you make.',
+  offText = 'Things you make are hidden. Nothing is deleted.',
 }: {
   on: boolean
   changedLine: string | null
   canChange: boolean
   online: boolean
   onChanged: (settings: import('@/features/selling/types').SellingSettings) => void
+  id?: string
+  label?: string
+  help?: string
+  save?: (on: boolean) => Promise<import('@/features/selling/types').SellingSettings>
+  onText?: string
+  offText?: string
 }) {
   const { showToast } = useToast()
   const [saving, setSaving] = useState(false)
   async function change(next: boolean) {
     setSaving(true)
     try {
-      onChanged(await sellingApi.updateMadeHere(next))
-      showToast(next ? 'You can now add things you make.' : 'Things you make are hidden. Nothing is deleted.', 'success')
+      onChanged(await save(next))
+      showToast(next ? onText : offText, 'success')
     } catch (err) {
       showToast(isAppError(err) ? err.message : "Couldn't change that. Try again.", 'error')
     } finally {
@@ -214,11 +250,11 @@ function MadeHereSwitch({
   return (
     <div className="flex items-start justify-between gap-4 border-t border-neutral-100 pt-4">
       <div className="min-w-0">
-        <p id="sell-made-here-label" className="text-sm font-medium text-neutral-900">
-          Sell things you make
+        <p id={`${id}-label`} className="text-sm font-medium text-neutral-900">
+          {label}
         </p>
-        <p id="sell-made-here-help" className="mt-0.5 max-w-prose text-sm text-neutral-500">
-          Meals, drinks you mix, services. Things you sell but don't keep in stock.
+        <p id={`${id}-help`} className="mt-0.5 max-w-prose text-sm text-neutral-500">
+          {help}
         </p>
         {changedLine && <p className="mt-1 text-xs text-neutral-500">{changedLine}</p>}
       </div>
@@ -227,8 +263,8 @@ function MadeHereSwitch({
           type="button"
           role="switch"
           aria-checked={on}
-          aria-labelledby="sell-made-here-label"
-          aria-describedby="sell-made-here-help"
+          aria-labelledby={`${id}-label`}
+          aria-describedby={`${id}-help`}
           disabled={saving || !online}
           onClick={() => void change(!on)}
           className={`relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:outline-none ${
@@ -242,6 +278,70 @@ function MadeHereSwitch({
         </button>
       ) : (
         <span className="shrink-0 text-sm font-medium text-neutral-700">{on ? 'On' : 'Off'}</span>
+      )}
+    </div>
+  )
+}
+
+const REOPEN_CHOICES = [1, 2, 3, 4, 6, 8, 12, 24]
+
+/**
+ * How long after a close a drawer can be opened again (V98; owner, 2026-11-18). Within it, the till offers "Open it
+ * again" and a sale reopens the drawer from what was counted; after it, the cashier starts a new day with a fresh count.
+ */
+function ReopenHours({
+  hours,
+  canChange,
+  online,
+  onChanged,
+}: {
+  hours: number
+  canChange: boolean
+  online: boolean
+  onChanged: (settings: import('@/features/selling/types').SellingSettings) => void
+}) {
+  const { showToast } = useToast()
+  const [saving, setSaving] = useState(false)
+  const choices = REOPEN_CHOICES.includes(hours) ? REOPEN_CHOICES : [...REOPEN_CHOICES, hours].sort((a, b) => a - b)
+  async function change(next: number) {
+    setSaving(true)
+    try {
+      onChanged(await sellingApi.updateCashReopenHours(next))
+      showToast(`A closed drawer can be opened again for ${next} ${next === 1 ? 'hour' : 'hours'}.`, 'success')
+    } catch (err) {
+      showToast(isAppError(err) ? err.message : "Couldn't change that. Try again.", 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+  const words = (value: number) => `${value} ${value === 1 ? 'hour' : 'hours'}`
+  return (
+    <div className="flex items-start justify-between gap-4 pl-4">
+      <div className="min-w-0">
+        <label htmlFor="cash-reopen-hours" className="text-sm font-medium text-neutral-900">
+          Open a closed drawer again within
+        </label>
+        <p id="cash-reopen-hours-help" className="mt-0.5 max-w-prose text-sm text-neutral-500">
+          After this, it&apos;s a new day: the cashier counts the drawer to start.
+        </p>
+      </div>
+      {canChange ? (
+        <select
+          id="cash-reopen-hours"
+          aria-describedby="cash-reopen-hours-help"
+          value={hours}
+          disabled={saving || !online}
+          onChange={(event) => void change(Number(event.target.value))}
+          className="h-9 shrink-0 rounded-md border border-neutral-300 bg-white px-2 text-sm text-neutral-900 disabled:opacity-50"
+        >
+          {choices.map((value) => (
+            <option key={value} value={value}>
+              {words(value)}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <span className="shrink-0 text-sm font-medium text-neutral-700">{words(hours)}</span>
       )}
     </div>
   )

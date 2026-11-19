@@ -9,7 +9,7 @@ import { isAppError } from '@/types/api'
 import { areasApi } from '@/features/branches/branchesApi'
 import { BRANCHES_KEY } from '@/features/branches/BranchProvider'
 import { AreaQuestions } from '@/features/branches/AreaQuestions'
-import { AREA_KINDS, ARRIVING, hasAreas, kindFlags, suggestedKind, type AreaKind } from '@/features/branches/areas'
+import { AREA_KINDS, ARRIVING, SELLING, hasAreas, kindFlags, suggestedKind, type AreaKind } from '@/features/branches/areas'
 import type { Branch } from '@/features/branches/types'
 
 /** The quick picks (STOCK_AREAS_PLAN.md §4.1): the places our restaurants, hotels and shops name. */
@@ -21,6 +21,8 @@ interface Card {
   kind: AreaKind
   /** Moves to it wait until someone there confirms them (Part 4). */
   confirms: boolean
+  /** Things are sold from it (V103). */
+  sells: boolean
   /** The answers were changed by hand: a name typed later no longer picks them. */
   answered: boolean
 }
@@ -98,7 +100,7 @@ export function AddAreasSheet({ branch, onClose }: { branch: Branch; onClose: ()
       }
       await areasApi.add(
         branch.id,
-        named.map((card) => ({ name: card.name.trim().replace(/\s+/g, ' '), ...kindFlags(card.kind), confirms: card.confirms })),
+        named.map((card) => ({ name: card.name.trim().replace(/\s+/g, ' '), ...kindFlags(card.kind), confirms: card.confirms, sells: card.sells })),
       )
       await queryClient.invalidateQueries({ queryKey: BRANCHES_KEY })
       const total = (branch.areas?.length ?? 1) + named.length
@@ -232,6 +234,8 @@ export function AddAreasSheet({ branch, onClose }: { branch: Branch; onClose: ()
                       confirms={card.confirms}
                       onKind={(kind) => change(card.key, { kind, answered: true })}
                       onConfirms={(confirms) => change(card.key, { confirms, answered: true })}
+                      sells={card.sells}
+                      onSells={(sells) => change(card.key, { sells, answered: true })}
                     />
                     <button
                       type="button"
@@ -248,6 +252,7 @@ export function AddAreasSheet({ branch, onClose }: { branch: Branch; onClose: ()
                     <p className="min-w-0 text-sm text-neutral-700">
                       <span className="block">{AREA_KINDS[card.kind].title}</span>
                       <span className="block">{card.confirms ? ARRIVING.CONFIRM : ARRIVING.NOW}</span>
+                      <span className="block">{card.sells ? SELLING.YES : SELLING.NO}</span>
                     </p>
                     <button
                       type="button"
@@ -285,5 +290,5 @@ export function AddAreasSheet({ branch, onClose }: { branch: Branch; onClose: ()
 }
 
 function blank(key: number): Card {
-  return { key, name: '', kind: 'STORED', confirms: false, answered: false }
+  return { key, name: '', kind: 'STORED', confirms: false, sells: true, answered: false }
 }

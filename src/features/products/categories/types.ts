@@ -10,6 +10,8 @@ export interface CompanyCategory {
   name: string
   /** How many of the company's products are in it — what a delete confirmation has to state. */
   productCount: number
+  /** V99: "These go with a meal" - its products are sides on a table's bill. */
+  goesWithMeal?: boolean
 }
 
 /** Body for create and rename. The server trims it, refuses blank or over 80, and 409s a duplicate. */
