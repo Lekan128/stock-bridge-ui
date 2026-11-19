@@ -152,6 +152,8 @@ export interface SaleDetail {
   charges?: import('@/features/selling/charges').SaleCharge[]
   /** What the customer paid: `total` (the food and drinks) plus every charge added on top. */
   totalToPay?: number
+  /** A table's bill: each part it was paid in (several when split, V101). */
+  payments?: { method: 'CASH' | 'TRANSFER' | 'CARD'; amount: number }[]
 }
 
 export type SaleCancelState = 'REQUESTED' | 'DECLINED' | 'CANCELLED'

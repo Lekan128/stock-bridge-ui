@@ -54,11 +54,24 @@ export function SaleReceiptCard({ receipt }: { receipt: ReceiptData }) {
           <span>{formatMoney(charge.amount)}</span>
         </div>
       ))}
-      {receipt.paymentMethod && (
-        <div className="flex items-center justify-between text-sm text-neutral-700">
-          <span>Paid by</span>
-          <PaymentChip method={receipt.paymentMethod} />
-        </div>
+      {receipt.parts ? (
+        <dl className="flex flex-col gap-1 text-sm text-neutral-700" aria-label="Paid in parts">
+          {receipt.parts.map((part, index) => (
+            <div key={index} className="flex items-center justify-between">
+              <dt>
+                <PaymentChip method={part.method} />
+              </dt>
+              <dd className="tabular-nums">{formatMoney(part.amount)}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        receipt.paymentMethod && (
+          <div className="flex items-center justify-between text-sm text-neutral-700">
+            <span>Paid by</span>
+            <PaymentChip method={receipt.paymentMethod} />
+          </div>
+        )
       )}
       {receipt.cancelled && <p className="text-center text-sm font-semibold tracking-wider text-danger-700 uppercase">Cancelled</p>}
       {receipt.queued && <p className="text-xs text-neutral-500">Saved on this phone. It will send when you are online.</p>}
@@ -108,12 +121,19 @@ export function PrintableReceipt({ receipt }: { receipt: ReceiptData }) {
           <span>{formatMoney(charge.amount)}</span>
         </div>
       ))}
-      {receipt.paymentMethod && (
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span>Paid by</span>
-          <span>{paymentLabel(receipt.paymentMethod)}</span>
-        </div>
-      )}
+      {receipt.parts
+        ? receipt.parts.map((part, index) => (
+            <div key={index} style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>{paymentLabel(part.method)}</span>
+              <span>{formatMoney(part.amount)}</span>
+            </div>
+          ))
+        : receipt.paymentMethod && (
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Paid by</span>
+              <span>{paymentLabel(receipt.paymentMethod)}</span>
+            </div>
+          )}
       {receipt.cancelled && <div style={{ textAlign: 'center', fontWeight: 700 }}>CANCELLED</div>}
       <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }} />
       <div style={{ textAlign: 'center' }}>Thank you</div>

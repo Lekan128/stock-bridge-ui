@@ -19,6 +19,25 @@ export interface BillSummary {
   lastSentAt?: string
   /** The food and drinks plus the charges added on top, as they'd be paid now (V100). */
   toPay?: number
+  /** Paid so far, in parts (V101), and what's left. */
+  paid?: number
+  left?: number
+}
+
+/** One part of a bill's payment. */
+export interface BillPayment {
+  method: 'CASH' | 'TRANSFER' | 'CARD'
+  amount: number
+  accountName?: string
+  paidAt: string
+  paidByName?: string
+}
+
+/** Paying a bill, or a part of it: the receipt once nothing is left, else the bill with what's left. */
+export interface PayResult {
+  paid: boolean
+  sale?: SaleDetail
+  bill?: Bill
 }
 
 /** A line already sent to a bill. */
@@ -49,6 +68,8 @@ export interface Bill {
   lines: SentLine[]
   /** The branch's charges and taxes on this bill, with what each comes to. */
   charges?: import('@/features/selling/charges').SaleCharge[]
+  /** The parts paid so far. */
+  payments?: BillPayment[]
 }
 
 export const billsApi = {
@@ -60,8 +81,9 @@ export const billsApi = {
     api.get<{ productId: string; areaId: string }[]>('/api/bills/served-from', { params: { branchId } }).then((r) => r.data),
   takeOff: (id: string, movementId: string, kind: 'NOT_MADE' | 'SENT_BACK', note: string) =>
     api.post<Bill>(`/api/bills/${id}/lines/${movementId}/take-off`, { kind, note }).then((r) => r.data),
-  pay: (id: string, method: SalePaymentMethod, accountId?: string, areaId?: string) =>
-    api.post<SaleDetail>(`/api/bills/${id}/pay`, { method, accountId, areaId }).then((r) => r.data),
+  /** `amount`: a part; absent pays the rest. */
+  pay: (id: string, method: SalePaymentMethod, accountId?: string, areaId?: string, amount?: number) =>
+    api.post<PayResult>(`/api/bills/${id}/pay`, { method, accountId, areaId, amount }).then((r) => r.data),
   close: (id: string) => api.post<BillSummary>(`/api/bills/${id}/close`).then((r) => r.data),
 }
 

@@ -25,6 +25,8 @@ export interface ReceiptData {
   charges?: SaleCharge[]
   /** What the customer paid - `total` (the food and drinks) plus the charges added on top. */
   toPay?: number
+  /** A bill paid in parts: each one, instead of one "Paid by". */
+  parts?: { method: SalePaymentMethod; amount: number }[]
   total: number
   paymentMethod?: SalePaymentMethod | null
   /** Still on this phone, not yet on the server. */
@@ -106,6 +108,7 @@ export function receiptFromDetail(sale: SaleDetail, business: string): ReceiptDa
     total: sale.total,
     charges: sale.charges?.filter((charge) => charge.amount > 0),
     toPay: sale.totalToPay,
+    parts: (sale.payments?.length ?? 0) > 1 ? sale.payments : undefined,
     paymentMethod: sale.paymentMethod,
     cancelled: sale.cancelState === 'CANCELLED' || (sale.lineCount > 0 && sale.cancelledLineCount === sale.lineCount),
   }
@@ -128,7 +131,11 @@ export function receiptText(receipt: ReceiptData): string {
     ]),
     `Total: ${formatMoney(receipt.toPay ?? receipt.total)}`,
     ...inPrices(receipt).map((charge) => `Includes ${chargeLabel(charge)}: ${formatMoney(charge.amount)}`),
-    ...(receipt.paymentMethod ? [`Paid by: ${paymentLabel(receipt.paymentMethod)}`] : []),
+    ...(receipt.parts
+      ? receipt.parts.map((part) => `Paid by ${paymentLabel(part.method)}: ${formatMoney(part.amount)}`)
+      : receipt.paymentMethod
+        ? [`Paid by: ${paymentLabel(receipt.paymentMethod)}`]
+        : []),
     ...(receipt.cancelled ? ['', 'CANCELLED'] : []),
     '',
     'Thank you!',

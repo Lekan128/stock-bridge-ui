@@ -1,9 +1,9 @@
-import { Banknote, CreditCard, Landmark, type LucideIcon } from 'lucide-react'
+import { Banknote, CreditCard, Landmark, Split, type LucideIcon } from 'lucide-react'
 import { PAYMENT_LABELS, PAYMENT_METHODS, paymentLabel, type SalePaymentMethod } from '@/features/selling/sale/paymentMethod'
 
 export type { SalePaymentMethod }
 
-const ICONS: Record<SalePaymentMethod, LucideIcon> = { CASH: Banknote, TRANSFER: Landmark, CARD: CreditCard }
+const ICONS: Record<SalePaymentMethod, LucideIcon> = { CASH: Banknote, TRANSFER: Landmark, CARD: CreditCard, SPLIT: Split }
 
 /** A picture and one word: "Cash", "Transfer", "Card" - or "Not recorded" for a sale from before. */
 export function PaymentChip({ method }: { method?: SalePaymentMethod | null }) {

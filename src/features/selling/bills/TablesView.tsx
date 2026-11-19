@@ -100,13 +100,14 @@ export function TablesView({ branch, header }: { branch: Branch; header: ReactNo
                 type="button"
                 onClick={() => navigate(`/app/sell/bill?table=${table.id}`)}
                 className={`flex min-h-16 w-full flex-col justify-between rounded-lg border px-2.5 py-2 text-left tabular-nums ${
-                  bill ? 'border-warning-300 bg-warning-50' : 'border-neutral-200 bg-white hover:border-primary-600'
+                  bill ? `border-warning-300 bg-warning-50 ${(bill.paid ?? 0) > 0 ? 'border-dashed' : ''}` : 'border-neutral-200 bg-white hover:border-primary-600'
                 }`}
               >
                 <span className="text-sm font-semibold text-neutral-900">{table.name}</span>
                 {bill && (
                   <span className="text-xs leading-tight text-warning-900">
-                    {formatMoney(bill.total)} · {openFor(bill.openedAt)}
+                    {/* Part paid (Step 11): what's left; otherwise what it comes to so far. */}
+                    {(bill.paid ?? 0) > 0 ? `${formatMoney(bill.left ?? 0)} left` : formatMoney(bill.toPay ?? bill.total)} · {openFor(bill.openedAt)}
                     {bill.openedByName ? ` · ${bill.openedByName.split(' ')[0]}` : ''}
                   </span>
                 )}
@@ -167,7 +168,7 @@ export function TablesView({ branch, header }: { branch: Branch; header: ReactNo
       )}
       {open.length > 0 && (
         <p className="text-xs text-neutral-500">
-          {open.length} open · {formatMoney(open.reduce((sum, bill) => sum + bill.total, 0))} so far
+          {open.length} open · {formatMoney(open.reduce((sum, bill) => sum + (bill.left ?? bill.toPay ?? bill.total), 0))} to come
         </p>
       )}
     </div>

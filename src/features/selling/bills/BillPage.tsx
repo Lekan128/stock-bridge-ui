@@ -1,3 +1,4 @@
+import { MoneyInput } from '@/features/selling/MoneyInput'
 import { chargeLabel } from '@/features/selling/charges'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -195,8 +196,42 @@ export function BillPage() {
   const accounts = branch?.paymentAccounts ?? []
   const [choosingAccount, setChoosingAccount] = useState(false)
   const [paying, setPaying] = useState<SalePaymentMethod | null>(null)
+  // Step 11: paying in parts - evenly between N people (remembered on this phone for the bill), or any amount.
+  const [splitting, setSplitting] = useState(false)
+  const [splitAmount, setSplitAmount] = useState('')
+  const [people, setPeopleState] = useState<number | null>(() => {
+    try {
+      const saved = localStorage.getItem(`bill-split:${params.get('id') ?? tableId}`)
+      return saved ? Number(saved) : null
+    } catch {
+      return null
+    }
+  })
+  function setPeople(n: number | null) {
+    setPeopleState(n)
+    try {
+      if (n) localStorage.setItem(`bill-split:${params.get('id') ?? tableId}`, String(n))
+      else localStorage.removeItem(`bill-split:${params.get('id') ?? tableId}`)
+    } catch {
+      // A private window: the split is forgotten on reload, nothing else.
+    }
+  }
+  const paidSoFar = bill.data?.summary.paid ?? 0
+  const left = bill.data?.summary.left ?? billTotal
+  const payments = bill.data?.payments ?? []
+  // The next part: an even share (the last one takes what's left), an amount typed, or the rest.
+  const evenShare = people ? Math.round(billTotal / people) : null
+  const partsLeft = people ? people - payments.length : null
+  const typedPart = Number(splitAmount.replace(/,/g, '')) || 0
+  const nextPart =
+    splitting && !people
+      ? Math.min(typedPart, left)
+      : evenShare != null && partsLeft != null && partsLeft > 1
+        ? Math.min(evenShare, left)
+        : left
+
   async function pay(method: SalePaymentMethod, accountId?: string) {
-    if (!billId) return
+    if (!billId || !(nextPart > 0)) return
     if (method === 'TRANSFER' && accountId === undefined && accounts.length > 1) {
       setChoosingAccount(true)
       return
@@ -204,11 +239,26 @@ export function BillPage() {
     setChoosingAccount(false)
     setPaying(method)
     try {
-      const sale = await billsApi.pay(billId, method, accountId ?? (method === 'TRANSFER' && accounts.length === 1 ? accounts[0].id : undefined), tillArea)
+      const part = nextPart < left ? nextPart : undefined
+      const result = await billsApi.pay(
+        billId,
+        method,
+        accountId ?? (method === 'TRANSFER' && accounts.length === 1 ? accounts[0].id : undefined),
+        tillArea,
+        part,
+      )
       await queryClient.invalidateQueries({ queryKey: ['bills'] })
       void queryClient.invalidateQueries({ queryKey: ['cash-till'] })
-      showToast(`${label} paid.`, 'success')
-      navigate(`/app/sales/${sale.saleId}`, { replace: true })
+      if (result.paid && result.sale) {
+        setPeople(null)
+        showToast(`${label} paid.`, 'success')
+        navigate(`/app/sales/${result.sale.saleId}`, { replace: true })
+        return
+      }
+      if (result.bill) queryClient.setQueryData(['bill', billId], result.bill)
+      setSplitting(false)
+      setSplitAmount('')
+      showToast(`${formatMoney(part ?? 0)} paid · ${formatMoney(result.bill?.summary.left ?? 0)} left.`, 'success')
     } catch (error) {
       showToast(isAppError(error) ? error.message : "Couldn't record the payment. Try again.", 'error')
     } finally {
@@ -411,11 +461,57 @@ export function BillPage() {
                   <span>{formatMoney(charge.amount)}</span>
                 </p>
               ))}
+            {payments.length > 0 && (
+              <div className="flex flex-col gap-1 rounded-lg border border-warning-300 bg-warning-50 px-3 py-2 text-sm tabular-nums" data-part-paid>
+                <p className="flex justify-between font-semibold text-warning-900">
+                  <span>
+                    {formatMoney(paidSoFar)} paid of {formatMoney(billTotal)}
+                  </span>
+                  {people && (
+                    <span>
+                      {payments.length} of {people}
+                    </span>
+                  )}
+                </p>
+                {payments.map((payment, index) => (
+                  <p key={index} className="flex justify-between text-accent-800">
+                    <span>
+                      {payment.method === 'CASH' ? 'Cash' : payment.method === 'CARD' ? 'Card' : `Transfer${payment.accountName ? ` · ${payment.accountName}` : ''}`}
+                    </span>
+                    <span>{formatMoney(payment.amount)}</span>
+                  </p>
+                ))}
+                <p className="flex justify-between font-semibold text-warning-900">
+                  <span>Left</span>
+                  <span>{formatMoney(left)}</span>
+                </p>
+              </div>
+            )}
+            {splitting && payments.length === 0 && (
+              <SplitChooser
+                total={billTotal}
+                people={people}
+                onPeople={(n) => {
+                  setPeople(n)
+                  setSplitAmount('')
+                }}
+                amount={splitAmount}
+                onAmount={(text) => {
+                  setSplitAmount(text)
+                  setPeople(null)
+                }}
+                onCancel={() => {
+                  setSplitting(false)
+                  setPeople(null)
+                  setSplitAmount('')
+                }}
+              />
+            )}
             {choosingAccount ? (
               <TransferAccountChooser
                 branchId={branch.id}
                 accounts={accounts}
-                amount={billTotal}
+                amount={nextPart}
                 busy={paying === 'TRANSFER'}
                 onPick={(account) => void pay('TRANSFER', account.id)}
                 onBack={() => setChoosingAccount(false)}
@@ -423,9 +519,23 @@ export function BillPage() {
             ) : (
               <>
                 <p className="text-xs font-medium text-neutral-500" aria-hidden="true">
-                  Paid with
+                  {nextPart < left || payments.length > 0
+                    ? `${payments.length === 0 ? 'The first part' : nextPart < left ? 'The next part' : 'The last part'}, ${formatMoney(nextPart)}, paid with`
+                    : 'Paid with'}
                 </p>
-                <PaymentButtons label={`Paid with, ${formatMoney(billTotal)}`} busy={paying} onPick={(method) => void pay(method)} />
+                <div className={nextPart > 0 ? '' : 'pointer-events-none opacity-35'}>
+                  <PaymentButtons label={`Paid with, ${formatMoney(nextPart)}`} busy={paying} onPick={(method) => void pay(method)} />
+                </div>
+                {!splitting && payments.length === 0 && (
+                  <button type="button" onClick={() => setSplitting(true)} className="min-h-10 text-sm font-semibold text-primary-700 hover:underline">
+                    Split the bill
+                  </button>
+                )}
+                {payments.length > 0 && (
+                  <button type="button" onClick={() => navigate('/app/sell')} className="min-h-10 text-sm font-medium text-neutral-600 hover:underline">
+                    Keep the rest open for later
+                  </button>
+                )}
               </>
             )}
           </>
@@ -811,5 +921,71 @@ function SentRow({
         </form>
       )}
     </li>
+  )
+}
+
+// ---------------------------------------------------------------------------------- splitting
+
+/**
+ * "Split the bill" (Step 11; owner, 2026-11-19): evenly between people - whole naira, the last part makes up the
+ * difference - or any amount. The first part is then paid with the usual buttons.
+ */
+function SplitChooser({
+  total,
+  people,
+  onPeople,
+  amount,
+  onAmount,
+  onCancel,
+}: {
+  total: number
+  people: number | null
+  onPeople: (n: number) => void
+  amount: string
+  onAmount: (text: string) => void
+  onCancel: () => void
+}) {
+  const each = people ? Math.round(total / people) : null
+  const last = people && each != null ? total - each * (people - 1) : null
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-neutral-200 bg-neutral-50 p-2.5" data-split>
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold text-neutral-900">Split the bill</p>
+        <button type="button" onClick={onCancel} className="text-sm font-medium text-neutral-600 hover:underline">
+          Pay it all at once
+        </button>
+      </div>
+      <p className="text-xs font-medium text-neutral-600">Evenly, between</p>
+      <div role="radiogroup" aria-label="Evenly, between" className="grid grid-cols-5 gap-1.5">
+        {[2, 3, 4, 5, 6].map((n) => (
+          <button
+            key={n}
+            type="button"
+            role="radio"
+            aria-checked={people === n}
+            onClick={() => onPeople(n)}
+            className={`min-h-10 rounded-md border text-sm font-semibold tabular-nums ${people === n ? 'border-2 border-primary-600 bg-primary-50 text-primary-700' : 'border-neutral-200 bg-white text-neutral-800'}`}
+          >
+            {n}
+          </button>
+        ))}
+      </div>
+      {people && each != null && last != null && (
+        <p className="text-sm text-neutral-700 tabular-nums">
+          Each pays {formatMoney(each)}
+          {last !== each && ` · the last one ${formatMoney(last)}`}
+        </p>
+      )}
+      <label htmlFor="split-amount" className="text-xs font-medium text-neutral-600">
+        Or an amount
+      </label>
+      <MoneyInput
+        id="split-amount"
+        value={amount}
+        onValue={onAmount}
+        placeholder="₦"
+        className="h-10 rounded-md border border-neutral-300 bg-white px-2 text-base tabular-nums"
+      />
+    </div>
   )
 }

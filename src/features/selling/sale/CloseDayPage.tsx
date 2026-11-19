@@ -1,3 +1,4 @@
+import { useOpenBills } from '@/features/selling/bills/TablesView'
 import { useState } from 'react'
 import { MoneyInput } from '@/features/selling/MoneyInput'
 import { Link, useNavigate } from 'react-router-dom'
@@ -35,6 +36,7 @@ export function CloseDayPage() {
     enabled: !!branch,
   })
   // One row per drawer: a drawer opened again after a close is the same drawer - show only its latest state.
+  const openBills = useOpenBills(branch?.id)
   const list = Object.values(
     (drawers.data ?? []).filter(mine).reduce<Record<string, Drawer>>((latest, drawer) => {
       const key = drawer.areaId ?? 'branch'
@@ -209,6 +211,17 @@ export function CloseDayPage() {
         <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Close the day</h1>
       </div>
       {drawers.error && <p role="alert" className="text-sm text-danger-700">{drawers.error}</p>}
+      {/* Stage C: tables' bills still open aren't money yet - closing is fine; they stay open into tomorrow. */}
+      {(openBills.data?.length ?? 0) > 0 && (
+        <p className="rounded-lg border border-warning-200 bg-warning-50 px-3 py-2 text-sm text-warning-900" data-open-bills>
+          <span className="font-semibold">
+            {openBills.data!.length} {openBills.data!.length === 1 ? 'bill' : 'bills'} still open ·{' '}
+            {formatMoney(openBills.data!.reduce((sum, bill) => sum + (bill.left ?? bill.toPay ?? bill.total), 0))}
+          </span>
+          <br />
+          {openBills.data!.map((bill) => bill.label).join(', ')}. They stay open; their cash goes into whichever drawer takes it.
+        </p>
+      )}
       {drawers.data && list.length === 0 && <p className="text-sm text-neutral-600">No drawer is open here today.</p>}
       {list.length > 0 && (
         <>

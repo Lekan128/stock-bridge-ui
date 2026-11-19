@@ -278,7 +278,7 @@ export function useSaleBasket(draftKey: string = BASKETS_DRAFT_KEY) {
             ...(amount != null ? { lineTotal: amount } : {}),
             note: note.trim() || undefined,
             areaId,
-            paymentMethod,
+            paymentMethod: paymentMethod as 'CASH' | 'TRANSFER' | 'CARD',
             ...(paymentAccountId ? { paymentAccountId } : {}),
           },
           baseDelta: -base,
