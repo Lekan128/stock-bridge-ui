@@ -17,6 +17,8 @@ export interface BillSummary {
   total: number
   items: number
   lastSentAt?: string
+  /** The food and drinks plus the charges added on top, as they'd be paid now (V100). */
+  toPay?: number
 }
 
 /** A line already sent to a bill. */
@@ -45,6 +47,8 @@ export interface SentLine {
 export interface Bill {
   summary: BillSummary
   lines: SentLine[]
+  /** The branch's charges and taxes on this bill, with what each comes to. */
+  charges?: import('@/features/selling/charges').SaleCharge[]
 }
 
 export const billsApi = {

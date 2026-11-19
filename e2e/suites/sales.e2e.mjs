@@ -167,7 +167,7 @@ await check('a scanner runs a basket: scanning again adds one; a changed price s
   await line(soap).getByRole('button', { name: /^Change the total for Soap/ }).click()
   await line(soap).getByLabel('Each (₦)').fill('300')
   await line(soap).getByText('usual ₦350').waitFor()
-  await page.getByText('2 items', { exact: true }).filter({ visible: true }).first().waitFor()
+  await page.getByText('3 items', { exact: true }).filter({ visible: true }).first().waitFor()
   await page.getByRole('group', { name: 'Paid with, ₦4,300' }).waitFor()
   await page.keyboard.press('Escape')
   await page.screenshot({ path: SHOTS + '1-basket.png' })

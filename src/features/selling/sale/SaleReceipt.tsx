@@ -2,7 +2,8 @@ import { createPortal } from 'react-dom'
 import { formatMoney } from '@/features/selling/money'
 import { PaymentChip } from '@/features/selling/sale/payment'
 import { paymentLabel } from '@/features/selling/sale/paymentMethod'
-import type { ReceiptData } from '@/features/selling/sale/receipt'
+import { inPrices, onTop, type ReceiptData } from '@/features/selling/sale/receipt'
+import { chargeLabel } from '@/features/selling/charges'
 
 /**
  * A sale's receipt as a customer would read it (Step 1 fixes): the business, the number and time, what was
@@ -28,10 +29,31 @@ export function SaleReceiptCard({ receipt }: { receipt: ReceiptData }) {
           </div>
         ))}
       </dl>
+      {/* Charges and taxes added on top (V100): the food and drinks, then each, then the total paid. */}
+      {onTop(receipt).length > 0 && (
+        <dl className="flex flex-col text-sm">
+          <div className="flex justify-between gap-3 py-0.5">
+            <dt className="text-neutral-600">Food and drinks</dt>
+            <dd className="text-neutral-900">{formatMoney(receipt.total)}</dd>
+          </div>
+          {onTop(receipt).map((charge) => (
+            <div key={charge.name} className="flex justify-between gap-3 py-0.5">
+              <dt className="text-neutral-600">{chargeLabel(charge)}</dt>
+              <dd className="text-neutral-900">{formatMoney(charge.amount)}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
       <div className={`flex justify-between text-base font-semibold text-neutral-900 ${receipt.cancelled ? 'line-through' : ''}`}>
         <span>Total</span>
-        <span>{formatMoney(receipt.total)}</span>
+        <span>{formatMoney(receipt.toPay ?? receipt.total)}</span>
       </div>
+      {inPrices(receipt).map((charge) => (
+        <div key={charge.name} className="-mt-1 flex justify-between text-xs text-neutral-500">
+          <span>Includes {chargeLabel(charge)}</span>
+          <span>{formatMoney(charge.amount)}</span>
+        </div>
+      ))}
       {receipt.paymentMethod && (
         <div className="flex items-center justify-between text-sm text-neutral-700">
           <span>Paid by</span>
@@ -62,10 +84,30 @@ export function PrintableReceipt({ receipt }: { receipt: ReceiptData }) {
         </div>
       ))}
       <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }} />
+      {onTop(receipt).length > 0 && (
+        <>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Food and drinks</span>
+            <span>{formatMoney(receipt.total)}</span>
+          </div>
+          {onTop(receipt).map((charge) => (
+            <div key={charge.name} style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>{chargeLabel(charge)}</span>
+              <span>{formatMoney(charge.amount)}</span>
+            </div>
+          ))}
+        </>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
         <span>TOTAL</span>
-        <span>{formatMoney(receipt.total)}</span>
+        <span>{formatMoney(receipt.toPay ?? receipt.total)}</span>
       </div>
+      {inPrices(receipt).map((charge) => (
+        <div key={charge.name} style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span>Includes {chargeLabel(charge)}</span>
+          <span>{formatMoney(charge.amount)}</span>
+        </div>
+      ))}
       {receipt.paymentMethod && (
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <span>Paid by</span>

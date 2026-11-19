@@ -1,3 +1,4 @@
+import { chargeLabel } from '@/features/selling/charges'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -103,7 +104,9 @@ export function BillPage() {
   const label = table ? tableLabel(table.name) : (bill.data?.summary.label ?? forName ?? 'Bill')
   const sent = bill.data?.lines ?? []
   const live = sent.filter((line) => !line.takenOff)
-  const billTotal = bill.data?.summary.total ?? 0
+  // Step 10: the food and drinks plus the branch's charges added on top, as they'd be paid now.
+  const billTotal = bill.data?.summary.toPay ?? bill.data?.summary.total ?? 0
+  const billCharges = (bill.data?.charges ?? []).filter((charge) => charge.amount > 0)
   const isSide = (product: Product) => !!product.categoryId && sideCategoryIds.includes(product.categoryId)
 
   // ------------------------------------------------------------------ adding: sides ask which meal
@@ -378,12 +381,36 @@ export function BillPage() {
           </>
         ) : live.length > 0 ? (
           <>
+            {billCharges.some((charge) => !charge.included) && (
+              <dl className="flex flex-col text-sm tabular-nums">
+                <div className="flex justify-between gap-3">
+                  <dt className="text-neutral-600">Food and drinks</dt>
+                  <dd className="text-neutral-900">{formatMoney(bill.data?.summary.total ?? 0)}</dd>
+                </div>
+                {billCharges
+                  .filter((charge) => !charge.included)
+                  .map((charge) => (
+                    <div key={charge.name} className="flex justify-between gap-3">
+                      <dt className="text-neutral-600">{chargeLabel(charge)}</dt>
+                      <dd className="text-neutral-900">{formatMoney(charge.amount)}</dd>
+                    </div>
+                  ))}
+              </dl>
+            )}
             <div className="flex items-baseline justify-between gap-3">
               <p className="text-sm text-neutral-600">
                 To pay · {formatNumber(liveCount)} {liveCount === 1 ? 'item' : 'items'}
               </p>
               <p className="text-xl font-semibold text-neutral-900 tabular-nums lg:text-3xl">{formatMoney(billTotal)}</p>
             </div>
+            {billCharges
+              .filter((charge) => charge.included)
+              .map((charge) => (
+                <p key={charge.name} className="-mt-1 flex justify-between text-xs text-neutral-500 tabular-nums">
+                  <span>Includes {chargeLabel(charge)}</span>
+                  <span>{formatMoney(charge.amount)}</span>
+                </p>
+              ))}
             {choosingAccount ? (
               <TransferAccountChooser
                 branchId={branch.id}

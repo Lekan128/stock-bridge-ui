@@ -1,3 +1,4 @@
+import { chargeLabel, priceCharges } from '@/features/selling/charges'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { MoneyInput, moneyText } from '@/features/selling/MoneyInput'
 import { Button } from '@/components/Button'
@@ -91,6 +92,10 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
   // Step 12: the transfer accounts of the branch selling (a one-branch company's only branch).
   const workingBranch = branchHere && !branchHere.isAll ? (branchHere.working ?? branchHere.branches[0] ?? null) : null
   const accounts = workingBranch?.paymentAccounts ?? []
+  // Step 10 (V100): the branch's charges on every sale - added on top they're part of what the customer pays.
+  const priced = priceCharges(basket.total, (workingBranch?.charges ?? []).filter((charge) => charge.applies === 'EVERY_SALE'))
+  const onTopCharges = priced.charges.filter((charge) => !charge.included && charge.amount > 0)
+  const toPay = priced.toPay
   const [choosingAccount, setChoosingAccount] = useState(false)
   const queryClient = useQueryClient()
   // Step 13: the drawer this till sells into, while "Count cash at open and close" is on (nothing of it otherwise).
@@ -124,6 +129,9 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
   }, [])
 
   const itemCount = basket.lines.length
+  // What the sale says it holds: two waters are 2 items, as a bill counts them (owner, 2026-11-19).
+  const pieces = basket.lines.reduce((sum, line) => sum + line.quantity, 0)
+  const piecesText = `${formatNumber(pieces)} ${pieces === 1 ? 'item' : 'items'}`
   // "Cancel sale": asked in place, never a popup; a different sale on screen forgets the question.
   const [cancelling, setCancelling] = useState(false)
   useEffect(() => setCancelling(false), [basket.activeId])
@@ -157,7 +165,10 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
     setRecording(paymentMethod)
     setAskUnpriced(false)
     const usualToSet = basket.lines.filter((line) => makeUsual.has(line.key))
-    const sale = await basket.record(areaId !== undefined ? (areaId ?? undefined) : area.areaId, paymentMethod, accountId)
+    const recorded = await basket.record(areaId !== undefined ? (areaId ?? undefined) : area.areaId, paymentMethod, accountId)
+    // Its charges, worked out as the server does, for the receipt straight away.
+    const charged = priceCharges(recorded.total, (workingBranch?.charges ?? []).filter((charge) => charge.applies === 'EVERY_SALE'))
+    const sale = { ...recorded, charges: charged.charges, toPay: charged.toPay }
     // The screen chose the area (quick mode): it remembers it, not the basket's own question.
     if (areaId === undefined) area.remember()
     setRecording(null)
@@ -195,7 +206,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
       <p className="text-sm">
         <span className="font-semibold text-danger-800">Cancel this sale?</span>{' '}
         <span className="text-neutral-700 tabular-nums">
-          {itemCount} {itemCount === 1 ? 'item' : 'items'} · {formatMoney(basket.total)}
+          {piecesText} · {formatMoney(basket.total)}
         </span>
       </p>
       <div className="flex gap-2">
@@ -337,19 +348,18 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
       )}
       <div className={`items-baseline justify-between gap-3 ${itemCount === 0 ? 'hidden' : 'flex'}`}>
         <p className="text-sm text-neutral-600">
-          <span className={W ? 'lg:hidden' : ''}>
-            {itemCount} {itemCount === 1 ? 'item' : 'items'}
-          </span>
-          {W && (
-            <span className="hidden lg:inline">
-              Total · {itemCount} {itemCount === 1 ? 'item' : 'items'}
-            </span>
-          )}
+          <span className={W ? 'lg:hidden' : ''}>{piecesText}</span>
+          {W && <span className="hidden lg:inline">Total · {piecesText}</span>}
         </p>
         <p className={`text-xl font-semibold text-neutral-900 tabular-nums ${W ? 'lg:text-3xl' : ''}`} aria-live="polite">
-          {formatMoney(basket.total)}
+          {formatMoney(toPay)}
         </p>
       </div>
+      {itemCount > 0 && onTopCharges.length > 0 && (
+        <p className="-mt-1 text-xs text-neutral-500 tabular-nums">
+          {formatMoney(basket.total)} + {onTopCharges.map((charge) => `${chargeLabel(charge)} ${formatMoney(charge.amount)}`).join(' + ')}
+        </p>
+      )}
       {itemCount === 0 && drawer && (drawer.open || drawer.closedToday) ? (
         <DrawerLine till={drawer} placeName={drawerPlace} />
       ) : (
@@ -360,7 +370,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
           <TransferAccountChooser
             branchId={workingBranch.id}
             accounts={accounts}
-            amount={basket.total}
+            amount={toPay}
             busy={recording === 'TRANSFER'}
             onPick={(account) => void record('TRANSFER', account.id)}
             onBack={() => setChoosingAccount(false)}
@@ -370,7 +380,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
             <p className="mb-1 text-xs font-medium text-neutral-500" aria-hidden="true">
               Paid with
             </p>
-            <PaymentButtons label={`Paid with, ${formatMoney(basket.total)}`} busy={recording} onPick={(method) => void record(method)} />
+            <PaymentButtons label={`Paid with, ${formatMoney(toPay)}`} busy={recording} onPick={(method) => void record(method)} />
           </>
         )}
       </div>

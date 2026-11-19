@@ -30,6 +30,8 @@ export interface SalesTotals {
   belowCostLineCount: number
   /** What came in by each way of paying (API V88). Absent from an API older than selling till Step 1. */
   byPayment?: PaymentTotals
+  /** Charges and taxes on these sales, kept apart from the food and drinks (V100). */
+  charges?: { name: string; included: boolean; amount: number }[]
 }
 
 /** The sales amount split by how the customer paid; "not recorded" is a sale from before payments. */
@@ -146,6 +148,10 @@ export interface SaleDetail {
   cancelDecidedAt?: string
   /** A table's bill (V99): "Table 5", "VIP", or the name it was opened for. */
   billFor?: string
+  /** Its charges and taxes as they stood when it was made (V100), with what each came to. */
+  charges?: import('@/features/selling/charges').SaleCharge[]
+  /** What the customer paid: `total` (the food and drinks) plus every charge added on top. */
+  totalToPay?: number
 }
 
 export type SaleCancelState = 'REQUESTED' | 'DECLINED' | 'CANCELLED'

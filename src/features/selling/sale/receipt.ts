@@ -1,3 +1,4 @@
+import { chargeLabel, type SaleCharge } from '@/features/selling/charges'
 import type { UnitOfMeasureOption } from '@/features/products/types'
 import { formatNumber } from '@/features/products/unitCopy'
 import { formatMoney } from '@/features/selling/money'
@@ -20,6 +21,10 @@ export interface ReceiptData {
   rows: { key: string; label: string; amount: number | null; side?: boolean }[]
   /** A table's bill: "Table 5", "VIP", or the name it was opened for. */
   billFor?: string
+  /** Charges and taxes (V100): added on top show before the total, included ones under it. */
+  charges?: SaleCharge[]
+  /** What the customer paid - `total` (the food and drinks) plus the charges added on top. */
+  toPay?: number
   total: number
   paymentMethod?: SalePaymentMethod | null
   /** Still on this phone, not yet on the server. */
@@ -56,10 +61,16 @@ export function receiptFromRecorded(sale: RecordedSale, catalogue: UnitOfMeasure
         }
       }),
     total: sale.total,
+    charges: sale.charges?.filter((charge) => charge.amount > 0),
+    toPay: sale.toPay,
     paymentMethod: sale.paymentMethod,
     queued: sale.lines.some((line) => line.status === 'queued'),
   }
 }
+
+/** The charges added on top of a receipt's food and drinks, and those already in its prices. */
+export const onTop = (receipt: ReceiptData) => (receipt.charges ?? []).filter((charge) => !charge.included)
+export const inPrices = (receipt: ReceiptData) => (receipt.charges ?? []).filter((charge) => charge.included)
 
 export function receiptFromDetail(sale: SaleDetail, business: string): ReceiptData {
   const live = sale.lines.filter((line) => !line.cancelled)
@@ -93,6 +104,8 @@ export function receiptFromDetail(sale: SaleDetail, business: string): ReceiptDa
       }
     }),
     total: sale.total,
+    charges: sale.charges?.filter((charge) => charge.amount > 0),
+    toPay: sale.totalToPay,
     paymentMethod: sale.paymentMethod,
     cancelled: sale.cancelState === 'CANCELLED' || (sale.lineCount > 0 && sale.cancelledLineCount === sale.lineCount),
   }
@@ -109,7 +122,12 @@ export function receiptText(receipt: ReceiptData): string {
     '',
     ...receipt.rows.map((row) => `${row.label} — ${row.amount != null ? formatMoney(row.amount) : 'no price'}`),
     '',
-    `Total: ${formatMoney(receipt.total)}`,
+    ...onTop(receipt).flatMap((charge, index) => [
+      ...(index === 0 ? [`Food and drinks: ${formatMoney(receipt.total)}`] : []),
+      `${chargeLabel(charge)}: ${formatMoney(charge.amount)}`,
+    ]),
+    `Total: ${formatMoney(receipt.toPay ?? receipt.total)}`,
+    ...inPrices(receipt).map((charge) => `Includes ${chargeLabel(charge)}: ${formatMoney(charge.amount)}`),
     ...(receipt.paymentMethod ? [`Paid by: ${paymentLabel(receipt.paymentMethod)}`] : []),
     ...(receipt.cancelled ? ['', 'CANCELLED'] : []),
     '',

@@ -1,3 +1,4 @@
+import { ChargesSection } from '@/features/selling/bills/ChargesSection'
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp } from 'lucide-react'
@@ -35,7 +36,7 @@ function tablesSummary(tables: BranchTable[]): string {
 }
 
 /**
- * Branch → Selling (V99, selling till Step 7): its tables. Charges and taxes join it in Step 10. Changed in the app's
+ * Branch → Selling (V99, V100; selling till Steps 7 and 10): its tables, and its charges and taxes. Changed in the app's
  * usual sheet: "Add 10" makes the next ten numbers, any table can be renamed or switched off, never deleted.
  */
 export function BranchSellingPanel({ branch }: { branch: Branch }) {
@@ -62,6 +63,7 @@ export function BranchSellingPanel({ branch }: { branch: Branch }) {
         With tables, Record a sale opens on Tables: a bill is kept open for a table and paid later. A shop without tables
         never sees them.
       </p>
+      <ChargesSection branch={branch} />
       <TablesSheet branch={branch} open={editing} tables={list} onClose={() => setEditing(false)} />
     </div>
   )

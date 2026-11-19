@@ -35,6 +35,8 @@ export interface Branch {
   paymentAccounts?: PaymentAccount[]
   /** Its switched-on tables (V99), in the owner's order; empty without table service. */
   tables?: BranchTable[]
+  /** Its switched-on charges and taxes (V100). */
+  charges?: import('@/features/selling/charges').Charge[]
 }
 
 /** A table at a branch (V99, selling till Step 7). */

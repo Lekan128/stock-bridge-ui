@@ -164,6 +164,12 @@ export function SalesPage() {
             )}
           </p>
           {totals.byPayment && totals.saleCount > 0 && <PaymentTotalsRow paid={totals.byPayment} />}
+          {/* Step 10 (V100): charges and taxes, apart from the food and drinks - taxes to pay over, service to share. */}
+          {totals.charges && totals.charges.length > 0 && (
+            <p className="text-sm text-neutral-600 tabular-nums" data-sales-charges>
+              {totals.charges.map((charge) => `${charge.included ? 'In prices: ' : ''}${charge.name} ${formatMoney(charge.amount)}`).join(' · ')}
+            </p>
+          )}
           {left > 0 && (
             <p className="text-sm text-neutral-600">
               Profit leaves out {formatNumber(left)} {left === 1 ? 'sale' : 'sales'}:{' '}

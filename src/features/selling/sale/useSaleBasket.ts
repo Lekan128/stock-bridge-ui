@@ -37,6 +37,10 @@ export interface RecordedSale {
   paymentAccountId?: string
   /** When it was recorded on this phone (ms) - the receipt's time. */
   recordedAt: number
+  /** Its charges and taxes (V100), worked out on the till as the server does - for the receipt straight away. */
+  charges?: import('@/features/selling/charges').SaleCharge[]
+  /** The food and drinks plus the charges added on top. */
+  toPay?: number
 }
 
 /** One customer's basket. Several can be open at once: one being served, others waiting to pay. */
