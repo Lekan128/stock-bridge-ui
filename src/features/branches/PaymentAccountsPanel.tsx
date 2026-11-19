@@ -53,7 +53,7 @@ export function PaymentAccountsPanel({ branch }: { branch: Branch }) {
     <div className="flex flex-col gap-5">
         <p className="text-sm text-neutral-600">
           Where customers at {branch.name} pay by transfer.{' '}
-          {on > 1 ? 'Transfer at the till asks which one the money came into.' : on === 1 ? 'Transfers are recorded to it.' : ''}
+          {on > 1 ? 'A transfer on Record a sale asks which one the money came into.' : on === 1 ? 'Transfers are recorded to it.' : ''}
         </p>
         {accounts.error && <p role="alert" className="text-sm text-danger-700">{accounts.error}</p>}
         {list.length > 0 && (

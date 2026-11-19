@@ -90,7 +90,7 @@ export function CloseDayPage() {
           <button
             type="button"
             onClick={() => (list.length > 1 ? setResult(null) : navigate('/app/sell'))}
-            aria-label={list.length > 1 ? 'Back to the drawers' : 'Back to the till'}
+            aria-label={list.length > 1 ? 'Back to the drawers' : 'Back to Record a sale'}
             className="rounded-md p-1.5 text-neutral-600 hover:bg-neutral-100"
           >
             <ArrowLeft className="h-5 w-5" aria-hidden="true" />
@@ -151,7 +151,7 @@ export function CloseDayPage() {
               Log out
             </Button>
             <Link to="/app/sell" className="self-center text-sm font-medium text-neutral-600 hover:underline">
-              Back to the till
+              Back to Record a sale
             </Link>
           </div>
         )}
