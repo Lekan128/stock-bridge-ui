@@ -12,6 +12,7 @@ import { SaleReceiptCard } from '@/features/selling/sale/SaleReceipt'
 import { salesReportApi } from '@/features/selling/sales/salesReportApi'
 import type { SaleDetail } from '@/features/selling/sales/types'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
+import { useSellingNav } from '@/features/selling/sellingNav'
 import { isAppError } from '@/types/api'
 
 /**
@@ -19,8 +20,11 @@ import { isAppError } from '@/types/api'
  * from a "Ada asks to cancel a sale" notification. Print or share it; cancel it, or ask to; and, for someone
  * who can cancel sales, approve or decline a request.
  */
-export function SaleRecordPage() {
-  const { saleId } = useParams<{ saleId: string }>()
+export function SaleRecordPage({ id }: { id?: string } = {}) {
+  const params = useParams<{ saleId: string }>()
+  // Inside quick mode (owner, 2026-11-19) a paid table's receipt comes as `id`; back goes to the Tables there.
+  const saleId = id ?? params.saleId
+  const nav = useSellingNav()
   const navigate = useNavigate()
   const location = useLocation()
   const { user, client } = useAuth()
@@ -49,7 +53,8 @@ export function SaleRecordPage() {
   const settled = sale?.cancelState === 'CANCELLED' || live === 0 || sale?.cancelState === 'REQUESTED'
 
   function back() {
-    if (location.key !== 'default') navigate(-1)
+    if (nav.quick) navigate(nav.tables)
+    else if (location.key !== 'default') navigate(-1)
     else navigate(permissions.includes(PERMISSIONS.VIEW_ANALYTICS) ? '/app/sales' : '/app/sell/today')
   }
 

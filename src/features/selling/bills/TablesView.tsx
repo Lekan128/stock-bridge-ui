@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { usePushReceived } from '@/features/push/usePushReceived'
+import { useSellingNav } from '@/features/selling/sellingNav'
 import { useNavigate } from 'react-router-dom'
 import { useApiQuery } from '@/data/useApiQuery'
 import type { Branch } from '@/features/branches/types'
@@ -10,6 +11,15 @@ import { billsApi, openFor, type BillSummary } from '@/features/selling/bills/bi
 /** Tables or Counter, per phone: a waiter lives on Tables, a counter on Counter (owner, 2026-11-19). */
 export type TillMode = 'tables' | 'counter'
 const MODE_KEY = 'till-mode'
+
+/** Record a sale opens next on this (quick mode's Exit lands where it was: Tables or the counter). */
+export function rememberTillMode(mode: TillMode): void {
+  try {
+    localStorage.setItem(MODE_KEY, mode)
+  } catch {
+    // A private window: it opens on Tables next time.
+  }
+}
 
 export function useTillMode(branch: Branch | null): [TillMode | null, (mode: TillMode) => void] {
   const hasTables = (branch?.tables?.length ?? 0) > 0
@@ -76,6 +86,7 @@ export function TablesView({ branch, header }: { branch: Branch; header: ReactNo
   const navigate = useNavigate()
   const online = useOnlineStatus()
   const bills = useOpenBills(branch.id)
+  const nav = useSellingNav()
   // "Table 5 · Kitchen: ready" on this phone: the grid shows it at once.
   usePushReceived('ticket-ready-', bills.refetch)
   const [, setNow] = useState(Date.now())
@@ -104,7 +115,7 @@ export function TablesView({ branch, header }: { branch: Branch; header: ReactNo
             <li key={table.id}>
               <button
                 type="button"
-                onClick={() => navigate(`/app/sell/bill?table=${table.id}`)}
+                onClick={() => navigate(nav.bill(`table=${table.id}`))}
                 className={`flex min-h-16 w-full flex-col justify-between rounded-lg border px-2.5 py-2 text-left tabular-nums ${
                   bill
                     ? `${served ? 'border-accent-300 bg-accent-50' : 'border-warning-300 bg-warning-50'} ${(bill.paid ?? 0) > 0 ? 'border-dashed' : ''}`
@@ -143,7 +154,7 @@ export function TablesView({ branch, header }: { branch: Branch; header: ReactNo
               <li key={bill.id}>
                 <button
                   type="button"
-                  onClick={() => navigate(`/app/sell/bill?id=${bill.id}`)}
+                  onClick={() => navigate(nav.bill(`id=${bill.id}`))}
                   className="flex min-h-14 w-full flex-col justify-between rounded-lg border border-warning-300 bg-warning-50 px-2.5 py-2 text-left tabular-nums"
                 >
                   <span className="truncate text-sm font-semibold text-neutral-900">{bill.label}</span>
@@ -161,7 +172,7 @@ export function TablesView({ branch, header }: { branch: Branch; header: ReactNo
           className="flex max-w-md gap-2"
           onSubmit={(event) => {
             event.preventDefault()
-            if (name.trim()) navigate(`/app/sell/bill?name=${encodeURIComponent(name.trim())}`)
+            if (name.trim()) navigate(nav.bill(`name=${encodeURIComponent(name.trim())}`))
           }}
         >
           <label htmlFor="bill-name" className="sr-only">

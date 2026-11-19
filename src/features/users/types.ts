@@ -50,6 +50,9 @@ export interface TenantUserSummary {
   worksEverywhere?: boolean
   /** Areas (V64): the areas they're limited to, across their branches; absent = every area. */
   areaIds?: string[]
+  /** Quick mode (V105): their buttons (absent: the app's own choice) and whether they start in it. */
+  quickModeTabs?: string[]
+  startsInQuickMode?: boolean
 }
 
 export interface CreateUserPayload {
@@ -80,6 +83,9 @@ export interface UpdateUserPayload {
   branchIds?: string[]
   /** The areas they're limited to (V64), replacing the list; empty = every area; omitted leaves it alone. */
   areaIds?: string[]
+  /** Quick mode (V105): their buttons (empty: the app's own choice) and whether they start in it. */
+  quickModeTabs?: string[]
+  startsInQuickMode?: boolean
 }
 
 export interface ResetPasswordPayload {

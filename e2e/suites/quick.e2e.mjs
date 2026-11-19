@@ -208,7 +208,11 @@ await check('a count straight after an offline sale compares against the stock a
   await search().waitFor()
 })
 
-await check('Exit goes back to Inventory', async () => {
+// Exit shows the same thing in the usual app (owner, 2026-11-19): from Count, Count stock; from Stock in, Inventory.
+await check('Exit shows the same thing in the usual app: Count stock from Count, Inventory from Stock in', async () => {
+  await page.getByRole('button', { name: 'Exit' }).click()
+  await page.waitForURL(/\/app\/products\/count$/)
+  await page.goto(`${UI}/app/quick?mode=in`)
   await page.getByRole('button', { name: 'Exit' }).click()
   await page.waitForURL(/\/app\/products$/)
 })

@@ -24,6 +24,7 @@ import { TransferAccountChooser } from '@/features/selling/sale/TransferAccounts
 import { lineAmount, optionOf, unitsFor, type SaleLine } from '@/features/selling/sale/saleLine'
 import { useSaleBasket } from '@/features/selling/sale/useSaleBasket'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
+import { useSellingNav } from '@/features/selling/sellingNav'
 import { billsApi, tableLabel, type Bill, type BillSummary, type SendStatus, type SentLine } from '@/features/selling/bills/billsApi'
 
 /** A meal a side can go with: a line on the bill already sent, or a new one. */
@@ -62,6 +63,8 @@ function keepNotes(branchId: string, used: string[]) {
 export function BillPage() {
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
+  // In quick mode (owner, 2026-11-19) the same bill, with quick mode's buttons on top: its links stay inside.
+  const nav = useSellingNav()
   const queryClient = useQueryClient()
   const { showToast } = useToast()
   const online = useOnlineStatus()
@@ -252,7 +255,7 @@ export function BillPage() {
       if (result.paid && result.sale) {
         setPeople(null)
         showToast(`${label} paid.`, 'success')
-        navigate(`/app/sales/${result.sale.saleId}`, { replace: true })
+        navigate(nav.receipt(result.sale.saleId), { replace: true })
         return
       }
       if (result.bill) queryClient.setQueryData(['bill', billId], result.bill)
@@ -271,7 +274,7 @@ export function BillPage() {
     try {
       await billsApi.close(billId)
       await queryClient.invalidateQueries({ queryKey: ['bills'] })
-      navigate('/app/sell', { replace: true })
+      navigate(nav.tables, { replace: true })
     } catch (error) {
       showToast(isAppError(error) ? error.message : "Couldn't close it. Try again.", 'error')
     }
@@ -279,7 +282,8 @@ export function BillPage() {
 
   // ------------------------------------------------------------------ the screen
   const [topbarSlot, setTopbarSlot] = useState<HTMLElement | null>(null)
-  useEffect(() => setTopbarSlot(document.getElementById('topbar-page-slot')), [])
+  // The laptop's top bar has the heading; quick mode covers it, so the bill keeps its own there.
+  useEffect(() => setTopbarSlot(nav.quick ? null : document.getElementById('topbar-page-slot')), [nav.quick])
   const since = bill.data?.summary.openedAt
     ? `since ${new Date(bill.data.summary.openedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}${
         bill.data.summary.openedByName ? ` · ${bill.data.summary.openedByName}` : ''
@@ -288,7 +292,7 @@ export function BillPage() {
   const back = (
     <button
       type="button"
-      onClick={() => navigate('/app/sell')}
+      onClick={() => navigate(nav.tables)}
       aria-label="Back to the tables"
       className="rounded-md p-1.5 text-neutral-600 hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none"
     >
@@ -533,7 +537,7 @@ export function BillPage() {
                   </button>
                 )}
                 {payments.length > 0 && (
-                  <button type="button" onClick={() => navigate('/app/sell')} className="min-h-10 text-sm font-medium text-neutral-600 hover:underline">
+                  <button type="button" onClick={() => navigate(nav.tables)} className="min-h-10 text-sm font-medium text-neutral-600 hover:underline">
                     Keep the rest open for later
                   </button>
                 )}
@@ -553,7 +557,7 @@ export function BillPage() {
     <div className="flex flex-col gap-4 lg:grid lg:h-full lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_24rem] lg:grid-rows-[auto_minmax(0,1fr)] lg:gap-0">
       {topbarSlot && createPortal(<div className="flex min-w-0 items-center gap-3">{heading}</div>, topbarSlot)}
       <div className="flex flex-col gap-3 lg:col-start-1 lg:row-start-1 lg:bg-neutral-50 lg:px-4 lg:pt-4">
-        <div className="flex min-w-0 items-center gap-2 lg:hidden">{heading}</div>
+        <div className={`flex min-w-0 items-center gap-2 ${nav.quick ? '' : 'lg:hidden'}`}>{heading}</div>
         {searchBox}
       </div>
       {panel}

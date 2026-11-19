@@ -17,6 +17,9 @@ import type { TenantUserSummary, UpdateUserPayload } from '@/features/users/type
 import { isAppError } from '@/types/api'
 import { useUsers } from '@/features/users/hooks/useUsers'
 import { sharedSignInNote } from '@/features/users/sharedSignIn'
+import { QuickModeFields } from '@/features/users/components/QuickModeFields'
+import { useRoles } from '@/features/users/hooks/useRoles'
+import type { Mode } from '@/features/quick/quickTabs'
 
 export interface EditUserModalProps {
   user: TenantUserSummary
@@ -40,6 +43,11 @@ export function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) 
   // …and in which areas (STOCK_AREAS_PART_3.md). Sent only when changed; empty = every area.
   const [areaIds, setAreaIds] = useState<string[]>(user.areaIds ?? [])
   const areasChanged = [...areaIds].sort().join() !== [...(user.areaIds ?? [])].sort().join()
+  // Quick mode (V105): where they start, and their buttons. Sent only when changed.
+  const [startsInQuick, setStartsInQuick] = useState(user.startsInQuickMode === true)
+  const [quickTabs, setQuickTabs] = useState<Mode[]>((user.quickModeTabs ?? []) as Mode[])
+  const quickTabsChanged = [...quickTabs].sort().join() !== [...(user.quickModeTabs ?? [])].sort().join()
+  const roles = useRoles().data ?? []
 
   const {
     register,
@@ -89,6 +97,8 @@ export function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) 
     if (dirtyFields.jobTitle) payload.jobTitle = values.jobTitle.trim()
     if (branchesChanged) payload.branchIds = branchIds
     if (areasChanged) payload.areaIds = areaIds
+    if (startsInQuick !== (user.startsInQuickMode === true)) payload.startsInQuickMode = startsInQuick
+    if (quickTabsChanged) payload.quickModeTabs = quickTabs
 
     if (Object.keys(payload).length === 0) {
       onClose()
@@ -163,6 +173,16 @@ export function EditUserModal({ user, onClose, onSuccess }: EditUserModalProps) 
         />
         {!isRoot && (
           <WorksAtField roleId={roleId} value={branchIds} onChange={setBranchIds} areaIds={areaIds} onAreasChange={setAreaIds} />
+        )}
+        {!isRoot && (
+          <QuickModeFields
+            name={user.firstName?.trim() || user.username}
+            permissions={roles.find((role) => role.id === roleId)?.permissions ?? []}
+            startsInQuick={startsInQuick}
+            onStartsInQuick={setStartsInQuick}
+            tabs={quickTabs}
+            onTabs={setQuickTabs}
+          />
         )}
         <Controller
           control={control}
