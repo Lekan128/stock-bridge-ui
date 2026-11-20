@@ -20,7 +20,7 @@ interface ProductLike {
 
 /**
  * A draft as the sync centre lists it (A6). Keys are `delivery:new`, `delivery:{expectedId}`,
- * `product:new`, `order:new`, `sale:new` and `transfer:new` (see `RecordDeliveryPage`, `ProductFormPage`, `useSaleBasket` and `SendStockPage`); anything else — a key a later
+ * `product:new`, `order:new`, `sale:new`, `sale:baskets` and `transfer:new` (see `RecordDeliveryPage`, `ProductFormPage`, `useSaleBasket` and `SendStockPage`); anything else — a key a later
  * version added — is listed plainly rather than hidden, so logout's count always matches the list.
  */
 export function describeDraft(draft: StoredDraft): DraftSummary {
@@ -56,7 +56,13 @@ export function describeDraft(draft: StoredDraft): DraftSummary {
   }
 
   if (kind === 'sale') {
-    const items = ((draft.value as { lines?: unknown[] }).lines ?? []).length
+    // `sale:baskets` (Step 1 fixes): every open basket; `sale:new` before it: one basket.
+    const value = draft.value as { lines?: unknown[]; baskets?: { lines?: unknown[] }[] }
+    if (Array.isArray(value.baskets)) {
+      const waiting = value.baskets.filter((basket) => (basket.lines ?? []).length > 0).length
+      return { title: 'Sales', detail: waiting > 0 ? `${waiting} waiting for payment` : null, to: '/app/sell' }
+    }
+    const items = (value.lines ?? []).length
     return { title: 'Sale', detail: items > 0 ? `${items} ${items === 1 ? 'item' : 'items'}` : null, to: '/app/sell' }
   }
 

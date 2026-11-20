@@ -34,7 +34,8 @@ export const PERMISSION_CATEGORIES: { label: string; codes: string[] }[] = [
   },
   {
     label: 'Inventory',
-    codes: [PERMISSIONS.MANAGE_INVENTORY, PERMISSIONS.STOCK_IN, PERMISSIONS.STOCK_OUT],
+    // CANCEL_SALES (V89): cancel any sale, and answer a cashier's request to.
+    codes: [PERMISSIONS.MANAGE_INVENTORY, PERMISSIONS.STOCK_IN, PERMISSIONS.STOCK_OUT, PERMISSIONS.CANCEL_SALES],
   },
   {
     label: 'Vendors',

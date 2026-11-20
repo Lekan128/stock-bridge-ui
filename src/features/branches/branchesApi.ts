@@ -27,15 +27,37 @@ export interface NewArea {
   shortIsUsed?: boolean
   /** Moves to it wait until someone there confirms them (Part 4). */
   confirms?: boolean
+  /** Things are sold from it (V103); absent: they are. */
+  sells?: boolean
 }
 
 /** A branch's areas (STOCK_AREAS_PART_1.md). Shared records, so online only, like branches. */
+/** One product a branch doesn't have yet (V92), for the picker. */
+export interface ProductToAdd {
+  id: string
+  name: string
+  sku: string
+  categoryId?: string
+  categoryName?: string
+  madeHere: boolean
+}
+
+/** The products a branch has (owner, 2026-11-17): adding them adds no stock. */
+export const branchProductsApi = {
+  toAdd: (branchId: string, params: { search?: string; madeHere?: boolean }) =>
+    api
+      .get<{ total: number; matching: number; products: ProductToAdd[] }>(`/api/branches/${branchId}/products/to-add`, { params })
+      .then((r) => r.data),
+  add: (branchId: string, body: { all: true } | { productIds: string[] }) =>
+    api.post<{ added: number }>(`/api/branches/${branchId}/products`, body).then((r) => r.data),
+}
+
 export const areasApi = {
   add: (branchId: string, areas: NewArea[]) =>
     api.post<Area[]>(`/api/branches/${branchId}/areas`, { areas }).then((r) => r.data),
   update: (
     id: string,
-    payload: { name?: string; keepsStock?: boolean; delivery?: boolean; shortIsUsed?: boolean; confirms?: boolean },
+    payload: { name?: string; keepsStock?: boolean; delivery?: boolean; shortIsUsed?: boolean; confirms?: boolean; sells?: boolean },
   ) =>
     api.patch<Area>(`/api/areas/${id}`, payload).then((r) => r.data),
   close: (id: string) => api.post<Area>(`/api/areas/${id}/close`).then((r) => r.data),

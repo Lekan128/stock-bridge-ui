@@ -57,7 +57,7 @@ export function AdminSellingHealthPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">Selling health</h1>
+          <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Selling health</h1>
           <p className="mt-1 max-w-2xl text-sm text-neutral-600">
             The figures the selling rollout is judged on (plan §9). Counter speed - a three-item sale in under 10 seconds - is timed
             in the field test, not here.
@@ -126,7 +126,7 @@ export function AdminSellingHealthPage() {
           {health.productsToCheck.length > 0 && (
             <section aria-labelledby="check-heading" className="flex flex-col gap-2">
               <h2 id="check-heading" className="text-sm font-semibold text-neutral-900">Usual prices that are probably wrong</h2>
-              <p className="text-sm text-neutral-600">Changed at the till on at least half their sales. Worth a word with the shop.</p>
+              <p className="text-sm text-neutral-600">Changed the price while selling on at least half their sales. Worth a word with the shop.</p>
               <ul className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
                 {health.productsToCheck.map((product) => (
                   <li key={product.productId} className="flex justify-between gap-3 px-4 py-2.5 text-sm">

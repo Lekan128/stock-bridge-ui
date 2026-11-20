@@ -1,3 +1,6 @@
+import { useQueryClient } from '@tanstack/react-query'
+import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
+import { SELLING_SETTINGS_KEY } from '@/features/selling/useSellingSettings'
 import { useState, type FormEvent } from 'react'
 import { Pencil, Tags, Trash2 } from 'lucide-react'
 import { Button } from '@/components/Button'
@@ -91,6 +94,17 @@ export function ManageCategoriesModal({
       setAddError(errorMessage(err, 'We could not add that category. Please try again.'))
     } finally {
       setAdding(false)
+    }
+  }
+
+  const { recordsSales } = useSellingPolicy()
+  const queryClient = useQueryClient()
+  async function setSides(category: CompanyCategory, on: boolean) {
+    try {
+      onSaved(await companyCategoriesApi.goesWithMeal(category.id, on))
+      void queryClient.invalidateQueries({ queryKey: SELLING_SETTINGS_KEY })
+    } catch (err) {
+      setEditError(errorMessage(err, 'We could not change that. Please try again.'))
     }
   }
 
@@ -248,6 +262,18 @@ export function ManageCategoriesModal({
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-neutral-900">{category.name}</p>
                         <p className="text-xs text-neutral-500">{productCountLabel(category.productCount)}</p>
+                        {/* Stage C (V99): sides - on a table's bill the till asks which meal each one goes with. */}
+                        {recordsSales && (
+                          <label className="mt-1 inline-flex items-center gap-2 text-xs text-neutral-700">
+                            <input
+                              type="checkbox"
+                              checked={category.goesWithMeal === true}
+                              onChange={(event) => void setSides(category, event.target.checked)}
+                              className="h-4 w-4 rounded border-neutral-300"
+                            />
+                            These go with a meal (sides)
+                          </label>
+                        )}
                       </div>
                       <div className="flex shrink-0 items-center gap-1">
                         <button

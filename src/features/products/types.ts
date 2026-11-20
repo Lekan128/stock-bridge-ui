@@ -137,6 +137,13 @@ export interface Product {
    * typed (2026-11-10): the count list's "Counted today". The phone's catalogue only; absent when never counted.
    */
   counts?: { areaId: string; at: string; countedAs?: { unit: string; quantity: number }[] }[]
+  /** Made here, not kept in stock (API V90, selling till Step 4). Absent: kept in stock. */
+  madeHere?: boolean
+  /** A made-here item's rough cost to make one, until a recipe works it out. */
+  estimatedCost?: number | null
+  /** Which branches it is for (API V92): every branch, or these. */
+  forAllBranches?: boolean
+  forBranchIds?: string[]
   warnings?: string[] | null
   /**
    * True when `packagingUnit`/`packagingSize` above are the DEFAULT among more than one distinct
@@ -243,6 +250,13 @@ export interface InitialVendorPayload {
 }
 
 export interface ProductFormPayload {
+  /** Made here, not kept in stock (API V90): create only, and only with "Sell things you make" on. */
+  madeHere?: boolean
+  /** A made-here item's rough cost to make one. */
+  estimatedCost?: number
+  /** Which branches it is for (V92): these, or every branch with `allBranches`. */
+  branchIds?: string[]
+  allBranches?: boolean
   name: string
   sku: string
   description?: string
@@ -420,6 +434,8 @@ export interface UnitOfMeasureRequestPayload {
 }
 
 export interface ProductUpdatePayload extends Partial<ProductFormPayload> {
+  /** Takes a made-here item's rough cost off (V90). */
+  clearEstimatedCost?: boolean
   active?: boolean
   removeImage?: boolean
   /** Removes the product's category. Needed because an absent `categoryId` leaves it unchanged. */
@@ -611,6 +627,15 @@ export interface StockOutPayload {
   saleId?: string
   /** What the whole line went for, when a total was typed rather than a price each - kept exactly. */
   lineTotal?: number
+  /**
+   * How the customer paid for the sale this line is part of (API V88, selling till Step 1): the same on
+   * every line of a basket; the server keeps the first to arrive.
+   */
+  paymentMethod?: 'CASH' | 'TRANSFER' | 'CARD'
+  /** Step 12 (V96): the account a transfer came into. */
+  paymentAccountId?: string
+  /** A line sent to a table's bill (V99): its key, the meal a side goes with, its note for the kitchen. */
+  billLine?: { lineKey: string; withKey?: string; note?: string; /** One Send: its lines share one ticket per area (V102). */ sendKey?: string }
 }
 
 // `ProductVendor` / `ProductVendorPriceTier` (GET /api/products/{productId}/vendors) live in

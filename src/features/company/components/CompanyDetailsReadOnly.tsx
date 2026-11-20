@@ -8,13 +8,13 @@ import type { Company } from '@/features/company/types'
  * (the backend leaves GET /api/company ungated for exactly this reason), so the only difference
  * between the two versions should be whether the values are typeable.
  */
-export function CompanyDetailsReadOnly({ company }: { company: Company }) {
+export function CompanyDetailsReadOnly({ company, logo }: { company: Company; logo?: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-4 rounded-lg border border-neutral-200 bg-white p-5">
       <div>
         <h2 className="text-base font-semibold text-neutral-900">Company details</h2>
         <p className="mt-0.5 text-sm text-neutral-500">
-          How your company is named on orders and invoices, and where ProcurePal sends account
+          How your company is named on orders and invoices, and where Procurepaddy sends account
           correspondence.
         </p>
       </div>
@@ -27,6 +27,7 @@ export function CompanyDetailsReadOnly({ company }: { company: Company }) {
         </span>
       </p>
 
+      {logo && <div>{logo}</div>}
       <dl className="flex flex-col gap-4">
         <Field label="Company name" value={company.name} />
         <Field label="Admin contact email" value={company.adminEmail} />

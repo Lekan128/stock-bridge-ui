@@ -114,7 +114,7 @@ export function ExpectedDeliveriesPage() {
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold text-neutral-900">{expectedCopy.list.title}</h1>
+          <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">{expectedCopy.list.title}</h1>
           <p className="mt-1 text-sm text-neutral-600">{expectedCopy.list.subtitle}</p>
         </div>
         {canCreate && (

@@ -128,7 +128,7 @@ export function AdminMarketplaceRevenuePage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">Marketplace Revenue</h1>
+          <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Marketplace Revenue</h1>
           <p className="text-sm text-neutral-500">
             Every seller's sales in one place — ProcurePal's and every vendor's — and how each is growing.
           </p>

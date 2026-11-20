@@ -24,7 +24,7 @@ export interface CompanyDetailsFormProps {
 const FIELD_KEYS = ['name', 'adminEmail', 'phone'] as const
 
 /** Rendered only for a user holding MANAGE_COMPANY_PROFILE — see CompanySettingsPage. */
-export function CompanyDetailsForm({ company, onUpdated }: CompanyDetailsFormProps) {
+export function CompanyDetailsForm({ company, onUpdated, logo }: CompanyDetailsFormProps & { logo?: React.ReactNode }) {
   const { showToast } = useToast()
   const [formError, setFormError] = useState<string | null>(null)
 
@@ -65,21 +65,27 @@ export function CompanyDetailsForm({ company, onUpdated }: CompanyDetailsFormPro
       <div>
         <h2 className="text-base font-semibold text-neutral-900">Company details</h2>
         <p className="mt-0.5 text-sm text-neutral-500">
-          How your company is named on orders and invoices, and where ProcurePal sends account
+          How your company is named on orders and invoices, and where Procurepaddy sends account
           correspondence.
         </p>
       </div>
 
-      <TextField
-        label="Company name"
-        hint="Shown on your orders, invoices and delivery notes."
-        error={errors.name?.message}
-        {...register('name')}
-      />
+      {/* The logo beside the name it stands for, as a product's photo sits beside its name. */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+        {logo && <div className="shrink-0">{logo}</div>}
+        <div className="min-w-0 flex-1">
+          <TextField
+            label="Company name"
+            hint="Shown on your orders, invoices and delivery notes."
+            error={errors.name?.message}
+            {...register('name')}
+          />
+        </div>
+      </div>
       <TextField
         label="Admin contact email"
         type="email"
-        hint="ProcurePal sends account and billing correspondence here. It is not a login."
+        hint="Procurepaddy sends account and billing correspondence here. It is not a login."
         error={errors.adminEmail?.message}
         {...register('adminEmail')}
       />

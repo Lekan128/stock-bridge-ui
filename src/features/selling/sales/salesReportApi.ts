@@ -1,6 +1,6 @@
 import { api } from '@/api/client'
 import { viewingAreaParams, viewingBranchId } from '@/features/branches/viewingBranch'
-import type { SaleDetail, SalesReport, SalesReportParams } from '@/features/selling/sales/types'
+import type { SaleCancelReason, SaleDetail, SalesReport, SalesReportParams } from '@/features/selling/sales/types'
 
 /** At a branch, that branch's sales (V51); in "All branches" or a one-branch company, every branch's. */
 function query({ from, to, groupBy, filter, productId }: SalesReportParams) {
@@ -24,6 +24,21 @@ export const salesReportApi = {
   /** The price for a line saved without one: per unit as typed, or what the whole line went for. */
   addPrice: (lineId: string, body: { unitPrice?: number; lineTotal?: number }) =>
     api.post<SaleDetail>(`/api/sales/lines/${lineId}/price`, body).then((r) => r.data),
+
+  /** The whole sale, with why (selling till Step 3): the cashier in its first two minutes, or anyone who can cancel sales. */
+  cancelSale: (saleId: string, reason: SaleCancelReason, note?: string) =>
+    api.post<SaleDetail>(`/api/sales/${saleId}/cancel`, { reason, note }).then((r) => r.data),
+
+  /** Past two minutes: the cashier asks; those who can cancel sales are told. */
+  askToCancel: (saleId: string, reason: SaleCancelReason, note?: string) =>
+    api.post<SaleDetail>(`/api/sales/${saleId}/cancel-request`, { reason, note }).then((r) => r.data),
+
+  approveCancel: (saleId: string) => api.post<SaleDetail>(`/api/sales/${saleId}/cancel-request/approve`).then((r) => r.data),
+
+  declineCancel: (saleId: string) => api.post<SaleDetail>(`/api/sales/${saleId}/cancel-request/decline`).then((r) => r.data),
+
+  /** The person's own sales today, without cost - My sales today. */
+  mine: () => api.get<SalesReport>('/api/sales/mine').then((r) => r.data),
 
   undo: (saleId: string) =>
     api.post<{ lines: { productName: string; undone: boolean; reason?: string }[] }>(`/api/sales/${saleId}/undo`).then((r) => r.data),

@@ -1,6 +1,7 @@
+import { useWorkArea } from '@/features/branches/workArea'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Download } from 'lucide-react'
+import { ChevronDown, Download } from 'lucide-react'
 import { PERMISSIONS } from '@/auth/permissions'
 import { useAuth } from '@/auth/useAuth'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
@@ -16,7 +17,9 @@ import { formatNumber, stockUnitWord } from '@/features/products/unitCopy'
 import { formatMoney } from '@/features/selling/money'
 import { SaleDetailSheet } from '@/features/selling/sales/SaleDetailSheet'
 import { salesReportApi } from '@/features/selling/sales/salesReportApi'
-import type { SalesFilter, SalesGrouping, SalesReport, SalesReportRow, SalesTotals } from '@/features/selling/sales/types'
+import { CANCEL_REASON_LABELS } from '@/features/selling/sale/cancelReasons'
+import { PaymentChip, type SalePaymentMethod } from '@/features/selling/sale/payment'
+import type { PaymentTotals, SalesFilter, SalesGrouping, SalesReport, SalesReportRow, SalesTotals } from '@/features/selling/sales/types'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { downloadBlob } from '@/utils/downloadBlob'
 
@@ -66,17 +69,22 @@ export function SalesPage() {
   const from = toApiDateTime(range.from)
   const to = toApiDateTime(range.to)
   const params = { from, to, groupBy: tab, filter }
+  // The branch and area being looked at are part of what's asked: before they were in the key, a page opened before
+  // the branch was known kept showing every branch's sales (found 2026-11-18).
+  const branchHere = useOptionalWorkingBranch()
+  const work = useWorkArea(branchHere && !branchHere.isAll ? branchHere.working : null)
+  const place = [branchHere?.isAll ? 'all' : (branchHere?.working?.id ?? null), work.area?.id ?? null]
   // The unfiltered report too: its totals are the headline and the chips' counts. While no filter is
   // on, it is the same request (and the same cache entry) as the one on screen.
   const base = useApiQuery<SalesReport>({
-    queryKey: ['sales-report', from, to, tab, null],
+    queryKey: ['sales-report', from, to, tab, null, ...place],
     queryFn: () => salesReportApi.report({ from, to, groupBy: tab }),
     fallbackError: "Couldn't load your sales.",
     enabled: recordsSales,
     keepPrevious: true,
   })
   const shown = useApiQuery<SalesReport>({
-    queryKey: ['sales-report', from, to, tab, filter],
+    queryKey: ['sales-report', from, to, tab, filter, ...place],
     queryFn: () => salesReportApi.report(params),
     fallbackError: "Couldn't load your sales.",
     enabled: recordsSales && filter != null,
@@ -111,7 +119,7 @@ export function SalesPage() {
   if (!recordsSales) {
     return (
       <div className="mx-auto flex max-w-xl flex-col gap-3 py-8">
-        <h1 className="text-2xl font-semibold text-neutral-900">Sales</h1>
+        <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Sales</h1>
         <p className="text-sm text-neutral-600">Your company doesn't record sales, so there is nothing to show here.</p>
         <Link to="/app/company" className="text-sm font-medium text-primary-600 hover:underline">
           Selling settings
@@ -127,7 +135,7 @@ export function SalesPage() {
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">Sales</h1>
+          <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Sales</h1>
           <p className="mt-1 text-sm text-neutral-500">{formatDateRange(range.from, range.to)}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -155,6 +163,9 @@ export function SalesPage() {
               </>
             )}
           </p>
+          {/* Step 10 (V100): charges and taxes, apart from the food and drinks - taxes to pay over, service to share. */}
+          {totals.charges && totals.charges.length > 0 && <ChargesLine totals={totals} />}
+          {totals.byPayment && totals.saleCount > 0 && <PaymentTotalsRow paid={totals.byPayment} />}
           {left > 0 && (
             <p className="text-sm text-neutral-600">
               Profit leaves out {formatNumber(left)} {left === 1 ? 'sale' : 'sales'}:{' '}
@@ -312,6 +323,11 @@ function SaleRow({
     ? new Date(row.occurredAt).toLocaleString(undefined, withDate ? { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' } : { hour: 'numeric', minute: '2-digit' })
     : ''
   const notes = [
+    // Selling till Step 3: who cancelled it and why - "sell, keep the cash, cancel" is what this list is for.
+    allCancelled && row.cancelReason && CANCEL_REASON_LABELS[row.cancelReason],
+    allCancelled && row.cancelledByName && `by ${row.cancelledByName}`,
+    allCancelled && row.cancelRequestedByName && row.cancelRequestedByName !== row.cancelledByName && `asked by ${row.cancelRequestedByName}`,
+    row.cancelState === 'REQUESTED' && 'asked to cancel',
     t.unpricedLineCount > 0 && t.unpricedLineCount < t.lineCount && `${t.unpricedLineCount} without a price`,
     t.cancelledLineCount > 0 && !allCancelled && `${t.cancelledLineCount} cancelled`,
     t.belowUsualPriceLineCount > 0 && 'below usual price',
@@ -332,8 +348,17 @@ function SaleRow({
             {notes.length > 0 && <span className="text-warning-700"> · {notes.join(' · ')}</span>}
           </span>
         </span>
-        <span className={`shrink-0 text-base font-semibold tabular-nums ${allCancelled ? 'text-neutral-500 line-through' : 'text-neutral-900'}`}>
-          {allCancelled ? 'Cancelled' : t.unpricedLineCount === t.lineCount ? <span className="text-sm font-medium text-warning-700">No price</span> : formatMoney(t.salesAmount)}
+        <span className="flex shrink-0 flex-col items-end gap-1">
+          <span className={`text-base font-semibold tabular-nums ${allCancelled ? 'text-neutral-500 line-through' : 'text-neutral-900'}`}>
+            {/* What the customer paid: charges added on top included (V100). */}
+            {allCancelled ? 'Cancelled' : t.unpricedLineCount === t.lineCount ? <span className="text-sm font-medium text-warning-700">No price</span> : formatMoney(t.salesAmount + (row.chargesOnTop ?? 0) + (row.chargesInPrices ?? 0))}
+          </span>
+          {!allCancelled && (
+            <span className="flex items-center gap-1">
+              <PaymentChip method={row.paymentMethod} />
+              {row.paymentAccountName && <span className="text-xs text-neutral-500">{row.paymentAccountName}</span>}
+            </span>
+          )}
         </span>
       </button>
     </li>
@@ -420,6 +445,89 @@ function BreakdownTable({ report, tab }: { report: SalesReport; tab: SalesGroupi
 }
 
 /** "₦3,700 profit (11.3%)", or nothing when no line has both a price and a cost. */
+/**
+ * Cash, Transfer and Card for the range, each a picture, an amount and how many sales (selling till
+ * Step 1). Sales from before payments were recorded are said underneath, never counted as cash.
+ */
+/**
+ * "+ ₦29,626 charges and taxes", opening to each one and what came in all told (owner, 2026-11-19). The big figure and
+ * the profit are the food and drinks only - taxes aren't the business's money - so charges already in the prices come
+ * out of them and sit here with the rest.
+ */
+function ChargesLine({ totals }: { totals: SalesTotals }) {
+  const [open, setOpen] = useState(false)
+  const charges = totals.charges ?? []
+  const all = charges.reduce((sum, charge) => sum + charge.amount, 0)
+  return (
+    <div className="flex flex-col items-start gap-1" data-sales-charges>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((was) => !was)}
+        className="-my-1.5 inline-flex min-h-9 items-center gap-1 rounded-sm text-sm font-medium text-neutral-800 tabular-nums hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+      >
+        + {formatMoney(all)} charges and taxes
+        <ChevronDown className={`h-4 w-4 text-neutral-500 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
+      </button>
+      {open && (
+        <ul className="flex flex-col gap-0.5 text-sm text-neutral-600 tabular-nums">
+          {charges.map((charge) => (
+            <li key={`${charge.name}-${charge.included}`}>
+              {charge.name} {formatMoney(charge.amount)}
+              {charge.included && <span className="text-neutral-500"> · in your prices</span>}
+            </li>
+          ))}
+          <li className="font-medium text-neutral-800">{formatMoney(totals.salesAmount + all)} came in</li>
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function PaymentTotalsRow({ paid }: { paid: PaymentTotals }) {
+  const boxes: { method: SalePaymentMethod; amount: number; sales: number }[] = [
+    { method: 'CASH', amount: paid.cashAmount, sales: paid.cashSales },
+    { method: 'TRANSFER', amount: paid.transferAmount, sales: paid.transferSales },
+    { method: 'CARD', amount: paid.cardAmount, sales: paid.cardSales },
+  ]
+  return (
+    <div className="mt-2 flex flex-col gap-1">
+      <ul className="grid grid-cols-3 gap-2" aria-label="By how they paid">
+        {boxes.map((box) => (
+          <li key={box.method} className="flex min-w-0 flex-col items-start gap-1 rounded-lg border border-neutral-200 bg-white px-3 py-2">
+            <PaymentChip method={box.method} />
+            <span className="text-base font-semibold tabular-nums text-neutral-900" data-payment-total={box.method}>
+              {formatMoney(box.amount)}
+            </span>
+            <span className="text-xs text-neutral-500 tabular-nums">
+              {formatNumber(box.sales)} {box.sales === 1 ? 'sale' : 'sales'}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {/* Step 12: the transfers split by account, to match against each bank's own record. */}
+      {(paid.transferAccounts?.length ?? 0) > 0 && (
+        <p className="text-xs text-neutral-600 tabular-nums" data-transfer-accounts>
+          Transfers:{' '}
+          {paid.transferAccounts!.map((account) => `${account.bankName} ${formatMoney(account.amount)}`).join(' · ')}
+          {(() => {
+            // Transfers from before accounts were listed (or with none named): said, so the parts add up.
+            const named = paid.transferAccounts!.reduce((sum, account) => sum + account.amount, 0)
+            const rest = Math.round((paid.transferAmount - named) * 100) / 100
+            return rest > 0 ? ` · ${formatMoney(rest)} no account named` : ''
+          })()}
+        </p>
+      )}
+      {paid.notRecordedSales > 0 && (
+        <p className="text-xs text-neutral-500 tabular-nums">
+          {formatMoney(paid.notRecordedAmount)} from {formatNumber(paid.notRecordedSales)}{' '}
+          {paid.notRecordedSales === 1 ? 'sale' : 'sales'} recorded before payments were kept.
+        </p>
+      )}
+    </div>
+  )
+}
+
 function profitText(totals: SalesTotals): string | null {
   if ((totals.profitKnownSalesAmount ?? 0) <= 0 || totals.grossProfit == null) return null
   return `${formatMoney(totals.grossProfit)} profit${totals.margin != null ? ` (${percent(totals.margin)})` : ''}`

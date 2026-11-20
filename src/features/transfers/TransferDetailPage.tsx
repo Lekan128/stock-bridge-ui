@@ -97,7 +97,7 @@ export function TransferDetailPage() {
   if (!transfer && queuedSend) {
     return (
       <Page>
-        <h1 className="text-2xl font-semibold text-neutral-900">Waybill</h1>
+        <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Waybill</h1>
         <div className="rounded-lg border border-neutral-200 bg-white p-4" data-receipt="recorded">
           <p className="font-medium text-neutral-900">{queuedSend.summary}</p>
           <p className="mt-1 text-sm text-neutral-600">
@@ -186,7 +186,7 @@ export function TransferDetailPage() {
         </Link>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold text-neutral-900">{transfer.waybill}</h1>
+            <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">{transfer.waybill}</h1>
             <Badge variant={STATUS_VARIANT[transfer.status]}>{STATUS_LABEL[transfer.status]}</Badge>
           </div>
           <p className="mt-1 text-sm text-neutral-600">

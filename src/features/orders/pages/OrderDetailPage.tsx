@@ -137,7 +137,7 @@ export function OrderDetailPage() {
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">{order.orderNumber}</h1>
+          <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">{order.orderNumber}</h1>
           <p className="mt-0.5 text-sm text-neutral-500">
             Placed {formatOrderDateTime(order.placedAt ?? order.createdAt)}
             {order.placedByUsername ? ` by ${order.placedByUsername}` : ''}

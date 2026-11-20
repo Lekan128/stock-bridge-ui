@@ -1,6 +1,7 @@
 import {
   ShoppingBag,
   ArrowLeftRight,
+  ChefHat,
   Building2,
   ChartLine,
   Contact,
@@ -12,6 +13,7 @@ import {
   PackageSearch,
   ReceiptText,
   ShieldCheck,
+  ShoppingCart,
   Store,
   Tags,
   Truck,
@@ -60,6 +62,8 @@ export interface NavItem {
    * own flag; the permission still applies on top.
    */
   recordsSalesOnly?: boolean
+  /** Only where a branch has kitchen and bar tickets on (V103): Tickets. */
+  ticketsOnly?: boolean
   /** Only once the company has two branches (MULTI_BRANCH_UX_PLAN.md rule 1): Transfers. */
   multiBranchOnly?: boolean
   /** Any one of these, where a screen serves several jobs (Transfers: receiving and sending). */
@@ -110,6 +114,15 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     items: [
       { path: '/app', label: 'Dashboard', icon: LayoutDashboard, exact: true },
+      // Selling till (owner, 2026-11-19): one tap for whoever sells, not a trip through Inventory. Its counter, a
+      // table's bill, My sales today and Close the day all light it up.
+      {
+        path: '/app/sell',
+        label: 'Record a sale',
+        icon: ShoppingCart,
+        requiredPermission: PERMISSIONS.STOCK_OUT,
+        recordsSalesOnly: true,
+      },
       // VIEW_PRODUCTS, not MANAGE_PRODUCTS — read-only roles can browse the catalog.
       { path: '/app/products', label: 'Inventory', icon: Warehouse, requiredPermission: PERMISSIONS.VIEW_PRODUCTS },
       // "Sales", never "My Sales" or "Selling": those are the marketplace's, and ProcurePal sees both.
@@ -119,6 +132,15 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: ShoppingBag,
         requiredPermission: PERMISSIONS.VIEW_ANALYTICS,
         recordsSalesOnly: true,
+      },
+      // Step 8 (V102, V103): kitchen and bar tickets - where a branch has them on. VIEW_PRODUCTS, as the kitchen has it.
+      {
+        path: '/app/tickets',
+        label: 'Tickets',
+        icon: ChefHat,
+        requiredPermission: PERMISSIONS.VIEW_PRODUCTS,
+        recordsSalesOnly: true,
+        ticketsOnly: true,
       },
       // MANAGE_INVENTORY, not VIEW_PRODUCTS: this screen shows cost prices and suppliers on every
       // row, which browsing the catalog does not. Matches the API's own gate on the endpoint.

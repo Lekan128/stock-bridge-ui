@@ -1,3 +1,4 @@
+import { DrawersLeftOpen } from '@/features/selling/sale/cashDay'
 import { useRecordsHere } from '@/features/branches/useRecordsHere'
 import { Lock } from 'lucide-react'
 import { PERMISSIONS } from '@/auth/permissions'
@@ -9,6 +10,7 @@ import { BranchTable } from '@/features/branches/BranchTable'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { StockHealth } from '@/features/dashboard/components/StockHealth'
 import { SalesTodayFigure } from '@/features/selling/sales/SalesTodayFigure'
+import { WaitingSalesLine } from '@/features/selling/sale/WaitingSalesLine'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { SetupChecklist } from '@/features/onboarding/SetupChecklist'
 import { VendorDashboardPage } from '@/features/vendor/pages/VendorDashboardPage'
@@ -74,14 +76,27 @@ function BuyerToday({
   const recordsHere = useRecordsHere()
   const ownersView = canViewAnalytics && (branch?.isMultiBranch ?? false) && (branch?.isAll ?? false)
 
+  const branchHere = useOptionalWorkingBranch()
+  const branchIdsForDrawers = branchHere
+    ? branchHere.isAll
+      ? branchHere.branches.filter((branch) => branch.active).map((branch) => branch.id)
+      : branchHere.working
+        ? [branchHere.working.id]
+        : branchHere.branches.slice(0, 1).map((branch) => branch.id)
+    : []
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold text-neutral-900">Dashboard</h1>
+        <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Dashboard</h1>
         <p className="text-sm text-neutral-500">{today}</p>
       </div>
 
       <SetupChecklist />
+      {/* Step 13: a drawer left open from before today, once, for whoever sees sales. */}
+      {canViewAnalytics && recordsSales && branchIdsForDrawers.length > 0 && <DrawersLeftOpen branchIds={branchIdsForDrawers} />}
+
+      {/* Baskets left open on this phone (selling till Step 1 fixes). */}
+      {recordsSales && permissions.includes('STOCK_OUT') && <WaitingSalesLine />}
 
       {/* "All branches" (MULTI_BRANCH_UX_PLAN.md §5.8): the branch table replaces today's figures - one
           row per branch, then the company. Pick a branch and this is the single-branch dashboard again. */}

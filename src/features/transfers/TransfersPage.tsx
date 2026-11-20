@@ -47,7 +47,7 @@ export function TransfersPage() {
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">Transfers</h1>
+          <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Transfers</h1>
           <p className="mt-1 text-sm text-neutral-600">
             Stock sent between {isAll ? 'your branches' : `${working?.name ?? 'this branch'} and your other branches`}.
           </p>

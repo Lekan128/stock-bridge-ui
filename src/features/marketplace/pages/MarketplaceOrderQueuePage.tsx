@@ -121,7 +121,7 @@ export function MarketplaceOrderQueuePage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">Order queue</h1>
+          <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Order queue</h1>
           <p className="mt-1 text-sm text-neutral-500">
             Customer orders to confirm, prepare and dispatch. New orders are flagged in amber.
           </p>

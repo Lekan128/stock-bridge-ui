@@ -9,7 +9,7 @@ import { requestsApi } from '@/features/requests/requestsApi'
 import { WaitingMovesLine } from '@/features/moves/WaitingMovesLine'
 import { usePendingStock } from '@/features/outbox/useOutbox'
 import { useEffect, useRef, useState, type RefObject } from 'react'
-import { Delete, Search, X } from 'lucide-react'
+import { Delete, Printer, Search, Share2, X } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Stamp, type StampKind } from '@/components/Stamp'
@@ -55,6 +55,12 @@ import { useCatalogState } from '@/features/catalog/useCatalog'
 import { CountList, type CountedHere, type RowCounted } from '@/features/quick/CountList'
 import { formatMoney } from '@/features/selling/money'
 import { MySalesToday } from '@/features/selling/sale/MySalesToday'
+import { BillPage } from '@/features/selling/bills/BillPage'
+import { TablesView, rememberTillMode } from '@/features/selling/bills/TablesView'
+import { TicketsPage } from '@/features/selling/tickets/TicketsPage'
+import { SaleRecordPage } from '@/features/selling/sale/SaleRecordPage'
+import { QUICK_SELLING_NAV, SellingNavContext } from '@/features/selling/sellingNav'
+import { paymentLabel } from '@/features/selling/sale/paymentMethod'
 import { SaleBasketEditor } from '@/features/selling/sale/SaleBasketEditor'
 import { undoSale, useSaleBasket, type RecordedSale } from '@/features/selling/sale/useSaleBasket'
 import { MODES, useQuickModeTabs, type Mode } from '@/features/quick/quickTabs'
@@ -63,6 +69,14 @@ import type { AskShare } from '@/features/requests/whatsAppShare'
 import { SyncPill } from '@/features/sync/SyncPill'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
+import { printReceipt } from '@/features/selling/sale/printReceipt'
+import { PrintableReceipt } from '@/features/selling/sale/SaleReceipt'
+import { receiptFromRecorded, shareReceipt } from '@/features/selling/sale/receipt'
+import { CancelSalePanel } from '@/features/selling/sale/CancelSale'
+import { CANCEL_ALONE_FOR_MS } from '@/features/selling/sale/cancelReasons'
+import { useAuth } from '@/auth/useAuth'
+import { PERMISSIONS } from '@/auth/permissions'
+import { useToast } from '@/components/useToast'
 
 
 /**
@@ -83,7 +97,7 @@ function outMeaning({ sells, areas, moveButton, sellButton }: { sells: boolean; 
   return areas && !sells ? `${what} Takes them off your stock.` : what
 }
 /** The Record button says what it will do: "Stock in 2 bags (100 kg)". */
-const ACTION: Record<Exclude<Mode, 'sell' | 'move' | 'ask'>, string> = { in: 'Stock in', out: 'Stock out', count: 'Record count:' }
+const ACTION: Record<Exclude<Mode, 'sell' | 'move' | 'ask' | 'tables' | 'tickets'>, string> = { in: 'Stock in', out: 'Stock out', count: 'Record count:' }
 const GRID_COLS = ['', 'grid-cols-1', 'grid-cols-2', 'grid-cols-3', 'grid-cols-4']
 
 /** One write made in this session, and where it stands. */
@@ -162,6 +176,23 @@ export function QuickModePage() {
   // Held here, not in the Sell step, so the basket (a draft on the phone) outlives the stamp.
   const basket = useSaleBasket()
   const [salesRecorded, setSalesRecorded] = useState(0)
+  /** The sale just paid: its card stays until Next sale, so the receipt can be printed (owner, 2026-11-16). */
+  const [saleCard, setSaleCard] = useState<{ sale: RecordedSale; kind: StampKind } | null>(null)
+  /** A receipt to print: set, rendered, then printed. `n` lets the same sale print twice. */
+  const [printJob, setPrintJob] = useState<{ sale: RecordedSale; n: number } | null>(null)
+  useEffect(() => {
+    if (printJob) printReceipt()
+  }, [printJob])
+  const printSale = (sale: RecordedSale) => setPrintJob((job) => ({ sale, n: (job?.n ?? 0) + 1 }))
+  const { client } = useAuth()
+  const { showToast } = useToast()
+  const receiptOf = (sale: RecordedSale) =>
+    receiptFromRecorded(sale, basket.catalogue, client?.name ?? 'Sale', branch?.isMultiBranch ? branch.nameOf(branch.working?.id) : undefined)
+  async function shareSale(sale: RecordedSale) {
+    const outcome = await shareReceipt(receiptOf(sale))
+    if (outcome === 'copied') showToast('Receipt copied. Paste it into a chat or a message.', 'success')
+    if (outcome === 'failed') showToast("Couldn't share the receipt. Try Print.", 'error')
+  }
   const [movesRecorded, setMovesRecorded] = useState(0)
   const rootRef = useRef<HTMLDivElement>(null)
 
@@ -189,17 +220,21 @@ export function QuickModePage() {
     setSalesRecorded((n) => n + 1)
     if (kept.length === 0) return // all refused: they are still in the basket, saying why
     const items = `${kept.length} ${kept.length === 1 ? 'item' : 'items'}`
-    recorded(
+    area.remember()
+    // Not the brief stamp of Stock in and Stock out: the sale's card stays until Next sale, for Print.
+    setSession((current) => [
       {
         key: sale.saleId,
         mode: 'sell',
         productId: '',
-        productName: sale.label,
-        summary: `${items} · ${formatMoney(sale.total)}`,
+        productName: `${formatMoney(sale.total)} · ${paymentLabel(sale.paymentMethod)}`,
+        summary: items,
         sale,
+        areaName: area.areaName ?? undefined,
       },
-      kept.every((line) => line.status === 'sent') ? 'synced' : 'recorded',
-    )
+      ...current,
+    ])
+    setSaleCard({ sale, kind: kept.every((line) => line.status === 'sent') ? 'synced' : 'recorded' })
   }
 
   function moveRecorded(moved: Moved) {
@@ -239,6 +274,61 @@ export function QuickModePage() {
     }, STAMP_MS)
   }
 
+  /**
+   * Exit shows the same thing in the usual app (owner, 2026-11-19): a phone's view on a phone, a laptop's on a laptop.
+   * The counter keeps its basket; a table's bill stays open; Tickets stays on its area.
+   */
+  function exitTo(): string {
+    if (mode === 'sell') {
+      rememberTillMode('counter')
+      return '/app/sell'
+    }
+    if (mode === 'tables') {
+      const receipt = params.get('receipt')
+      if (receipt) return `/app/sales/${receipt}`
+      for (const key of ['table', 'id', 'name']) {
+        const value = params.get(key)
+        if (value) return `/app/sell/bill?${key}=${encodeURIComponent(value)}`
+      }
+      rememberTillMode('tables')
+      return '/app/sell'
+    }
+    if (mode === 'tickets') return '/app/tickets'
+    if (mode === 'count') return '/app/products/count'
+    return '/app/products'
+  }
+
+  const tabRow = (
+<div
+      role="group"
+      aria-label="What are you doing?"
+      aria-describedby="quick-mode-meaning"
+      aria-busy={!quickTabs.ready || undefined}
+      className={`grid ${GRID_COLS[tabs.length]} min-h-14 gap-1 rounded-lg bg-neutral-100 p-1`}
+    >
+      {/* Until their own buttons are known, the row keeps its place, empty - no flash of the wrong ones. */}
+      {quickTabs.ready && tabs.map((m) => (
+        <button
+          key={m.value}
+          type="button"
+          aria-pressed={mode === m.value}
+          onClick={() => chooseMode(m.value)}
+          className={`h-12 rounded-md text-base font-semibold ${
+            mode === m.value ? 'bg-primary-600 text-white shadow-sm' : 'text-neutral-600'
+          }`}
+        >
+          {m.label}
+        </button>
+      ))}
+    </div>
+  )
+  // Tables and Tickets (owner, 2026-11-19): the phone's own screens, inside quick mode - a table's bill and its paid
+  // receipt open here too, so the buttons stay on top.
+  const sellingScreen = mode === 'tables' || mode === 'tickets'
+  const billQuery = ['table', 'id', 'name'].find((key) => params.get(key))
+  const receiptId = params.get('receipt')
+  const tillBranch = branch && !branch.isAll ? (branch.working ?? null) : null
+
   return createPortal(
     // Over the workspace's own chrome — and over toasts (z-40), which would otherwise cover the
     // Record button; dialogs (the sync centre, z-50) still open above it.
@@ -252,7 +342,7 @@ export function QuickModePage() {
       <header className="flex items-center justify-between gap-3 border-b border-neutral-200 px-4 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-3">
         <button
           type="button"
-          onClick={() => navigate('/app/products')}
+          onClick={() => navigate(exitTo())}
           className="inline-flex h-11 items-center gap-1.5 rounded-md px-2 text-base font-medium text-neutral-700 hover:bg-neutral-100"
         >
           <X className="h-5 w-5" aria-hidden="true" />
@@ -262,7 +352,7 @@ export function QuickModePage() {
           {/* Where every scan here lands (UX §5.2): "Quick mode · Oshodi". */}
           Quick mode{branchHere ? ` · ${branchHere}` : ''}
           {/* Where every scan lands, changed right here (Move has its own From and To). */}
-          {mode !== 'move' && mode !== 'ask' && (
+          {mode !== 'move' && mode !== 'ask' && !sellingScreen && (
             <QuickAreaTitle areaId={area.areaId} areaName={area.areaName} choices={area.choices} onChoose={area.choose} />
           )}
         </h1>
@@ -271,30 +361,27 @@ export function QuickModePage() {
       {/* Areas that confirm (Part 4): what's waiting for this person, one line under the title. */}
       <WaitingMovesLine bar />
 
+      {sellingScreen ? (
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto" data-quick-selling={mode}>
+          <div className="mx-auto w-full max-w-md px-4 pt-4">{tabRow}</div>
+          <div className="mx-auto flex w-full max-w-5xl min-h-0 flex-1 flex-col px-4 py-4">
+            <SellingNavContext.Provider value={QUICK_SELLING_NAV}>
+              {mode === 'tickets' ? (
+                <TicketsPage />
+              ) : receiptId ? (
+                <SaleRecordPage key={receiptId} id={receiptId} />
+              ) : billQuery ? (
+                <BillPage key={`${billQuery}-${params.get(billQuery)}`} />
+              ) : tillBranch ? (
+                <TablesView branch={tillBranch} header={null} />
+              ) : null}
+            </SellingNavContext.Provider>
+          </div>
+        </div>
+      ) : (
       <div className="mx-auto flex w-full max-w-md min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
         <div className="flex flex-col gap-2">
-          <div
-            role="group"
-            aria-label="What are you doing?"
-            aria-describedby="quick-mode-meaning"
-            aria-busy={!quickTabs.ready || undefined}
-            className={`grid ${GRID_COLS[tabs.length]} min-h-14 gap-1 rounded-lg bg-neutral-100 p-1`}
-          >
-            {/* Until their own buttons are known, the row keeps its place, empty - no flash of the wrong ones. */}
-            {quickTabs.ready && tabs.map((m) => (
-              <button
-                key={m.value}
-                type="button"
-                aria-pressed={mode === m.value}
-                onClick={() => chooseMode(m.value)}
-                className={`h-12 rounded-md text-base font-semibold ${
-                  mode === m.value ? 'bg-primary-600 text-white shadow-sm' : 'text-neutral-600'
-                }`}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
+          {tabRow}
           {/* Count shares the explanation's line, so it costs no height above the keyboard. */}
           <div className="flex items-start justify-between gap-3">
             <p id="quick-mode-meaning" className="text-sm text-neutral-600">
@@ -324,6 +411,25 @@ export function QuickModePage() {
 
         {flash ? (
           <StampFlash kind={flash.kind} text={flash.text} next={mode === 'sell' ? 'Next customer…' : 'Next item…'} />
+        ) : mode === 'sell' && saleCard ? (
+          <QuickSaleCard
+            sale={saleCard.sale}
+            kind={saleCard.kind}
+            onPrint={() => printSale(saleCard.sale)}
+            onShare={() => void shareSale(saleCard.sale)}
+            onNext={() => {
+              setSaleCard(null)
+              searchRef.current?.focus()
+            }}
+            onCancelled={() => {
+              // Cancelled in its first two minutes: its items come back to fix and take again.
+              const cancelled = saleCard.sale
+              basket.restoreSale(cancelled)
+              setSession((all) => all.map((e) => (e.key === cancelled.saleId ? { ...e, undone: true } : e)))
+              setSaleCard(null)
+              setSalesRecorded((n) => n + 1)
+            }}
+          />
         ) : mode === 'sell' ? (
           <div className="flex flex-col gap-4">
             <SaleBasketEditor basket={basket} onRecorded={saleRecorded} areaId={area.areaId ?? null} />
@@ -383,8 +489,21 @@ export function QuickModePage() {
           />
         )}
 
-        <SessionList entries={session} onUndone={(key) => setSession((all) => all.map((e) => (e.key === key ? { ...e, undone: true } : e)))} />
+        <SessionList
+          entries={session}
+          onPrint={printSale}
+          onShare={(sale) => void shareSale(sale)}
+          onUndone={(key) => {
+            const undoneSale = session.find((e) => e.key === key)?.sale
+            setSession((all) => all.map((e) => (e.key === key ? { ...e, undone: true } : e)))
+            // An undone sale's items come back into the sale, to fix and take again (owner, 2026-11-16).
+            if (undoneSale) basket.restoreSale(undoneSale)
+            if (saleCard?.sale.saleId === key) setSaleCard(null)
+          }}
+        />
+        {printJob && <PrintableReceipt key={printJob.n} receipt={receiptOf(printJob.sale)} />}
       </div>
+      )}
     </div>,
     document.body,
   )
@@ -506,7 +625,7 @@ function AmountStep({
   onBack,
   onRecorded,
 }: {
-  mode: Exclude<Mode, 'sell' | 'move' | 'ask'>
+  mode: Exclude<Mode, 'sell' | 'move' | 'ask' | 'tables' | 'tickets'>
   product: Product
   /** The session's stock-out reason, or null for none given. */
   reason: OutReason | null
@@ -1055,6 +1174,89 @@ function QuickReason({ value, onChange }: { value: OutReason | null; onChange: (
 
 // -------------------------------------------------------------------------------------- stamp
 
+/**
+ * A sale just paid, quick-mode style (owner, 2026-11-16): the stamp, the amount and how it was paid, what was
+ * in it, and Print - it stays until Next sale, since most cashiers print.
+ */
+function QuickSaleCard({
+  sale,
+  kind,
+  onPrint,
+  onShare,
+  onNext,
+  onCancelled,
+}: {
+  sale: RecordedSale
+  kind: StampKind
+  onPrint: () => void
+  onShare: () => void
+  onNext: () => void
+  onCancelled: () => void
+}) {
+  const { user } = useAuth()
+  const { showToast } = useToast()
+  const online = useOnlineStatus()
+  const [asked, setAsked] = useState(false)
+  const fresh = Date.now() - sale.recordedAt < CANCEL_ALONE_FOR_MS
+  const canCancelSales = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.CANCEL_SALES)
+  const kept = sale.lines.filter((line) => line.status !== 'refused')
+  const refused = sale.lines.filter((line) => line.status === 'refused')
+  const names = kept.map((line) => (line.line.quantity > 1 ? `${line.line.product.name} × ${line.line.quantity}` : line.line.product.name))
+  return (
+    <div role="status" className="flex flex-col gap-4 rounded-lg border-2 border-neutral-200 px-4 py-6" data-quick-sale-card>
+      <div className="flex flex-col items-center gap-2 text-center">
+        <div className="scale-125">
+          <Stamp kind={kind} land />
+        </div>
+        <p className="text-2xl font-semibold tabular-nums">
+          {formatMoney(sale.total)} · {paymentLabel(sale.paymentMethod)}
+        </p>
+        <p className="text-sm text-neutral-600">{names.join(', ')}</p>
+        {kind !== 'synced' && <p className="text-xs text-neutral-500">Saved on this phone. It will send when you are online.</p>}
+        {refused.length > 0 && (
+          <p role="alert" className="text-sm text-warning-800">
+            {refused.map((line) => line.line.product.name).join(', ')} not recorded - still in the sale.
+          </p>
+        )}
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <button type="button" onClick={onPrint} className="flex min-h-12 items-center justify-center gap-1.5 rounded-lg bg-action text-base font-semibold text-white hover:bg-action-hover">
+          <Printer className="h-5 w-5" aria-hidden="true" />
+          Print
+        </button>
+        <button type="button" onClick={onShare} className="flex min-h-12 items-center justify-center gap-1.5 rounded-lg bg-action text-base font-semibold text-white hover:bg-action-hover">
+          <Share2 className="h-5 w-5" aria-hidden="true" />
+          Share
+        </button>
+        <button type="button" onClick={onNext} className="min-h-12 rounded-lg border border-neutral-300 bg-white text-base font-semibold text-neutral-900 hover:bg-neutral-50">
+          Next sale
+        </button>
+      </div>
+      {asked ? (
+        <p className="text-center text-sm font-medium text-warning-800">Asked to cancel. Waiting for a manager.</p>
+      ) : (
+        <div className="flex justify-center">
+          <CancelSalePanel
+            saleId={sale.saleId}
+            canCancelNow={canCancelSales || fresh}
+            canAsk
+            blocked={kind !== 'synced' || !online ? 'This sale is still on this phone. Cancel it when you are back online.' : null}
+            onDone={(_, done) => {
+              if (done === 'requested') {
+                setAsked(true)
+                showToast('Asked. A manager will see it.', 'success')
+              } else {
+                showToast('Sale cancelled. The items are back.', 'success')
+                onCancelled()
+              }
+            }}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
 function StampFlash({ kind, text, next }: { kind: StampKind; text: string; next: string }) {
   return (
     <div role="status" className="flex flex-col items-center gap-4 rounded-lg border-2 border-neutral-200 px-4 py-10 text-center">
@@ -1069,7 +1271,18 @@ function StampFlash({ kind, text, next }: { kind: StampKind; text: string; next:
 
 // ------------------------------------------------------------------------------------ session
 
-function SessionList({ entries, onUndone }: { entries: SessionEntry[]; onUndone: (key: string) => void }) {
+function SessionList({
+  entries,
+  onUndone,
+  onPrint,
+  onShare,
+}: {
+  entries: SessionEntry[]
+  onUndone: (key: string) => void
+  /** A sale's receipt, printed again from the list. */
+  onPrint: (sale: RecordedSale) => void
+  onShare: (sale: RecordedSale) => void
+}) {
   const { ops, recentlySent } = useOutboxState()
   const [error, setError] = useState<string | null>(null)
   if (entries.length === 0) return null
@@ -1152,7 +1365,18 @@ function SessionList({ entries, onUndone }: { entries: SessionEntry[]; onUndone:
             ) : (
               <span className="flex shrink-0 items-center gap-2">
                 <Stamp kind={stampFor(entry)} />
-                {entry === latest && (
+                {entry.sale && (
+                  <>
+                    <button type="button" onClick={() => onPrint(entry.sale!)} className="h-10 rounded-md px-2 text-sm font-semibold text-primary-700 underline">
+                      Print
+                    </button>
+                    <button type="button" onClick={() => onShare(entry.sale!)} className="h-10 rounded-md px-2 text-sm font-semibold text-primary-700 underline">
+                      Share
+                    </button>
+                  </>
+                )}
+                {/* A sale is cancelled with a reason from its card, never undone without one (Step 3). */}
+                {entry === latest && !entry.sale && (
                   <button type="button" onClick={() => void undo(entry)} className="h-10 rounded-md px-2 text-sm font-semibold text-primary-700 underline">
                     Undo
                   </button>

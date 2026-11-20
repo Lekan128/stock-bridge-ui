@@ -84,7 +84,7 @@ export function LowStockProductsPage() {
           <ArrowLeft className="h-5 w-5" />
         </button>
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">Low-stock products</h1>
+          <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Low-stock products</h1>
           <p className="text-sm text-neutral-500">Products at or below their low-stock threshold.</p>
         </div>
         {canOrder && toOrder.length > 0 && (

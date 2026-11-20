@@ -1,3 +1,5 @@
+import { AreaUseLine } from '@/features/stock/components/AreaUseLine'
+import { useWorkArea } from '@/features/branches/workArea'
 import { ArrowDownToLine, ArrowUpFromLine, Download, PackagePlus, PackageMinus, SlidersHorizontal } from 'lucide-react'
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -118,6 +120,7 @@ export function StockMovementsPage() {
   const { recordsSales, requiresSellingPrice } = useSellingPolicy()
   // "All branches" (MULTI_BRANCH_UX_PLAN.md §4.3): every branch's rows, each saying where.
   const branch = useOptionalWorkingBranch()
+  const canManageInventory = permissions.includes(PERMISSIONS.MANAGE_INVENTORY)
   const showBranch = (branch?.isMultiBranch ?? false) && (branch?.isAll ?? false)
   const nameOf = (id: string | undefined) => branch?.nameOf(id)
   // …and a filter to one of them (UX §5.1).
@@ -126,6 +129,8 @@ export function StockMovementsPage() {
   // Areas (V60): at a branch with areas, each row says which, and the moves between them are a choice.
   const areaBranch = branch?.working && hasAreas(branch.working) ? branch.working : null
   const areaName = (id: string | undefined) => areaBranch?.areas?.find((area) => area.id === id)?.name
+  // The one area chosen at the top, if any: Step 6's line is that area's.
+  const work = useWorkArea(areaBranch)
   const directions = areaBranch
     ? [...DIRECTIONS, { value: 'MOVES' as const, label: 'Moves between areas' }, { value: 'REQUESTS' as const, label: 'Requests' }]
     : DIRECTIONS
@@ -173,25 +178,121 @@ export function StockMovementsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">Stock movements</h1>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Stock movements</h1>
           <p className="mt-1 max-w-2xl text-sm text-neutral-500">
-            Everything you took in and gave out, with what it cost. Dates are when the delivery or
-            sale happened — not when it was entered — so backdated and imported stock lands in the
-            period it really belongs to.
+            Everything you took in and gave out, with what it cost.
+            <span className="hidden sm:inline">
+              {' '}Dates are when the delivery or sale happened — not when it was entered — so backdated and imported stock
+              lands in the period it really belongs to.
+            </span>
           </p>
         </div>
-        {/* Dates, the download and suppliers are the ledger's: the moves list (newest first) has none. */}
+        {/* The download is the ledger's: the moves list (newest first) has none. On a phone, its picture alone. */}
         {!showingMoves && (
-          <div className="flex flex-wrap items-center gap-2">
+          <Button variant="secondary" onClick={() => void exportIt()} loading={exporting} aria-label="Download">
+            <Download className="h-4 w-4" aria-hidden="true" />
+            <span className="hidden sm:inline">Download</span>
+          </Button>
+        )}
+      </div>
+
+      {/* Every filter in one row under the title (owner, 2026-11-17): the figures, the area's line and the list below
+          all follow them. Each choice says what it is ("This month", "Everything", "Any supplier"), so no labels show. */}
+      {/* A phone: the period on its own line, the other two side by side under it - whole words, never cut. */}
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center" data-movement-filters>
+        {!showingMoves && (
+          <div className="col-span-2 sm:col-span-1">
             <DateRangeControl value={range} onChange={(next) => applyFilter(() => setRange(next))} />
-            <Button variant="secondary" onClick={() => void exportIt()} loading={exporting}>
-              <Download className="h-4 w-4" aria-hidden="true" />
-              Download
-            </Button>
           </div>
         )}
+        <div className="min-w-0">
+          <label htmlFor="direction" className="sr-only">
+            Show
+          </label>
+          <select
+            id="direction"
+            value={direction}
+            onChange={(event) => applyFilter(() => setDirection(event.target.value as DirectionFilter))}
+            className="w-full min-w-0 rounded-md border border-neutral-300 px-2 py-2 text-sm text-neutral-900 sm:w-auto sm:px-3 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+          >
+            {directions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Only once "Stock out" is chosen: a reason is a fact about stock-outs, and offering it
+            beside "Everything" would be a filter that quietly hides every delivery. */}
+        {reasonApplies && (
+          <div className="min-w-0">
+            <label htmlFor="reason" className="sr-only">
+              Reason
+            </label>
+            <select
+              id="reason"
+              value={reasonFilter}
+              onChange={(event) => applyFilter(() => setReasonFilter(event.target.value as '' | 'NONE' | OutReason))}
+              className="w-full min-w-0 rounded-md border border-neutral-300 px-2 py-2 text-sm text-neutral-900 sm:w-auto sm:px-3 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            >
+              <option value="">Any reason</option>
+              {OUT_REASONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+              <option value="NONE">{NO_REASON_LABEL}</option>
+            </select>
+          </div>
+        )}
+
+        {showBranch && branch && (
+          <div className="min-w-0">
+            <label htmlFor="movement-branch" className="sr-only">
+              Branch
+            </label>
+            <select
+              id="movement-branch"
+              value={branchFilter}
+              onChange={(event) => applyFilter(() => setBranchFilter(event.target.value))}
+              className="w-full min-w-0 rounded-md border border-neutral-300 px-2 py-2 text-sm text-neutral-900 sm:w-auto sm:px-3 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            >
+              <option value="">Every branch</option>
+              {branch.branches.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Hidden rather than disabled for a user without VIEW_VENDORS: the options would be a
+            request they are not allowed to make, and an empty picker looks broken. */}
+        {canViewVendors && !showingMoves && (
+          <div className="min-w-0">
+            <label htmlFor="supplier" className="sr-only">
+              Supplier
+            </label>
+            <select
+              id="supplier"
+              value={companyVendorId}
+              onChange={(event) => applyFilter(() => setCompanyVendorId(event.target.value))}
+              className="w-full min-w-0 rounded-md border border-neutral-300 px-2 py-2 text-sm text-neutral-900 sm:w-auto sm:px-3 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            >
+              <option value="">Any supplier</option>
+              {vendors.map((vendor) => (
+                <option key={vendor.id} value={vendor.id}>
+                  {vendor.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
       </div>
 
       {summary && showingAdjustments && !showingMoves && (
@@ -219,8 +320,24 @@ export function StockMovementsPage() {
         </div>
       )}
 
+      {/* A phone: the same four figures in one small block, so the list starts on the first screen (owner, 2026-11-17). */}
       {summary && !showingAdjustments && !showingMoves && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <dl className="grid grid-cols-2 overflow-hidden rounded-lg border border-neutral-200 bg-white tabular-nums sm:hidden" data-figures-compact>
+          {[
+            ['Stock in value', formatCurrency(summary.inValue)],
+            ['Stock out value', formatCurrency(recordsSales && summary.salesAmount != null ? summary.salesAmount + summary.otherOutCost : summary.outValue)],
+            ['Units in', formatNumber(summary.inQuantity)],
+            ['Units out', formatNumber(summary.outQuantity)],
+          ].map(([label, value], index) => (
+            <div key={label} className={`px-3 py-2.5 ${index % 2 === 0 ? 'border-r' : ''} ${index < 2 ? 'border-b' : ''} border-neutral-200`}>
+              <dt className="text-xs text-neutral-500">{label}</dt>
+              <dd className="text-base font-semibold text-neutral-900">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {summary && !showingAdjustments && !showingMoves && (
+        <div className="hidden gap-4 sm:grid sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             label="Stock in value"
             value={formatCurrency(summary.inValue)}
@@ -257,6 +374,12 @@ export function StockMovementsPage() {
             icon={ArrowUpFromLine}
           />
         </div>
+      )}
+
+      {/* Step 6: an area that makes what is sold - what the plates took, and what counts found used on top. Managers
+          only, and only when one area is chosen. */}
+      {!showingMoves && canManageInventory && areaBranch && work.area && (
+        <AreaUseLine branchId={areaBranch.id} areaId={work.area.id} range={range} rangeLabel={rangeLabel} />
       )}
 
       {/* Multiple branches (MULTI_BRANCH_BUILD_PLAN.md §4.3): at one branch, stock moved to and from the
@@ -315,100 +438,6 @@ export function StockMovementsPage() {
         </p>
       )}
 
-      <div className="flex flex-wrap items-end gap-3">
-        <div>
-          <label htmlFor="direction" className="mb-1.5 block text-sm font-medium text-neutral-700">
-            Show
-          </label>
-          <select
-            id="direction"
-            value={direction}
-            onChange={(event) => applyFilter(() => setDirection(event.target.value as DirectionFilter))}
-            className="rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-          >
-            {directions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Only once "Stock out" is chosen: a reason is a fact about stock-outs, and offering it
-            beside "Everything" would be a filter that quietly hides every delivery. */}
-        {reasonApplies && (
-          <div>
-            <label htmlFor="reason" className="mb-1.5 block text-sm font-medium text-neutral-700">
-              Reason
-            </label>
-            <select
-              id="reason"
-              value={reasonFilter}
-              onChange={(event) => applyFilter(() => setReasonFilter(event.target.value as '' | 'NONE' | OutReason))}
-              className="rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-            >
-              <option value="">Any reason</option>
-              {OUT_REASONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-              <option value="NONE">{NO_REASON_LABEL}</option>
-            </select>
-          </div>
-        )}
-
-        {showBranch && branch && (
-          <div>
-            <label htmlFor="movement-branch" className="mb-1.5 block text-sm font-medium text-neutral-700">
-              Branch
-            </label>
-            <select
-              id="movement-branch"
-              value={branchFilter}
-              onChange={(event) => applyFilter(() => setBranchFilter(event.target.value))}
-              className="rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-            >
-              <option value="">Every branch</option>
-              {branch.branches.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {/* Hidden rather than disabled for a user without VIEW_VENDORS: the options would be a
-            request they are not allowed to make, and an empty picker looks broken. */}
-        {canViewVendors && !showingMoves && (
-          <div>
-            <label htmlFor="supplier" className="mb-1.5 block text-sm font-medium text-neutral-700">
-              Supplier
-            </label>
-            <select
-              id="supplier"
-              value={companyVendorId}
-              onChange={(event) => applyFilter(() => setCompanyVendorId(event.target.value))}
-              className="rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-            >
-              <option value="">Any supplier</option>
-              {vendors.map((vendor) => (
-                <option key={vendor.id} value={vendor.id}>
-                  {vendor.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {!showSkeleton && !error && !showingMoves && (
-          <p className="py-2 text-sm text-neutral-500">
-            {formatNumber(totalElements)} movement{totalElements === 1 ? '' : 's'}
-          </p>
-        )}
-      </div>
-
       {showingMoves && areaBranch && (direction === 'REQUESTS' ? <RequestsList branchId={areaBranch.id} /> : <MovesList branchId={areaBranch.id} />)}
 
       {!showingMoves && error && (
@@ -436,8 +465,47 @@ export function StockMovementsPage() {
         />
       )}
 
+      {!showingMoves && !showSkeleton && !error && (
+        <p className="-mb-3 text-sm text-neutral-500">
+          {formatNumber(totalElements)} movement{totalElements === 1 ? '' : 's'}
+        </p>
+      )}
+
       {!showingMoves && movements.length > 0 && (
         <>
+          {/* A phone: one readable row per movement - product and quantity, then type, area and time, then the note. */}
+          <ul className={`flex flex-col gap-2 md:hidden ${loading ? 'opacity-50' : ''}`} aria-label="Stock movements" data-movement-rows>
+            {movements.map((movement) => {
+              const badge = MOVEMENT_BADGE[movement.movementType]
+              const out = movement.movementType === 'OUT' || movement.movementType === 'TRANSFER_OUT' || (movement.movementType === 'ADJUSTMENT' && movement.quantity < 0)
+              const where = movement.movementType === 'MOVE' ? routeOf(movement) : areaBranch ? areaName(movement.areaId) : undefined
+              return (
+                <li key={movement.id} className="flex flex-col gap-0.5 rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-sm">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="min-w-0 truncate font-medium text-neutral-900">{movement.productName ?? '—'}</span>
+                    <span className={`shrink-0 font-semibold tabular-nums ${out ? 'text-warning-700' : 'text-accent-700'}`}>
+                      {movement.movementType === 'ADJUSTMENT' || movement.movementType === 'MOVE' ? '' : out ? '−' : '+'}
+                      {formatNumber(Math.abs(movement.quantity))}
+                      {movement.unitOfMeasure && <span className="ml-1 text-xs font-normal text-neutral-500">{movement.unitOfMeasure.toLowerCase()}</span>}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-1.5 text-xs text-neutral-600">
+                    <Badge variant={badge.variant}>{movement.outReason ? outReasonLabel(movement.outReason) : badge.label}</Badge>
+                    {movement.count && <span>count ·</span>}
+                    {where && <span>{where} ·</span>}
+                    {showBranch && <span>{nameOf(movement.branchId) ?? '—'} ·</span>}
+                    <span>{formatDateTime(movement.occurredAt ?? movement.createdAt)}</span>
+                    {movement.lineValue != null && <span>· {formatCurrency(movement.lineValue)}</span>}
+                  </div>
+                  {(movement.note || movement.companyVendorName) && (
+                    <p className="text-xs text-neutral-500">
+                      {[movement.companyVendorName, movement.note].filter(Boolean).join(' · ')}
+                    </p>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
           {/* The table scrolls inside its own container rather than the page — eight columns do
               not fit a phone, and a horizontally scrolling page loses the nav. */}
           {/* Focusable, so the columns past the edge can be reached with a keyboard as well as a finger. */}
@@ -445,7 +513,7 @@ export function StockMovementsPage() {
             tabIndex={0}
             role="region"
             aria-label="Stock movements"
-            className={`overflow-x-auto rounded-lg border border-neutral-200 bg-white transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${loading ? 'opacity-50' : ''}`}
+            className={`hidden overflow-x-auto rounded-lg border border-neutral-200 bg-white transition-opacity md:block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${loading ? 'opacity-50' : ''}`}
           >
             <table className="w-full min-w-[56rem] text-sm">
               <thead className="border-b border-neutral-200 bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">

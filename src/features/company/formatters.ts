@@ -19,7 +19,7 @@ export function formatPaymentTerms(terms: PaymentTerms): string {
 const PAYMENT_TERMS_DESCRIPTIONS: Record<PaymentTerms, string> = {
   PREPAID: 'Marketplace orders must be paid for before they are fulfilled.',
   PAY_ON_DELIVERY_ALLOWED:
-    'ProcurePal has extended credit terms to this company — pay on delivery may be offered at checkout.',
+    'Procurepaddy has extended credit terms to this company — pay on delivery may be offered at checkout.',
 }
 
 export function describePaymentTerms(terms: PaymentTerms): string {

@@ -150,7 +150,12 @@ export function useSheetBranch(): SheetBranch {
  * The "Which area?" part, for a sheet recording at `branch` (STOCK_AREAS_PART_1.md). Also used on its own
  * by quick mode and the sale basket, which always record at the phone's branch.
  */
-export function useSheetArea(branch: Branch | null): {
+export function useSheetArea(
+  branch: Branch | null,
+  waiting?: Record<string, number>,
+  /** Record a sale and bills (V103): only areas things are sold from - never a store room. */
+  selling = false,
+): {
   titleSuffix: string
   field: ReactNode
   areaId: string | undefined
@@ -166,7 +171,8 @@ export function useSheetArea(branch: Branch | null): {
   const { user } = useAuth()
   const work = useWorkArea(branch)
   // Someone placed in particular areas (Part 3) chooses only among theirs; everyone else among all.
-  const areas = work.limited ? work.areas : stockAreas(branch)
+  const all = work.limited ? work.areas : stockAreas(branch)
+  const areas = selling ? all.filter((area) => area.sells !== false) : all
   // The choice is per branch: switching the sheet's branch must never carry the Kitchen of one to the next.
   const [chosen, setChosen] = useState<{ branchId: string; areaId: string } | null>(null)
   if (!branch || !hasAreas(branch) || areas.length === 0 || (!work.limited && areas.length < 2)) {
@@ -176,8 +182,13 @@ export function useSheetArea(branch: Branch | null): {
   // question. With more, the question stays, that area already picked: stocking in at the Store from the
   // Kitchen is one tap here, not a trip to the top bar and back (owner, 2026-10-31).
   const last = read(user?.id ? lastAreaKey(user.id, branch.id) : null)
+  // Only among the areas offered: a sale never falls back to the Store, even where deliveries arrive.
+  const offered = (area: Area | null | undefined) => (area && areas.some((one) => one.id === area.id) ? area : undefined)
   const fallback =
-    work.area ?? areas.find((area) => area.id === last) ?? (work.limited ? undefined : deliveryArea(branch)) ?? areas[0]
+    offered(work.area) ??
+    areas.find((area) => area.id === last) ??
+    (work.limited ? undefined : offered(deliveryArea(branch))) ??
+    areas[0]
   const current =
     chosen?.branchId === branch.id ? (areas.find((area) => area.id === chosen.areaId) ?? fallback) : fallback
   if (areas.length < 2) {
@@ -204,6 +215,7 @@ export function useSheetArea(branch: Branch | null): {
           options={areas}
           chosen={current.id}
           onChoose={(id) => setChosen({ branchId: branch.id, areaId: id })}
+          waiting={waiting}
         />
       ) : (
         <select

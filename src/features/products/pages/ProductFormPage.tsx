@@ -1,8 +1,23 @@
 import { ProductUnitsField, unitsDraftFrom, unitsPayload, type UnitsDraft } from '@/features/products/components/ProductUnitsField'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
+import {
+  EMPTY_MADE_WITH,
+  MadeWithEditor,
+  draftFromMadeWith,
+  madeWithPayload,
+  madeWithProblem,
+  type MadeWithDraft,
+} from '@/features/products/components/MadeWithEditor'
+import { madeWithApi } from '@/features/products/madeWith'
+import {
+  ProductBranchesField,
+  defaultProductBranches,
+  productBranchesText,
+  type ProductBranchesValue,
+} from '@/features/products/components/ProductBranchesField'
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Banknote, Bell, ClipboardCheck, Lock, Ruler, Tag, Truck } from 'lucide-react'
+import { ArrowLeft, Banknote, Bell, ChefHat, ClipboardCheck, Lock, Ruler, Tag, Truck } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
@@ -218,8 +233,8 @@ const IDENTITY_FIELDS: { field: keyof ProductFormValues & keyof Product; label: 
  * something to edit here.
  */
 /** The form's sections, in order (owner, 2026-11-10). */
-type StepId = 'basics' | 'units' | 'price' | 'suppliers' | 'alert' | 'review'
-const STEP_IDS: StepId[] = ['basics', 'units', 'price', 'suppliers', 'alert', 'review']
+type StepId = 'basics' | 'units' | 'price' | 'madeWith' | 'suppliers' | 'alert' | 'review'
+const STEP_IDS: StepId[] = ['basics', 'units', 'price', 'madeWith', 'suppliers', 'alert', 'review']
 
 /** Which section each field is in: a problem in it marks that step, and Create opens the first one with one. */
 const FIELD_STEP: Record<string, StepId> = {
@@ -243,6 +258,12 @@ interface ProductDraft {
   values: ProductFormValues
   containsText: string
   skuUnlocked: boolean
+  /** Kept in stock or Made here, and a made-here item's own answers (owner, 2026-11-17). Absent on older drafts. */
+  madeHere?: boolean
+  roughCost?: string
+  madeWith?: MadeWithDraft
+  /** Which branches it is for (V92). */
+  branches?: ProductBranchesValue
 }
 
 export function ProductFormPage() {
@@ -260,14 +281,31 @@ export function ProductFormPage() {
   // One product, one price, every branch (MULTI_BRANCH_UX_PLAN.md §5.14): the form says where a change
   // lands, and the price is read-only for someone who can't change selling prices.
   // Every open branch in the company, not only those this person sees: a price applies at all of them.
-  const { isMultiBranch, openBranches: branchCount } = useWorkingBranch()
+  const { isMultiBranch, openBranches: branchCount, working, isAll, nameOf, branches } = useWorkingBranch()
+  // Which branches it is for (V92): a new one, the branch being worked at; the line under the name changes it.
+  const [productBranches, setProductBranches] = useState<ProductBranchesValue>(() => defaultProductBranches(working, isAll))
+  const [branchesTouched, setBranchesTouched] = useState(false)
+  useEffect(() => {
+    if (!isEdit && !branchesTouched) setProductBranches(defaultProductBranches(working, isAll))
+  }, [isEdit, branchesTouched, working, isAll])
+  const branchFields = isMultiBranch
+    ? productBranches.all
+      ? { allBranches: true }
+      : { branchIds: productBranches.ids }
+    : {}
   const canChangePrices = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.CHANGE_SELLING_PRICES)
   const priceHint = !canChangePrices
     ? 'Prices are set by people who can change selling prices.'
     : isMultiBranch
       ? `Same price at all ${branchCount} branches.`
       : undefined
-  const { showsSellingPrice, requiresSellingPrice } = useSellingPolicy()
+  const { showsSellingPrice, requiresSellingPrice, sellsMadeHere } = useSellingPolicy()
+  // Made here, not kept in stock (V90, selling till Step 4): chosen at the top when adding; fixed once added.
+  const [madeHereChoice, setMadeHereChoice] = useState(false)
+  const [roughCost, setRoughCost] = useState('')
+  // "Made with" (V95, Step 5): read with a made-here item being edited, saved right after the product.
+  const [madeWith, setMadeWith] = useState<MadeWithDraft>(EMPTY_MADE_WITH)
+  const [madeWithLoaded, setMadeWithLoaded] = useState(false)
   /** The pack a company's selling price is typed per ("CARTON"), or null for the stock unit (V47). */
   const [priceUnitCode, setPriceUnitCode] = useState<string | null>(null)
   // The product's own units and where its stock-outs start (UNITS_PLAN.md Parts 1-2), beside the form's fields.
@@ -288,6 +326,22 @@ export function ProductFormPage() {
   const { product, loading: loadingProduct, error: productError, refetch: refetchProduct } = useProduct(id, {
     requireFresh: true,
   })
+  useEffect(() => {
+    if (!isEdit || !id || product?.madeHere !== true || madeWithLoaded) return
+    let live = true
+    madeWithApi
+      .get(id)
+      .then((saved) => {
+        if (live) setMadeWith(draftFromMadeWith(saved))
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (live) setMadeWithLoaded(true)
+      })
+    return () => {
+      live = false
+    }
+  }, [isEdit, id, product?.madeHere, madeWithLoaded])
   const queryClient = useQueryClient()
   // Gated on VIEW_VENDORS rather than fetched unconditionally: the picker is optional, and asking
   // for a list the caller is not allowed to read would be a 403 in everyone's network tab.
@@ -434,6 +488,8 @@ export function ProductFormPage() {
           ? seededUnit
           : `${product.packagingSize} ${seededUnit}`,
     )
+    setRoughCost(product.estimatedCost != null ? String(product.estimatedCost) : '')
+    setProductBranches({ all: product.forAllBranches !== false, ids: product.forBranchIds ?? [] })
     reset({
       name: product.name,
       sku: product.sku,
@@ -526,6 +582,13 @@ export function ProductFormPage() {
     reset(saved.values)
     setContainsText(saved.containsText)
     setSkuUnlocked(saved.skuUnlocked)
+    setMadeHereChoice(saved.madeHere === true)
+    setRoughCost(saved.roughCost ?? '')
+    setMadeWith(saved.madeWith ?? EMPTY_MADE_WITH)
+    if (saved.branches) {
+      setBranchesTouched(true)
+      setProductBranches(saved.branches)
+    }
     setRestoredDraft(true)
     setOfferedDraft(null)
   }
@@ -554,9 +617,17 @@ export function ProductFormPage() {
     if (isEdit || initialDraft === undefined || offeredDraft || !typedSomething.current) return
     const values = getValues()
     if (!values.name?.trim() && !containsText.trim()) return
-    saveDraftNow({ values, containsText, skuUnlocked })
+    saveDraftNow({
+      values,
+      containsText,
+      skuUnlocked,
+      madeHere: madeHereChoice,
+      roughCost,
+      madeWith,
+      ...(branchesTouched ? { branches: productBranches } : {}),
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formVersion, containsText, skuUnlocked, initialDraft, offeredDraft])
+  }, [formVersion, containsText, skuUnlocked, initialDraft, offeredDraft, madeHereChoice, roughCost, madeWith, productBranches])
 
   function discardDraft() {
     void draft.clear()
@@ -566,6 +637,10 @@ export function ProductFormPage() {
     reset({ ...productFormDefaults(), unitOfMeasure: 'PIECE', name: location.state?.name ?? '' })
     setContainsText('')
     setSkuUnlocked(false)
+    setMadeHereChoice(false)
+    setRoughCost('')
+    setMadeWith(EMPTY_MADE_WITH)
+    setBranchesTouched(false)
   }
 
   const [containsError, setContainsError] = useState<string | null>(null)
@@ -855,8 +930,10 @@ export function ProductFormPage() {
     setFormError(null)
     setSectionProblem(null)
     // The product's own units go with the rest (UNITS_PLAN.md Part 1); one still being typed is said here.
+    // A made-here item: whatever was typed under "Kept in stock" (units, suppliers) is neither checked nor sent - the
+    // two kinds never mix (owner, 2026-11-17).
     const unitFields = unitsPayload(units, { stockUnitCode: watchedStockUnitCode ?? '', packOption: livePackOption })
-    if ('problem' in unitFields) {
+    if (!madeHere && 'problem' in unitFields) {
       setSectionProblem({ step: 'units', message: unitFields.problem })
       setStep('units')
       return
@@ -867,7 +944,7 @@ export function ProductFormPage() {
       // unchanged and still carries stock units, so the conversion happens on this side of the
       // request rather than becoming a new field on it.
       const lowStockThreshold = toStockUnits(values.lowStockThreshold)
-      const links = supplierLinks(supplierDrafts, livePackOption)
+      const links = madeHere ? { links: [] } : supplierLinks(supplierDrafts, livePackOption)
       if ('problem' in links) {
         setSectionProblem({ step: 'suppliers', message: links.problem })
         setStep('suppliers')
@@ -881,8 +958,14 @@ export function ProductFormPage() {
               {
                 ...toProductUpdatePayload(values, product?.categoryId),
                 ...companyPriceFields(values),
-                ...unitFields,
-                lowStockThreshold,
+                ...(madeHere ? {} : unitFields),
+                ...(madeHere ? {} : { lowStockThreshold }),
+                ...(madeHere
+                  ? roughCost.trim() === ''
+                    ? { clearEstimatedCost: true }
+                    : { estimatedCost: Number(roughCost) }
+                  : {}),
+                ...branchFields,
                 removeImage: removeImage || undefined,
               },
               imageFile,
@@ -893,11 +976,28 @@ export function ProductFormPage() {
             // user could abandon halfway through. `toInitialVendorPayload` returns undefined
             // when the block was left blank, so this is a no-op for a product created with no
             // supplier or stock yet.
-            await productsApi.create(
+            madeHere
+            ? // Made here (V90): name, category, photo, price and a rough cost - nothing about stock.
+              await productsApi.create(
+                {
+                  ...toProductPayload(values),
+                  ...companyPriceFields(values),
+                  unitOfMeasure: undefined,
+                  packagingUnit: undefined,
+                  packagingSize: undefined,
+                  lowStockThreshold: undefined,
+                  madeHere: true,
+                  ...(roughCost.trim() !== '' && Number.isFinite(Number(roughCost)) ? { estimatedCost: Number(roughCost) } : {}),
+                  ...branchFields,
+                },
+                imageFile,
+              )
+            : await productsApi.create(
               {
                 ...toProductPayload(values),
                 ...companyPriceFields(values),
-                ...(unitFields.measures.length > 0 ? unitFields : {}),
+                ...branchFields,
+                ...('measures' in unitFields && unitFields.measures.length > 0 ? unitFields : {}),
                 lowStockThreshold,
                 // Its suppliers, several at once, and the stock on the shelf now - one atomic write (2026-11-10).
                 ...(links.links.length > 0 ? { suppliers: links.links } : {}),
@@ -921,6 +1021,17 @@ export function ProductFormPage() {
         void queryClient.invalidateQueries({ queryKey: queryKeys.products.vendors(saved.id) })
       }
 
+      // "Made with" (V95): after the product, which it belongs to. A refusal leaves the product saved and says so.
+      let madeWithWarning: string | null = null
+      if (madeHere && (isEdit ? madeWithLoaded : madeWith.ingredients.length > 0)) {
+        try {
+          await madeWithApi.set(saved.id, madeWithPayload(madeWith, branches, productBranches))
+          void queryClient.invalidateQueries({ queryKey: ['made-with', saved.id] })
+        } catch (error) {
+          madeWithWarning = isAppError(error) ? error.message : 'its ingredients were not saved.'
+        }
+      }
+
       // Vendors only. ProcurePal's staff set brand on the admin catalogue screen, and an
       // ordinary buying company has no marketplace facets at all — the route would 403 them,
       // which is why the input is not rendered for either.
@@ -932,7 +1043,9 @@ export function ProductFormPage() {
       syncProductIntoCache(queryClient, saved)
       void invalidateInventory(queryClient)
 
-      if (detailsWarning) {
+      if (madeWithWarning) {
+        showToast(`Product saved, but ${madeWithWarning}`, 'error')
+      } else if (detailsWarning) {
         showToast(`Product saved, ${detailsWarning}`, 'error')
       } else if (suppliersWarning) {
         showToast(`Product saved, but ${suppliersWarning}`, 'error')
@@ -954,7 +1067,10 @@ export function ProductFormPage() {
       }
       // A draft that was only offered belongs to a different product: it stays for later.
       if (!isEdit && !offeredDraft) await draft.finish()
-      navigate(`/app/products/${saved.id}`)
+      // The form isn't kept behind the product (owner, 2026-11-17): Back from the product goes where they came from -
+      // Inventory - and a new product's page offers "Add another" instead.
+      if (isEdit && (window.history.state?.idx ?? 0) > 0) navigate(-1)
+      else navigate(`/app/products/${saved.id}`, { replace: true, state: isEdit ? undefined : { created: true } })
     } catch (err) {
       setPendingValues(null)
       if (!isAppError(err)) {
@@ -998,7 +1114,20 @@ export function ProductFormPage() {
    * own `UnitPriceRequiredException`, which is why the message matches it exactly.
    */
   async function onSubmit(values: ProductFormValues) {
-    if (!isEdit && !values.unitOfMeasure) {
+    if (isMultiBranch && !productBranches.all && productBranches.ids.length === 0) {
+      setSectionProblem({ step: 'basics', message: 'Choose at least one branch it is for.' })
+      setStep('basics')
+      return
+    }
+    if (madeHere) {
+      const problem = madeWithProblem(madeWith, branches, productBranches)
+      if (problem) {
+        setSectionProblem({ step: 'madeWith', message: problem })
+        setStep('madeWith')
+        return
+      }
+    }
+    if (!isEdit && !values.unitOfMeasure && !madeHere) {
       setError('unitOfMeasure', { message: 'Choose what it’s counted in.' })
       setStep('units')
       return
@@ -1070,6 +1199,13 @@ export function ProductFormPage() {
   async function next() {
     const ok = await trigger(fieldsOf(shownStep))
     if (!ok) return
+    if (shownStep === 'basics' && isMultiBranch && !productBranches.all && productBranches.ids.length === 0) {
+      return setSectionProblem({ step: 'basics', message: 'Choose at least one branch it is for.' })
+    }
+    if (shownStep === 'madeWith') {
+      const problem = madeWithProblem(madeWith, branches, productBranches)
+      if (problem) return setSectionProblem({ step: 'madeWith', message: problem })
+    }
     if (shownStep === 'units' && !isEdit && !getValues('unitOfMeasure')) {
       setError('unitOfMeasure', { message: 'Choose what it’s counted in.' })
       return
@@ -1093,15 +1229,19 @@ export function ProductFormPage() {
 
   // The steps this person has (owner, 2026-11-10): Price only where products are sold, Suppliers only for someone
   // who sees them, Review only when adding.
+  const madeHere = isEdit ? product?.madeHere === true : sellsMadeHere && madeHereChoice
   const stepProblem = (stepId: StepId) =>
     sectionProblem?.step === stepId || Object.keys(errors).some((field) => FIELD_STEP[field] === stepId)
   const steps: FormStep[] = (
     [
       { id: 'basics', label: 'Basics', icon: Tag },
-      { id: 'units', label: 'Units', icon: Ruler },
+      // Made here (V90): no units, suppliers or stock alert - nothing about stock applies.
+      ...(madeHere ? [] : [{ id: 'units', label: 'Units', icon: Ruler }]),
       ...(showsSellingPrice ? [{ id: 'price', label: 'Price', icon: Banknote, optional: !requiresSellingPrice }] : []),
-      ...(canViewVendors ? [{ id: 'suppliers', label: 'Suppliers', icon: Truck, optional: true }] : []),
-      { id: 'alert', label: 'Stock alert', icon: Bell, optional: true },
+      // Step 5 (V95): what goes into one, and where it's made.
+      ...(madeHere ? [{ id: 'madeWith', label: 'Made with', icon: ChefHat, optional: true }] : []),
+      ...(canViewVendors && !madeHere ? [{ id: 'suppliers', label: 'Suppliers', icon: Truck, optional: true }] : []),
+      ...(madeHere ? [] : [{ id: 'alert', label: 'Stock alert', icon: Bell, optional: true }]),
       ...(isEdit ? [] : [{ id: 'review', label: 'Review', icon: ClipboardCheck }]),
     ] as (Omit<FormStep, 'done' | 'problem' | 'id'> & { id: StepId })[]
   ).map((candidate) => ({
@@ -1124,7 +1264,11 @@ export function ProductFormPage() {
     {
       step: 'basics',
       title: 'Basics',
-      text: [reviewValues.name?.trim() || 'No name yet', categoryOptions.find((category) => category.id === reviewValues.categoryId)?.name]
+      text: [
+        reviewValues.name?.trim() || 'No name yet',
+        categoryOptions.find((category) => category.id === reviewValues.categoryId)?.name,
+        isMultiBranch ? `for ${productBranchesText(productBranches, nameOf)}` : null,
+      ]
         .filter(Boolean)
         .join(' · '),
     },
@@ -1141,6 +1285,19 @@ export function ProductFormPage() {
         .filter(Boolean)
         .join(' · '),
     },
+    ...(madeHere
+      ? [
+          {
+            step: 'madeWith' as StepId,
+            title: 'Made with',
+            text:
+              madeWith.ingredients.length === 0
+                ? 'None'
+                : `${madeWith.ingredients.map((line) => line.name).join(', ')}${madeWith.madeIn ? ` · made in ${madeWith.madeIn}` : ''}`,
+            empty: madeWith.ingredients.length === 0,
+          },
+        ]
+      : []),
     ...(showsSellingPrice
       ? [
           {
@@ -1225,11 +1382,11 @@ export function ProductFormPage() {
         {isEdit ? (
           <div className="min-w-0">
             <p className="text-sm font-medium text-neutral-500">Edit product</p>
-            <h1 className="truncate text-2xl font-semibold text-neutral-900">{product?.name ?? 'Product'}</h1>
+            <h1 className="truncate text-xl font-semibold text-neutral-900 lg:text-2xl">{product?.name ?? 'Product'}</h1>
           </div>
         ) : (
           <div>
-            <h1 className="text-2xl font-semibold text-neutral-900">Add product</h1>
+            <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Add product</h1>
             {/* What must be filled, said once (owner, 2026-11-10); the fields say "Required" themselves. */}
             <p className="text-sm text-neutral-600">Only what says Required has to be filled. The rest can wait.</p>
           </div>
@@ -1264,6 +1421,42 @@ export function ProductFormPage() {
           caveat="Add the photo again if it had one."
         />
       )}
+
+      {/* "Kept in stock" or "Made here" (V90, selling till Step 4): the same form, the steps that apply. */}
+      {!isEdit && sellsMadeHere && (
+        <div className="flex max-w-xl flex-col gap-1.5">
+          {/* Small, like the Inventory tabs - noticeable, not a slab (owner, 2026-11-17). */}
+          <div role="radiogroup" aria-label="What is it?" className="inline-flex w-fit items-center gap-0.5 rounded-full border border-neutral-300 bg-white p-0.5">
+            {([
+              [false, 'Kept in stock'],
+              [true, 'Made here'],
+            ] as const).map(([value, label]) => (
+              <button
+                key={label}
+                type="button"
+                role="radio"
+                aria-checked={madeHereChoice === value}
+                onClick={() => {
+                  typedSomething.current = true
+                  setMadeHereChoice(value)
+                  setStep('basics')
+                }}
+                className={`min-h-9 rounded-full px-4 text-sm font-semibold ${
+                  madeHereChoice === value ? 'bg-primary-50 text-primary-800 ring-1 ring-primary-300' : 'text-neutral-600 hover:text-neutral-900'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-neutral-500">
+            {madeHereChoice
+              ? 'You make or prepare it when someone buys it: a meal, a cocktail, a service. It isn’t counted as stock.'
+              : 'You buy it and count it: drinks, rice, oil, napkins.'}
+          </p>
+        </div>
+      )}
+      {isEdit && madeHere && <p className="text-sm text-neutral-600">Made here: sold, not kept in stock.</p>}
 
       <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[13rem_minmax(0,48rem)] lg:gap-8">
         <div className="lg:sticky lg:top-6 lg:self-start">
@@ -1405,6 +1598,14 @@ export function ProductFormPage() {
             {isVendor && <p className="mt-1.5 text-xs text-neutral-500">Only your team sees this. Changing it does not affect your listing.</p>}
           </div>
         )}
+        <ProductBranchesField
+          value={productBranches}
+          onChange={(value) => {
+            setBranchesTouched(true)
+            setProductBranches(value)
+            if (sectionProblem?.step === 'basics') setSectionProblem(null)
+          }}
+        />
         </FormSection>
 
         {/* ------------------------------------------------- How you count and pack this product */}
@@ -1744,7 +1945,48 @@ export function ProductFormPage() {
           </>
         )}
 
+        {/* A made-here item's rough cost to make one (V90): profit shows until a recipe works it out. */}
+        {madeHere && madeWith.ingredients.length === 0 && (
+          <TextField
+            id="estimatedCost"
+            label="Rough cost to make one (₦, optional)"
+            inputMode="decimal"
+            hint="So the Sales page can show profit. Leave it empty if you don’t know."
+            value={roughCost}
+            onChange={(event) => {
+              typedSomething.current = true
+              setRoughCost(event.target.value)
+            }}
+          />
+        )}
         </FormSection>
+        )}
+
+        {/* -------------------------------------------------------------- Made with (Step 5, V95) */}
+        {madeHere && (
+          <FormSection
+            id="madeWith"
+            current={shownStep}
+            title="Made with"
+            description="What goes into one, and where it's made. Selling it takes these out of that area. Optional."
+          >
+            <MadeWithEditor
+              value={madeWith}
+              onChange={(value) => {
+                typedSomething.current = true
+                setMadeWith(value)
+                if (sectionProblem?.step === 'madeWith') setSectionProblem(null)
+              }}
+              forBranches={productBranches}
+              price={watch('unitPrice')?.trim() ? Number(watch('unitPrice')) : null}
+              itemId={id}
+            />
+            {sectionProblem?.step === 'madeWith' && (
+              <p role="alert" className="mt-3 text-sm text-danger-700">
+                {sectionProblem.message}
+              </p>
+            )}
+          </FormSection>
         )}
 
         {/* -------------------------------------------------------------- Suppliers */}
@@ -1835,7 +2077,7 @@ export function ProductFormPage() {
         {!isEdit && (
           <FormSection id="review" current={shownStep} title="Review" description="Check it, then create it. Change anything from here.">
             <dl className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white" data-review>
-              {reviewLines.map((line) => (
+              {reviewLines.filter((line) => steps.some((candidate) => candidate.id === line.step)).map((line) => (
                 <div key={line.step} className="flex items-start gap-3 px-4 py-3" data-review-line={line.step}>
                   <div className="min-w-0 flex-1">
                     <dt className="text-xs font-medium text-neutral-500">{line.title}</dt>

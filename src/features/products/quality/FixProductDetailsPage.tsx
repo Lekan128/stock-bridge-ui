@@ -67,7 +67,7 @@ export function FixProductDetailsPage() {
           <ArrowLeft className="h-5 w-5" aria-hidden="true" />
         </Link>
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">Fix product details</h1>
+          <h1 className="text-xl font-semibold text-neutral-900 lg:text-2xl">Fix product details</h1>
           <p className="text-sm text-neutral-500">A few products were saved in a way that needs a quick fix.</p>
         </div>
       </div>

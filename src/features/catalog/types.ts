@@ -47,6 +47,11 @@ export interface CatalogRow {
   countIn?: string[] | null
   /** When each area last counted it, a branch's only area too, and as typed (2026-11-10). */
   counts?: { areaId: string; at: string; countedAs?: { unit: string; quantity: number }[] }[] | null
+  /** Made here, not kept in stock (V90). Absent on rows synced before it: false. */
+  madeHere?: boolean
+  /** Which branches it is for (V92): every branch, or these. Absent on rows synced before it: shown everywhere. */
+  forAllBranches?: boolean
+  forBranchIds?: string[]
 }
 
 export interface SnapshotPage {
@@ -95,6 +100,8 @@ export interface CatalogQuery {
   areaIds?: string[]
   /** In an area view, list the products those areas have never had as well ("Show them"). */
   showOthers?: boolean
+  /** Never list another area's product, even when searched for: the till sells only from its area (owner, 2026-11-18). */
+  onlyHere?: boolean
   /**
    * A count of one area (STOCK_SHEETS_AND_AREA_COUNT_PLAN.md Part 5): only the rows that area has counted since
    * `since` (`counted: true`, "Counted today"), or only those it hasn't (`false`, "To count").
@@ -102,6 +109,11 @@ export interface CatalogQuery {
   countedInArea?: { areaId: string; since: number; counted: boolean }
   /** Only what's there - low or not - nothing at 0: the count list (2026-11-10). */
   onlyHeld?: boolean
+  /**
+   * Made-here items (V90, selling till Step 4): left out unless asked - every stock screen leaves them out by
+   * default. 'only': the Inventory's "Made here" tab; 'include': selling, where both are sold.
+   */
+  madeHere?: 'only' | 'include'
 }
 
 export interface CatalogQueryResult {
@@ -121,6 +133,8 @@ export interface CatalogQueryResult {
   incoming: { units: number; productCount: number }
   catalogSize: number
   activeCount: number
+  /** The categories with something matching every other filter - a chip per category that would show anything. */
+  categoryIds?: string[]
 }
 
 /** What the worker has stored about the sync itself. */

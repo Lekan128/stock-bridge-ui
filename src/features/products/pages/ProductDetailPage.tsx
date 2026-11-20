@@ -1,6 +1,9 @@
 import { useRecordsHere } from '@/features/branches/useRecordsHere'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
+import { productBranchesText } from '@/features/products/components/ProductBranchesField'
+import { madeWithApi, type MadeWith } from '@/features/products/madeWith'
+import { useApiQuery } from '@/data/useApiQuery'
 import { carryBranchStock, scopeProduct, scopeToAreas } from '@/features/branches/scopeProduct'
 import { useWorkArea } from '@/features/branches/workArea'
 import { OtherBranchesList } from '@/features/branches/OtherBranchesList'
@@ -44,6 +47,7 @@ import { VendorsTab } from '@/features/products/vendors/components/VendorsTab'
 import { isAppError } from '@/types/api'
 import { PriceHistory } from '@/features/selling/components/PriceHistory'
 import { SoldThisMonth } from '@/features/selling/sales/SoldThisMonth'
+import { formatMoney } from '@/features/selling/money'
 import { perStockUnitEcho, sellingPriceText } from '@/features/selling/priceText'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { OverflowMenu, type OverflowMenuItem } from '@/components/OverflowMenu'
@@ -69,9 +73,16 @@ export function ProductDetailPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = parseDetailTab(searchParams.get('tab'))
   const { product: wholeProduct, setProduct, loading, error, showingSaved, updatedAt, refetch: refetchProduct } = useProduct(id)
+  // A made-here item's "Made with" (V95, Step 5).
+  const madeWith = useApiQuery<MadeWith>({
+    queryKey: ['made-with', id],
+    queryFn: () => madeWithApi.get(id!),
+    fallbackError: "Couldn't load what it's made with.",
+    enabled: !!id && wholeProduct?.madeHere === true,
+  })
   // At a branch, the page reads that branch's figure (MULTI_BRANCH_UX_PLAN.md §5.9); the whole product,
   // with every branch's figure, stays for the "At other branches" list.
-  const { working, isMultiBranch, recordable } = useWorkingBranch()
+  const { working, isMultiBranch, recordable, nameOf } = useWorkingBranch()
   // As the branch holds it, then as the areas chosen in the top bar hold it (Part 3.6).
   const work = useWorkArea(working)
   const viewAreas = work.viewAreaIds
@@ -226,6 +237,134 @@ export function ProductDetailPage() {
     )
   }
 
+  // Made here (V90, selling till Step 4): no stock, deliveries or suppliers - its price, its rough cost, what sold.
+  // Which branches it is for (V92).
+  const forText = productBranchesText(
+    { all: product.forAllBranches !== false, ids: product.forBranchIds ?? [] },
+    nameOf,
+  )
+  // Not for the branch being worked at: said so, and nothing is sold, counted or taken out here (the server
+  // refuses those). Stock in stays - stock arriving here makes it for here.
+  const notForHere =
+    isMultiBranch && working != null && product.forAllBranches === false && !(product.forBranchIds ?? []).includes(working.id)
+  const notForHereNote = notForHere ? (
+    <p role="status" className="rounded-lg border border-warning-200 bg-warning-50 px-3 py-2 text-sm text-warning-800">
+      For {forText} only, so it doesn't show at {working?.name}.
+    </p>
+  ) : null
+
+  // Just added (owner, 2026-11-17): the form is not behind this page, so the next one is a tap from here.
+  const justCreated = (location.state as { created?: boolean } | null)?.created === true
+  const createdNote = justCreated ? (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-accent-200 bg-accent-50 px-3 py-2 text-sm">
+      <span className="font-medium text-accent-700">Added.</span>
+      <Link to="/app/products/new" className="font-semibold text-primary-700 hover:underline">
+        Add another product
+      </Link>
+    </div>
+  ) : null
+
+  if (product.madeHere) {
+    const recipe = madeWith.data
+    const hasRecipe = (recipe?.ingredients.length ?? 0) > 0
+    // With ingredients, the cost is theirs at cost price; without, the rough cost typed in.
+    const makeCost = hasRecipe ? (recipe?.costToMake ?? null) : (product.estimatedCost ?? null)
+    const profit = product.unitPrice != null && makeCost != null ? product.unitPrice - makeCost : null
+    return (
+      <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={goBack}
+            aria-label="Back"
+            className="rounded-md p-1.5 text-neutral-600 hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+          >
+            <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+          </button>
+          <h1 className="min-w-0 truncate text-xl font-semibold text-neutral-900 lg:text-2xl">{product.name}</h1>
+        </div>
+        <p className="-mt-2 text-sm text-neutral-600">Made here: sold, not kept in stock.</p>
+        {createdNote}
+        {notForHereNote}
+        <dl className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
+          {[
+            ['Price', product.unitPrice != null ? formatMoney(product.unitPrice) : 'No price yet'],
+            ['Category', product.categoryName ?? 'None'],
+            ...(isMultiBranch ? [['For', forText]] : []),
+            ...(showsSellingPrice
+              ? [
+                  [
+                    hasRecipe ? 'Costs to make' : 'Rough cost to make one',
+                    makeCost != null
+                      ? `${formatMoney(makeCost)}${
+                          profit != null && product.unitPrice
+                            ? ` · profit ${formatMoney(profit)} each (${Math.round((profit / product.unitPrice) * 100)}%)`
+                            : ''
+                        }`
+                      : hasRecipe
+                        ? 'An ingredient has no cost price yet'
+                        : 'Not set',
+                  ],
+                ]
+              : []),
+            ...(hasRecipe && recipe?.madeIn
+              ? [
+                  [
+                    'Made in',
+                    [recipe.madeIn, ...recipe.branches.filter((at) => at.chosenForBranch && at.areaName).map((at) => `${at.areaName} at ${at.branchName}`)].join(' · '),
+                  ],
+                ]
+              : []),
+          ].map(([label, value]) => (
+            <div key={label} className="flex items-baseline justify-between gap-3 px-4 py-3">
+              <dt className="text-sm text-neutral-600">{label}</dt>
+              <dd className="text-right text-sm font-medium text-neutral-900 tabular-nums">{value}</dd>
+            </div>
+          ))}
+        </dl>
+        {hasRecipe && recipe && (
+          <section aria-labelledby="made-with-title" className="flex flex-col gap-2">
+            <h2 id="made-with-title" className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+              Made with, for one
+            </h2>
+            <dl className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
+              {recipe.ingredients.map((line) => {
+                const option = line.unitOptions.find((candidate) => line.unit != null && candidate.code === line.unit) ??
+                  line.unitOptions.find((candidate) => candidate.isStockUnit)
+                return (
+                  <div key={line.productId} className="flex items-baseline justify-between gap-3 px-4 py-3">
+                    <dt className="text-sm text-neutral-600">
+                      <Link to={`/app/products/${line.productId}`} className="hover:underline">
+                        {line.name}
+                      </Link>
+                    </dt>
+                    <dd className="text-right text-sm font-medium text-neutral-900 tabular-nums">
+                      {+line.quantity} {option?.label ?? ''}
+                      {line.cost != null ? ` · ${formatMoney(line.cost)}` : ''}
+                    </dd>
+                  </div>
+                )
+              })}
+            </dl>
+          </section>
+        )}
+        {recordsSales && <SoldThisMonth productId={product.id} stockUnit="PIECE" />}
+        <div className="grid grid-cols-2 gap-3">
+          {recordsSales && !notForHere && (
+            <Button variant="action" onClick={() => navigate(`/app/sell?product=${product.id}`)}>
+              Sell
+            </Button>
+          )}
+          {canManageProducts && (
+            <Button variant="secondary" onClick={() => navigate(`/app/products/${product.id}/edit`)}>
+              Edit
+            </Button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   const incoming = incomingFor(product)
 
   // `unitOfMeasure`/`packagingUnit` are wire CODEs ("KG", "BAG"), never something to show a reader,
@@ -253,7 +392,7 @@ export function ProductDetailPage() {
   // Stock in / out / count: inside the hero from a laptop up, in a bar pinned to the bottom on a phone.
   // Sell (§6.1) opens Record a sale with this product as the first line. It is the screen's action
   // when the product has a price - a priced product is one that is sold - and Stock in steps back.
-  const canSell = recordsSales && canStockOut
+  const canSell = recordsSales && canStockOut && !notForHere
   const sellLeads = canSell && product.unitPrice != null
   const stockButtons =
     canStockIn || canStockOut || (canManageInventory && recordsHere) ? (
@@ -270,13 +409,13 @@ export function ProductDetailPage() {
             Stock in
           </Button>
         )}
-        {canStockOut && (
+        {canStockOut && !notForHere && (
           <Button variant="secondary" onClick={() => stockActions.open('out', product)}>
             <Minus className="h-4 w-4" aria-hidden="true" />
             Stock out
           </Button>
         )}
-        {canManageInventory && recordsHere && (
+        {canManageInventory && recordsHere && !notForHere && (
           <Button variant="secondary" onClick={() => stockActions.open('count', product)}>
             Count
           </Button>
@@ -377,6 +516,8 @@ export function ProductDetailPage() {
         sellingPrice={showsSellingPrice ? sellingPriceText(product, stockUnitText, packOption) : null}
         where={where}
       />
+      {createdNote}
+      {notForHereNote}
       {/* Where in the branch it is, and moving it between areas (STOCK_AREAS_PART_2.md). */}
       {hasAreas(working) && (
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
@@ -527,6 +668,16 @@ export function ProductDetailPage() {
                   View {UNIT_COPY.SUPPLIERS.toLowerCase()}
                 </Link>
               </DetailRow>
+              {isMultiBranch && (
+                <DetailRow label="For">
+                  <span className="font-medium text-neutral-900">{forText}</span>
+                  {canManageProducts && (
+                    <Link to={`/app/products/${product.id}/edit`} className="ml-2 text-sm font-medium text-primary-700 hover:underline">
+                      Change
+                    </Link>
+                  )}
+                </DetailRow>
+              )}
               <DetailRow label="Description" wide>
                 <span className="text-neutral-700">{product.description || 'No description provided.'}</span>
               </DetailRow>

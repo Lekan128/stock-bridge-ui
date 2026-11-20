@@ -17,6 +17,9 @@ export const companyCategoriesApi = {
   rename: (id: string, payload: CompanyCategoryPayload) =>
     api.put<CompanyCategory>(`${BASE}/${id}`, payload).then((r) => r.data),
 
+  /** "These go with a meal" (V99): the till asks which meal each of its products goes with. */
+  goesWithMeal: (id: string, on: boolean) => api.put<CompanyCategory>(`${BASE}/${id}/goes-with-meal`, { on }).then((r) => r.data),
+
   /** The category's products are kept and become uncategorised; nothing else is deleted. */
   remove: (id: string) => api.delete<void>(`${BASE}/${id}`).then(() => undefined),
 }

@@ -19,6 +19,8 @@ export interface InventoryBarProps {
   onStockLevelFilterChange: (value: StockLevelFilter) => void
   /** Per-chip counts, when the device catalogue can answer them instantly. */
   stockLevelCounts?: Record<StockLevelFilter, number>
+  /** The "Made here" tab (V90): no stock levels to filter by. */
+  hideStockLevels?: boolean
   categories: CompanyCategory[]
   categoryFilter: string
   onCategoryFilterChange: (categoryId: string) => void
@@ -182,8 +184,8 @@ export const InventoryBar = forwardRef<HTMLInputElement, InventoryBarProps>(func
         )}
       </div>
 
-      {/* One line on a phone, scrolling sideways rather than wrapping. */}
-      <div className="-mx-1 overflow-x-auto px-1 md:mx-0 md:shrink-0 md:px-0">
+      {/* One line on a phone, scrolling sideways rather than wrapping. Not on the "Made here" tab (V90). */}
+      <div hidden={props.hideStockLevels} className="-mx-1 overflow-x-auto px-1 md:mx-0 md:shrink-0 md:px-0">
         <div role="group" aria-label="Stock level" className="flex w-max items-center gap-1 rounded-md border border-neutral-200 bg-neutral-50 p-0.5">
           {STOCK_CHIPS.map((chip) => (
             <button
