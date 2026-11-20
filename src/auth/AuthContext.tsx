@@ -253,6 +253,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function logout() {
     const refreshToken = authStorage.getRefreshToken()
+    // The next sign-in starts afresh: someone set to start in quick mode lands there again (StartInQuickMode).
+    try {
+      sessionStorage.removeItem('pp.opened')
+    } catch {
+      // No session storage: nothing to forget.
+    }
     // While still signed in: this device stops getting the notifications of the person signing out.
     await forgetPushOnThisDevice()
 

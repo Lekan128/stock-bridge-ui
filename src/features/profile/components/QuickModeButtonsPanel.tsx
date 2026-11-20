@@ -52,7 +52,8 @@ export function QuickModeButtonsPanel({ onUpdated }: { onUpdated: (profile: Prof
           Quick mode buttons
         </h2>
         <p className="mt-0.5 text-sm text-neutral-500">
-          Keep the ones you use most, up to {MAX_QUICK_TABS}. Every phone you sign in on shows the same.
+          Keep the ones you use most, up to {MAX_QUICK_TABS}. Every phone you sign in on shows the same. Your manager can set
+          them too.
         </p>
       </div>
 

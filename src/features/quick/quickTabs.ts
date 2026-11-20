@@ -10,11 +10,15 @@ import type { Profile } from '@/features/profile/types'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 
 /** What quick mode can be doing: its buttons along the top. */
-export type Mode = 'sell' | 'in' | 'out' | 'move' | 'ask' | 'count'
+export type Mode = 'tables' | 'tickets' | 'sell' | 'in' | 'out' | 'move' | 'ask' | 'count'
 
 // The same names as everywhere else in the app (it said Receive and Issue, warehouse words a
 // shopkeeper had to guess at), each with one line saying what it does — Count most of all.
 export const MODES: { value: Mode; label: string; verb: string; meaning: string }[] = [
+  // Quick mode for every job (V105; owner, 2026-11-19): the phone's Tables and bills, and an area's Tickets, inside
+  // quick mode - the same screens, not copies.
+  { value: 'tables', label: 'Tables', verb: 'Tables', meaning: 'Your tables and their bills: add, send, serve and take payment.' },
+  { value: 'tickets', label: 'Tickets', verb: 'Tickets', meaning: "What's waiting in the Kitchen or the Bar." },
   // Only where the company records sales (useSellingPolicy) - and first there: it is the till.
   { value: 'sell', label: 'Sell', verb: 'Sold', meaning: 'Scan what the customer is buying, then record the sale in one go.' },
   { value: 'in', label: 'Stock in', verb: 'Stock in', meaning: 'Goods coming in, like a delivery or a return. Adds them to your stock.' },
@@ -85,6 +89,8 @@ export function useQuickModeTabs(): QuickModeTabs {
   const work = useWorkArea(working)
   const movesHere = permissions.includes(PERMISSIONS.STOCK_OUT) && hasAreas(working) && work.areas.length > 0
   const allowed: Record<Mode, boolean> = {
+    tables: recordsSales && permissions.includes(PERMISSIONS.STOCK_OUT) && (working?.tables?.length ?? 0) > 0,
+    tickets: permissions.includes(PERMISSIONS.VIEW_PRODUCTS) && working?.ticketsOn === true,
     sell: recordsSales && permissions.includes(PERMISSIONS.STOCK_OUT),
     in: permissions.includes(PERMISSIONS.STOCK_IN),
     out: permissions.includes(PERMISSIONS.STOCK_OUT),

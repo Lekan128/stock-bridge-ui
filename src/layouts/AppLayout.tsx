@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { BranchProvider } from '@/features/branches/BranchProvider'
 import { BranchQuestion } from '@/features/branches/BranchQuestion'
 import { MoveFromLink } from '@/features/moves/MoveFromLink'
+import { StartInQuickMode } from '@/features/quick/StartInQuickMode'
 import { Outlet, useLocation } from 'react-router-dom'
 import { EmailVerificationBanner } from '@/features/profile/components/EmailVerificationBanner'
 import { Sidebar } from '@/layouts/Sidebar'
@@ -84,6 +85,8 @@ export function AppLayout() {
       </div>
       <UpdatePrompt />
       <BranchQuestion />
+      {/* Someone set to start in quick mode lands there as the app opens (V105). */}
+      <StartInQuickMode />
       {/* The bell's "2 items from the Store to confirm" opens the move over whatever page it lands on. */}
       <MoveFromLink />
       {DesignPreviewChip && (

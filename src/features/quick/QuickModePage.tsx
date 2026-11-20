@@ -55,6 +55,11 @@ import { useCatalogState } from '@/features/catalog/useCatalog'
 import { CountList, type CountedHere, type RowCounted } from '@/features/quick/CountList'
 import { formatMoney } from '@/features/selling/money'
 import { MySalesToday } from '@/features/selling/sale/MySalesToday'
+import { BillPage } from '@/features/selling/bills/BillPage'
+import { TablesView, rememberTillMode } from '@/features/selling/bills/TablesView'
+import { TicketsPage } from '@/features/selling/tickets/TicketsPage'
+import { SaleRecordPage } from '@/features/selling/sale/SaleRecordPage'
+import { QUICK_SELLING_NAV, SellingNavContext } from '@/features/selling/sellingNav'
 import { paymentLabel } from '@/features/selling/sale/paymentMethod'
 import { SaleBasketEditor } from '@/features/selling/sale/SaleBasketEditor'
 import { undoSale, useSaleBasket, type RecordedSale } from '@/features/selling/sale/useSaleBasket'
@@ -92,7 +97,7 @@ function outMeaning({ sells, areas, moveButton, sellButton }: { sells: boolean; 
   return areas && !sells ? `${what} Takes them off your stock.` : what
 }
 /** The Record button says what it will do: "Stock in 2 bags (100 kg)". */
-const ACTION: Record<Exclude<Mode, 'sell' | 'move' | 'ask'>, string> = { in: 'Stock in', out: 'Stock out', count: 'Record count:' }
+const ACTION: Record<Exclude<Mode, 'sell' | 'move' | 'ask' | 'tables' | 'tickets'>, string> = { in: 'Stock in', out: 'Stock out', count: 'Record count:' }
 const GRID_COLS = ['', 'grid-cols-1', 'grid-cols-2', 'grid-cols-3', 'grid-cols-4']
 
 /** One write made in this session, and where it stands. */
@@ -269,6 +274,61 @@ export function QuickModePage() {
     }, STAMP_MS)
   }
 
+  /**
+   * Exit shows the same thing in the usual app (owner, 2026-11-19): a phone's view on a phone, a laptop's on a laptop.
+   * The counter keeps its basket; a table's bill stays open; Tickets stays on its area.
+   */
+  function exitTo(): string {
+    if (mode === 'sell') {
+      rememberTillMode('counter')
+      return '/app/sell'
+    }
+    if (mode === 'tables') {
+      const receipt = params.get('receipt')
+      if (receipt) return `/app/sales/${receipt}`
+      for (const key of ['table', 'id', 'name']) {
+        const value = params.get(key)
+        if (value) return `/app/sell/bill?${key}=${encodeURIComponent(value)}`
+      }
+      rememberTillMode('tables')
+      return '/app/sell'
+    }
+    if (mode === 'tickets') return '/app/tickets'
+    if (mode === 'count') return '/app/products/count'
+    return '/app/products'
+  }
+
+  const tabRow = (
+<div
+      role="group"
+      aria-label="What are you doing?"
+      aria-describedby="quick-mode-meaning"
+      aria-busy={!quickTabs.ready || undefined}
+      className={`grid ${GRID_COLS[tabs.length]} min-h-14 gap-1 rounded-lg bg-neutral-100 p-1`}
+    >
+      {/* Until their own buttons are known, the row keeps its place, empty - no flash of the wrong ones. */}
+      {quickTabs.ready && tabs.map((m) => (
+        <button
+          key={m.value}
+          type="button"
+          aria-pressed={mode === m.value}
+          onClick={() => chooseMode(m.value)}
+          className={`h-12 rounded-md text-base font-semibold ${
+            mode === m.value ? 'bg-primary-600 text-white shadow-sm' : 'text-neutral-600'
+          }`}
+        >
+          {m.label}
+        </button>
+      ))}
+    </div>
+  )
+  // Tables and Tickets (owner, 2026-11-19): the phone's own screens, inside quick mode - a table's bill and its paid
+  // receipt open here too, so the buttons stay on top.
+  const sellingScreen = mode === 'tables' || mode === 'tickets'
+  const billQuery = ['table', 'id', 'name'].find((key) => params.get(key))
+  const receiptId = params.get('receipt')
+  const tillBranch = branch && !branch.isAll ? (branch.working ?? null) : null
+
   return createPortal(
     // Over the workspace's own chrome — and over toasts (z-40), which would otherwise cover the
     // Record button; dialogs (the sync centre, z-50) still open above it.
@@ -282,7 +342,7 @@ export function QuickModePage() {
       <header className="flex items-center justify-between gap-3 border-b border-neutral-200 px-4 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-3">
         <button
           type="button"
-          onClick={() => navigate('/app/products')}
+          onClick={() => navigate(exitTo())}
           className="inline-flex h-11 items-center gap-1.5 rounded-md px-2 text-base font-medium text-neutral-700 hover:bg-neutral-100"
         >
           <X className="h-5 w-5" aria-hidden="true" />
@@ -292,7 +352,7 @@ export function QuickModePage() {
           {/* Where every scan here lands (UX §5.2): "Quick mode · Oshodi". */}
           Quick mode{branchHere ? ` · ${branchHere}` : ''}
           {/* Where every scan lands, changed right here (Move has its own From and To). */}
-          {mode !== 'move' && mode !== 'ask' && (
+          {mode !== 'move' && mode !== 'ask' && !sellingScreen && (
             <QuickAreaTitle areaId={area.areaId} areaName={area.areaName} choices={area.choices} onChoose={area.choose} />
           )}
         </h1>
@@ -301,30 +361,27 @@ export function QuickModePage() {
       {/* Areas that confirm (Part 4): what's waiting for this person, one line under the title. */}
       <WaitingMovesLine bar />
 
+      {sellingScreen ? (
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto" data-quick-selling={mode}>
+          <div className="mx-auto w-full max-w-md px-4 pt-4">{tabRow}</div>
+          <div className="mx-auto flex w-full max-w-5xl min-h-0 flex-1 flex-col px-4 py-4">
+            <SellingNavContext.Provider value={QUICK_SELLING_NAV}>
+              {mode === 'tickets' ? (
+                <TicketsPage />
+              ) : receiptId ? (
+                <SaleRecordPage key={receiptId} id={receiptId} />
+              ) : billQuery ? (
+                <BillPage key={`${billQuery}-${params.get(billQuery)}`} />
+              ) : tillBranch ? (
+                <TablesView branch={tillBranch} header={null} />
+              ) : null}
+            </SellingNavContext.Provider>
+          </div>
+        </div>
+      ) : (
       <div className="mx-auto flex w-full max-w-md min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
         <div className="flex flex-col gap-2">
-          <div
-            role="group"
-            aria-label="What are you doing?"
-            aria-describedby="quick-mode-meaning"
-            aria-busy={!quickTabs.ready || undefined}
-            className={`grid ${GRID_COLS[tabs.length]} min-h-14 gap-1 rounded-lg bg-neutral-100 p-1`}
-          >
-            {/* Until their own buttons are known, the row keeps its place, empty - no flash of the wrong ones. */}
-            {quickTabs.ready && tabs.map((m) => (
-              <button
-                key={m.value}
-                type="button"
-                aria-pressed={mode === m.value}
-                onClick={() => chooseMode(m.value)}
-                className={`h-12 rounded-md text-base font-semibold ${
-                  mode === m.value ? 'bg-primary-600 text-white shadow-sm' : 'text-neutral-600'
-                }`}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
+          {tabRow}
           {/* Count shares the explanation's line, so it costs no height above the keyboard. */}
           <div className="flex items-start justify-between gap-3">
             <p id="quick-mode-meaning" className="text-sm text-neutral-600">
@@ -446,6 +503,7 @@ export function QuickModePage() {
         />
         {printJob && <PrintableReceipt key={printJob.n} receipt={receiptOf(printJob.sale)} />}
       </div>
+      )}
     </div>,
     document.body,
   )
@@ -567,7 +625,7 @@ function AmountStep({
   onBack,
   onRecorded,
 }: {
-  mode: Exclude<Mode, 'sell' | 'move' | 'ask'>
+  mode: Exclude<Mode, 'sell' | 'move' | 'ask' | 'tables' | 'tickets'>
   product: Product
   /** The session's stock-out reason, or null for none given. */
   reason: OutReason | null

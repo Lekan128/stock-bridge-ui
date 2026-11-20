@@ -25,6 +25,8 @@ export interface Profile {
   receivePromotionalEmail: boolean
   /** Quick mode's buttons as this person chose them (owner, 2026-11-01); absent: the app's own choice. */
   quickModeTabs?: string[] | null
+  /** Opens in quick mode rather than the usual app (V105): their manager's choice. */
+  startsInQuickMode?: boolean
   phone?: string | null
   jobTitle?: string | null
   role: string

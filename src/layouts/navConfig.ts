@@ -13,6 +13,7 @@ import {
   PackageSearch,
   ReceiptText,
   ShieldCheck,
+  ShoppingCart,
   Store,
   Tags,
   Truck,
@@ -113,6 +114,15 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     items: [
       { path: '/app', label: 'Dashboard', icon: LayoutDashboard, exact: true },
+      // Selling till (owner, 2026-11-19): one tap for whoever sells, not a trip through Inventory. Its counter, a
+      // table's bill, My sales today and Close the day all light it up.
+      {
+        path: '/app/sell',
+        label: 'Record a sale',
+        icon: ShoppingCart,
+        requiredPermission: PERMISSIONS.STOCK_OUT,
+        recordsSalesOnly: true,
+      },
       // VIEW_PRODUCTS, not MANAGE_PRODUCTS — read-only roles can browse the catalog.
       { path: '/app/products', label: 'Inventory', icon: Warehouse, requiredPermission: PERMISSIONS.VIEW_PRODUCTS },
       // "Sales", never "My Sales" or "Selling": those are the marketplace's, and ProcurePal sees both.
