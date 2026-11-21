@@ -56,6 +56,7 @@ import { WaitingMovesLine } from '@/features/moves/WaitingMovesLine'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { StockWorthLine } from '@/features/selling/components/StockWorthLine'
 import { downloadBlob } from '@/utils/downloadBlob'
+import { NeedsALookList, lookSummary, useNeedsALook } from '@/features/products/NeedsALook'
 
 function isStockStatusFilter(value: string | null): value is StockStatusFilter {
   return value === 'OK' || value === 'LOW' || value === 'OUT'
@@ -286,7 +287,17 @@ export function ProductListPage() {
 
   // The notices that used to stack above the list, folded into one line (C1, U1).
   const dataIssues = useDataIssuesNotice()
+  // The small line (BRANCH_PRICES_PLAN.md 9.2): what to fix or check at the branch, or every branch in All branches.
+  const multiBranch = branch?.isMultiBranch === true
+  const look = useNeedsALook(branch && !branch.isAll ? branch.working?.id : undefined, undefined, multiBranch && online)
   const attention: AttentionItem[] = []
+  if (look.data && look.data.items.length > 0) {
+    attention.push({
+      key: 'needs-a-look',
+      summary: lookSummary(look.data, branch && !branch.isAll ? branch.working?.name : undefined),
+      content: <NeedsALookList answer={look.data} showBranch={!!branch?.isAll} />,
+    })
+  }
   if (dataIssues.issues.length > 0) {
     const count = dataIssues.issues.length
     attention.push({

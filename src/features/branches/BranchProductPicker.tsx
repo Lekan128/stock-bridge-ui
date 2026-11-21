@@ -8,6 +8,7 @@ import { isAppError } from '@/types/api'
 import { syncCatalog } from '@/features/catalog/catalogStore'
 import { branchProductsApi, type ProductToAdd } from '@/features/branches/branchesApi'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
+import { NeedsALookList, lookSummary, useNeedsALook } from '@/features/products/NeedsALook'
 
 /** The picker's choice: every product the branch doesn't have, or these. */
 export type BranchProductsChoice = { all: true } | { all: false; ids: string[] }
@@ -157,20 +158,59 @@ export function AddBranchProductsSheet({ branchId, branchName, onClose }: { bran
   const [selected, setSelected] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
+  // After adding (BRANCH_PRICES_PLAN.md 9.2): how many went in, and what to look at there before selling.
+  const [added, setAdded] = useState<number | null>(null)
+  const look = useNeedsALook(branchId, undefined, added != null)
 
   async function add(choice: BranchProductsChoice) {
     setBusy(true)
     setProblem(null)
     try {
-      await addProductsToBranch(branchId, choice)
+      const count = await addProductsToBranch(branchId, choice)
       await queryClient.invalidateQueries({ queryKey: ['branch-products-to-add', branchId] })
       await queryClient.invalidateQueries({ queryKey: ['products'] })
-      onClose()
+      await queryClient.invalidateQueries({ queryKey: ['needs-a-look'] })
+      setAdded(count)
     } catch (error) {
       setProblem(isAppError(error) ? error.message : 'Something went wrong. Please try again.')
     } finally {
       setBusy(false)
     }
+  }
+
+  if (added != null) {
+    const answer = look.data
+    return (
+      <Sheet
+        open
+        onClose={onClose}
+        title={`Add products to ${branchName}`}
+        size="lg"
+        footer={
+          <Button variant="action" onClick={onClose}>
+            Done
+          </Button>
+        }
+      >
+        <div className="flex flex-col gap-3">
+          <p className="font-medium text-neutral-900">
+            {added} {added === 1 ? 'product' : 'products'} added to {branchName}.
+            {answer && answer.items.length > 0 ? ` ${lookSummary(answer, undefined).split(' · ')[1]}.` : ''}
+          </p>
+          {answer && answer.items.length > 0 ? (
+            <>
+              <NeedsALookList answer={answer} showBranch={false} inSheet />
+              <p className="text-sm text-neutral-500">
+                Ingredients don&apos;t need stock first: stock them in before you start selling. Anything left here stays on the line
+                on Inventory.
+              </p>
+            </>
+          ) : (
+            answer && <p className="text-sm text-neutral-600">Nothing to look at: they&apos;re ready at {branchName}.</p>
+          )}
+        </div>
+      </Sheet>
+    )
   }
 
   return (

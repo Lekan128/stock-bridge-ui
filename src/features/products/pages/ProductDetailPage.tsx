@@ -53,6 +53,8 @@ import { useBranchPrices, type PriceFields } from '@/features/selling/branchPric
 import { PricesByBranch } from '@/features/selling/PricesByBranch'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { OverflowMenu, type OverflowMenuItem } from '@/components/OverflowMenu'
+import { NeedsALookList, useNeedsALook } from '@/features/products/NeedsALook'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 
 
 type ProductDetailTab = 'overview' | 'vendors'
@@ -230,6 +232,9 @@ export function ProductDetailPage() {
   // Before the early returns below: a hook must run on every render.
   const { showsSellingPrice, recordsSales } = useSellingPolicy()
   const branchPrices = useBranchPrices()
+  // The small line's things for this product, at the branches the person sees (BRANCH_PRICES_PLAN.md 9.2).
+  const lookOnline = useOnlineStatus()
+  const productLook = useNeedsALook(undefined, id, isMultiBranch && lookOnline)
   /** The price as this view says it: the working branch's, or in "All branches" the range where they differ. */
   const priceSaid = (item: Product, say: (price: PriceFields) => string | null): string | null => {
     const range = branchPrices.showingAll ? branchPrices.range(item) : null
@@ -297,6 +302,7 @@ export function ProductDetailPage() {
         <p className="-mt-2 text-sm text-neutral-600">Made here: sold, not kept in stock.</p>
         {createdNote}
         {notForHereNote}
+        {productLook.data && productLook.data.items.length > 0 && <NeedsALookList answer={productLook.data} showBranch />}
         <dl className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
           {[
             [
@@ -535,6 +541,7 @@ export function ProductDetailPage() {
       />
       {createdNote}
       {notForHereNote}
+      {productLook.data && productLook.data.items.length > 0 && <NeedsALookList answer={productLook.data} showBranch />}
       {showsSellingPrice && (
         <PricesByBranch product={product} text={(price) => sellingPriceText(price, stockUnitText, packOption)} />
       )}
