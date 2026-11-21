@@ -12,6 +12,7 @@ import { formatNumber } from '@/features/products/unitCopy'
 import { formatMoney } from '@/features/selling/money'
 import { openingUnit, unitsFor, usualPrice } from '@/features/selling/sale/saleLine'
 import type { useSaleBasket } from '@/features/selling/sale/useSaleBasket'
+import { useBranchPrices } from '@/features/selling/branchPrices'
 
 type Basket = ReturnType<typeof useSaleBasket>
 
@@ -44,6 +45,7 @@ export function SaleProductGrid({
   /** A table's bill (V99): everything the branch sells, whichever area makes or keeps it. */
   wholeBranch?: boolean
 }) {
+  const branchPrices = useBranchPrices()
   const { user } = useAuth()
   const canView = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.VIEW_PRODUCTS)
   const [tab, setTab] = useState<Tab>('all')
@@ -146,7 +148,9 @@ export function SaleProductGrid({
       {products.length > 0 && (
         <ul className="grid grid-cols-3 gap-1.5 sm:grid-cols-4 lg:grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] lg:gap-2" aria-label="Tap to add">
           {products.map((product) => {
-            const price = usualPrice(product, openingUnit(product, unitsFor(product, basket.catalogue)))
+            // Prices per branch (V107): the button says the price at the branch the sale is at.
+            const priced = branchPrices.atWorking(product)
+            const price = usualPrice(priced, openingUnit(priced, unitsFor(priced, basket.catalogue)))
             const inSale = basket.lines.filter((line) => line.product.id === product.id).reduce((sum, line) => sum + line.quantity, 0)
             return (
               <li key={product.id}>

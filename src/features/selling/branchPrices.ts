@@ -82,5 +82,5 @@ export function useBranchPrices() {
     [on, groups],
   )
 
-  return { on, listOf, groups, atWorking, range, showingAll: isAll }
+  return { on, listOf, groups, atWorking, range, showingAll: isAll, workingId: isAll ? undefined : working?.id }
 }

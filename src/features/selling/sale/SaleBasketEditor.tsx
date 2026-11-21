@@ -26,6 +26,7 @@ import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { TransferAccountChooser } from '@/features/selling/sale/TransferAccounts'
 import { DrawerLine, StartDayBar, useCashTill } from '@/features/selling/sale/cashDay'
 import { useQueryClient } from '@tanstack/react-query'
+import { useBranchPrices } from '@/features/selling/branchPrices'
 
 type Basket = ReturnType<typeof useSaleBasket>
 
@@ -88,6 +89,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
   }
   // Where in the branch this sale comes from, at a branch with a choice of areas (V60): the Bar, not the Store.
   const branchHere = useOptionalWorkingBranch()
+  const branchPrices = useBranchPrices()
   const area = useSheetArea(branchHere && !branchHere.isAll ? branchHere.working : null, basket.waitingByArea, true)
   // Step 12: the transfer accounts of the branch selling (a one-branch company's only branch).
   const workingBranch = branchHere && !branchHere.isAll ? (branchHere.working ?? branchHere.branches[0] ?? null) : null
@@ -183,8 +185,15 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
       const option = optionOf(line, unitsFor(line.product, basket.catalogue))
       const each = priceEach(line, option)
       if (each == null) continue
+      // Prices per branch (V107): it becomes the price at the branch the sale was at.
+      const atBranch = branchPrices.on ? branchPrices.workingId : undefined
       productsApi
-        .update(line.product.id, { unitPrice: each, unitPriceUnit: option.isStockUnit ? undefined : option.code })
+        .update(
+          line.product.id,
+          atBranch
+            ? { branchPrices: [{ branchId: atBranch, price: each }], unitPriceUnit: option.isStockUnit ? undefined : option.code }
+            : { unitPrice: each, unitPriceUnit: option.isStockUnit ? undefined : option.code },
+        )
         .catch(() => showToast(`Couldn't make that ${line.product.name}'s usual price.`, 'error'))
     }
   }
