@@ -542,7 +542,11 @@ export function ProductListPage() {
     onRecordSale: recordsSales && canStockOut ? () => navigate('/app/sell') : undefined,
     onExport: () => void handleExport(),
     onSkuSettings: () => navigate('/app/products/sku-settings'),
-    onManageCategories: () => setManageCategoriesOpen(true),
+    // Counts as they are now: a product moved into a category since this page loaded is counted (owner, 2026-11-21).
+    onManageCategories: () => {
+      void categoryList.reload()
+      setManageCategoriesOpen(true)
+    },
   }
 
   return (
