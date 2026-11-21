@@ -646,6 +646,8 @@ export interface StockOutPayload {
   paymentAccountId?: string
   /** A line sent to a table's bill (V99): its key, the meal a side goes with, its note for the kitchen. */
   billLine?: { lineKey: string; withKey?: string; note?: string; /** One Send: its lines share one ticket per area (V102). */ sendKey?: string }
+  /** A counter sale's line for the kitchen (V109): what's made in another area goes on its ticket, a side with its meal. */
+  counterLine?: { lineKey: string; withKey?: string; note?: string }
 }
 
 // `ProductVendor` / `ProductVendorPriceTier` (GET /api/products/{productId}/vendors) live in

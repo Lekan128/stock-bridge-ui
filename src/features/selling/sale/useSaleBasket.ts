@@ -284,6 +284,8 @@ export function useSaleBasket(draftKey: string = BASKETS_DRAFT_KEY) {
             areaId,
             paymentMethod: paymentMethod as 'CASH' | 'TRANSFER' | 'CARD',
             ...(paymentAccountId ? { paymentAccountId } : {}),
+            // For the kitchen (V109): made in another area, it goes on that area's ticket; a side with its meal.
+            counterLine: { lineKey: line.key, ...(line.withKey ? { withKey: line.withKey } : {}), ...(line.note ? { note: line.note } : {}) },
           },
           baseDelta: -base,
         })

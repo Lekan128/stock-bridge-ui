@@ -1,3 +1,4 @@
+import { SidePicker, type Meal } from '@/features/selling/sale/SidePicker'
 import { MoneyInput } from '@/features/selling/MoneyInput'
 import { chargeLabel } from '@/features/selling/charges'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
@@ -28,14 +29,6 @@ import { useSellingNav } from '@/features/selling/sellingNav'
 import { billsApi, tableLabel, type Bill, type BillSummary, type SendStatus, type SentLine } from '@/features/selling/bills/billsApi'
 
 /** A meal a side can go with: a line on the bill already sent, or a new one. */
-interface Meal {
-  key: string
-  name: string
-  /** A new line of several: choosing it makes one of them its own plate. */
-  quantity: number
-  sent: boolean
-  note?: string
-}
 
 const NOTES_KEY = (branchId: string) => `bill-notes:${branchId}`
 function readNotes(branchId: string): string[] {
@@ -597,51 +590,6 @@ function mealName(key: string, sent: SentLine[], lines: SaleLine[]): string | un
  * "Extra chicken goes with…" (owner, 2026-11-19): on the product buttons, one button per plate on the bill from the same
  * kitchen - two Jollof are two buttons - and "On its own".
  */
-function SidePicker({ side, meals, onPick, onBack }: { side: string; meals: Meal[]; onPick: (meal: Meal | null) => void; onBack: () => void }) {
-  const seen = new Map<string, number>()
-  const total = new Map<string, number>()
-  for (const meal of meals) total.set(meal.name, (total.get(meal.name) ?? 0) + meal.quantity)
-  const ordinal = (n: number) => ['1st', '2nd', '3rd'][n - 1] ?? `${n}th`
-  return (
-    <div className="flex flex-col gap-2 rounded-xl border-2 border-primary-600 bg-primary-50 p-3" role="group" aria-label={`${side} goes with`}>
-      <div className="flex items-baseline justify-between gap-3">
-        <p className="font-semibold text-neutral-900">{side} goes with</p>
-        <button type="button" onClick={onBack} className="text-sm font-semibold text-primary-700 hover:underline">
-          Back
-        </button>
-      </div>
-      {meals.flatMap((meal) =>
-        Array.from({ length: Math.max(1, meal.sent ? 1 : meal.quantity) }, (_, index) => {
-          const n = (seen.get(meal.name) ?? 0) + 1
-          seen.set(meal.name, n)
-          const many = (total.get(meal.name) ?? 1) > 1
-          const extra = [many ? (meal.sent && meal.quantity > 1 ? `one of ${formatNumber(meal.quantity)}` : ordinal(n)) : null, meal.note, meal.sent ? 'sent' : null]
-            .filter(Boolean)
-            .join(' · ')
-          return (
-            <button
-              key={`${meal.key}-${index}`}
-              type="button"
-              onClick={() => onPick(meal)}
-              className="flex min-h-12 items-center justify-between gap-3 rounded-lg border border-neutral-200 bg-white px-3 text-left text-sm font-semibold text-neutral-900 hover:border-primary-600"
-            >
-              <span>{meal.name}</span>
-              <span className="text-xs font-normal text-neutral-500">{extra}</span>
-            </button>
-          )
-        }),
-      )}
-      <button
-        type="button"
-        onClick={() => onPick(null)}
-        className="flex min-h-12 items-center justify-between gap-3 rounded-lg border border-dashed border-neutral-300 bg-white px-3 text-left text-sm text-neutral-600"
-      >
-        <span>On its own</span>
-        <span className="text-xs">a side ordered by itself</span>
-      </button>
-    </div>
-  )
-}
 
 // ---------------------------------------------------------------------------------- a new line's extras
 
