@@ -120,6 +120,7 @@ export function ProductListPage() {
   const navigate = useNavigate()
   const permissions = user?.type === 'tenant' ? user.permissions : []
   const canManageProducts = permissions.includes(PERMISSIONS.MANAGE_PRODUCTS)
+  const canChangePrices = permissions.includes(PERMISSIONS.CHANGE_SELLING_PRICES)
   /**
    * Who may reach the bulk import pipeline. Mirrors its controller exactly — MANAGE_PRODUCTS or
    * MANAGE_INVENTORY (bulk-import contract §3) — so a storekeeper, who holds only the second,
@@ -526,6 +527,7 @@ export function ProductListPage() {
     onGiveBack: givesHere ? () => setGivenOpen(true) : undefined,
     // A list to count down, not a button on every row (owner, 2026-11-10).
     onCountStock: canCount ? () => navigate('/app/products/count') : undefined,
+    onPriceSheet: showsSellingPrice && canChangePrices ? () => navigate('/app/products/prices') : undefined,
     onRecordSale: recordsSales && canStockOut ? () => navigate('/app/sell') : undefined,
     onExport: () => void handleExport(),
     onSkuSettings: () => navigate('/app/products/sku-settings'),

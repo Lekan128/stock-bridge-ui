@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useToast } from '@/components/useToast'
@@ -30,6 +31,7 @@ export function BranchPricesChoice({ branch }: { branch: Branch }) {
   // With the switch on every branch has prices; none yet means the branch list is still catching up.
   if (!isMultiBranch || settings.data?.branchPrices !== true || !branch.priceListId) return null
   const mayChange = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.MANAGE_BRANCHES)
+  const mayChangePrices = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.CHANGE_SELLING_PRICES)
   const others = branches.filter((other) => other.id !== branch.id && other.active)
   const sharesWith = others.filter((other) => other.priceListId && other.priceListId === branch.priceListId)
   const own = sharesWith.length === 0
@@ -129,6 +131,14 @@ export function BranchPricesChoice({ branch }: { branch: Branch }) {
           </div>
         )}
       </div>
+      {mayChangePrices && (
+        <Link
+          to={`/app/products/prices?prices=${branch.priceListId}`}
+          className="self-start rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-primary-700 hover:bg-neutral-50"
+        >
+          Open price sheet
+        </Link>
+      )}
       {!mayChange && <p className="text-xs text-neutral-500">People who manage branches can change this.</p>}
     </section>
   )
