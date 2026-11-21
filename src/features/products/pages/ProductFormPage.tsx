@@ -51,6 +51,7 @@ import { useStockHistory } from '@/features/products/hooks/useStockHistory'
 import { useUnitOfMeasureOptions } from '@/features/products/hooks/useUnitOfMeasureOptions'
 import { BranchLevels } from '@/features/branches/BranchLevels'
 import { listPriceText } from '@/features/selling/priceText'
+import { useBranchPrices } from '@/features/selling/branchPrices'
 import {
   makeProductFormSchema,
   productFormDefaults,
@@ -294,11 +295,27 @@ export function ProductFormPage() {
       : { branchIds: productBranches.ids }
     : {}
   const canChangePrices = user?.type === 'tenant' && user.permissions.includes(PERMISSIONS.CHANGE_SELLING_PRICES)
+  // Prices per branch (BRANCH_PRICES_PLAN.md, V107): a box for each set of branch prices used where it is for.
+  const branchPricing = useBranchPrices()
+  const productIsFor = (branchId: string) => productBranches.all || productBranches.ids.includes(branchId)
+  const priceGroups = branchPricing.on
+    ? branchPricing.groups.filter((group) => group.listId && group.branches.some((branch) => productIsFor(branch.id)))
+    : []
+  // With prices per branch on (owner, 2026-11-21) every branch has prices: the boxes are the price; no single one.
+  const pricesByBranch = branchPricing.on
+  const mainPriceAt = (branchPricing.groups.find((group) => !group.listId)?.branches ?? [])
+    .filter((branch) => productIsFor(branch.id))
+    .map((branch) => branch.name)
+  const [branchPriceValues, setBranchPriceValues] = useState<Record<string, string>>({})
   const priceHint = !canChangePrices
     ? 'Prices are set by people who can change selling prices.'
-    : isMultiBranch
-      ? `Same price at all ${branchCount} branches.`
-      : undefined
+    : branchPricing.on && priceGroups.length > 0
+      ? mainPriceAt.length > 0
+        ? `Used at ${mainPriceAt.join(', ')}`
+        : 'Used wherever a branch has no price of its own'
+      : isMultiBranch
+        ? `Same price at all ${branchCount} branches.`
+        : undefined
   const { showsSellingPrice, requiresSellingPrice, sellsMadeHere } = useSellingPolicy()
   // Made here, not kept in stock (V90, selling till Step 4): chosen at the top when adding; fixed once added.
   const [madeHereChoice, setMadeHereChoice] = useState(false)
@@ -516,6 +533,15 @@ export function ProductFormPage() {
     })
     setPriceUnitCode(!requiresSellingPrice ? (product.unitPriceEnteredUnit ?? null) : null)
     setUnits(unitsDraftFrom(product))
+    // Each set of branch prices' own price, as typed when it was typed per the main price's unit.
+    const own: Record<string, string> = {}
+    for (const price of product.branchPrices ?? []) {
+      own[price.priceListId] =
+        price.unitPriceEntered != null && price.unitPriceEnteredUnit === (product.unitPriceEnteredUnit ?? null)
+          ? String(price.unitPriceEntered)
+          : String(price.unitPrice)
+    }
+    setBranchPriceValues(own)
   }, [product, reset, unitOfMeasureOptions, baseOptions, requiresSellingPrice])
 
   /**
@@ -922,8 +948,20 @@ export function ProductFormPage() {
    */
   function companyPriceFields(values: ProductFormValues): { unitPriceUnit?: string; clearUnitPrice?: boolean } {
     if (!showsSellingPrice || requiresSellingPrice) return {}
+    if (pricesByBranch) return pricePerPack && priceOption ? { unitPriceUnit: priceOption.code } : {}
     if (values.unitPrice.trim() === '') return isEdit && product?.unitPrice != null ? { clearUnitPrice: true } : {}
     return pricePerPack && priceOption ? { unitPriceUnit: priceOption.code } : {}
+  }
+
+  /** V107: the boxes for branches with their own prices - one branch of each set is enough, the set is shared. */
+  function branchPriceFields(): { branchPrices?: { branchId: string; price: number | null }[] } {
+    if (!branchPricing.on || !canChangePrices || !showsSellingPrice || requiresSellingPrice || priceGroups.length === 0) return {}
+    return {
+      branchPrices: priceGroups.map((group) => {
+        const typed = (branchPriceValues[group.listId as string] ?? '').replace(/,/g, '').trim()
+        return { branchId: group.branches[0].id, price: typed === '' ? null : Number(typed) }
+      }),
+    }
   }
 
   async function save(values: ProductFormValues) {
@@ -958,6 +996,8 @@ export function ProductFormPage() {
               {
                 ...toProductUpdatePayload(values, product?.categoryId),
                 ...companyPriceFields(values),
+                ...branchPriceFields(),
+                ...(pricesByBranch ? { unitPrice: undefined } : {}),
                 ...(madeHere ? {} : unitFields),
                 ...(madeHere ? {} : { lowStockThreshold }),
                 ...(madeHere
@@ -982,6 +1022,8 @@ export function ProductFormPage() {
                 {
                   ...toProductPayload(values),
                   ...companyPriceFields(values),
+                ...branchPriceFields(),
+                ...(pricesByBranch ? { unitPrice: undefined } : {}),
                   unitOfMeasure: undefined,
                   packagingUnit: undefined,
                   packagingSize: undefined,
@@ -996,6 +1038,8 @@ export function ProductFormPage() {
               {
                 ...toProductPayload(values),
                 ...companyPriceFields(values),
+                ...branchPriceFields(),
+                ...(pricesByBranch ? { unitPrice: undefined } : {}),
                 ...branchFields,
                 ...('measures' in unitFields && unitFields.measures.length > 0 ? unitFields : {}),
                 lowStockThreshold,
@@ -1061,7 +1105,9 @@ export function ProductFormPage() {
       } else if (isMultiBranch && isEdit && priceChanged(product, saved)) {
         // One price for the company (MULTI_BRANCH_UX_PLAN.md §5.6): the toast says where it now applies.
         const price = listPriceText(saved, unitOfMeasureOptions)
-        showToast(price ? `Saved. ${price.replace(' / ', ' a ')} at all ${branchCount} branches.` : 'Product updated.', 'success')
+        // With branches on their own prices (V107), the main price is only where no own price is used.
+        const where = pricesByBranch ? null : `all ${branchCount} branches`
+        showToast(price && where ? `Saved. ${price.replace(' / ', ' a ')} at ${where}.` : 'Product updated.', 'success')
       } else {
         showToast(isEdit ? 'Product updated.' : 'Product created.', 'success')
       }
@@ -1134,6 +1180,19 @@ export function ProductFormPage() {
     }
     if (requiresSellingPrice && values.unitPrice.trim().length === 0) {
       setError('unitPrice', { message: UNIT_PRICE_REQUIRED_MESSAGE })
+      setStep('price')
+      return
+    }
+    // A branch's own price (V107): a number, or blank for the main price.
+    const badBranchPrice = priceGroups.find((group) => {
+      const typed = (branchPriceValues[group.listId as string] ?? '').replace(/,/g, '').trim()
+      return typed !== '' && !(Number(typed) >= 0)
+    })
+    if (badBranchPrice) {
+      setSectionProblem({
+        step: 'price',
+        message: `Type the price at ${badBranchPrice.branches[0].name} as a number, or leave it blank for the main price.`,
+      })
       setStep('price')
       return
     }
@@ -1303,8 +1362,23 @@ export function ProductFormPage() {
           {
             step: 'price' as StepId,
             title: 'Price',
-            text: reviewValues.unitPrice?.trim() ? `${formatMoney(Number(reviewValues.unitPrice))} a ${priceUnitWord ?? 'unit'}` : 'None',
-            empty: !reviewValues.unitPrice?.trim(),
+            text: pricesByBranch
+              ? // V107: each branch's price, "₦5,500 at Ikeja · No price at Lekki".
+                priceGroups
+                  .map((group) => {
+                    const typed = (branchPriceValues[group.listId as string] ?? '').replace(/,/g, '').trim()
+                    const names = group.branches.filter((branch) => productIsFor(branch.id)).map((branch) => branch.name).join(', ')
+                    return typed === '' || !(Number(typed) >= 0)
+                      ? `No price at ${names}`
+                      : `${formatMoney(Number(typed))} a ${priceUnitWord ?? 'unit'} at ${names}`
+                  })
+                  .join(' · ') || 'None'
+              : reviewValues.unitPrice?.trim()
+                ? `${formatMoney(Number(reviewValues.unitPrice))} a ${priceUnitWord ?? 'unit'}`
+                : 'None',
+            empty: pricesByBranch
+              ? priceGroups.every((group) => (branchPriceValues[group.listId as string] ?? '').trim() === '')
+              : !reviewValues.unitPrice?.trim(),
           },
         ]
       : []),
@@ -1882,7 +1956,7 @@ export function ProductFormPage() {
           <>
             <div>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-2">
-                <div className="flex-1">
+                <div className={pricesByBranch ? 'hidden' : 'flex-1'}>
                   <TextField
                     label={priceUnitWord ? `Selling price (₦ per ${priceUnitWord})` : 'Selling price (₦)'}
                     inputMode="decimal"
@@ -1894,6 +1968,8 @@ export function ProductFormPage() {
                 </div>
                 {priceOptions.length > 1 && priceOption && (
                   <div className="sm:pb-0.5">
+                    {/* Prices per branch (V107): with no single box beside it, the choice says what it is. */}
+                    {pricesByBranch && <p className="mb-1.5 text-sm font-medium text-neutral-700">Priced per</p>}
                     <UnitToggle
                       value={priceOption.label}
                       onChange={(option) => setPriceUnitCode(option.isStockUnit ? null : option.code)}
@@ -1904,7 +1980,7 @@ export function ProductFormPage() {
                 )}
               </div>
               {/* At most two facts under the field: the price per the other unit, and the profit. */}
-              {(priceConversion || profitPerPriceUnit != null) && (
+              {!pricesByBranch && (priceConversion || profitPerPriceUnit != null) && (
                 <p className="mt-1.5 text-xs text-neutral-600" data-price-echo>
                   {priceConversion}
                   {priceConversion && profitPerPriceUnit != null && ' · '}
@@ -1919,6 +1995,31 @@ export function ProductFormPage() {
                 </p>
               )}
             </div>
+            {/* Prices per branch (V107): a box for each set of branch prices used where this is for. Blank: the main price. */}
+            {priceGroups.map((group) => {
+              const listId = group.listId as string
+              const names = group.branches.filter((branch) => productIsFor(branch.id)).map((branch) => branch.name)
+              return (
+                <div key={listId} className="sm:max-w-xs">
+                  <TextField
+                    id={`branch-price-${listId}`}
+                    label={`At ${names.join(', ')}${priceUnitWord ? ` (₦ per ${priceUnitWord})` : ' (₦)'}`}
+                    inputMode="decimal"
+                    readOnly={!canChangePrices}
+                    hint={
+                      group.branches.length > names.length || names.length > 1
+                        ? 'One price for these branches: they share their prices.'
+                        : 'Blank: no price there yet.'
+                    }
+                    value={branchPriceValues[listId] ?? ''}
+                    onChange={(event) => {
+                      typedSomething.current = true
+                      setBranchPriceValues((current) => ({ ...current, [listId]: event.target.value }))
+                    }}
+                  />
+                </div>
+              )
+            })}
           </>
         )}
 
@@ -2100,7 +2201,11 @@ export function ProductFormPage() {
         <FormError message={formError} />
 
         {isMultiBranch && isEdit && (
-          <p className="text-right text-sm text-neutral-600">Changes to this product apply at all {branchCount} branches.</p>
+          <p className="text-right text-sm text-neutral-600">
+            {priceGroups.length > 0
+              ? `Changes apply at all ${branchCount} branches. Each branch's own price stays its own.`
+              : `Changes to this product apply at all ${branchCount} branches.`}
+          </p>
         )}
         </div>
         {/* Adding: Next, step by step, and Create only on Review. Editing: Save from any section, since what's required

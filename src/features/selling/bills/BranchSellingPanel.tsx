@@ -1,3 +1,4 @@
+import { BranchPricesChoice } from '@/features/selling/BranchPricesChoice'
 import { ChargesSection } from '@/features/selling/bills/ChargesSection'
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
@@ -51,6 +52,7 @@ export function BranchSellingPanel({ branch }: { branch: Branch }) {
   const on = list.filter((table) => table.active).length
   return (
     <div className="flex flex-col gap-3">
+      <BranchPricesChoice branch={branch} />
       <div className="flex items-center justify-between gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-3">
         <span className="min-w-0">
           <span className="block font-semibold text-neutral-900">Tables{on ? ` · ${on}` : ''}</span>

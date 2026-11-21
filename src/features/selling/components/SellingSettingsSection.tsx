@@ -1,3 +1,6 @@
+import { useQueryClient } from '@tanstack/react-query'
+import { BRANCHES_KEY } from '@/features/branches/BranchProvider'
+import { Button } from '@/components/Button'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PERMISSIONS } from '@/auth/permissions'
@@ -7,6 +10,8 @@ import { formatDate } from '@/features/company/formatters'
 import { LegacyPriceReviewSheet } from '@/features/selling/components/LegacyPriceReviewSheet'
 import { PriceSheetLink } from '@/features/selling/components/PriceSheetLink'
 import { sellingApi } from '@/features/selling/sellingApi'
+import { useWorkingBranch } from '@/features/branches/useWorkingBranch'
+import { syncCatalog } from '@/features/catalog/catalogStore'
 import { useSellingSettings } from '@/features/selling/useSellingSettings'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { isAppError } from '@/types/api'
@@ -25,6 +30,7 @@ export function SellingSettingsSection() {
   const { showToast } = useToast()
   const online = useOnlineStatus()
   const { data: settings, setData, refetch } = useSellingSettings()
+  const { isMultiBranch } = useWorkingBranch()
   // The settings screen always reads the switch afresh, rather than trusting the minute-old copy
   // every other screen shares: this is where the owner checks what is true.
   useEffect(() => {
@@ -120,6 +126,20 @@ export function SellingSettingsSection() {
           canChange={canChange}
           online={online}
           onChanged={(updated) => setData(updated)}
+        />
+      )}
+
+      {/* Prices per branch (BRANCH_PRICES_PLAN.md, V107): two or more branches only. */}
+      {on && isMultiBranch && (
+        <BranchPricesSwitch
+          on={settings.branchPrices === true}
+          canChange={canChange}
+          online={online}
+          onChanged={(updated) => {
+            setData(updated)
+            // Every product's price can change at some branch: the phone's copy catches up now.
+            void syncCatalog().catch(() => {})
+          }}
         />
       )}
 
@@ -342,6 +362,116 @@ function ReopenHours({
         </select>
       ) : (
         <span className="shrink-0 text-sm font-medium text-neutral-700">{words(hours)}</span>
+      )}
+    </div>
+  )
+}
+
+/**
+ * "Each branch can have its own prices" (V107; owner 2026-11-21). On: every branch starts with today's prices, then
+ * each chooses on its page. Off asks first, in place, which branch's prices every branch then uses - each branch's
+ * own are kept for when it's on again.
+ */
+function BranchPricesSwitch({
+  on,
+  canChange,
+  online,
+  onChanged,
+}: {
+  on: boolean
+  canChange: boolean
+  online: boolean
+  onChanged: (settings: import('@/features/selling/types').SellingSettings) => void
+}) {
+  const { showToast } = useToast()
+  const queryClient = useQueryClient()
+  const { branches } = useWorkingBranch()
+  const open = branches.filter((branch) => branch.active)
+  const [saving, setSaving] = useState(false)
+  const [askingOff, setAskingOff] = useState(false)
+  const [useBranchId, setUseBranchId] = useState(() => open.find((branch) => branch.main)?.id ?? open[0]?.id ?? '')
+
+  async function change(next: boolean, useId?: string) {
+    setSaving(true)
+    try {
+      onChanged(await sellingApi.updateBranchPrices(next, useId))
+      // Each branch's prices changed with it: the branch list says which they use.
+      await queryClient.invalidateQueries({ queryKey: BRANCHES_KEY })
+      setAskingOff(false)
+      const used = open.find((branch) => branch.id === useId)?.name
+      showToast(
+        next
+          ? "Every branch starts with today's prices. Give a branch its own on its page under Branches."
+          : `Every branch now uses ${used ?? "the main branch"}'s prices. The others are kept for when you turn this on.`,
+        'success',
+      )
+    } catch (err) {
+      showToast(isAppError(err) ? err.message : "Couldn't change that. Try again.", 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3 border-t border-neutral-100 pt-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p id="branch-prices-label" className="text-sm font-medium text-neutral-900">
+            Each branch can have its own prices
+          </p>
+          <p id="branch-prices-help" className="mt-0.5 max-w-prose text-sm text-neutral-500">
+            {on ? 'On: choose the prices each branch uses on its page under Branches.' : 'Off: one price at every branch.'}
+          </p>
+        </div>
+        {canChange ? (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={on}
+            aria-labelledby="branch-prices-label"
+            aria-describedby="branch-prices-help"
+            disabled={saving || !online || askingOff}
+            onClick={() => (on ? setAskingOff(true) : void change(true))}
+            className={`relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:outline-none ${
+              on ? 'bg-accent-600' : 'bg-neutral-300'
+            } ${saving || !online ? 'cursor-not-allowed opacity-50' : ''}`}
+          >
+            <span
+              aria-hidden="true"
+              className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${on ? 'translate-x-6' : 'translate-x-1'}`}
+            />
+          </button>
+        ) : (
+          <span className="shrink-0 text-sm font-medium text-neutral-700">{on ? 'On' : 'Off'}</span>
+        )}
+      </div>
+      {askingOff && (
+        <div className="flex flex-col gap-3 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+          <label htmlFor="branch-prices-use" className="text-sm font-medium text-neutral-900">
+            Every branch will use which branch&apos;s prices?
+          </label>
+          <select
+            id="branch-prices-use"
+            value={useBranchId}
+            onChange={(event) => setUseBranchId(event.target.value)}
+            className="w-full max-w-xs rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
+          >
+            {open.map((branch) => (
+              <option key={branch.id} value={branch.id}>
+                {branch.name}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-neutral-500">The other branches&apos; prices are kept for when you turn this on again.</p>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => void change(false, useBranchId)} disabled={saving || !online || !useBranchId}>
+              Turn off
+            </Button>
+            <Button variant="secondary" onClick={() => setAskingOff(false)} disabled={saving}>
+              Keep it on
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   )

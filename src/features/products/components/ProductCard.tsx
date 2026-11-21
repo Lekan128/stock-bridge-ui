@@ -18,6 +18,7 @@ import { packEquivalent } from '@/features/products/packEquivalent'
 import type { Product } from '@/features/products/types'
 import { formatNumber } from '@/features/products/unitCopy'
 import { listPriceText } from '@/features/selling/priceText'
+import { useBranchPrices } from '@/features/selling/branchPrices'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { resolveUnitSymbol } from '@/features/products/unitSet'
 
@@ -51,7 +52,14 @@ export function ProductCard({ product, incoming = 0, quickActions, selection }: 
       : null
   const { showsSellingPrice } = useSellingPolicy()
   // The selling price leads the line where products have one (SELLING_PRICE_PLAN.md §6.5).
-  const price = showsSellingPrice ? listPriceText(product, unitOfMeasureOptions) : null
+  // Prices per branch (V107): the price where the person works; "All branches" the main one, "+1 price" beside it.
+  const branchPrices = useBranchPrices()
+  const range = showsSellingPrice && branchPrices.showingAll ? branchPrices.range(product) : null
+  const price = !showsSellingPrice
+    ? null
+    : range
+      ? `${listPriceText({ ...product, ...range[0] }, unitOfMeasureOptions)} – ${listPriceText({ ...product, ...range[1] }, unitOfMeasureOptions)}`
+      : listPriceText(branchPrices.atWorking(product), unitOfMeasureOptions)
   const forLine = useForBranchesLine(product)
   const subtitle = [price, product.categoryName, pack, forLine].filter(Boolean).join(' · ') || product.sku
   const press = useRef<{ timer: number; x: number; y: number } | null>(null)

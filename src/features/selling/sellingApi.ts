@@ -12,6 +12,9 @@ export const sellingApi = {
   /** "Sell things you make" (selling till Step 4): needs selling on to turn on. */
   updateMadeHere: (on: boolean) => api.put<SellingSettings>('/api/company/selling/made-here', { on }).then((r) => r.data),
   updateCountsCash: (on: boolean) => api.put<SellingSettings>('/api/company/selling/counts-cash', { on }).then((r) => r.data),
+  /** Turning it off, `useBranchId` is the branch whose prices every branch then uses (owner, 2026-11-21). */
+  updateBranchPrices: (on: boolean, useBranchId?: string) =>
+    api.put<SellingSettings>('/api/company/selling/branch-prices', { on, useBranchId }).then((r) => r.data),
   updateCashReopenHours: (hours: number) =>
     api.put<SellingSettings>('/api/company/selling/cash-reopen-hours', { hours }).then((r) => r.data),
 
