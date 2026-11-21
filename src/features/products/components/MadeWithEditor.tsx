@@ -170,6 +170,8 @@ interface MadeWithEditorProps {
   forBranches: { all: boolean; ids: string[] }
   /** Its selling price, for the profit. */
   price: number | null
+  /** With prices per branch: the branch that price is at ("at Ikeja"), when they differ. */
+  priceWhere?: string
   /** The item itself, never its own ingredient. */
   itemId?: string
 }
@@ -179,7 +181,7 @@ interface MadeWithEditorProps {
  * the ingredient has (1 Derica of rice). Adding an ingredient opens a search right under the list - no popup. Any
  * kept-in-stock product can be one, with or without stock. On a laptop the cost sits beside the list.
  */
-export function MadeWithEditor({ value, onChange, forBranches, price, itemId }: MadeWithEditorProps) {
+export function MadeWithEditor({ value, onChange, forBranches, price, priceWhere, itemId }: MadeWithEditorProps) {
   const { branches } = useWorkingBranch()
   const { options: catalogue } = useUnitOfMeasureOptions()
   const [adding, setAdding] = useState(false)
@@ -248,7 +250,7 @@ export function MadeWithEditor({ value, onChange, forBranches, price, itemId }: 
         <p className="text-base font-semibold text-neutral-900">{total != null ? formatMoney(total) : '—'}</p>
       </div>
       <div>
-        <p className="text-xs text-neutral-600">Sells for</p>
+        <p className="text-xs text-neutral-600">Sells for{priceWhere ? ` at ${priceWhere}` : ''}</p>
         <p className="text-base font-semibold text-neutral-900">{price != null ? formatMoney(price) : '—'}</p>
       </div>
       <div>

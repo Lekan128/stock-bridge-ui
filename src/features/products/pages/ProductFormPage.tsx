@@ -953,6 +953,25 @@ export function ProductFormPage() {
     return pricePerPack && priceOption ? { unitPriceUnit: priceOption.code } : {}
   }
 
+  /**
+   * The price "Made with" works profit out from (owner, 2026-11-21): with branch prices on, the box of the branch being
+   * worked at, else the first box with a price, naming where; otherwise the one price.
+   */
+  const madeWithPrice = (() => {
+    const number = (typed: string | undefined) => {
+      const clean = (typed ?? '').replace(/,/g, '').trim()
+      return clean !== '' && Number(clean) >= 0 ? Number(clean) : null
+    }
+    if (!pricesByBranch) return { price: number(watch('unitPrice')), where: undefined }
+    const here = priceGroups.find((group) => group.branches.some((branch) => branch.id === branchPricing.workingId))
+    const group = here && number(branchPriceValues[here.listId as string]) != null
+      ? here
+      : priceGroups.find((candidate) => number(branchPriceValues[candidate.listId as string]) != null)
+    if (!group) return null
+    const names = group.branches.filter((branch) => productIsFor(branch.id)).map((branch) => branch.name)
+    return { price: number(branchPriceValues[group.listId as string]), where: priceGroups.length > 1 ? names.join(', ') : undefined }
+  })()
+
   /** V107: the boxes for branches with their own prices - one branch of each set is enough, the set is shared. */
   function branchPriceFields(): { branchPrices?: { branchId: string; price: number | null }[] } {
     if (!branchPricing.on || !canChangePrices || !showsSellingPrice || requiresSellingPrice || priceGroups.length === 0) return {}
@@ -2079,7 +2098,8 @@ export function ProductFormPage() {
                 if (sectionProblem?.step === 'madeWith') setSectionProblem(null)
               }}
               forBranches={productBranches}
-              price={watch('unitPrice')?.trim() ? Number(watch('unitPrice')) : null}
+              price={madeWithPrice?.price ?? null}
+              priceWhere={madeWithPrice?.where}
               itemId={id}
             />
             {sectionProblem?.step === 'madeWith' && (
