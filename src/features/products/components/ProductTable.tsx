@@ -19,6 +19,7 @@ import { AreaBreakdown } from '@/features/branches/AreaBreakdown'
 import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { productBranchesText } from '@/features/products/components/ProductBranchesField'
 import { listPriceText } from '@/features/selling/priceText'
+import { useBranchPrices } from '@/features/selling/branchPrices'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { resolveUnitSymbol } from '@/features/products/unitSet'
 
@@ -108,6 +109,8 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
   // The price column follows the selling policy (a vendor, ProcurePal, or a company that sells
   // from its stock); the pack subtitle stays a company's, as before.
   const { showsSellingPrice } = useSellingPolicy()
+  // Prices per branch (V107): the price where the person works; "All branches" shows the main one and "+1 price".
+  const branchPrices = useBranchPrices()
   // Fetched for two things now: the packaging subtitle a company sees in place of the unit price
   // column, and — for EVERY tenant, vendor included — the stock unit stamped on the "On hand"
   // figure. A vendor's row used to need nothing from this list; a bare quantity in the on-hand
@@ -283,7 +286,14 @@ export function ProductTable({ products, sort, onSortChange, incomingFor, select
               <td className="border-b border-neutral-100 px-4 py-2.5 text-neutral-600">{product.sku}</td>
               {showsSellingPrice && (
                 <td className="border-b border-neutral-100 px-4 py-2.5 text-right whitespace-nowrap tabular-nums text-neutral-700">
-                  {listPriceText(product, unitOfMeasureOptions) ?? <span className="text-neutral-500">—</span>}
+                  {(() => {
+                    // "All branches" with prices per branch (V107): the lowest to the highest where they differ.
+                    const range = branchPrices.showingAll ? branchPrices.range(product) : null
+                    if (range) {
+                      return `${listPriceText({ ...product, ...range[0] }, unitOfMeasureOptions)} – ${listPriceText({ ...product, ...range[1] }, unitOfMeasureOptions)}`
+                    }
+                    return listPriceText(branchPrices.atWorking(product), unitOfMeasureOptions) ?? <span className="text-neutral-500">—</span>
+                  })()}
                 </td>
               )}
               <td className="border-b border-neutral-100 px-4 py-2.5 text-right">

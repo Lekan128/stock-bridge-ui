@@ -52,6 +52,8 @@ export interface CatalogRow {
   /** Which branches it is for (V92): every branch, or these. Absent on rows synced before it: shown everywhere. */
   forAllBranches?: boolean
   forBranchIds?: string[]
+  /** V107: its own prices at branches with their own (absent: the main price everywhere). */
+  branchPrices?: import('@/features/products/types').BranchListPrice[]
 }
 
 export interface SnapshotPage {

@@ -79,12 +79,34 @@ function itemBranches(branches: Branch[], forBranches: { all: boolean; ids: stri
   return forBranches.all ? open : open.filter((branch) => forBranches.ids.includes(branch.id))
 }
 
+const openAreas = (branch: Branch) => (branch.areas ?? []).filter((area) => area.active)
+
 const hasNamed = (branch: Branch, name: string | null) =>
-  name != null && (branch.areas ?? []).some((area) => area.active && area.name.toLowerCase() === name.toLowerCase())
+  name != null && openAreas(branch).some((area) => area.name.toLowerCase() === name.toLowerCase())
+
+/**
+ * Who "Made in" asks (owner, 2026-11-21): only the branches the item is for, and of those only a branch with more
+ * than one area - a branch with one area makes it there, nothing to ask. The names offered are those branches' areas.
+ */
+function madeInAsked(branches: Branch[], forBranches: { all: boolean; ids: string[] }) {
+  const mine = itemBranches(branches, forBranches)
+  const asked = mine.filter((branch) => openAreas(branch).length > 1)
+  const names = new Map<string, string>()
+  for (const branch of asked) {
+    for (const area of openAreas(branch)) if (!names.has(area.name.toLowerCase())) names.set(area.name.toLowerCase(), area.name)
+  }
+  return { mine, asked, names }
+}
+
+/** The "Made in" name as offered, or null when it isn't one of the names offered (the "For" branches changed). */
+function offeredName(names: Map<string, string>, madeIn: string | null): string | null {
+  return madeIn == null ? null : (names.get(madeIn.toLowerCase()) ?? null)
+}
 
 /**
  * Anything missing before it can be saved, in a sentence: an amount, "Made in", or a branch's own area. Null when
- * it can be. A company without areas never sees "Made in" - each branch's only place is where it is made.
+ * it can be. When none of the branches it is for has more than one area, "Made in" isn't asked - each branch's one
+ * area is where it is made.
  */
 export function madeWithProblem(
   draft: MadeWithDraft,
@@ -94,14 +116,12 @@ export function madeWithProblem(
   if (draft.ingredients.length === 0) return null
   const empty = draft.ingredients.find((line) => !(Number(line.quantity) > 0))
   if (empty) return `Say how much ${empty.name} goes into one.`
-  if (!anyAreas(branches)) return null
-  if (!draft.madeIn) return 'Choose where it is made.'
-  const missing = itemBranches(branches, forBranches).find((branch) => !hasNamed(branch, draft.madeIn) && !draft.madeInAt[branch.id])
+  const { asked, names } = madeInAsked(branches, forBranches)
+  if (asked.length === 0) return null
+  const madeIn = offeredName(names, draft.madeIn)
+  if (!madeIn) return 'Choose where it is made.'
+  const missing = asked.find((branch) => !hasNamed(branch, madeIn) && !draft.madeInAt[branch.id])
   return missing ? `Choose where it is made at ${missing.name}.` : null
-}
-
-function anyAreas(branches: Branch[]): boolean {
-  return branches.some((branch) => branch.active && (branch.areas?.filter((area) => area.active).length ?? 0) > 1)
 }
 
 /** The request for `PUT /made-with`. */
@@ -118,24 +138,30 @@ export function madeWithPayload(
       ...(option && !option.isStockUnit ? { unit: option.code } : {}),
     }
   })
-  if (!anyAreas(branches) && ingredients.length > 0) {
-    // No areas: each branch's one place. Named after the main branch's; any branch whose one place is named
+  const { mine, asked, names } = madeInAsked(branches, forBranches)
+  if (asked.length === 0 && ingredients.length > 0) {
+    // Nothing asked: each branch's one area. Named after the main branch's; any branch whose one area is named
     // differently is given it.
-    const mine = itemBranches(branches, forBranches)
-    const first = (mine.find((branch) => branch.main) ?? mine[0])?.areas?.find((area) => area.active)
-    const madeIn = first?.name ?? null
+    const home = mine.find((branch) => branch.main) ?? mine[0]
+    const madeIn = (home ? openAreas(home)[0]?.name : null) ?? null
     const madeInAt = mine
       .filter((branch) => !hasNamed(branch, madeIn))
       .flatMap((branch) => {
-        const only = branch.areas?.find((area) => area.active)
+        const only = openAreas(branch)[0]
         return only ? [{ branchId: branch.id, areaId: only.id }] : []
       })
     return { madeIn, madeInAt, ingredients }
   }
-  const madeInAt = itemBranches(branches, forBranches)
-    .filter((branch) => !hasNamed(branch, draft.madeIn) && draft.madeInAt[branch.id])
-    .map((branch) => ({ branchId: branch.id, areaId: draft.madeInAt[branch.id] }))
-  return { madeIn: draft.madeIn, madeInAt, ingredients }
+  const madeIn = offeredName(names, draft.madeIn)
+  // A branch without an area of that name: its one area, or the one chosen there.
+  const madeInAt = mine
+    .filter((branch) => !hasNamed(branch, madeIn))
+    .flatMap((branch) => {
+      const areas = openAreas(branch)
+      const areaId = areas.length === 1 ? areas[0].id : draft.madeInAt[branch.id]
+      return areaId ? [{ branchId: branch.id, areaId }] : []
+    })
+  return { madeIn, madeInAt, ingredients }
 }
 
 interface MadeWithEditorProps {
@@ -144,6 +170,8 @@ interface MadeWithEditorProps {
   forBranches: { all: boolean; ids: string[] }
   /** Its selling price, for the profit. */
   price: number | null
+  /** With prices per branch: the branch that price is at ("at Ikeja"), when they differ. */
+  priceWhere?: string
   /** The item itself, never its own ingredient. */
   itemId?: string
 }
@@ -153,7 +181,7 @@ interface MadeWithEditorProps {
  * the ingredient has (1 Derica of rice). Adding an ingredient opens a search right under the list - no popup. Any
  * kept-in-stock product can be one, with or without stock. On a laptop the cost sits beside the list.
  */
-export function MadeWithEditor({ value, onChange, forBranches, price, itemId }: MadeWithEditorProps) {
+export function MadeWithEditor({ value, onChange, forBranches, price, priceWhere, itemId }: MadeWithEditorProps) {
   const { branches } = useWorkingBranch()
   const { options: catalogue } = useUnitOfMeasureOptions()
   const [adding, setAdding] = useState(false)
@@ -166,16 +194,11 @@ export function MadeWithEditor({ value, onChange, forBranches, price, itemId }: 
   }
   const [term, setTerm] = useState('')
 
-  const areaNames = useMemo(() => {
-    const names = new Map<string, string>()
-    for (const branch of branches) {
-      if (!branch.active) continue
-      for (const area of branch.areas ?? []) if (area.active && !names.has(area.name.toLowerCase())) names.set(area.name.toLowerCase(), area.name)
-    }
-    return [...names.values()]
-  }, [branches])
-  const showMadeIn = anyAreas(branches)
-  const needChoice = value.madeIn ? itemBranches(branches, forBranches).filter((branch) => !hasNamed(branch, value.madeIn)) : []
+  const { asked, names } = useMemo(() => madeInAsked(branches, forBranches), [branches, forBranches])
+  const areaNames = [...names.values()]
+  const showMadeIn = asked.length > 0
+  const madeIn = offeredName(names, value.madeIn)
+  const needChoice = madeIn ? asked.filter((branch) => !hasNamed(branch, madeIn)) : []
 
   // The newest value, for an answer that arrives after more edits.
   const latest = useRef(value)
@@ -227,7 +250,7 @@ export function MadeWithEditor({ value, onChange, forBranches, price, itemId }: 
         <p className="text-base font-semibold text-neutral-900">{total != null ? formatMoney(total) : '—'}</p>
       </div>
       <div>
-        <p className="text-xs text-neutral-600">Sells for</p>
+        <p className="text-xs text-neutral-600">Sells for{priceWhere ? ` at ${priceWhere}` : ''}</p>
         <p className="text-base font-semibold text-neutral-900">{price != null ? formatMoney(price) : '—'}</p>
       </div>
       <div>
@@ -252,7 +275,7 @@ export function MadeWithEditor({ value, onChange, forBranches, price, itemId }: 
             </label>
             <select
               id="made-in"
-              value={value.madeIn ?? ''}
+              value={madeIn ?? ''}
               onChange={(event) => set({ madeIn: event.target.value || null })}
               className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
             >
@@ -268,7 +291,7 @@ export function MadeWithEditor({ value, onChange, forBranches, price, itemId }: 
           {needChoice.map((branch) => (
             <div key={branch.id}>
               <label htmlFor={`made-in-${branch.id}`} className="mb-1.5 block text-sm font-medium text-neutral-700">
-                At {branch.name} (no {value.madeIn} there), made in
+                At {branch.name} (no {madeIn} there), made in
               </label>
               <select
                 id={`made-in-${branch.id}`}
@@ -277,13 +300,11 @@ export function MadeWithEditor({ value, onChange, forBranches, price, itemId }: 
                 className={`w-full rounded-md border bg-white px-3 py-2 text-sm ${value.madeInAt[branch.id] ? 'border-neutral-300' : 'border-primary-500 ring-1 ring-primary-500'}`}
               >
                 <option value="">Choose an area</option>
-                {(branch.areas ?? [])
-                  .filter((area) => area.active)
-                  .map((area) => (
-                    <option key={area.id} value={area.id}>
-                      {area.name}
-                    </option>
-                  ))}
+                {openAreas(branch).map((area) => (
+                  <option key={area.id} value={area.id}>
+                    {area.name}
+                  </option>
+                ))}
               </select>
             </div>
           ))}

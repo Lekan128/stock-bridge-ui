@@ -11,6 +11,7 @@ import { formatMoney } from '@/features/selling/money'
 import type { SalePaymentMethod } from '@/features/selling/sale/paymentMethod'
 import { lineAmount, openingUnit, optionOf, unitsFor, type SaleLine } from '@/features/selling/sale/saleLine'
 import { isAppError } from '@/types/api'
+import { useBranchPrices } from '@/features/selling/branchPrices'
 
 /** How one line of a recorded sale stands. */
 export interface RecordedLine {
@@ -79,6 +80,7 @@ function emptyBasket(): Basket {
  * the others: the money for them was taken.
  */
 export function useSaleBasket(draftKey: string = BASKETS_DRAFT_KEY) {
+  const branchPrices = useBranchPrices()
   const { options: catalogue } = useUnitOfMeasureOptions()
   const draft = useDraft<BasketsDraft>(draftKey)
   const [baskets, setBaskets] = useState<Basket[]>(() => [emptyBasket()])
@@ -153,7 +155,9 @@ export function useSaleBasket(draftKey: string = BASKETS_DRAFT_KEY) {
    * Adds one of the product - or one more, if it is already in the basket in the unit it opens in. A side on a table's
    * bill (V99) counts up only beside the same meal; given `withKey`, it goes with that meal.
    */
-  function add(product: Product, withKey?: string): string {
+  function add(given: Product, withKey?: string): string {
+    // Prices per branch (V107): the sale charges the price at the branch it's recorded at.
+    const product = branchPrices.atWorking(given)
     const options = unitsFor(product, catalogue)
     const unit = openingUnit(product, options)
     const existing = lines.find(
@@ -280,6 +284,8 @@ export function useSaleBasket(draftKey: string = BASKETS_DRAFT_KEY) {
             areaId,
             paymentMethod: paymentMethod as 'CASH' | 'TRANSFER' | 'CARD',
             ...(paymentAccountId ? { paymentAccountId } : {}),
+            // For the kitchen (V109): made in another area, it goes on that area's ticket; a side with its meal.
+            counterLine: { lineKey: line.key, ...(line.withKey ? { withKey: line.withKey } : {}), ...(line.note ? { note: line.note } : {}) },
           },
           baseDelta: -base,
         })

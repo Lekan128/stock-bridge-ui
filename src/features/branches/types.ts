@@ -39,7 +39,17 @@ export interface Branch {
   charges?: import('@/features/selling/charges').Charge[]
   /** V103: items sent from a bill go as tickets to where they're made or kept. */
   ticketsOn?: boolean
+  /**
+   * V107: the set of prices it uses (BRANCH_PRICES_PLAN.md); absent for the main prices. Branches with the same one
+   * share their prices. Given even while the company's switch is off.
+   */
+  priceListId?: string
+  /** V107: how many products have their own price in that set. */
+  ownPriceCount?: number
 }
+
+/** How a branch is priced (V107): the main prices, its own, or another branch's. */
+export type BranchPriceUse = 'MAIN' | 'OWN' | 'SAME_AS'
 
 /** A table at a branch (V99, selling till Step 7). */
 export interface BranchTable {

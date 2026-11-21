@@ -1,3 +1,4 @@
+import { PriceSheetPage } from '@/features/selling/PriceSheetPage'
 import { BillPage } from '@/features/selling/bills/BillPage'
 import { CloseDayPage } from '@/features/selling/sale/CloseDayPage'
 import { TicketsPage } from '@/features/selling/tickets/TicketsPage'
@@ -699,6 +700,15 @@ export function AppRoutes() {
           {/* Static segment, declared above products/:id for the same reason products/import is —
             see that route's comment. Gated on MANAGE_PRODUCTS: configuring how SKUs get
             generated is the same authority as creating/editing products, not a read concern. */}
+          {/* The price sheet (BRANCH_PRICES_PLAN.md §10): for people who change selling prices. */}
+          <Route
+            path="products/prices"
+            element={
+              <RequirePermission permission={PERMISSIONS.CHANGE_SELLING_PRICES}>
+                <PriceSheetPage />
+              </RequirePermission>
+            }
+          />
           <Route
             path="products/sku-settings"
             element={

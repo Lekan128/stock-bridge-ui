@@ -29,6 +29,8 @@ export interface SellingSettings {
   cashReopenHours?: number
   /** V99: categories whose products are sides - the till asks which meal each goes with. */
   sideCategoryIds?: string[]
+  /** V107: "Each branch can have its own prices" (BRANCH_PRICES_PLAN.md). Off: one price at every branch. */
+  branchPrices?: boolean
 }
 
 export interface UpdateSellingSettingsPayload {

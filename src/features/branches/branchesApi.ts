@@ -15,6 +15,9 @@ export const branchesApi = {
   makeMain: (id: string) => api.post<Branch>(`/api/branches/${id}/main`).then((r) => r.data),
   close: (id: string) => api.post<Branch>(`/api/branches/${id}/close`).then((r) => r.data),
   reopen: (id: string) => api.post<Branch>(`/api/branches/${id}/reopen`).then((r) => r.data),
+  /** The prices a branch uses (V107): the main ones, its own, or another branch's. */
+  setPrices: (id: string, uses: import('./types').BranchPriceUse, sameAsBranchId?: string) =>
+    api.put<void>(`/api/branches/${id}/prices`, { uses, sameAsBranchId }).then(() => undefined),
   /** One low-stock level for many products at a branch; null takes them back to their own (Phase 4). */
   setThresholds: (id: string, body: { productIds: string[]; lowStockThreshold: number | null }) =>
     api.put<{ updated: number }>(`/api/branches/${id}/thresholds`, body).then((r) => r.data),

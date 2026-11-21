@@ -41,7 +41,7 @@ import {
   packPhrase,
   stockUnitSymbol,
 } from '@/features/products/unitCopy'
-import type { StockMovement } from '@/features/products/types'
+import type { Product, StockMovement } from '@/features/products/types'
 import { buildPackOption } from '@/features/products/unitSet'
 import { VendorsTab } from '@/features/products/vendors/components/VendorsTab'
 import { isAppError } from '@/types/api'
@@ -49,8 +49,12 @@ import { PriceHistory } from '@/features/selling/components/PriceHistory'
 import { SoldThisMonth } from '@/features/selling/sales/SoldThisMonth'
 import { formatMoney } from '@/features/selling/money'
 import { perStockUnitEcho, sellingPriceText } from '@/features/selling/priceText'
+import { useBranchPrices, type PriceFields } from '@/features/selling/branchPrices'
+import { PricesByBranch } from '@/features/selling/PricesByBranch'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { OverflowMenu, type OverflowMenuItem } from '@/components/OverflowMenu'
+import { NeedsALookList, useNeedsALook } from '@/features/products/NeedsALook'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 
 
 type ProductDetailTab = 'overview' | 'vendors'
@@ -227,6 +231,16 @@ export function ProductDetailPage() {
 
   // Before the early returns below: a hook must run on every render.
   const { showsSellingPrice, recordsSales } = useSellingPolicy()
+  const branchPrices = useBranchPrices()
+  // The small line's things for this product, at the branches the person sees (BRANCH_PRICES_PLAN.md 9.2).
+  const lookOnline = useOnlineStatus()
+  const productLook = useNeedsALook(undefined, id, isMultiBranch && lookOnline)
+  /** The price as this view says it: the working branch's, or in "All branches" the range where they differ. */
+  const priceSaid = (item: Product, say: (price: PriceFields) => string | null): string | null => {
+    const range = branchPrices.showingAll ? branchPrices.range(item) : null
+    if (range) return `${say(range[0])} – ${say(range[1])}`
+    return say(branchPrices.atWorking(item))
+  }
   if (loading) return <ProductDetailSkeleton />
 
   if (error || !product) {
@@ -269,7 +283,9 @@ export function ProductDetailPage() {
     const hasRecipe = (recipe?.ingredients.length ?? 0) > 0
     // With ingredients, the cost is theirs at cost price; without, the rough cost typed in.
     const makeCost = hasRecipe ? (recipe?.costToMake ?? null) : (product.estimatedCost ?? null)
-    const profit = product.unitPrice != null && makeCost != null ? product.unitPrice - makeCost : null
+    const priceHere = branchPrices.atWorking(product).unitPrice
+    const priceText = priceSaid(product, (price) => (price.unitPrice != null ? formatMoney(price.unitPrice) : null))
+    const profit = priceHere != null && makeCost != null ? priceHere - makeCost : null
     return (
       <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
         <div className="flex items-center gap-2">
@@ -286,9 +302,15 @@ export function ProductDetailPage() {
         <p className="-mt-2 text-sm text-neutral-600">Made here: sold, not kept in stock.</p>
         {createdNote}
         {notForHereNote}
+        {productLook.data && productLook.data.items.length > 0 && <NeedsALookList answer={productLook.data} showBranch />}
         <dl className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
           {[
-            ['Price', product.unitPrice != null ? formatMoney(product.unitPrice) : 'No price yet'],
+            [
+              'Price',
+              <>
+                {priceText ?? 'No price yet'}
+              </>,
+            ],
             ['Category', product.categoryName ?? 'None'],
             ...(isMultiBranch ? [['For', forText]] : []),
             ...(showsSellingPrice
@@ -297,8 +319,8 @@ export function ProductDetailPage() {
                     hasRecipe ? 'Costs to make' : 'Rough cost to make one',
                     makeCost != null
                       ? `${formatMoney(makeCost)}${
-                          profit != null && product.unitPrice
-                            ? ` · profit ${formatMoney(profit)} each (${Math.round((profit / product.unitPrice) * 100)}%)`
+                          profit != null && priceHere
+                            ? ` · profit ${formatMoney(profit)} each (${Math.round((profit / priceHere) * 100)}%)`
                             : ''
                         }`
                       : hasRecipe
@@ -316,12 +338,13 @@ export function ProductDetailPage() {
                 ]
               : []),
           ].map(([label, value]) => (
-            <div key={label} className="flex items-baseline justify-between gap-3 px-4 py-3">
+            <div key={String(label)} className="flex items-baseline justify-between gap-3 px-4 py-3">
               <dt className="text-sm text-neutral-600">{label}</dt>
               <dd className="text-right text-sm font-medium text-neutral-900 tabular-nums">{value}</dd>
             </div>
           ))}
         </dl>
+        <PricesByBranch product={product} text={(price) => (price.unitPrice != null ? formatMoney(price.unitPrice) : null)} />
         {hasRecipe && recipe && (
           <section aria-labelledby="made-with-title" className="flex flex-col gap-2">
             <h2 id="made-with-title" className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
@@ -513,11 +536,15 @@ export function ProductDetailPage() {
         incoming={incoming}
         actions={stockButtons ?? undefined}
         lastMovement={lastMovement}
-        sellingPrice={showsSellingPrice ? sellingPriceText(product, stockUnitText, packOption) : null}
+        sellingPrice={showsSellingPrice ? priceSaid(product, (price) => sellingPriceText(price, stockUnitText, packOption)) : null}
         where={where}
       />
       {createdNote}
       {notForHereNote}
+      {productLook.data && productLook.data.items.length > 0 && <NeedsALookList answer={productLook.data} showBranch />}
+      {showsSellingPrice && (
+        <PricesByBranch product={product} text={(price) => sellingPriceText(price, stockUnitText, packOption)} />
+      )}
       {/* Where in the branch it is, and moving it between areas (STOCK_AREAS_PART_2.md). */}
       {hasAreas(working) && (
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
@@ -587,7 +614,7 @@ export function ProductDetailPage() {
               {showsSellingPrice && (
                 <DetailRow label="Selling price">
                   <span className="font-medium text-neutral-900">
-                    {sellingPriceText(product, stockUnitText, packOption) ?? 'No selling price'}
+                    {priceSaid(product, (price) => sellingPriceText(price, stockUnitText, packOption)) ?? 'No selling price'}
                   </span>
                   {(perStockUnitEcho(product, stockUnitText, packOption) ?? (product.unitPriceEntered == null ? unitPricePackEcho : null)) && (
                     <span className="block text-xs text-neutral-500">

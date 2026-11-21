@@ -144,6 +144,11 @@ export interface Product {
   /** Which branches it is for (API V92): every branch, or these. */
   forAllBranches?: boolean
   forBranchIds?: string[]
+  /**
+   * V107: its own price in each set of branch prices that has one; absent otherwise. A branch whose set isn't here
+   * uses `unitPrice`, the main price. Read through `priceAt`, never directly.
+   */
+  branchPrices?: BranchListPrice[]
   warnings?: string[] | null
   /**
    * True when `packagingUnit`/`packagingSize` above are the DEFAULT among more than one distinct
@@ -257,6 +262,11 @@ export interface ProductFormPayload {
   /** Which branches it is for (V92): these, or every branch with `allBranches`. */
   branchIds?: string[]
   allBranches?: boolean
+  /**
+   * V107: its own price at branches with their own prices, typed per the main price's unit; null takes a branch
+   * back to the main price. One branch of each set of prices is enough: the set is shared.
+   */
+  branchPrices?: { branchId: string; price: number | null }[]
   name: string
   sku: string
   description?: string
@@ -636,6 +646,8 @@ export interface StockOutPayload {
   paymentAccountId?: string
   /** A line sent to a table's bill (V99): its key, the meal a side goes with, its note for the kitchen. */
   billLine?: { lineKey: string; withKey?: string; note?: string; /** One Send: its lines share one ticket per area (V102). */ sendKey?: string }
+  /** A counter sale's line for the kitchen (V109): what's made in another area goes on its ticket, a side with its meal. */
+  counterLine?: { lineKey: string; withKey?: string; note?: string }
 }
 
 // `ProductVendor` / `ProductVendorPriceTier` (GET /api/products/{productId}/vendors) live in
@@ -690,4 +702,12 @@ export type UpdateProductSkuSettingsPayload = ProductSkuSettings
 export interface SkuPreview {
   sku: string
   nextSequence: number
+}
+
+/** A product's own price in one set of branch prices (V107): per stock unit, and as typed with its unit. */
+export interface BranchListPrice {
+  priceListId: string
+  unitPrice: number
+  unitPriceEntered?: number | null
+  unitPriceEnteredUnit?: string | null
 }

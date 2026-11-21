@@ -56,6 +56,7 @@ import { WaitingMovesLine } from '@/features/moves/WaitingMovesLine'
 import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 import { StockWorthLine } from '@/features/selling/components/StockWorthLine'
 import { downloadBlob } from '@/utils/downloadBlob'
+import { NeedsALookList, lookSummary, useNeedsALook } from '@/features/products/NeedsALook'
 
 function isStockStatusFilter(value: string | null): value is StockStatusFilter {
   return value === 'OK' || value === 'LOW' || value === 'OUT'
@@ -120,6 +121,7 @@ export function ProductListPage() {
   const navigate = useNavigate()
   const permissions = user?.type === 'tenant' ? user.permissions : []
   const canManageProducts = permissions.includes(PERMISSIONS.MANAGE_PRODUCTS)
+  const canChangePrices = permissions.includes(PERMISSIONS.CHANGE_SELLING_PRICES)
   /**
    * Who may reach the bulk import pipeline. Mirrors its controller exactly — MANAGE_PRODUCTS or
    * MANAGE_INVENTORY (bulk-import contract §3) — so a storekeeper, who holds only the second,
@@ -285,7 +287,17 @@ export function ProductListPage() {
 
   // The notices that used to stack above the list, folded into one line (C1, U1).
   const dataIssues = useDataIssuesNotice()
+  // The small line (BRANCH_PRICES_PLAN.md 9.2): what to fix or check at the branch, or every branch in All branches.
+  const multiBranch = branch?.isMultiBranch === true
+  const look = useNeedsALook(branch && !branch.isAll ? branch.working?.id : undefined, undefined, multiBranch && online)
   const attention: AttentionItem[] = []
+  if (look.data && look.data.items.length > 0) {
+    attention.push({
+      key: 'needs-a-look',
+      summary: lookSummary(look.data, branch && !branch.isAll ? branch.working?.name : undefined),
+      content: <NeedsALookList answer={look.data} showBranch={!!branch?.isAll} />,
+    })
+  }
   if (dataIssues.issues.length > 0) {
     const count = dataIssues.issues.length
     attention.push({
@@ -526,10 +538,15 @@ export function ProductListPage() {
     onGiveBack: givesHere ? () => setGivenOpen(true) : undefined,
     // A list to count down, not a button on every row (owner, 2026-11-10).
     onCountStock: canCount ? () => navigate('/app/products/count') : undefined,
+    onPriceSheet: showsSellingPrice && canChangePrices ? () => navigate('/app/products/prices') : undefined,
     onRecordSale: recordsSales && canStockOut ? () => navigate('/app/sell') : undefined,
     onExport: () => void handleExport(),
     onSkuSettings: () => navigate('/app/products/sku-settings'),
-    onManageCategories: () => setManageCategoriesOpen(true),
+    // Counts as they are now: a product moved into a category since this page loaded is counted (owner, 2026-11-21).
+    onManageCategories: () => {
+      void categoryList.reload()
+      setManageCategoriesOpen(true)
+    },
   }
 
   return (

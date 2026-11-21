@@ -26,6 +26,9 @@ import { useOptionalWorkingBranch } from '@/features/branches/useWorkingBranch'
 import { TransferAccountChooser } from '@/features/selling/sale/TransferAccounts'
 import { DrawerLine, StartDayBar, useCashTill } from '@/features/selling/sale/cashDay'
 import { useQueryClient } from '@tanstack/react-query'
+import { useBranchPrices } from '@/features/selling/branchPrices'
+import { SidePicker, type Meal } from '@/features/selling/sale/SidePicker'
+import { useSellingPolicy } from '@/features/selling/useSellingPolicy'
 
 type Basket = ReturnType<typeof useSaleBasket>
 
@@ -77,8 +80,20 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
     if (wide) setTopbarSlot(document.getElementById('topbar-page-slot'))
   }, [wide])
 
+  // Sides go with a meal on the counter too (V109; owner 2026-11-21): one meal, it goes with it; more, it asks.
+  const { sideCategoryIds } = useSellingPolicy()
+  const isSide = (product: Product) => !!product.categoryId && sideCategoryIds.includes(product.categoryId)
+  const [choosingSide, setChoosingSide] = useState<Product | null>(null)
+  const meals = (): Meal[] =>
+    basket.lines
+      .filter((line) => !line.withKey && !isSide(line.product))
+      .map((line) => ({ key: line.key, name: line.product.name, quantity: line.quantity, sent: false, note: line.note }))
+
   function addProduct(product: Product) {
-    basket.add(product)
+    const open = isSide(product) ? meals() : []
+    if (open.length === 0) basket.add(product)
+    else if (open.length === 1 && open[0].quantity === 1) basket.add(product, open[0].key)
+    else setChoosingSide(product)
     // Searched for it: the search clears and stays ready for the next item (owner, 2026-11-16).
     if (term !== '') {
       setTerm('')
@@ -88,6 +103,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
   }
   // Where in the branch this sale comes from, at a branch with a choice of areas (V60): the Bar, not the Store.
   const branchHere = useOptionalWorkingBranch()
+  const branchPrices = useBranchPrices()
   const area = useSheetArea(branchHere && !branchHere.isAll ? branchHere.working : null, basket.waitingByArea, true)
   // Step 12: the transfer accounts of the branch selling (a one-branch company's only branch).
   const workingBranch = branchHere && !branchHere.isAll ? (branchHere.working ?? branchHere.branches[0] ?? null) : null
@@ -183,8 +199,15 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
       const option = optionOf(line, unitsFor(line.product, basket.catalogue))
       const each = priceEach(line, option)
       if (each == null) continue
+      // Prices per branch (V107): it becomes the price at the branch the sale was at.
+      const atBranch = branchPrices.on ? branchPrices.workingId : undefined
       productsApi
-        .update(line.product.id, { unitPrice: each, unitPriceUnit: option.isStockUnit ? undefined : option.code })
+        .update(
+          line.product.id,
+          atBranch
+            ? { branchPrices: [{ branchId: atBranch, price: each }], unitPriceUnit: option.isStockUnit ? undefined : option.code }
+            : { unitPrice: each, unitPriceUnit: option.isStockUnit ? undefined : option.code },
+        )
         .catch(() => showToast(`Couldn't make that ${line.product.name}'s usual price.`, 'error'))
     }
   }
@@ -437,10 +460,16 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
             aria-label="This sale"
           >
             {/* Newest first: what was just added sits right under the search (owner, 2026-11-16). */}
-            {[...basket.lines].reverse().map((line) => (
+            {counterOrder(basket.lines).map((line) => (
               <BasketLine
                 key={line.key}
                 line={line}
+                side={!!line.withKey}
+                below={
+                  line.withKey ? (
+                    <p className="text-xs text-neutral-500">with {basket.lines.find((meal) => meal.key === line.withKey)?.product.name}</p>
+                  ) : undefined
+                }
                 place={place}
                 catalogue={basket.catalogue}
                 canMakeUsual={canManageProducts && online && line.product.unitPrice == null}
@@ -508,6 +537,19 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
 
   const products = (
     <div className={W ? 'lg:col-start-1 lg:row-start-2 lg:min-h-0 lg:overflow-y-auto lg:bg-neutral-50 lg:px-4 lg:pt-3 lg:pb-6' : ''}>
+      {choosingSide ? (
+        <SidePicker
+          side={choosingSide.name}
+          meals={meals()}
+          onPick={(meal) => {
+            // One of several of the same becomes its own plate, and the side goes with it.
+            const withKey = meal && meal.quantity > 1 ? basket.splitOne(meal.key) : meal?.key
+            basket.add(choosingSide, withKey)
+            setChoosingSide(null)
+          }}
+          onBack={() => setChoosingSide(null)}
+        />
+      ) : (
       <SaleProductGrid
         basket={basket}
         search={finder.search}
@@ -516,6 +558,7 @@ export function SaleBasketEditor({ basket, onRecorded, startProduct, areaId, ban
         onPick={addProduct}
         areaId={place.areaId}
       />
+      )}
     </div>
   )
 
@@ -758,3 +801,15 @@ export function BasketLine({ line, place, side, below, catalogue, canMakeUsual, 
     </li>
   )
 }
+
+/** Newest first (owner, 2026-11-16), each meal followed by its sides (V109); a side whose meal is gone stays put. */
+function counterOrder(lines: SaleLine[]): SaleLine[] {
+  const newest = [...lines].reverse()
+  const ordered: SaleLine[] = []
+  for (const line of newest) {
+    if (line.withKey && lines.some((meal) => meal.key === line.withKey)) continue
+    ordered.push(line, ...newest.filter((side) => side.withKey === line.key))
+  }
+  return ordered
+}
+

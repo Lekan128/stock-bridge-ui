@@ -360,6 +360,7 @@ export function toCatalogRow(product: Product): CatalogRow {
     madeHere: product.madeHere === true,
     forAllBranches: product.forAllBranches,
     forBranchIds: product.forBranchIds,
+    branchPrices: product.branchPrices,
   }
 }
 
@@ -400,5 +401,6 @@ export function toProduct(row: CatalogRow): Product {
     madeHere: row.madeHere === true,
     forAllBranches: row.forAllBranches,
     forBranchIds: row.forBranchIds,
+    branchPrices: row.branchPrices ?? undefined,
   }
 }
